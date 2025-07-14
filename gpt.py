@@ -2,28 +2,31 @@ import os
 import openai
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
+ASSISTANT_ID = "g-67f7499803088191a8014bbcd3db4930"  # Patti assistant
 
-def generate_response(lead):
-    lead_type = lead.get("leadType", "Unknown")
-    source = lead.get("source", "Unknown")
-    vehicle = lead.get("soughtVehicles", [{}])[0]
-    vehicle_desc = f"{vehicle.get('yearFrom', '')} {vehicle.get('make', '')} {vehicle.get('model', '')}".strip()
+def run_gpt(user_prompt):
+    thread = openai.beta.threads.create()
 
-    prompt = f"""You are a helpful virtual assistant for a car dealership. A new {lead_type} lead just came in from {source}.
-The customer is interested in: {vehicle_desc}.
-
-Write a friendly, professional email response that:
-- thanks them for their interest
-- acknowledges their vehicle interest
-- offers to assist with next steps or scheduling
-
-Respond in the dealership’s tone: courteous, knowledgeable, not overly pushy.
-"""
-
-    print("🧠 Sending prompt to OpenAI...")
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": prompt}]
+    openai.beta.threads.messages.create(
+        thread_id=thread.id,
+        role="user",
+        content=user_prompt
     )
 
-    return response["choices"][0]["message"]["content"]
+    run = openai.beta.threads.runs.create(
+        thread_id=thread.id,
+        assistant_id=ASSISTANT_ID
+    )
+
+    while True:
+        run = openai.beta.threads.runs.retrieve(
+            thread_id=thread.id,
+            run_id=run.id
+        )
+        if run.status == "completed":
+            break
+        elif run.status == "failed":
+            raise Exception("GPT run failed")
+
+    messages = openai.beta.threads.messages.list(thread_id=thread.id)
+    return messages.data[0].content[0].text.value.strip()
