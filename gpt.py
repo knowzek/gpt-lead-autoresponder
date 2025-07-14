@@ -2,7 +2,7 @@ import os
 import openai
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
-ASSISTANT_ID = "g-67f7499803088191a8014bbcd3db4930"  # Patti assistant
+ASSISTANT_ID = "asst_5wPtENezPqy78Pu2ZA7Dr2qk"  # Patti assistant
 
 def run_gpt(user_prompt):
     thread = openai.beta.threads.create()
