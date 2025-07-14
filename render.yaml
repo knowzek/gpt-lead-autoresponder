@@ -1,7 +1,7 @@
 services:
   - type: cron
     name: gpt-lead-autoresponder
-    schedule: "@every 15m"
+    schedule: "@hourly"
     startCommand: python main.py
     buildCommand: "pip install -r requirements.txt"
     envVars:
