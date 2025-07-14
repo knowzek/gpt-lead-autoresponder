@@ -1,43 +1,38 @@
-# main.py
-import os
-from fortellis import get_token, get_recent_leads, get_opportunity
-from gpt import run_gpt
+from fortellis import get_recent_leads
+from gpt import generate_response
 from emailer import send_email
-from state_store import was_processed, mark_processed
+from state_store import load_state, save_state
 
-MICKEY_EMAIL = os.getenv("MICKEY_EMAIL")
+print("▶️ Starting GPT lead autoresponder...")
 
-def format_prompt(opportunity):
-    vehicle = opportunity.get("soughtVehicles", [{}])[0]
-    trade = opportunity.get("tradeIns", [{}])[0]
-    make = vehicle.get("make", "a vehicle")
-    model = vehicle.get("model", "")
-    year = vehicle.get("yearFrom", "")
-    trim = vehicle.get("trim", "")
-    source = opportunity.get("source", "Internet")
-    salesperson = opportunity.get("salesTeam", [{}])[0].get("firstName", "our team")
+# Load the last processed lead time
+last_seen_time = load_state()
+print(f"ℹ️ Last processed lead timestamp: {last_seen_time}")
 
-    return f"""
-A new lead came in from {source}. They're interested in a {year} {make} {model} {trim}.
-They may also trade in a {trade.get('year', '')} {trade.get('make', '')} {trade.get('model', '')}.
-Write a friendly follow-up email introducing {salesperson} from our dealership.
-    """
+# Fetch leads from Fortellis
+leads = get_recent_leads(since_minutes=15)
+print(f"📬 Found {len(leads)} leads from Fortellis")
 
-def main():
-    token = get_token()
-    leads = get_recent_leads(token)
+# Loop through leads
+for lead in leads:
+    activity_id = lead.get("activityId")
+    created_date = lead.get("createdDate")
 
-    for lead in leads:
-        aid = lead["activityId"]
-        if was_processed(aid):
-            continue
+    print(f"➡️ Processing lead: {activity_id} created at {created_date}")
 
-        opp_id = lead["opportunityId"]
-        opportunity = get_opportunity(opp_id, token)
-        prompt = format_prompt(opportunity)
-        response = run_gpt(prompt)
-        send_email(to=MICKEY_EMAIL, subject="[GPT Demo] New Lead Response", body=response)
-        mark_processed(aid)
+    # Skip already processed leads
+    if last_seen_time and created_date <= last_seen_time:
+        print(f"⏭️ Skipping already processed lead: {activity_id}")
+        continue
 
-if __name__ == "__main__":
-    main()
+    response = generate_response(lead)
+    print(f"💬 GPT response: {response[:100]}...")
+
+    send_email(lead, response)
+    print(f"📧 Email sent to Mickey for lead {activity_id}")
+
+    # Update state
+    save_state(created_date)
+    print(f"✅ Updated state to {created_date}")
+
+print("🏁 Done.")
