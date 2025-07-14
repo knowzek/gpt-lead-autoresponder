@@ -2,6 +2,8 @@ from fortellis import get_recent_leads
 from gpt import run_gpt
 from emailer import send_email
 from state_store import load_state, save_state
+from state_store import was_processed, mark_processed
+
 
 print("▶️ Starting GPT lead autoresponder...")
 
