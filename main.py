@@ -1,5 +1,5 @@
 from fortellis import get_recent_leads
-from gpt import generate_response
+from gpt import run_gpt
 from emailer import send_email
 from state_store import load_state, save_state
 
@@ -25,7 +25,8 @@ for lead in leads:
         print(f"⏭️ Skipping already processed lead: {activity_id}")
         continue
 
-    response = generate_response(lead)
+    prompt = format_prompt(opportunity)  # Make sure this is passed correctly
+    response = run_gpt(prompt)
     print(f"💬 GPT response: {response[:100]}...")
 
     send_email(lead, response)
