@@ -29,7 +29,7 @@ def get_token():
 
 
 def get_recent_leads(token, since_minutes=10):
-    since = (datetime.utcnow() - timedelta(minutes=since_minutes)).isoformat() + "Z"
+    since = (datetime.utcnow() - timedelta(days=6, hours=20)).isoformat() + "Z"
     url = f"{BASE_URL}/sales/elead/v1/leads/search-delta?since={since}&page=1&pageSize=100"
     headers = {
         "Authorization": f"Bearer {token}",
