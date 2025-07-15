@@ -46,7 +46,7 @@ for lead in leads:
     """
     
     response = run_gpt(prompt, customer_name)
-    print(f"💬 GPT response: {response[:100]}...")
+    print(f"💬 GPT response: {response['body'][:100]}...")
     
     send_email(
         to=MICKEY_EMAIL,
