@@ -11,6 +11,18 @@ CLIENT_ID = os.getenv("FORTELLIS_CLIENT_ID")
 CLIENT_SECRET = os.getenv("FORTELLIS_CLIENT_SECRET")
 SUBSCRIPTION_ID = os.getenv("FORTELLIS_SUBSCRIPTION_ID")
 
+def get_opportunity_activities(opportunity_id, token):
+    url = f"{BASE_URL}/sales/v2/elead/opportunities/{opportunity_id}/activities"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Subscription-Id": SUBSCRIPTION_ID,
+        "Request-Id": str(uuid.uuid4()),
+        "Accept": "application/json"
+    }
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    return response.json().get("items", [])
+
 
 def get_token():
     headers = {
