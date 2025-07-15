@@ -1,5 +1,6 @@
 import os
 import openai
+import re
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 ASSISTANT_ID = "asst_5wPtENezPqy78Pu2ZA7Dr2qk"  
