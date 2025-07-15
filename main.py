@@ -23,7 +23,7 @@ for lead in leads:
     print(f"➡️ Evaluating lead: {activity_id}")
     if was_processed(activity_id):
         print(f"⏭️ Skipping previously processed lead: {activity_id}")
-    continue
+        continue
 
     print(f"➡️ Processing new lead: {activity_id}")
 
