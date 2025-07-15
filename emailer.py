@@ -10,7 +10,11 @@ GMAIL_PASS = os.getenv("GMAIL_PASS")
 def send_email(to, subject, body):
     msg = MIMEMultipart()
     msg['From'] = GMAIL_USER
-    msg['To'] = ", ".join(to) if isinstance(to, list) else to
+    if isinstance(to, list):
+        msg['To'] = ", ".join(to)
+    else:
+        msg['To'] = to
+
     msg['Subject'] = subject
 
     msg.attach(MIMEText(body, 'plain'))
@@ -19,7 +23,7 @@ def send_email(to, subject, body):
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
         server.login(GMAIL_USER, GMAIL_PASS)
-        server.sendmail(GMAIL_USER, to, msg.as_string())
+        server.sendmail(GMAIL_USER, [to] if isinstance(to, str) else to, msg.as_string())
         server.quit()
         print(f"✅ Email sent to {to}")
     except Exception as e:
