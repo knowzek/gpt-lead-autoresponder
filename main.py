@@ -100,13 +100,15 @@ for lead in leads:
     A new lead came in from {source}. They're interested in a {vehicle_str}.
     {trade_text}
     Write a warm, professional email introducing {salesperson} from {dealership} and following up on their interest.
-    Include a subject line. Use the tone and formatting of our assistant Patti.
-    
-    Use the dealership name: {dealership}. Include it naturally in the body and sign-off.
-    Avoid placeholders like [Dealership Name] or [Contact Info].
     
     ### Requirements:
-    - Include the following debug section at the bottom of the email:
+    - Begin the email with: Hi [Guest's Name],
+    - Include the customer's vehicle of interest: {vehicle_str}
+    - Mention trade-in info if available: {trade_text or 'No trade-in info'}
+    - Mention the salesperson by name: {salesperson}
+    - Sign the email from Patti at {dealership}
+    - Use a warm, helpful tone that reflects our assistant Patti
+    - At the end, include this debug info as-is - this is required for debug and testing to compare the raw json results from debug_block to the information in the email:
     {debug_block}
 
     """
