@@ -1,5 +1,5 @@
 import os
-from fortellis import get_token, get_recent_leads, get_opportunity, get_customer_by_url
+from fortellis import get_token, get_recent_leads, get_opportunity, get_customer_by_url, get_opportunity_activities
 from gpt import run_gpt
 from emailer import send_email
 #from state_store import was_processed, mark_processed
@@ -33,6 +33,9 @@ for lead in filtered_leads:
     opportunity_id = lead.get("opportunityId")
     opportunity = get_opportunity(opportunity_id, token)
     print("📄 Opportunity data:", json.dumps(opportunity, indent=2))
+    # 🔍 Fetch and print activity log (this may include inquiry message)
+    activities = get_opportunity_activities(opportunity_id, token)
+    print("📄 Activities:", json.dumps(activities, indent=2))
     
     vehicle = opportunity.get("soughtVehicles", [{}])[0]
     make = vehicle.get("make", "")
