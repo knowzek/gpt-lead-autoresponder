@@ -126,10 +126,11 @@ for lead in filtered_leads:
     print(f"💬 GPT response: {response['body'][:100]}...")
     
     send_email(
-        to="knowzek@gmail.com,mickeyt@the-dms.com",  # replace with actual email
+        to=["knowzek@gmail.com", "mickeyt@the-dms.com"],
         subject=response["subject"],
         body=response["body"]
     )
+
     print(f"📧 Email sent to Mickey for lead {activity_id}")
     
     mark_processed(opportunity_id)
