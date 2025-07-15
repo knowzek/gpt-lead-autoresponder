@@ -16,7 +16,7 @@ leads = get_recent_leads(token)
 print(f"📬 Found {len(leads)} leads from Fortellis")
 
 # Limit to 5 leads max per run
-leads = leads[:3]
+leads = leads[:5]
 
 for lead in leads:
     activity_id = lead.get("activityId")
