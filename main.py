@@ -40,9 +40,27 @@ for lead in leads:
     trade_in = opportunity.get("tradeIns", [{}])[0].get("make", "")
     trade_text = f"They may also be trading in a {trade_in}." if trade_in else ""
     
+    # Extract salesperson info
+    salesperson_obj = opportunity.get("salesTeam", [{}])[0]
+    salesperson = salesperson_obj.get("firstName", "our team")
+    
+    # Try to guess the dealership from lead source or position name
+    store_map = {
+        "Tustin Mazda": "Tustin Mazda",
+        "Huntington Beach Mazda": "Huntington Beach Mazda",
+        "Tustin Hyundai": "Tustin Hyundai",
+        "Mission Viejo Kia": "Mission Viejo Kia"
+    }
+    
     source = opportunity.get("source", "Internet")
-    salesperson = opportunity.get("salesTeam", [{}])[0].get("firstName", "our team")
-    dealership = "Patterson Auto Group"  # 🔁 Replace or make dynamic later
+    position_name = salesperson_obj.get("positionName", "")
+    
+    # First try position name, then fallback to source, then default
+    dealership = (
+        store_map.get(position_name)
+        or store_map.get(source)
+        or "Patterson Auto Group"
+    )
     
     customer = opportunity.get("customer", {})
     customer_name = customer.get("firstName", "there")
