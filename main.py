@@ -80,6 +80,7 @@ for lead in filtered_leads:
     if customer_url:
         try:
             customer_data = get_customer_by_url(customer_url, token)
+            print("📄 Customer data:", json.dumps(customer_data, indent=2))
             first_name = customer_data.get("firstName", "").strip()
             if first_name and first_name.lower() not in ["mobile", "test", "unknown"]:
                 customer_name = first_name
