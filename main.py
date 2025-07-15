@@ -80,7 +80,6 @@ for lead in leads:
                 customer_name = first_name
         except Exception as e:
             print(f"⚠️ Failed to fetch customer name: {e}")
-
     
     # Add lead debug details to bottom of email for testing
     debug_block = f"""
