@@ -14,18 +14,19 @@ leads = get_recent_leads(token)
 print(f"📬 Found {len(leads)} leads from Fortellis")
 
 # Limit to 5 leads max per run
-leads = leads[:5]
+leads = leads[:3]
 
 for lead in leads:
     activity_id = lead.get("activityId")
-    if was_processed(activity_id):
-        print(f"⏭️ Skipping previously processed lead: {activity_id}")
-        continue
+#    if was_processed(activity_id):
+#        print(f"⏭️ Skipping previously processed lead: {activity_id}")
+#       continue
 
     print(f"➡️ Processing new lead: {activity_id}")
 
     opportunity_id = lead.get("opportunityId")
     opportunity = get_opportunity(opportunity_id, token)
+    print("📄 Opportunity data:", json.dumps(opportunity, indent=2))
     
     vehicle = opportunity.get("soughtVehicles", [{}])[0]
     make = vehicle.get("make", "")
