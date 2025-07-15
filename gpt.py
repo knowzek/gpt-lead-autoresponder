@@ -50,7 +50,7 @@ def run_gpt(user_prompt, customer_name):
 
     # Replace placeholder with actual name
     if customer_name:
-        email_body = email_body.replace("[Guest's Name]", customer_name)
+        email_body = email_body.replace("[Guest's Name]", customer_name).replace("[Guest’s Name]", customer_name)
 
     return {
         "subject": subject_line,
