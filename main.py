@@ -20,6 +20,7 @@ leads = leads[:3]
 
 for lead in leads:
     activity_id = lead.get("activityId")
+    print(f"➡️ Evaluating lead: {activity_id}")
     if was_processed(activity_id):
         print(f"⏭️ Skipping previously processed lead: {activity_id}")
     continue
