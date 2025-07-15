@@ -65,7 +65,22 @@ for lead in leads:
     )
     
     customer = opportunity.get("customer", {})
-    customer_name = customer.get("firstName", "there")
+    customer_url = ""
+    for link in customer.get("links", []):
+        if link.get("rel") == "self":
+            customer_url = link.get("href")
+            break
+    
+    customer_name = "there"
+    if customer_url:
+        try:
+            customer_data = get_customer_by_url(customer_url, token)
+            first_name = customer_data.get("firstName", "").strip()
+            if first_name and first_name.lower() not in ["mobile", "test", "unknown"]:
+                customer_name = first_name
+        except Exception as e:
+            print(f"⚠️ Failed to fetch customer name: {e}")
+
     
     # Add lead debug details to bottom of email for testing
     debug_block = f"""
@@ -90,7 +105,10 @@ for lead in leads:
     Use the dealership name: {dealership}. Include it naturally in the body and sign-off.
     Avoid placeholders like [Dealership Name] or [Contact Info].
     
+    ### Requirements:
+    - Include the following debug section at the bottom of the email:
     {debug_block}
+
     """
 
     response = run_gpt(prompt, customer_name)
