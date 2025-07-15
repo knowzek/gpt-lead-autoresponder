@@ -126,7 +126,7 @@ for lead in filtered_leads:
     print(f"💬 GPT response: {response['body'][:100]}...")
     
     send_email(
-        to=["knowzek@gmail.com", "mickeyt@the-dms.com"],
+        to=["knowzek@gmail.com", "knowzek@gmail.com"],
         subject=response["subject"],
         body=response["body"]
     )
