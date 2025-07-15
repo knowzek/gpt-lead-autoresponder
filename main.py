@@ -20,10 +20,12 @@ leads = leads[:3]
 
 for lead in leads:
     activity_id = lead.get("activityId")
-    print(f"➡️ Evaluating lead: {activity_id}")
-    if was_processed(activity_id):
-        print(f"⏭️ Skipping previously processed lead: {activity_id}")
+    opportunity_id = lead.get("opportunityId")
+    
+    if was_processed(opportunity_id):
+        print(f"⏭️ Skipping previously processed opportunity: {opportunity_id}")
         continue
+
 
     print(f"➡️ Processing new lead: {activity_id}")
 
@@ -89,12 +91,15 @@ for lead in leads:
     ---
     
     🧪 # DEBUG CONTEXT
+    Customer Name: {customer_name}
     Lead Source: {source}
     Dealership: {dealership}
     Vehicle: {vehicle_str}
     Trade-In: {trade_in or 'N/A'}
     Stock #: {stock or 'N/A'}
     Salesperson: {salesperson}
+    Activity ID: {activity_id}
+    Opportunity ID: {opportunity_id}
     """
     
     prompt = f"""
@@ -124,7 +129,7 @@ for lead in leads:
     )
     print(f"📧 Email sent to Mickey for lead {activity_id}")
     
-    mark_processed(activity_id)
+    mark_processed(opportunity_id)
     print(f"✅ Marked lead {activity_id} as processed")
 
 print("🏁 Done.")
