@@ -1,5 +1,5 @@
 import os
-from fortellis import get_token, get_recent_leads, get_opportunity
+from fortellis import get_token, get_recent_leads, get_opportunity, get_customer_by_url
 from gpt import run_gpt
 from emailer import send_email
 from state_store import was_processed, mark_processed
