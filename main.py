@@ -4,6 +4,7 @@ from gpt import run_gpt
 from emailer import send_email
 from state_store import was_processed, mark_processed
 import json
+import re
 
 MICKEY_EMAIL = os.getenv("MICKEY_EMAIL")
 
