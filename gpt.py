@@ -41,8 +41,8 @@ def run_gpt(user_prompt, customer_name):
     subject_line = ""
     body_lines = []
     for line in lines:
-        if line.lower().startswith("subject:"):
-            subject_line = line.replace("Subject:", "").strip()
+        if line.lower().startswith("subject:") or line.lower().startswith("### subject:"):
+            subject_line = line.split(":", 1)[1].strip()
         else:
             body_lines.append(line)
 
