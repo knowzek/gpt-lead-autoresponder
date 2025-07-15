@@ -72,6 +72,7 @@ for lead in leads:
     
     🧪 # DEBUG CONTEXT
     Lead Source: {source}
+    Dealership: {dealership}
     Vehicle: {vehicle_str}
     Trade-In: {trade_in or 'N/A'}
     Stock #: {stock or 'N/A'}
@@ -82,8 +83,10 @@ for lead in leads:
     A new lead came in from {source}. They're interested in a {vehicle_str}.
     {trade_text}
     Write a warm, professional email introducing {salesperson} from {dealership} and following up on their interest.
-    Include a subject line. Do not include hyperlinks unless a real URL is provided.
-    Use the tone and formatting of our assistant Patti.
+    Include a subject line. Use the tone and formatting of our assistant Patti.
+    
+    Use the dealership name: {dealership}. Include it naturally in the body and sign-off.
+    Avoid placeholders like [Dealership Name] or [Contact Info].
     
     {debug_block}
     """
