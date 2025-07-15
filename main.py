@@ -21,7 +21,7 @@ for lead in leads:
     opportunity_id = lead.get("opportunityId")
     if not was_processed(opportunity_id):
         filtered_leads.append(lead)
-    if len(filtered_leads) == 8:
+    if len(filtered_leads) == 5:
         break
 
 
