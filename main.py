@@ -3,6 +3,7 @@ from fortellis import get_token, get_recent_leads, get_opportunity
 from gpt import run_gpt
 from emailer import send_email
 from state_store import was_processed, mark_processed
+import json
 
 MICKEY_EMAIL = os.getenv("MICKEY_EMAIL")
 
