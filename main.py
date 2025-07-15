@@ -1,5 +1,5 @@
 import os
-from fortellis import get_token, get_recent_leads, get_opportunity, get_customer_by_url, get_opportunity_activities
+from fortellis import get_token, get_recent_leads, get_opportunity, get_customer_by_url, get_activity_by_url
 from gpt import run_gpt
 from emailer import send_email
 #from state_store import was_processed, mark_processed
@@ -30,12 +30,24 @@ for lead in filtered_leads:
     opportunity_id = lead.get("opportunityId")
     print(f"➡️ Evaluating lead: {activity_id} → Opportunity: {opportunity_id}")
 
-    opportunity_id = lead.get("opportunityId")
     opportunity = get_opportunity(opportunity_id, token)
     print("📄 Opportunity data:", json.dumps(opportunity, indent=2))
     # 🔍 Fetch and print activity log (this may include inquiry message)
-    activities = get_opportunity_activities(opportunity_id, token)
-    print("📄 Activities:", json.dumps(activities, indent=2))
+
+    # Try to extract the activity link to pull guest's inquiry
+    activity_link = next(
+        (l.get("href") for l in lead.get("links", []) if "/activities/" in l.get("href", "")),
+        None
+    )
+    
+    inquiry_text = ""
+    if activity_link:
+        try:
+            activity_data = get_activity_by_url(activity_link, token)
+            inquiry_text = activity_data.get("notes", "") or ""
+            print(f"📩 Inquiry text: {inquiry_text}")
+        except Exception as e:
+            print(f"⚠️ Failed to fetch activity data: {e}")
     
     vehicle = opportunity.get("soughtVehicles", [{}])[0]
     make = vehicle.get("make", "")
@@ -108,21 +120,24 @@ for lead in filtered_leads:
     """
     
     prompt = f"""
-    A new lead came in from {source}. They're interested in a {vehicle_str}.
-    {trade_text}
-    Write a warm, professional email introducing {salesperson} from {dealership} and following up on their interest.
+    You are Patti, the virtual assistant for Patterson Auto Group.
     
-    ### Requirements:
-    - Begin the email with: Hi [Guest's Name],
-    - Include the customer's vehicle of interest: {vehicle_str}
-    - Mention trade-in info if available: {trade_text or 'No trade-in info'}
-    - Mention the salesperson by name: {salesperson}
-    - Sign the email from Patti at {dealership}
-    - Use a warm, helpful tone that reflects our assistant Patti
-    - At the end, include this debug info as-is - this is required for debug and testing to compare the raw json results from debug_block to the information in the email:
+    This guest submitted a lead through {source}.
+    They’re interested in: {vehicle_str}.
+    Salesperson: {salesperson}
+    {trade_text}
+    
+    Here’s what the guest asked or submitted:
+    "{inquiry_text}"
+    
+    Please write a warm, professional reply. If you can’t tell which dealership this is for, follow your fallback behavior for Unknown Store. If an appointment is mentioned, include it per your system rules.
+    
+    Use Patti’s tone, logic, and formatting per your system instructions.
+    
+    ### Debug info for testing:
     {debug_block}
-
     """
+
 
     response = run_gpt(prompt, customer_name)
     print(f"💬 GPT response: {response['body'][:100]}...")
