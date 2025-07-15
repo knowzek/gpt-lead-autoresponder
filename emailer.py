@@ -10,7 +10,7 @@ GMAIL_PASS = os.getenv("GMAIL_PASS")
 def send_email(to, subject, body):
     msg = MIMEMultipart()
     msg['From'] = GMAIL_USER
-    msg['To'] = to
+    msg['To'] = ", ".join(to) if isinstance(to, list) else to
     msg['Subject'] = subject
 
     msg.attach(MIMEText(body, 'plain'))
