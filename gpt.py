@@ -40,13 +40,20 @@ def run_gpt(user_prompt, customer_name):
     # Extract subject + body
     subject_line = ""
     body_lines = []
-    for line in lines:
-        if line.lower().startswith("subject:") or line.lower().startswith("### subject:"):
-            subject_line = line.split(":", 1)[1].strip()
-        else:
-            body_lines.append(line)
-
+    
+    # Improved parsing to detect and remove subject line
+    for i, line in enumerate(lines):
+        if re.match(r"^#{0,3}\s*subject\s*:\s*(.+)", line.strip(), re.I):
+            subject_line = re.sub(r"^#{0,3}\s*subject\s*:\s*", "", line.strip(), flags=re.I)
+            body_lines = lines[i+1:]
+            break
+    else:
+        # fallback if GPT didn’t include a Subject line
+        subject_line = "Your vehicle inquiry with Patterson Auto Group"
+        body_lines = lines
+    
     email_body = "\n".join(body_lines).strip()
+
 
     # Replace placeholder with actual name
     if customer_name:
