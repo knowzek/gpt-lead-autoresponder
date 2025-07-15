@@ -41,8 +41,11 @@ def _connect():
 # Check if activity ID was already processed
 def was_processed(activity_id):
     sheet = _connect()
-    activity_ids = sheet.col_values(1)  # Column A
+    activity_ids = sheet.col_values(1)
+    print(f"🧾 Activity IDs in sheet: {activity_ids}")
+    print(f"🔍 Comparing against: {activity_id}")
     return activity_id in activity_ids
+
 
 # Add a new activity ID to the sheet
 def mark_processed(activity_id):
