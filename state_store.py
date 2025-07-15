@@ -1,29 +1,38 @@
-# state_store.py
 import os
-import json
-from pathlib import Path
+import gspread
+from google.oauth2 import service_account
 
-STATE_FILE = Path("processed_leads.json")
+# Load credentials from environment variables
+def _get_creds():
+    creds_info = {
+        "type": "service_account",
+        "project_id": os.getenv("GOOGLE_PROJECT_ID"),
+        "private_key_id": os.getenv("GOOGLE_PRIVATE_KEY_ID"),
+        "private_key": os.getenv("GOOGLE_PRIVATE_KEY").replace('\\n', '\n'),
+        "client_email": os.getenv("GOOGLE_CLIENT_EMAIL"),
+        "client_id": os.getenv("GOOGLE_CLIENT_ID"),
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{os.getenv('GOOGLE_CLIENT_EMAIL')}"
+    }
+    return service_account.Credentials.from_service_account_info(creds_info)
 
+# Connect to the Sheet
+def _connect():
+    creds = _get_creds()
+    client = gspread.authorize(creds)
+    spreadsheet = os.getenv("STATE_SPREADSHEET_NAME")
+    worksheet = os.getenv("STATE_WORKSHEET_NAME")
+    return client.open(spreadsheet).worksheet(worksheet)
 
-def _load_state():
-    if STATE_FILE.exists():
-        with open(STATE_FILE, "r") as f:
-            return set(json.load(f))
-    return set()
-
-
-def _save_state(processed):
-    with open(STATE_FILE, "w") as f:
-        json.dump(list(processed), f)
-
-
+# Check if activity ID was already processed
 def was_processed(activity_id):
-    processed = _load_state()
-    return activity_id in processed
+    sheet = _connect()
+    activity_ids = sheet.col_values(1)  # Column A
+    return activity_id in activity_ids
 
-
+# Add a new activity ID to the sheet
 def mark_processed(activity_id):
-    processed = _load_state()
-    processed.add(activity_id)
-    _save_state(processed)
+    sheet = _connect()
+    sheet.append_row([activity_id])
