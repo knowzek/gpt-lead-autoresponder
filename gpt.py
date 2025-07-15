@@ -2,22 +2,25 @@ import os
 import openai
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
-ASSISTANT_ID = "asst_..."  # Replace with your Assistants API ID
+ASSISTANT_ID = "asst_..."  # 🔁 Replace with your real Assistant ID
 
 def run_gpt(user_prompt, customer_name):
     thread = openai.beta.threads.create()
 
+    # Send user message (no system message, keeps Patti's tone)
     openai.beta.threads.messages.create(
         thread_id=thread.id,
         role="user",
         content=user_prompt
     )
 
+    # Trigger GPT run
     run = openai.beta.threads.runs.create(
         thread_id=thread.id,
         assistant_id=ASSISTANT_ID
     )
 
+    # Wait for completion
     while True:
         run = openai.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
         if run.status == "completed":
@@ -25,17 +28,18 @@ def run_gpt(user_prompt, customer_name):
         elif run.status == "failed":
             raise Exception("❌ GPT run failed")
 
+    # Get GPT response
     messages = openai.beta.threads.messages.list(thread_id=thread.id)
     raw = messages.data[0].content[0].text.value.strip()
 
-    # Optional: Strip fluff like "Certainly!" if followed by a subject line
+    # Optional: Strip fluff like "Certainly!" if followed by Subject line
     lines = raw.splitlines()
     if len(lines) > 1 and "subject:" in lines[1].lower():
         lines = lines[1:]
 
+    # Extract subject + body
     subject_line = ""
     body_lines = []
-
     for line in lines:
         if line.lower().startswith("subject:"):
             subject_line = line.replace("Subject:", "").strip()
@@ -44,7 +48,7 @@ def run_gpt(user_prompt, customer_name):
 
     email_body = "\n".join(body_lines).strip()
 
-    # Replace placeholder with real name
+    # Replace placeholder with actual name
     if customer_name:
         email_body = email_body.replace("[Guest's Name]", customer_name)
 
