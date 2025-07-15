@@ -1,5 +1,5 @@
 import os
-from fortellis import get_token, get_recent_leads, get_opportunity, get_customer_by_url, get_activity_by_url
+from fortellis import get_token, get_recent_leads, get_opportunity, get_customer_by_url, get_activity_by_url, search_activities_by_opportunity
 from gpt import run_gpt
 from emailer import send_email
 #from state_store import was_processed, mark_processed
@@ -40,12 +40,14 @@ for lead in filtered_leads:
     
     inquiry_text = ""
     try:
-        activity_data = get_activity_by_url(activity_url, token)
-        inquiry_text = activity_data.get("notes", "") or ""
+        activities = search_activities_by_opportunity(opportunity_id, token)
+        for a in activities:
+            if a.get("type") == "Lead" and a.get("notes"):
+                inquiry_text = a["notes"]
+                break
         print(f"📩 Inquiry text: {inquiry_text}")
     except Exception as e:
-        print(f"⚠️ Failed to fetch activity data: {e}")
-
+        print(f"⚠️ Failed to search activities: {e}")
     
     vehicle = opportunity.get("soughtVehicles", [{}])[0]
     make = vehicle.get("make", "")
