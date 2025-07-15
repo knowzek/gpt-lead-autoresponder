@@ -26,8 +26,7 @@ for lead in leads:
 
     opportunity_id = lead.get("opportunityId")
     opportunity = get_opportunity(opportunity_id, token)
-
-    # Format the GPT prompt
+    
     vehicle = opportunity.get("soughtVehicles", [{}])[0]
     make = vehicle.get("make", "a vehicle")
     model = vehicle.get("model", "")
@@ -35,19 +34,27 @@ for lead in leads:
     trim = vehicle.get("trim", "")
     source = opportunity.get("source", "Internet")
     salesperson = opportunity.get("salesTeam", [{}])[0].get("firstName", "our team")
-
+    
+    customer = opportunity.get("customer", {})
+    customer_name = customer.get("firstName", "there")
+    
     prompt = f"""
-A new lead came in from {source}. They're interested in a {year} {make} {model} {trim}.
-They may also trade in a {opportunity.get('tradeIns', [{}])[0].get('make', '')}.
-Write a friendly follow-up email introducing {salesperson} from our dealership.
+    A new lead came in from {source}. They're interested in a {year} {make} {model} {trim}.
+    They may also trade in a {opportunity.get('tradeIns', [{}])[0].get('make', '')}.
+    Write a friendly follow-up email introducing {salesperson} from our dealership.
+    Include a subject line, and use the tone and format of our assistant Patti.
     """
-
-    response = run_gpt(prompt)
+    
+    response = run_gpt(prompt, customer_name)
     print(f"💬 GPT response: {response[:100]}...")
-
-    send_email(to=MICKEY_EMAIL, subject="[GPT Demo] New Lead Response", body=response)
+    
+    send_email(
+        to=MICKEY_EMAIL,
+        subject=response["subject"],
+        body=response["body"]
+    )
     print(f"📧 Email sent to Mickey for lead {activity_id}")
-
+    
     mark_processed(activity_id)
     print(f"✅ Marked lead {activity_id} as processed")
 
