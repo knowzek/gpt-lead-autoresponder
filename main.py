@@ -2,7 +2,7 @@ import os
 from fortellis import get_token, get_recent_leads, get_opportunity, get_customer_by_url
 from gpt import run_gpt
 from emailer import send_email
-from state_store import was_processed, mark_processed
+#from state_store import was_processed, mark_processed
 import json
 import re
 
@@ -16,21 +16,19 @@ leads = get_recent_leads(token)
 print(f"📬 Found {len(leads)} leads from Fortellis")
 
 # Limit to 3 unprocessed leads per run
-filtered_leads = []
-for lead in leads:
-    opportunity_id = lead.get("opportunityId")
-    if not was_processed(opportunity_id):
-        filtered_leads.append(lead)
-    if len(filtered_leads) == 5:
-        break
+filtered_leads = leads[:5]  
+#for lead in leads:
+#    opportunity_id = lead.get("opportunityId")
+#    if not was_processed(opportunity_id):
+#        filtered_leads.append(lead)
+#    if len(filtered_leads) == 5:
+#        break
 
 
 for lead in filtered_leads:
     activity_id = lead.get("activityId")
     opportunity_id = lead.get("opportunityId")
     print(f"➡️ Evaluating lead: {activity_id} → Opportunity: {opportunity_id}")
-
-    print(f"➡️ Processing new lead: {activity_id}")
 
     opportunity_id = lead.get("opportunityId")
     opportunity = get_opportunity(opportunity_id, token)
@@ -133,7 +131,7 @@ for lead in filtered_leads:
 
     print(f"📧 Email sent to Mickey for lead {activity_id}")
     
-    mark_processed(opportunity_id)
-    print(f"✅ Marked lead {activity_id} as processed")
+#    mark_processed(opportunity_id)
+#    print(f"✅ Marked lead {activity_id} as processed")
 
 print("🏁 Done.")
