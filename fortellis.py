@@ -41,6 +41,16 @@ def get_recent_leads(token, since_minutes=10):
     response.raise_for_status()
     return response.json().get("items", [])
 
+def get_customer_by_url(url, token):
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Subscription-Id": SUBSCRIPTION_ID,
+        "Request-Id": str(uuid.uuid4()),
+        "Accept": "application/json"
+    }
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    return response.json()
 
 def get_opportunity(opportunity_id, token):
     url = f"{BASE_URL}/sales/v2/elead/opportunities/{opportunity_id}"
