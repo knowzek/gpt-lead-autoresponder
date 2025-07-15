@@ -2,7 +2,7 @@ import os
 import openai
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
-ASSISTANT_ID = "asst_..."  # 🔁 Replace with your real Assistant ID
+ASSISTANT_ID = "asst_5wPtENezPqy78Pu2ZA7Dr2qk"  
 
 def run_gpt(user_prompt, customer_name):
     thread = openai.beta.threads.create()
