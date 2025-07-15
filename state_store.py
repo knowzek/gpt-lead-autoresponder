@@ -32,7 +32,11 @@ def _connect():
     client = gspread.authorize(creds)
     spreadsheet = os.getenv("STATE_SPREADSHEET_NAME")
     worksheet = os.getenv("STATE_WORKSHEET_NAME")
-    return client.open(spreadsheet).worksheet(worksheet)
+    print(f"🔗 Connecting to spreadsheet: {spreadsheet}, worksheet: {worksheet}")
+    sheet = client.open(spreadsheet).worksheet(worksheet)
+    print(f"✅ Sheet loaded with {len(sheet.get_all_values())} rows")
+    return sheet
+
 
 # Check if activity ID was already processed
 def was_processed(activity_id):
