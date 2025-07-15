@@ -34,20 +34,18 @@ for lead in filtered_leads:
     print("📄 Opportunity data:", json.dumps(opportunity, indent=2))
     # 🔍 Fetch and print activity log (this may include inquiry message)
 
-    # Try to extract the activity link to pull guest's inquiry
-    activity_link = next(
-        (l.get("href") for l in lead.get("links", []) if "/activities/" in l.get("href", "")),
-        None
-    )
+    # 🆕 Build activity URL using activityId and pull inquiry notes
+    activity_id = lead.get("activityId")
+    activity_url = f"https://api.fortellis.io/cdk-test/sales/crm/v2/activities/{activity_id}"
     
     inquiry_text = ""
-    if activity_link:
-        try:
-            activity_data = get_activity_by_url(activity_link, token)
-            inquiry_text = activity_data.get("notes", "") or ""
-            print(f"📩 Inquiry text: {inquiry_text}")
-        except Exception as e:
-            print(f"⚠️ Failed to fetch activity data: {e}")
+    try:
+        activity_data = get_activity_by_url(activity_url, token)
+        inquiry_text = activity_data.get("notes", "") or ""
+        print(f"📩 Inquiry text: {inquiry_text}")
+    except Exception as e:
+        print(f"⚠️ Failed to fetch activity data: {e}")
+
     
     vehicle = opportunity.get("soughtVehicles", [{}])[0]
     make = vehicle.get("make", "")
