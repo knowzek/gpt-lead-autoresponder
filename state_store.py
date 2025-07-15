@@ -47,4 +47,6 @@ def was_processed(activity_id):
 # Add a new activity ID to the sheet
 def mark_processed(activity_id):
     sheet = _connect()
+    print(f"✍️ Marking lead as processed: {activity_id}")
     sheet.append_row([activity_id])
+
