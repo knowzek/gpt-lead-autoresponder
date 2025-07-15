@@ -124,7 +124,7 @@ for lead in leads:
     print(f"💬 GPT response: {response['body'][:100]}...")
     
     send_email(
-        to=MICKEY_EMAIL,
+        to="knowzek@gmail.com,mickeyt@the-dms.com",  # replace with actual email
         subject=response["subject"],
         body=response["body"]
     )
