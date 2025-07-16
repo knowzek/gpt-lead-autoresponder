@@ -23,7 +23,7 @@ def get_activity_by_url(url, token):
     return response.json()
 
 def search_activities_by_opportunity(opportunity_id, token):
-    url = f"{BASE_URL}/sales/v2/elead/activities/search"
+    url = "https://api.fortellis.io/sales/crm/v2/activities/search"
     headers = {
         "Authorization": f"Bearer {token}",
         "Subscription-Id": SUBSCRIPTION_ID,
@@ -33,7 +33,11 @@ def search_activities_by_opportunity(opportunity_id, token):
     }
     payload = {
         "filters": [
-            {"field": "opportunityId", "operator": "EQ", "value": opportunity_id}
+            {
+                "field": "opportunityId",
+                "operator": "EQ",
+                "value": opportunity_id
+            }
         ],
         "page": 1,
         "pageSize": 10
