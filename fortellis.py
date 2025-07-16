@@ -22,6 +22,19 @@ def get_activity_by_url(url, token):
     response.raise_for_status()
     return response.json()
 
+def get_activity_by_id_v2(activity_id, token):
+    url = f"https://api.fortellis.io/cdk-test/sales/v2/elead/activities/{activity_id}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Subscription-Id": SUBSCRIPTION_ID,
+        "Request-Id": str(uuid.uuid4()),
+        "Accept": "application/json"
+    }
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    return response.json()
+
+
 def search_activities_by_opportunity(opportunity_id, token):
     url = "https://api.fortellis.io/sales/crm/v2/activities/search"
     headers = {
