@@ -5,6 +5,8 @@ from emailer import send_email
 #from state_store import was_processed, mark_processed
 import json
 import re
+from fortellis import get_activity_by_id_v2
+
 
 MICKEY_EMAIL = os.getenv("MICKEY_EMAIL")
 
@@ -38,16 +40,27 @@ for lead in filtered_leads:
     activity_id = lead.get("activityId")
     activity_url = f"https://api.fortellis.io/cdk-test/sales/crm/v2/activities/{activity_id}"
     
+    # inquiry_text = ""
+    # OLD BLOCK – DELETE THIS:
+    # try:
+    #     activities = search_activities_by_opportunity(opportunity_id, token)
+    #     for a in activities:
+    #         if a.get("type") == "Lead" and a.get("notes"):
+    #             inquiry_text = a["notes"]
+    #             break
+    #     print(f"📩 Inquiry text: {inquiry_text}")
+    # except Exception as e:
+    #     print(f"⚠️ Failed to search activities: {e}")
+
+    # ✅ Try to get activity notes using v2 activity ID method
     inquiry_text = ""
     try:
-        activities = search_activities_by_opportunity(opportunity_id, token)
-        for a in activities:
-            if a.get("type") == "Lead" and a.get("notes"):
-                inquiry_text = a["notes"]
-                break
+        activity_data = get_activity_by_id_v2(activity_id, token)
+        inquiry_text = activity_data.get("notes", "") or ""
         print(f"📩 Inquiry text: {inquiry_text}")
     except Exception as e:
-        print(f"⚠️ Failed to search activities: {e}")
+        print(f"⚠️ Failed to fetch activity by ID: {e}")
+
     
     vehicle = opportunity.get("soughtVehicles", [{}])[0]
     make = vehicle.get("make", "")
