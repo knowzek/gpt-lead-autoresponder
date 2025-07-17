@@ -38,7 +38,7 @@ for lead in filtered_leads:
 
     # 🆕 Build activity URL using activityId and pull inquiry notes
     activity_id = lead.get("activityId")
-    activity_url = f"https://api.fortellis.io/cdk-test/sales/crm/v2/activities/{activity_id}"
+    activity_url = f"https://api.fortellis.io/cdk-test/sales/elead/v2/activities/{activity_id}"
     
     # inquiry_text = ""
     # OLD BLOCK – DELETE THIS:
