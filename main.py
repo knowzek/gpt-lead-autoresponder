@@ -53,6 +53,11 @@ for lead in filtered_leads:
             activity_data = get_activity_by_url(activity_url, token)
             print("🧾 Raw activity data:", json.dumps(activity_data, indent=2))  # <-- Add this
             inquiry_text = activity_data.get("notes", "") or ""
+
+            # 👇 fallback to parsing ADF XML if 'notes' is empty
+            if not inquiry_text and "message" in activity_data:
+                inquiry_text = extract_adf_comment(activity_data["message"].get("body", ""))
+
             print(f"📩 Inquiry text: {inquiry_text}")
         except Exception as e:
             print(f"⚠️ Failed to fetch activity by URL: {e}")
@@ -61,6 +66,10 @@ for lead in filtered_leads:
         try:
             activity_data = get_activity_by_id_v1(activity_id, token)
             inquiry_text = activity_data.get("notes", "") or ""
+
+            # 👇 fallback to parsing ADF XML if 'notes' is empty
+            if not inquiry_text and "message" in activity_data:
+                inquiry_text = extract_adf_comment(activity_data["message"].get("body", ""))
             print(f"📩 Inquiry text (fallback by ID): {inquiry_text}")
         except Exception as e:
             print(f"❌ Fallback failed: Could not fetch activity by ID: {e}")
@@ -72,6 +81,10 @@ for lead in filtered_leads:
             activity_data = get_activity_by_id_v1(activity_id, token)
             print("🧾 Raw activity data (by ID):", json.dumps(activity_data, indent=2))  # <== ADD THIS LINE
             inquiry_text = activity_data.get("notes", "") or ""
+
+            # 👇 fallback to parsing ADF XML if 'notes' is empty
+            if not inquiry_text and "message" in activity_data:
+                inquiry_text = extract_adf_comment(activity_data["message"].get("body", ""))
             print(f"📩 Inquiry text (fallback by ID): {inquiry_text}")
         except Exception as e:
             print(f"⚠️ Final fallback failed: {e}")
