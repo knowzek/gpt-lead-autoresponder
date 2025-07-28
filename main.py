@@ -35,8 +35,6 @@ for lead in filtered_leads:
         print("⚠️ No activityId found, skipping lead.")
         continue
 
-    print(f"📦 Raw activities: {json.dumps(activities, indent=2)}")
-
     if not activity_id:
         print("⚠️ No activityId found, skipping lead.")
         continue
