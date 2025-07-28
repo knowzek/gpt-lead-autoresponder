@@ -22,7 +22,7 @@ leads = get_recent_leads(token)
 
 print(f"📬 Found {len(leads)} leads from Fortellis")
 
-filtered_leads = leads[:5]
+filtered_leads = leads[:25]
 
 pprint.pprint(leads[0])  # Debug: show first lead structure
 
