@@ -11,6 +11,37 @@ CLIENT_ID = os.getenv("FORTELLIS_CLIENT_ID")
 CLIENT_SECRET = os.getenv("FORTELLIS_CLIENT_SECRET")
 SUBSCRIPTION_ID = os.getenv("FORTELLIS_SUBSCRIPTION_ID")
 
+def search_activities_by_opportunity(opportunity_id, token):
+    url = f"{BASE_URL}/sales/elead/v1/activities/search"
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Authorization": f"Bearer {token}",
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET
+    }
+    body = {
+        "filters": [
+            {
+                "field": "opportunityId",
+                "operator": "eq",
+                "value": opportunity_id
+            }
+        ],
+        "sort": [
+            {
+                "field": "createdDate",
+                "direction": "desc"
+            }
+        ],
+        "page": 1,
+        "pageSize": 10
+    }
+
+    response = requests.post(url, json=body, headers=headers)
+    response.raise_for_status()
+    return response.json().get("items", [])
+
 def get_activity_by_url(url, token):
     headers = {
         "Authorization": f"Bearer {token}",
