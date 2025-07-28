@@ -18,7 +18,7 @@ leads = get_recent_leads(token)
 print(f"📬 Found {len(leads)} leads from Fortellis")
 
 # Limit to 3 unprocessed leads per run
-filtered_leads = leads[:25]  
+filtered_leads = leads[:5]  
 #for lead in leads:
 #    opportunity_id = lead.get("opportunityId")
 #    if not was_processed(opportunity_id):
