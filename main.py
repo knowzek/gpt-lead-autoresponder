@@ -28,6 +28,7 @@ filtered_leads = leads[:25]
 pprint.pprint(leads[0])  # Debug: show first lead structure
 
 for lead in filtered_leads:
+    print("🔍 Raw lead:", json.dumps(lead, indent=2))
     activity_id = lead.get("activityId")
     if not activity_id:
         print("⚠️ No activityId found, skipping lead.")
