@@ -42,7 +42,7 @@ for lead in filtered_leads:
     inquiry_text = ""
     activity_url = None
     for link in lead.get("links", []):
-        if link.get("rel") == "activity":
+        if "activity" in link.get("title", "").lower():
             activity_url = link.get("href")
             break
 
