@@ -61,7 +61,23 @@ for lead in filtered_leads:
     # ✅ Try to get activity notes using v2 activity ID method
     inquiry_text = ""
     try:
-        activity_data = get_activity_by_id_v2(activity_id, token)
+        activity_url = None
+        for link in lead.get("links", []):
+            if link.get("rel") == "activity":
+                activity_url = link.get("href")
+                break
+        
+        if activity_url:
+            try:
+                activity_data = get_activity_by_url(activity_url, token)
+                inquiry_text = activity_data.get("notes", "") or ""
+                print(f"📩 Inquiry text: {inquiry_text}")
+            except Exception as e:
+                print(f"⚠️ Failed to fetch activity by URL: {e}")
+        else:
+            print(f"⚠️ No activity link found for lead {activity_id}")
+            continue
+
         inquiry_text = activity_data.get("notes", "") or ""
         print(f"📩 Inquiry text: {inquiry_text}")
     except Exception as e:
