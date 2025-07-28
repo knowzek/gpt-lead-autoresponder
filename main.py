@@ -210,7 +210,20 @@ for lead in filtered_leads:
     trim = vehicle.get("trim", "")
     stock = vehicle.get("stockNumber", "")
     vehicle_str = f"{year} {make} {model} {trim}".strip()
-    
+
+    # 🔁 Fallback: parse ADF XML if vehicle is blank
+    if not any([year, make, model]):
+        try:
+            xml = activity_data.get("message", {}).get("body", "")
+            root = ET.fromstring(xml)
+            v = root.find(".//vehicle")
+            year = v.findtext("year", "").strip()
+            make = v.findtext("make", "").strip()
+            model = v.findtext("model", "").strip()
+            trim = v.findtext("trim", "").strip()
+        except Exception as e:
+            print(f"⚠️ Failed to parse fallback vehicle info from ADF XML: {e}")
+
     # Link model text to SRP if dealership known
     base_url = DEALERSHIP_URL_MAP.get(dealership)
     if any([year, make, model]):
