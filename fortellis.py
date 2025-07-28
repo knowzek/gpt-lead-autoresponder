@@ -65,32 +65,6 @@ def get_activity_by_id_v1(activity_id, token):
     response.raise_for_status()
     return response.json()
 
-
-def search_activities_by_opportunity(opportunity_id, token):
-    url = "https://api.fortellis.io/sales/crm/v2/activities/search"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Subscription-Id": SUBSCRIPTION_ID,
-        "Request-Id": str(uuid.uuid4()),
-        "Accept": "application/json",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "filters": [
-            {
-                "field": "opportunityId",
-                "operator": "EQ",
-                "value": opportunity_id
-            }
-        ],
-        "page": 1,
-        "pageSize": 10
-    }
-    response = requests.post(url, headers=headers, json=payload)
-    response.raise_for_status()
-    return response.json().get("items", [])
-
-
 def get_token():
     headers = {
         "Content-Type": "application/x-www-form-urlencoded",
