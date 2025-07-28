@@ -28,17 +28,18 @@ filtered_leads = leads[:5]
 
 
 for lead in filtered_leads:
-    activity_id = lead.get("activityId")
+    activities = lead.get("activities", [])
+    activity_id = activities[0].get("activityId") if activities else None
+    if not activity_id:
+        print("⚠️ No activityId found, skipping lead.")
+        continue
+
     opportunity_id = lead.get("opportunityId")
     print(f"➡️ Evaluating lead: {activity_id} → Opportunity: {opportunity_id}")
 
     opportunity = get_opportunity(opportunity_id, token)
     print("📄 Opportunity data:", json.dumps(opportunity, indent=2))
     # 🔍 Fetch and print activity log (this may include inquiry message)
-
-    # 🆕 Build activity URL using activityId and pull inquiry notes
-    activity_id = lead.get("activityId")
-    activity_url = f"https://api.fortellis.io/cdk-test/sales/elead/v2/activities/{activity_id}"
     
     # inquiry_text = ""
     # OLD BLOCK – DELETE THIS:
