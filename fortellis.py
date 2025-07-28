@@ -11,19 +11,6 @@ CLIENT_ID = os.getenv("FORTELLIS_CLIENT_ID")
 CLIENT_SECRET = os.getenv("FORTELLIS_CLIENT_SECRET")
 SUBSCRIPTION_ID = os.getenv("FORTELLIS_SUBSCRIPTION_ID")
 
-import xml.etree.ElementTree as ET
-
-def extract_adf_comment(adf_xml: str) -> str:
-    try:
-        root = ET.fromstring(adf_xml)
-        comment_el = root.find(".//customer/comments")
-        if comment_el is not None:
-            return comment_el.text.strip()
-    except Exception as e:
-        print(f"⚠️ Failed to parse ADF XML: {e}")
-    return ""
-
-
 def search_activities_by_opportunity(opportunity_id, token):
     url = f"{BASE_URL}/sales/elead/v1/activities/search"
     headers = {
