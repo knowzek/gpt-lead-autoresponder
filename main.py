@@ -51,6 +51,7 @@ for lead in filtered_leads:
     if activity_url:
         try:
             activity_data = get_activity_by_url(activity_url, token)
+            print("🧾 Raw activity data:", json.dumps(activity_data, indent=2))  # <-- Add this
             inquiry_text = activity_data.get("notes", "") or ""
             print(f"📩 Inquiry text: {inquiry_text}")
         except Exception as e:
@@ -69,8 +70,9 @@ for lead in filtered_leads:
     if not inquiry_text:
         try:
             activity_data = get_activity_by_id_v1(activity_id, token)
+            print("🧾 Raw activity data (by ID):", json.dumps(activity_data, indent=2))  # <== ADD THIS LINE
             inquiry_text = activity_data.get("notes", "") or ""
-            print(f"📩 Inquiry text (retried by ID): {inquiry_text}")
+            print(f"📩 Inquiry text (fallback by ID): {inquiry_text}")
         except Exception as e:
             print(f"⚠️ Final fallback failed: {e}")
 
