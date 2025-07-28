@@ -7,9 +7,9 @@ from fortellis import (
     get_opportunity,
     get_customer_by_url,
     get_activity_by_url,
-    get_activity_by_id_v1,
-    search_activities_by_opportunity
+    get_activity_by_id_v1
 )
+
 from gpt import run_gpt
 from emailer import send_email
 # from state_store import was_processed, mark_processed
@@ -64,17 +64,15 @@ for lead in filtered_leads:
             print(f"❌ Fallback failed: Could not fetch activity by ID: {e}")
             continue
 
-    # ✅ Final fallback: try searching activities tied to the opportunity
+    # ✅ Final fallback: retry get_activity_by_id in case URL lookup failed earlier
     if not inquiry_text:
         try:
-            activities = search_activities_by_opportunity(opportunity_id, token)
-            for a in activities:
-                if a.get("type") == "Lead" and a.get("notes"):
-                    inquiry_text = a["notes"]
-                    print(f"📩 Recovered inquiry from activity search: {inquiry_text}")
-                    break
+            activity_data = get_activity_by_id_v1(activity_id, token)
+            inquiry_text = activity_data.get("notes", "") or ""
+            print(f"📩 Inquiry text (retried by ID): {inquiry_text}")
         except Exception as e:
-            print(f"⚠️ Failed activity search fallback: {e}")
+            print(f"⚠️ Final fallback failed: {e}")
+
 
 
     # 📦 Vehicle info
