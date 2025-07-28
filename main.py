@@ -202,6 +202,12 @@ for lead in filtered_leads:
     # Set base_url for VDP/SRP linking
     base_url = DEALERSHIP_URL_MAP.get(dealership)
 
+    vehicle = opportunity.get("soughtVehicles", [{}])[0]
+    year = vehicle.get("yearFrom", "")
+    make = vehicle.get("make", "")
+    model = vehicle.get("model", "")
+    trim = vehicle.get("trim", "")
+    stock = vehicle.get("stockNumber", "")
 
     vehicle_str = f"{year} {make} {model} {trim}".strip()
     if any([year, make, model]):
