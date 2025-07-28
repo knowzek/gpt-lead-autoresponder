@@ -29,6 +29,37 @@ def extract_adf_comment(adf_xml: str) -> str:
 
 MICKEY_EMAIL = os.getenv("MICKEY_EMAIL")
 
+# 🧭 Salesperson → Standardized Full Name
+SALES_PERSON_MAP = {
+    "Madeleine": "Madeleine Demo",
+    "Pavan": "Pavan Singh",
+    "Joe B": "Joe B",  # Already full
+    "Desk Manager 1": "Jim Feinstein",  # Replace with a known team member style if needed
+    "Bloskie, Terry": "Terry Bloskie",  # Fix CRM name style
+    "Test606, CLB": "Roozbeh",          # Assign to a known persona
+}
+
+# 🏢 Source/Subsource/Salesperson → Dealership
+DEALERSHIP_MAP = {
+    "Podium": "Tustin Hyundai",
+    "Podium Webchat": "Tustin Hyundai",
+    "CarNow": "Mission Viejo Kia",
+    "Madeleine": "Tustin Mazda",
+    "Pavan": "Tustin Hyundai",
+    "Joe B": "Huntington Beach Mazda",
+    "Bloskie, Terry": "Tustin Hyundai",
+    "Test606, CLB": "Tustin Hyundai",
+    "Desk Manager 1": "Mission Viejo Kia"
+}
+
+# 🌐 Dealership → SRP URL base
+DEALERSHIP_URL_MAP = {
+    "Tustin Mazda": "https://www.tustinmazda.com/used-inventory/",
+    "Huntington Beach Mazda": "https://www.huntingtonbeachmazda.com/used-inventory/",
+    "Tustin Hyundai": "https://www.tustinhyundai.com/used-inventory/",
+    "Mission Viejo Kia": "https://www.missionviejokia.com/used-inventory/"
+}
+
 print("▶️ Starting GPT lead autoresponder...")
 
 token = get_token()
@@ -114,26 +145,41 @@ for lead in filtered_leads:
     vehicle_str = f"{year} {make} {model} {trim}".strip()
     if not any([year, make, model, trim]):
         vehicle_str = "one of our vehicles"
+    else:
+        # Link model text to SRP if dealership known
+        base_url = DEALERSHIP_URL_MAP.get(dealership)
+        if base_url and make and model:
+            search_slug = f"?make={make}&model={model}"
+            linked_model = f'<a href="{base_url}{search_slug}">{vehicle_str}</a>'
+            vehicle_str = linked_model
 
     trade_in = opportunity.get("tradeIns", [{}])[0].get("make", "")
     trade_text = f"They may also be trading in a {trade_in}." if trade_in else ""
 
     salesperson_obj = opportunity.get("salesTeam", [{}])[0]
-    salesperson = salesperson_obj.get("firstName", "our team")
-
-    store_map = {
-        "Tustin Mazda": "Tustin Mazda",
-        "Huntington Beach Mazda": "Huntington Beach Mazda",
-        "Tustin Hyundai": "Tustin Hyundai",
-        "Mission Viejo Kia": "Mission Viejo Kia"
-    }
-    source = opportunity.get("source", "Internet")
+    first_name = salesperson_obj.get("firstName", "").strip()
+    last_name = salesperson_obj.get("lastName", "").strip()
+    full_name = f"{first_name} {last_name}".strip()
+    created_by = opportunity.get("createdBy", "")  # fallback if needed
+    
+    # Map salesperson name to known persona
+    salesperson = SALES_PERSON_MAP.get(first_name) or SALES_PERSON_MAP.get(full_name) or SALES_PERSON_MAP.get(created_by) or full_name or "our team"
+    
+    # Determine source/subSource
+    source = opportunity.get("source", "")
+    sub_source = opportunity.get("subSource", "")
     position_name = salesperson_obj.get("positionName", "")
+    
+    # Map dealership
     dealership = (
-        store_map.get(position_name)
-        or store_map.get(source)
+        DEALERSHIP_MAP.get(first_name)
+        or DEALERSHIP_MAP.get(full_name)
+        or DEALERSHIP_MAP.get(source)
+        or DEALERSHIP_MAP.get(sub_source)
+        or DEALERSHIP_MAP.get(created_by)
         or "Patterson Auto Group"
     )
+
 
     # 👤 Customer name
     customer = opportunity.get("customer", {})
