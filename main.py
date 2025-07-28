@@ -12,6 +12,19 @@ from fortellis import (
 
 from gpt import run_gpt
 from emailer import send_email
+
+import xml.etree.ElementTree as ET
+
+def extract_adf_comment(adf_xml: str) -> str:
+    try:
+        root = ET.fromstring(adf_xml)
+        comment_el = root.find(".//customer/comments")
+        if comment_el is not None and comment_el.text:
+            return comment_el.text.strip()
+    except Exception as e:
+        print(f"⚠️ Failed to parse ADF XML: {e}")
+    return ""
+
 # from state_store import was_processed, mark_processed
 
 MICKEY_EMAIL = os.getenv("MICKEY_EMAIL")
