@@ -99,7 +99,7 @@ leads = get_recent_leads(token)
 
 print(f"📬 Found {len(leads)} leads from Fortellis")
 
-filtered_leads = leads[:8]
+filtered_leads = leads[:5]
 
 pprint.pprint(leads[0])  # Debug: show first lead structure
 
@@ -217,10 +217,14 @@ for lead in filtered_leads:
             xml = activity_data.get("message", {}).get("body", "")
             root = ET.fromstring(xml)
             v = root.find(".//vehicle")
-            year = v.findtext("year", "").strip()
-            make = v.findtext("make", "").strip()
-            model = v.findtext("model", "").strip()
-            trim = v.findtext("trim", "").strip()
+            if v is not None:
+                year = v.findtext("year", "").strip()
+                make = v.findtext("make", "").strip()
+                model = v.findtext("model", "").strip()
+                trim = v.findtext("trim", "").strip()
+            else:
+                print("⚠️ No <vehicle> element found in ADF XML.")
+
         except Exception as e:
             print(f"⚠️ Failed to parse fallback vehicle info from ADF XML: {e}")
 
