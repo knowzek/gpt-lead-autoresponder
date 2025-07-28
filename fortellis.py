@@ -14,13 +14,13 @@ SUBSCRIPTION_ID = os.getenv("FORTELLIS_SUBSCRIPTION_ID")
 def search_activities_by_opportunity(opportunity_id, token):
     url = f"{BASE_URL}/sales/elead/v1/activities/search"
     headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
         "Authorization": f"Bearer {token}",
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET
+        "Subscription-Id": SUBSCRIPTION_ID,
+        "Request-Id": str(uuid.uuid4()),
+        "Accept": "application/json",
+        "Content-Type": "application/json"
     }
-    body = {
+    payload = {
         "filters": [
             {
                 "field": "opportunityId",
@@ -28,19 +28,14 @@ def search_activities_by_opportunity(opportunity_id, token):
                 "value": opportunity_id
             }
         ],
-        "sort": [
-            {
-                "field": "createdDate",
-                "direction": "desc"
-            }
-        ],
+        "sort": [{"field": "createdDate", "direction": "desc"}],
         "page": 1,
         "pageSize": 10
     }
-
-    response = requests.post(url, json=body, headers=headers)
+    response = requests.post(url, headers=headers, json=payload)
     response.raise_for_status()
     return response.json().get("items", [])
+
 
 def get_activity_by_url(url, token):
     headers = {
