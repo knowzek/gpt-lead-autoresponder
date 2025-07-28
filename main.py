@@ -7,7 +7,8 @@ from fortellis import (
     get_opportunity,
     get_customer_by_url,
     get_activity_by_url,
-    get_activity_by_id_v1
+    get_activity_by_id_v1,
+    search_activities_by_opportunity
 )
 from gpt import run_gpt
 from emailer import send_email
