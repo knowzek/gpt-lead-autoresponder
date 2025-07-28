@@ -1,12 +1,17 @@
 import os
-from fortellis import get_token, get_recent_leads, get_opportunity, get_customer_by_url, get_activity_by_url, search_activities_by_opportunity
+import json
+import pprint
+from fortellis import (
+    get_token,
+    get_recent_leads,
+    get_opportunity,
+    get_customer_by_url,
+    get_activity_by_url,
+    get_activity_by_id_v2
+)
 from gpt import run_gpt
 from emailer import send_email
-#from state_store import was_processed, mark_processed
-import json
-import re
-from fortellis import get_activity_by_id_v2
-
+# from state_store import was_processed, mark_processed
 
 MICKEY_EMAIL = os.getenv("MICKEY_EMAIL")
 
@@ -17,24 +22,12 @@ leads = get_recent_leads(token)
 
 print(f"📬 Found {len(leads)} leads from Fortellis")
 
-# Limit to 3 unprocessed leads per run
-filtered_leads = leads[:5]  
-#for lead in leads:
-#    opportunity_id = lead.get("opportunityId")
-#    if not was_processed(opportunity_id):
-#        filtered_leads.append(lead)
-#    if len(filtered_leads) == 5:
-#        break
+filtered_leads = leads[:5]
 
-import pprint
-pprint.pprint(leads[0])  # or use json.dumps(leads[0], indent=2) for better readability
+pprint.pprint(leads[0])  # Debug: show first lead structure
 
 for lead in filtered_leads:
     activity_id = lead.get("activityId")
-    if not activity_id:
-        print("⚠️ No activityId found, skipping lead.")
-        continue
-
     if not activity_id:
         print("⚠️ No activityId found, skipping lead.")
         continue
@@ -44,46 +37,33 @@ for lead in filtered_leads:
 
     opportunity = get_opportunity(opportunity_id, token)
     print("📄 Opportunity data:", json.dumps(opportunity, indent=2))
-    # 🔍 Fetch and print activity log (this may include inquiry message)
-    
-    # inquiry_text = ""
-    # OLD BLOCK – DELETE THIS:
-    # try:
-    #     activities = search_activities_by_opportunity(opportunity_id, token)
-    #     for a in activities:
-    #         if a.get("type") == "Lead" and a.get("notes"):
-    #             inquiry_text = a["notes"]
-    #             break
-    #     print(f"📩 Inquiry text: {inquiry_text}")
-    # except Exception as e:
-    #     print(f"⚠️ Failed to search activities: {e}")
 
-    # ✅ Try to get activity notes using v2 activity ID method
+    # 🔍 Fetch inquiry notes from activity link or fallback to ID
     inquiry_text = ""
-    try:
-        activity_url = None
-        for link in lead.get("links", []):
-            if link.get("rel") == "activity":
-                activity_url = link.get("href")
-                break
-        
-        if activity_url:
-            try:
-                activity_data = get_activity_by_url(activity_url, token)
-                inquiry_text = activity_data.get("notes", "") or ""
-                print(f"📩 Inquiry text: {inquiry_text}")
-            except Exception as e:
-                print(f"⚠️ Failed to fetch activity by URL: {e}")
-        else:
-            print(f"⚠️ No activity link found for lead {activity_id}")
+    activity_url = None
+    for link in lead.get("links", []):
+        if link.get("rel") == "activity":
+            activity_url = link.get("href")
+            break
+
+    if activity_url:
+        try:
+            activity_data = get_activity_by_url(activity_url, token)
+            inquiry_text = activity_data.get("notes", "") or ""
+            print(f"📩 Inquiry text: {inquiry_text}")
+        except Exception as e:
+            print(f"⚠️ Failed to fetch activity by URL: {e}")
+    else:
+        print(f"⚠️ No activity link found for lead {activity_id}, trying fallback...")
+        try:
+            activity_data = get_activity_by_id_v2(activity_id, token)
+            inquiry_text = activity_data.get("notes", "") or ""
+            print(f"📩 Inquiry text (fallback by ID): {inquiry_text}")
+        except Exception as e:
+            print(f"❌ Fallback failed: Could not fetch activity by ID: {e}")
             continue
 
-        inquiry_text = activity_data.get("notes", "") or ""
-        print(f"📩 Inquiry text: {inquiry_text}")
-    except Exception as e:
-        print(f"⚠️ Failed to fetch activity by ID: {e}")
-
-    
+    # 📦 Vehicle info
     vehicle = opportunity.get("soughtVehicles", [{}])[0]
     make = vehicle.get("make", "")
     model = vehicle.get("model", "")
@@ -93,39 +73,35 @@ for lead in filtered_leads:
     vehicle_str = f"{year} {make} {model} {trim}".strip()
     if not any([year, make, model, trim]):
         vehicle_str = "one of our vehicles"
-    
+
     trade_in = opportunity.get("tradeIns", [{}])[0].get("make", "")
     trade_text = f"They may also be trading in a {trade_in}." if trade_in else ""
-    
-    # Extract salesperson info
+
     salesperson_obj = opportunity.get("salesTeam", [{}])[0]
     salesperson = salesperson_obj.get("firstName", "our team")
-    
-    # Try to guess the dealership from lead source or position name
+
     store_map = {
         "Tustin Mazda": "Tustin Mazda",
         "Huntington Beach Mazda": "Huntington Beach Mazda",
         "Tustin Hyundai": "Tustin Hyundai",
         "Mission Viejo Kia": "Mission Viejo Kia"
     }
-    
     source = opportunity.get("source", "Internet")
     position_name = salesperson_obj.get("positionName", "")
-    
-    # First try position name, then fallback to source, then default
     dealership = (
         store_map.get(position_name)
         or store_map.get(source)
         or "Patterson Auto Group"
     )
-    
+
+    # 👤 Customer name
     customer = opportunity.get("customer", {})
     customer_url = ""
     for link in customer.get("links", []):
         if link.get("rel") == "self":
             customer_url = link.get("href")
             break
-    
+
     customer_name = "there"
     if customer_url:
         try:
@@ -136,12 +112,10 @@ for lead in filtered_leads:
                 customer_name = first_name
         except Exception as e:
             print(f"⚠️ Failed to fetch customer name: {e}")
-    
-    # Add lead debug details to bottom of email for testing
+
+    # 🧪 Debug info for GPT
     debug_block = f"""
-    
     ---
-    
     🧪 # DEBUG CONTEXT
     Customer Name: {customer_name}
     Lead Source: {source}
@@ -153,39 +127,37 @@ for lead in filtered_leads:
     Activity ID: {activity_id}
     Opportunity ID: {opportunity_id}
     """
-    
+
     prompt = f"""
     You are Patti, the virtual assistant for Patterson Auto Group.
-    
+
     This guest submitted a lead through {source}.
     They’re interested in: {vehicle_str}.
     Salesperson: {salesperson}
     {trade_text}
-    
+
     Here’s what the guest asked or submitted:
     "{inquiry_text}"
-    
+
     Please write a warm, professional reply. If you can’t tell which dealership this is for, follow your fallback behavior for Unknown Store. If an appointment is mentioned, include it per your system rules.
-    
+
     Use Patti’s tone, logic, and formatting per your system instructions.
-    
+
     ### Debug info for testing:
     {debug_block}
     """
 
-
     response = run_gpt(prompt, customer_name)
     print(f"💬 GPT response: {response['body'][:100]}...")
-    
+
     send_email(
         to=["knowzek@gmail.com", "knowzek@gmail.com"],
         subject=response["subject"],
         body=response["body"]
     )
-
     print(f"📧 Email sent to Mickey for lead {activity_id}")
-    
-#    mark_processed(opportunity_id)
-#    print(f"✅ Marked lead {activity_id} as processed")
+
+    # mark_processed(opportunity_id)
+    # print(f"✅ Marked lead {activity_id} as processed")
 
 print("🏁 Done.")
