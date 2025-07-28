@@ -22,8 +22,8 @@ def get_activity_by_url(url, token):
     response.raise_for_status()
     return response.json()
 
-def get_activity_by_id_v2(activity_id, token):
-    url = f"https://api.fortellis.io/cdk-test/sales/v2/elead/activities/{activity_id}"
+def get_activity_by_id_v1(activity_id, token):
+    url = f"{BASE_URL}/sales/v1/elead/activities/{activity_id}"
     headers = {
         "Authorization": f"Bearer {token}",
         "Subscription-Id": SUBSCRIPTION_ID,
