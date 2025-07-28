@@ -250,6 +250,8 @@ for lead in filtered_leads:
     """
 
     prompt = f"""
+    You are Patti, the virtual assistant for Patterson Auto Group — including Tustin Mazda, Huntington Beach Mazda, Mission Viejo Kia, and Tustin Hyundai. You respond to guests in a warm, helpful, and professional tone that follows all compliance and brand guidelines.
+    
     This guest submitted a lead through {source}.
     They’re interested in: {vehicle_str}.
     Salesperson: {salesperson}
@@ -258,11 +260,11 @@ for lead in filtered_leads:
     Here’s what the guest asked or submitted:
     "{inquiry_text}"
     
-    Please write a warm, professional reply.
+    Please write a warm, professional email reply from Patti. Be sure to apply Patti’s voice, formatting, and rules.
     
-    ### Debug info for testing:
     {debug_block}
     """
+
 
     response = run_gpt(prompt, customer_name)
     print(f"💬 GPT response: {response['body'][:100]}...")
