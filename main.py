@@ -26,9 +26,13 @@ filtered_leads = leads[:5]
 #    if len(filtered_leads) == 5:
 #        break
 
+import pprint
+pprint.pprint(leads[0])  # or use json.dumps(leads[0], indent=2) for better readability
 
 for lead in filtered_leads:
     activities = lead.get("activities", [])
+    print(f"📦 Raw activities: {json.dumps(activities, indent=2)}")
+
     activity_id = activities[0].get("activityId") if activities else None
     if not activity_id:
         print("⚠️ No activityId found, skipping lead.")
