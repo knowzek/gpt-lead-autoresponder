@@ -56,7 +56,7 @@ for lead in filtered_leads:
     else:
         print(f"⚠️ No activity link found for lead {activity_id}, trying fallback...")
         try:
-            activity_data = get_activity_by_id_v2(activity_id, token)
+            activity_data = get_activity_by_id_v1(activity_id, token)
             inquiry_text = activity_data.get("notes", "") or ""
             print(f"📩 Inquiry text (fallback by ID): {inquiry_text}")
         except Exception as e:
