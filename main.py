@@ -13,6 +13,38 @@ from fortellis import (
 from gpt import run_gpt
 from emailer import send_email
 
+DEALERSHIP_URL_MAP = {
+    "Tustin Mazda": "https://www.tustinmazda.com/",
+    "Huntington Beach Mazda": "https://www.huntingtonbeachmazda.com/",
+    "Tustin Hyundai": "https://www.tustinhyundai.com/",
+    "Mission Viejo Kia": "https://www.missionviejokia.com/",
+    "Patterson Auto Group": "https://www.pattersonautos.com/"
+}
+
+def infer_dealership(salesperson_obj, source):
+    # Map test/demo names to real dealerships
+    demo_name = f"{salesperson_obj.get('firstName', '')} {salesperson_obj.get('lastName', '')}".strip()
+    test_name_map = {
+        "Test606 CLB": "Tustin Mazda",
+        "Bloskie Terry": "Tustin Hyundai",
+        "Demo User": "Huntington Beach Mazda",
+        "Desk Manager 1": "Mission Viejo Kia"
+    }
+
+    source_map = {
+        "Podium": "Tustin Mazda",
+        "CarNow": "Mission Viejo Kia",
+        "AutoTrader": "Huntington Beach Mazda"
+    }
+
+    # Try test name first
+    if demo_name in test_name_map:
+        return test_name_map[demo_name]
+
+    # Fallback to source
+    return source_map.get(source, "Patterson Auto Group")
+
+
 import xml.etree.ElementTree as ET
 
 def extract_adf_comment(adf_xml: str) -> str:
