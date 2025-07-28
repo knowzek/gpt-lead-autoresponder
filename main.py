@@ -216,20 +216,16 @@ for lead in filtered_leads:
     """
 
     prompt = f"""
-    You are Patti, the virtual assistant for Patterson Auto Group.
-
     This guest submitted a lead through {source}.
     They’re interested in: {vehicle_str}.
     Salesperson: {salesperson}
     {trade_text}
-
+    
     Here’s what the guest asked or submitted:
     "{inquiry_text}"
-
-    Please write a warm, professional reply. If you can’t tell which dealership this is for, follow your fallback behavior for Unknown Store. If an appointment is mentioned, include it per your system rules.
-
-    Use Patti’s tone, logic, and formatting per your system instructions.
-
+    
+    Please write a warm, professional reply.
+    
     ### Debug info for testing:
     {debug_block}
     """
