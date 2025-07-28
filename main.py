@@ -167,26 +167,7 @@ for lead in filtered_leads:
 
 
 
-    # 📦 Vehicle info
-    vehicle = opportunity.get("soughtVehicles", [{}])[0]
-    make = vehicle.get("make", "")
-    model = vehicle.get("model", "")
-    year = vehicle.get("yearFrom", "")
-    trim = vehicle.get("trim", "")
-    stock = vehicle.get("stockNumber", "")
-    vehicle_str = f"{year} {make} {model} {trim}".strip()
-    if not any([year, make, model, trim]):
-        vehicle_str = "one of our vehicles"
-    else:
-        # Link model text to SRP if dealership known
-        base_url = DEALERSHIP_URL_MAP.get(dealership)
-        if base_url and make and model:
-            search_slug = f"?make={make}&model={model}"
-            linked_model = f'<a href="{base_url}{search_slug}">{vehicle_str}</a>'
-            vehicle_str = linked_model
-
-    trade_in = opportunity.get("tradeIns", [{}])[0].get("make", "")
-    trade_text = f"They may also be trading in a {trade_in}." if trade_in else ""
+    # 🔍 Salesperson and Dealership Mapping
 
     salesperson_obj = opportunity.get("salesTeam", [{}])[0]
     first_name = salesperson_obj.get("firstName", "").strip()
@@ -194,15 +175,21 @@ for lead in filtered_leads:
     full_name = f"{first_name} {last_name}".strip()
     created_by = opportunity.get("createdBy", "")  # fallback if needed
     
-    # Map salesperson name to known persona
-    salesperson = SALES_PERSON_MAP.get(first_name) or SALES_PERSON_MAP.get(full_name) or SALES_PERSON_MAP.get(created_by) or full_name or "our team"
+    # Map salesperson to known persona name for Patti
+    salesperson = (
+        SALES_PERSON_MAP.get(first_name)
+        or SALES_PERSON_MAP.get(full_name)
+        or SALES_PERSON_MAP.get(created_by)
+        or full_name
+        or "our team"
+    )
     
-    # Determine source/subSource
+    # Determine lead source/subSource
     source = opportunity.get("source", "")
     sub_source = opportunity.get("subSource", "")
     position_name = salesperson_obj.get("positionName", "")
     
-    # Map dealership
+    # Map to a known dealership from test data
     dealership = (
         DEALERSHIP_MAP.get(first_name)
         or DEALERSHIP_MAP.get(full_name)
@@ -211,7 +198,22 @@ for lead in filtered_leads:
         or DEALERSHIP_MAP.get(created_by)
         or "Patterson Auto Group"
     )
+    
+    # Set base_url for VDP/SRP linking
+    base_url = DEALERSHIP_URL_MAP.get(dealership)
 
+
+    vehicle_str = f"{year} {make} {model} {trim}".strip()
+    if any([year, make, model]):
+        if base_url and make and model:
+            search_slug = f"?make={make}&model={model}"
+            vehicle_str = f'<a href="{base_url}{search_slug}">{vehicle_str}</a>'
+    else:
+        vehicle_str = "one of our vehicles"
+
+
+    trade_in = opportunity.get("tradeIns", [{}])[0].get("make", "")
+    trade_text = f"They may also be trading in a {trade_in}." if trade_in else ""
 
     # 👤 Customer name
     customer = opportunity.get("customer", {})
