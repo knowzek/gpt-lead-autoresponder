@@ -63,6 +63,19 @@ for lead in filtered_leads:
             print(f"❌ Fallback failed: Could not fetch activity by ID: {e}")
             continue
 
+    # ✅ Final fallback: try searching activities tied to the opportunity
+    if not inquiry_text:
+        try:
+            activities = search_activities_by_opportunity(opportunity_id, token)
+            for a in activities:
+                if a.get("type") == "Lead" and a.get("notes"):
+                    inquiry_text = a["notes"]
+                    print(f"📩 Recovered inquiry from activity search: {inquiry_text}")
+                    break
+        except Exception as e:
+            print(f"⚠️ Failed activity search fallback: {e}")
+
+
     # 📦 Vehicle info
     vehicle = opportunity.get("soughtVehicles", [{}])[0]
     make = vehicle.get("make", "")
