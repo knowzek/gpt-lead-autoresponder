@@ -280,48 +280,48 @@ for lead in filtered_leads:
     """
 
     if fallback_mode:
-    prompt = f"""
-    Your job is to write personalized, dealership-branded emails from Patti, a friendly virtual assistant.
-
-    The guest submitted a lead through {source}.
-    They’re interested in: {vehicle_str}.
-    Salesperson: {salesperson}
-    {trade_text}
-
-    They didn’t leave a detailed message.
-
-    Please write a warm, professional email reply that:
-    - Starts with 1–2 appealing vehicle features or dealership Why Buys (if available)
-    - Welcomes the guest and highlights your team's helpfulness
-    - Encourages them to share any specific questions or preferences
-    - Mentions the salesperson by name
-
-    {debug_block}
-    """
-else:
-    prompt = f"""
-    Your job is to write personalized, dealership-branded emails from Patti, a friendly virtual assistant.
-
-    When writing:
-    - Lead with VALUE: if you have Why Buy info or vehicle features, make that the first thing Patti shares
-    - If the customer mentioned a vehicle, answer them confidently and link to that inventory if possible
-    - If there’s a specific question, answer it first before offering general help
-    - Do NOT ask the customer to “let us know what you’re interested in” if the vehicle is already clear
-    - Always include the salesperson’s name and invite them to reach out
-    - Keep it warm, clear, and helpful — no robotic filler
-
-    This guest submitted a lead through {source}.
-    They’re interested in: {vehicle_str}.
-    Salesperson: {salesperson}
-    {trade_text}
+        prompt = f"""
+        Your job is to write personalized, dealership-branded emails from Patti, a friendly virtual assistant.
     
-    Here’s what the guest asked or submitted:
-    "{inquiry_text}"
+        The guest submitted a lead through {source}.
+        They’re interested in: {vehicle_str}.
+        Salesperson: {salesperson}
+        {trade_text}
     
-    Please write a warm, professional email reply from Patti. Be sure to apply Patti’s voice, formatting, and rules.
+        They didn’t leave a detailed message.
     
-    {debug_block}
-    """
+        Please write a warm, professional email reply that:
+        - Starts with 1–2 appealing vehicle features or dealership Why Buys (if available)
+        - Welcomes the guest and highlights your team's helpfulness
+        - Encourages them to share any specific questions or preferences
+        - Mentions the salesperson by name
+    
+        {debug_block}
+        """
+    else:
+        prompt = f"""
+        Your job is to write personalized, dealership-branded emails from Patti, a friendly virtual assistant.
+    
+        When writing:
+        - Lead with VALUE: if you have Why Buy info or vehicle features, make that the first thing Patti shares
+        - If the customer mentioned a vehicle, answer them confidently and link to that inventory if possible
+        - If there’s a specific question, answer it first before offering general help
+        - Do NOT ask the customer to “let us know what you’re interested in” if the vehicle is already clear
+        - Always include the salesperson’s name and invite them to reach out
+        - Keep it warm, clear, and helpful — no robotic filler
+    
+        This guest submitted a lead through {source}.
+        They’re interested in: {vehicle_str}.
+        Salesperson: {salesperson}
+        {trade_text}
+        
+        Here’s what the guest asked or submitted:
+        "{inquiry_text}"
+        
+        Please write a warm, professional email reply from Patti. Be sure to apply Patti’s voice, formatting, and rules.
+        
+        {debug_block}
+        """
 
 
 
