@@ -12,6 +12,70 @@ from fortellis import (
 
 from gpt import run_gpt
 from emailer import send_email
+USE_EMAIL_MODE = True  # Set to False to use Fortellis API
+from imapclient import IMAPClient
+import email
+
+def fetch_adf_xml_from_gmail(email_address, app_password, sender_filter="Sales@tustinhyundai.edealerhub.com"):
+    with IMAPClient("imap.gmail.com", ssl=True) as client:
+        client.login(email_address, app_password)
+        client.select_folder("INBOX")
+
+        messages = client.search(["UNSEEN", "FROM", sender_filter])
+        if not messages:
+            print("📭 No new lead emails found.")
+            return None
+
+        for uid, message_data in client.fetch(messages, ["RFC822"]).items():
+            msg = email.message_from_bytes(message_data[b"RFC822"])
+            for part in msg.walk():
+                if part.get_content_type() == "text/plain":
+                    body = part.get_payload(decode=True).decode()
+                    if "<?xml" in body:
+                        xml_start = body.find("<?xml")
+                        return body[xml_start:].strip()
+
+    print("⚠️ No ADF/XML found in email body.")
+    return None
+
+def parse_adf_xml_to_lead(xml_string):
+    try:
+        root = ET.fromstring(xml_string)
+        contact = root.find(".//customer/contact")
+        vehicle = root.find(".//vehicle")
+
+        first = contact.findtext("name[@part='first']", "Guest")
+        last = contact.findtext("name[@part='last']", "")
+        email = contact.findtext("email", "")
+        phone = contact.findtext("phone", "")
+
+        year = vehicle.findtext("year", "")
+        make = vehicle.findtext("make", "")
+        model = vehicle.findtext("model", "")
+        trim = vehicle.findtext("trim", "")
+
+        return {
+            "activityId": "email-lead",
+            "opportunityId": "email-opportunity",
+            "source": "Email",
+            "customerId": "email-customer",
+            "links": [],
+            "email_first": first,
+            "email_last": last,
+            "email_address": email,
+            "email_phone": phone,
+            "vehicle": {
+                "year": year,
+                "make": make,
+                "model": model,
+                "trim": trim
+            },
+            "notes": root.findtext(".//customer/comments", "")
+        }
+    except Exception as e:
+        print(f"❌ Failed to parse ADF XML: {e}")
+        return None
+
 
 DEALERSHIP_URL_MAP = {
     "Tustin Mazda": "https://www.tustinmazda.com/",
@@ -94,8 +158,21 @@ DEALERSHIP_URL_MAP = {
 
 print("▶️ Starting GPT lead autoresponder...")
 
-token = get_token()
-leads = get_recent_leads(token)
+if USE_EMAIL_MODE:
+    print("📥 Email mode enabled — pulling latest ADF/XML email...")
+    xml = fetch_adf_xml_from_gmail(os.getenv("GMAIL_USER"), os.getenv("GMAIL_APP_PASSWORD"))
+    if not xml:
+        print("❌ No email lead found.")
+        exit()
+    parsed_lead = parse_adf_xml_to_lead(xml)
+    if not parsed_lead:
+        print("❌ Failed to parse email ADF lead.")
+        exit()
+    leads = [parsed_lead]
+else:
+    token = get_token()
+    leads = get_recent_leads(token)
+
 
 print(f"📬 Found {len(leads)} leads from Fortellis")
 
@@ -113,43 +190,56 @@ for lead in filtered_leads:
     opportunity_id = lead.get("opportunityId")
     print(f"➡️ Evaluating lead: {activity_id} → Opportunity: {opportunity_id}")
 
-    opportunity = get_opportunity(opportunity_id, token)
-    print("📄 Opportunity data:", json.dumps(opportunity, indent=2))
-
-    # 🔍 Fetch inquiry notes from activity link or fallback to ID
-    inquiry_text = ""
-    activity_url = None
-    for link in lead.get("links", []):
-        if "activity" in link.get("title", "").lower():
-            activity_url = link.get("href")
-            break
-
-    if activity_url:
-        try:
-            activity_data = get_activity_by_url(activity_url, token)
-            print("🧾 Raw activity data:", json.dumps(activity_data, indent=2))  # <-- Add this
-            inquiry_text = activity_data.get("notes", "") or ""
-
-            # 👇 fallback to parsing ADF XML if 'notes' is empty
-            if not inquiry_text and "message" in activity_data:
-                inquiry_text = extract_adf_comment(activity_data["message"].get("body", ""))
-
-            print(f"📩 Inquiry text: {inquiry_text}")
-        except Exception as e:
-            print(f"⚠️ Failed to fetch activity by URL: {e}")
+    if USE_EMAIL_MODE:
+        # Fabricate a fake opportunity object using parsed email values
+        opportunity = {
+            "salesTeam": [{"firstName": "Pavan", "lastName": "Singh"}],  # Default fallback
+            "source": parsed_lead.get("source", "Email"),
+            "subSource": "",
+            "soughtVehicles": [parsed_lead.get("vehicle", {})],
+            "customer": {"id": "email"},
+            "tradeIns": [],
+            "createdBy": "Patti Assistant"
+        }
+        inquiry_text = parsed_lead.get("notes", "")
     else:
-        print(f"⚠️ No activity link found for lead {activity_id}, trying fallback...")
-        try:
-            activity_data = get_activity_by_id_v1(activity_id, token)
-            inquiry_text = activity_data.get("notes", "") or ""
-
-            # 👇 fallback to parsing ADF XML if 'notes' is empty
-            if not inquiry_text and "message" in activity_data:
-                inquiry_text = extract_adf_comment(activity_data["message"].get("body", ""))
-            print(f"📩 Inquiry text (fallback by ID): {inquiry_text}")
-        except Exception as e:
-            print(f"❌ Fallback failed: Could not fetch activity by ID: {e}")
-            continue
+        opportunity = get_opportunity(opportunity_id, token)
+        print("📄 Opportunity data:", json.dumps(opportunity, indent=2))
+    
+    if not USE_EMAIL_MODE:
+        # 🔍 Fetch inquiry notes from activity link or fallback to ID
+        activity_url = None
+        for link in lead.get("links", []):
+            if "activity" in link.get("title", "").lower():
+                activity_url = link.get("href")
+                break
+    
+        if activity_url:
+            try:
+                activity_data = get_activity_by_url(activity_url, token)
+                print("🧾 Raw activity data:", json.dumps(activity_data, indent=2))  # <-- Add this
+                inquiry_text = activity_data.get("notes", "") or ""
+    
+                # 👇 fallback to parsing ADF XML if 'notes' is empty
+                if not inquiry_text and "message" in activity_data:
+                    inquiry_text = extract_adf_comment(activity_data["message"].get("body", ""))
+    
+                print(f"📩 Inquiry text: {inquiry_text}")
+            except Exception as e:
+                print(f"⚠️ Failed to fetch activity by URL: {e}")
+        else:
+            print(f"⚠️ No activity link found for lead {activity_id}, trying fallback...")
+            try:
+                activity_data = get_activity_by_id_v1(activity_id, token)
+                inquiry_text = activity_data.get("notes", "") or ""
+    
+                # 👇 fallback to parsing ADF XML if 'notes' is empty
+                if not inquiry_text and "message" in activity_data:
+                    inquiry_text = extract_adf_comment(activity_data["message"].get("body", ""))
+                print(f"📩 Inquiry text (fallback by ID): {inquiry_text}")
+            except Exception as e:
+                print(f"❌ Fallback failed: Could not fetch activity by ID: {e}")
+                continue
 
     # ✅ Final fallback: retry get_activity_by_id in case URL lookup failed earlier
     if not inquiry_text:
