@@ -1,6 +1,7 @@
 import os
 import json
 import pprint
+import re
 import xml.etree.ElementTree as ET
 from fortellis import (
     get_token,
@@ -42,29 +43,26 @@ def fetch_adf_xml_from_gmail(email_address, app_password, sender_filters=None):
             for part in msg.walk():
                 if part.get_content_type() == "text/plain":
                     body = part.get_payload(decode=True).decode()
-                    if "<?xml" in body:
-                        xml_start = body.find("<?xml")
-                        return body[xml_start:].strip()
+                    return body.strip()
+
 
     print("⚠️ No ADF/XML found in email body.")
     return None
 
 
-def parse_adf_xml_to_lead(xml_string):
+def parse_plaintext_lead(body):
     try:
-        root = ET.fromstring(xml_string)
-        contact = root.find(".//customer/contact")
-        vehicle = root.find(".//vehicle")
+        # Rough match for vehicle block
+        vehicle_match = re.search(r"Vehicle:\s+([^\n<]+)", body)
+        name_match = re.search(r"Name:\s+([^\n<]+)", body)
+        phone_match = re.search(r"Phone:\s+([^\n<]+)", body)
+        email_match = re.search(r"E-?Mail:\s+([^\s<]+)", body)
+        comment_match = re.search(r"Comments:\s+(.*?)<", body)
 
-        first = contact.findtext("name[@part='first']", "Guest")
-        last = contact.findtext("name[@part='last']", "")
-        email = contact.findtext("email", "")
-        phone = contact.findtext("phone", "")
-
-        year = vehicle.findtext("year", "")
-        make = vehicle.findtext("make", "")
-        model = vehicle.findtext("model", "")
-        trim = vehicle.findtext("trim", "")
+        vehicle_parts = vehicle_match.group(1).split() if vehicle_match else []
+        year = vehicle_parts[0] if len(vehicle_parts) > 0 else ""
+        make = vehicle_parts[1] if len(vehicle_parts) > 1 else ""
+        model = " ".join(vehicle_parts[2:]) if len(vehicle_parts) > 2 else ""
 
         return {
             "activityId": "email-lead",
@@ -72,20 +70,20 @@ def parse_adf_xml_to_lead(xml_string):
             "source": "Email",
             "customerId": "email-customer",
             "links": [],
-            "email_first": first,
-            "email_last": last,
-            "email_address": email,
-            "email_phone": phone,
+            "email_first": name_match.group(1).split()[0] if name_match else "Guest",
+            "email_last": " ".join(name_match.group(1).split()[1:]) if name_match else "",
+            "email_address": email_match.group(1) if email_match else "",
+            "email_phone": phone_match.group(1) if phone_match else "",
             "vehicle": {
                 "year": year,
                 "make": make,
                 "model": model,
-                "trim": trim
+                "trim": ""  # You can refine this later if needed
             },
-            "notes": root.findtext(".//customer/comments", "")
+            "notes": comment_match.group(1).strip() if comment_match else ""
         }
     except Exception as e:
-        print(f"❌ Failed to parse ADF XML: {e}")
+        print(f"❌ Failed to parse plain text lead: {e}")
         return None
 
 
@@ -173,7 +171,7 @@ if USE_EMAIL_MODE:
     if not xml:
         print("❌ No email lead found.")
         exit()
-    parsed_lead = parse_adf_xml_to_lead(xml)
+    parsed_lead = parse_plaintext_lead(xml)
     if not parsed_lead:
         print("❌ Failed to parse email ADF lead.")
         exit()
