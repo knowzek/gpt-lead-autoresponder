@@ -30,9 +30,7 @@ def fetch_adf_xml_from_gmail(email_address, app_password, sender_filters=None):
         client.login(email_address, app_password)
         client.select_folder("INBOX")
 
-        messages = []
-        for sender in sender_filters:
-            messages += client.search(["UNSEEN", "FROM", sender])
+        messages = client.search(["UNSEEN"])
 
         if not messages:
             print("📭 No new lead emails found.")
@@ -40,11 +38,14 @@ def fetch_adf_xml_from_gmail(email_address, app_password, sender_filters=None):
 
         for uid, message_data in client.fetch(messages, ["RFC822"]).items():
             msg = email.message_from_bytes(message_data[b"RFC822"])
-            for part in msg.walk():
-                if part.get_content_type() == "text/plain":
-                    body = part.get_payload(decode=True).decode()
-                    return body.strip()
-
+            from_header = msg.get("From", "").lower()
+            print("📤 Email from:", from_header)
+            if any(sender.lower() in from_header for sender in sender_filters):
+                for part in msg.walk():
+                    if part.get_content_type() == "text/plain":
+                        body = part.get_payload(decode=True).decode()
+                        print("📨 Raw email preview:\n", body[:500])
+                        return body.strip()
 
     print("⚠️ No ADF/XML found in email body.")
     return None
