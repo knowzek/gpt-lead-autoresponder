@@ -164,7 +164,10 @@ for lead in filtered_leads:
             print(f"📩 Inquiry text (fallback by ID): {inquiry_text}")
         except Exception as e:
             print(f"⚠️ Final fallback failed: {e}")
-
+    # 🛑 Fallback trigger if inquiry is blank or generic
+    fallback_mode = False
+    if not inquiry_text or inquiry_text.strip().lower() in ["", "request a quote", "interested", "info", "information", "looking"]:
+        fallback_mode = True
 
 
     # 🔍 Salesperson and Dealership Mapping
@@ -276,6 +279,26 @@ for lead in filtered_leads:
     Opportunity ID: {opportunity_id}
     """
 
+    if fallback_mode:
+    prompt = f"""
+    Your job is to write personalized, dealership-branded emails from Patti, a friendly virtual assistant.
+
+    The guest submitted a lead through {source}.
+    They’re interested in: {vehicle_str}.
+    Salesperson: {salesperson}
+    {trade_text}
+
+    They didn’t leave a detailed message.
+
+    Please write a warm, professional email reply that:
+    - Starts with 1–2 appealing vehicle features or dealership Why Buys (if available)
+    - Welcomes the guest and highlights your team's helpfulness
+    - Encourages them to share any specific questions or preferences
+    - Mentions the salesperson by name
+
+    {debug_block}
+    """
+else:
     prompt = f"""
     Your job is to write personalized, dealership-branded emails from Patti, a friendly virtual assistant.
 
@@ -299,6 +322,7 @@ for lead in filtered_leads:
     
     {debug_block}
     """
+
 
 
     response = run_gpt(prompt, customer_name)
