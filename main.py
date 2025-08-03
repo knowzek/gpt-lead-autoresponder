@@ -166,16 +166,23 @@ DEALERSHIP_URL_MAP = {
 print("▶️ Starting GPT lead autoresponder...")
 
 if USE_EMAIL_MODE:
-    print("📥 Email mode enabled — pulling latest ADF/XML email...")
-    xml = fetch_adf_xml_from_gmail(os.getenv("GMAIL_USER"), os.getenv("GMAIL_APP_PASSWORD"))
-    if not xml:
+    print("📥 Email mode enabled — pulling latest email...")
+    email_body = fetch_adf_xml_from_gmail(os.getenv("GMAIL_USER"), os.getenv("GMAIL_APP_PASSWORD"))
+    if not email_body:
         print("❌ No email lead found.")
         exit()
-    parsed_lead = parse_plaintext_lead(xml)
+
+    if "<?xml" in email_body:
+        parsed_lead = parse_adf_xml_to_lead(email_body)
+    else:
+        parsed_lead = parse_plaintext_lead(email_body)
+
     if not parsed_lead:
-        print("❌ Failed to parse email ADF lead.")
+        print("❌ Failed to parse lead from email body.")
         exit()
+
     leads = [parsed_lead]
+
 else:
     token = get_token()
     leads = get_recent_leads(token)
