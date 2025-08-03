@@ -17,12 +17,22 @@ USE_EMAIL_MODE = True  # Set to False to use Fortellis API
 from imapclient import IMAPClient
 import email
 
-def fetch_adf_xml_from_gmail(email_address, app_password, sender_filter="Sales@tustinhyundai.edealerhub.com"):
+def fetch_adf_xml_from_gmail(email_address, app_password, sender_filters=None):
+    if sender_filters is None:
+        sender_filters = [
+            "notify@eleadnotify.com",
+            "Sales@tustinhyundai.edealerhub.com",
+            "sales@missionviejokia.edealerhub.com"
+        ]
+
     with IMAPClient("imap.gmail.com", ssl=True) as client:
         client.login(email_address, app_password)
         client.select_folder("INBOX")
 
-        messages = client.search(["UNSEEN", "FROM", sender_filter])
+        messages = []
+        for sender in sender_filters:
+            messages += client.search(["UNSEEN", "FROM", sender])
+
         if not messages:
             print("📭 No new lead emails found.")
             return None
@@ -38,6 +48,7 @@ def fetch_adf_xml_from_gmail(email_address, app_password, sender_filter="Sales@t
 
     print("⚠️ No ADF/XML found in email body.")
     return None
+
 
 def parse_adf_xml_to_lead(xml_string):
     try:
