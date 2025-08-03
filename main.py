@@ -1,6 +1,7 @@
 import os
 import json
 import pprint
+import xml.etree.ElementTree as ET
 from fortellis import (
     get_token,
     get_recent_leads,
@@ -107,9 +108,6 @@ def infer_dealership(salesperson_obj, source):
 
     # Fallback to source
     return source_map.get(source, "Patterson Auto Group")
-
-
-import xml.etree.ElementTree as ET
 
 def extract_adf_comment(adf_xml: str) -> str:
     try:
@@ -412,8 +410,6 @@ for lead in filtered_leads:
         
         {debug_block}
         """
-
-
 
     response = run_gpt(prompt, customer_name)
     print(f"💬 GPT response: {response['body'][:100]}...")
