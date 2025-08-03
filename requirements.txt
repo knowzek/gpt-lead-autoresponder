@@ -3,4 +3,5 @@ openai
 python-dotenv
 gspread
 google-auth
+imapclient
 
