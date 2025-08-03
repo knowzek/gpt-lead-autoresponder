@@ -41,11 +41,15 @@ def fetch_adf_xml_from_gmail(email_address, app_password, sender_filters=None):
             from_header = msg.get("From", "").lower()
             print("📤 Email from:", from_header)
             if any(sender.lower() in from_header for sender in sender_filters):
+                print("✉️ Subject:", msg.get("Subject"))
+
                 for part in msg.walk():
-                    if part.get_content_type() == "text/plain":
-                        body = part.get_payload(decode=True).decode()
+                    content_type = part.get_content_type()
+                    if content_type in ["text/plain", "text/html"]:
+                        body = part.get_payload(decode=True).decode(errors="ignore")
                         print("📨 Raw email preview:\n", body[:500])
                         return body.strip()
+
 
     print("⚠️ No ADF/XML found in email body.")
     return None
