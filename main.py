@@ -264,9 +264,10 @@ for lead in filtered_leads:
                 continue
 
     # ✅ Final fallback: retry get_activity_by_id in case URL lookup failed earlier
-    if not inquiry_text:
+    if not USE_EMAIL_MODE and not inquiry_text:
         try:
             activity_data = get_activity_by_id_v1(activity_id, token)
+
             print("🧾 Raw activity data (by ID):", json.dumps(activity_data, indent=2))  # <== ADD THIS LINE
             inquiry_text = activity_data.get("notes", "") or ""
 
@@ -352,9 +353,9 @@ for lead in filtered_leads:
     else:
         vehicle_str = "one of our vehicles"
 
+    trade_ins = opportunity.get("tradeIns", [])
+    trade_in = trade_ins[0].get("make", "") if trade_ins else ""
 
-
-    trade_in = opportunity.get("tradeIns", [{}])[0].get("make", "")
     trade_text = f"They may also be trading in a {trade_in}." if trade_in else ""
 
     # 👤 Customer name
