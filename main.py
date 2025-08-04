@@ -512,21 +512,23 @@ for lead in filtered_leads:
     subscription_id = os.getenv("FORTELLIS_SUBSCRIPTION_ID")
     print(f"▸ Using Subscription-Id: {subscription_id!r}")
     
+        # ─── only log to CRM if we actually have a lead email ───
     recipient = lead.get("email_address", "").strip()
-    recipients = [recipient] if recipient else []
-
-    from_address = os.getenv("FORTELLIS_FROM_EMAIL", "FortellisSalesLeads@eleadcrm.com")
-    activity_log = send_opportunity_email_activity(
-        token,
-        subscription_id,
-        opportunity_id,
-        from_address,             # from address
-        recipients,                # either [“user@…”] or []
-        [],                        # cc if you want
-        response["subject"],
-        response["body"].replace("\n", "<br/>")
-    )
-    print(f"🗄️ Logged email activity to CRM: {activity_log['activityId']}")
+    if recipient:
+        from_address = os.getenv("FORTELLIS_FROM_EMAIL", "FortellisSalesLeads@eleadcrm.com")
+        activity_log = send_opportunity_email_activity(
+            token,
+            subscription_id,
+            opportunity_id,
+            from_address,
+            [recipient],
+            [],
+            subject,
+            response["body"].replace("\n", "<br/>")
+        )
+        print(f"🗄️ Logged email activity to CRM: {activity_log['activityId']}")
+    else:
+        print(f"⚠️ No lead email for opportunity {opportunity_id}, skipping CRM log.")
 
     print(f"📧 Email sent to Mickey for lead {activity_id}")
 
