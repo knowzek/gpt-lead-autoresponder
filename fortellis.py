@@ -11,6 +11,40 @@ CLIENT_ID = os.getenv("FORTELLIS_CLIENT_ID")
 CLIENT_SECRET = os.getenv("FORTELLIS_CLIENT_SECRET")
 SUBSCRIPTION_ID = os.getenv("FORTELLIS_SUBSCRIPTION_ID")
 
+# ── fortellis.py ──
+
+BASE_URL = "https://api.fortellis.io/cdk-test"  # your test‐env base
+
+def send_opportunity_email_activity(token, subscription_id,
+                                    opportunity_id, sender,
+                                    recipients, carbon_copies,
+                                    subject, body_html):
+    """
+    Logs an email in the CRM by POST /sales/v2/elead/opportunities/sendEmail
+    """
+    url = f"{BASE_URL}/sales/v2/elead/opportunities/sendEmail"
+    payload = {
+        "opportunityId": opportunity_id,
+        "message": {
+            "from": sender,
+            "recipients": recipients,
+            "carbonCopies": carbon_copies or [],
+            "subject": subject,
+            "body": body_html,
+            "isHtml": True
+        }
+    }
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Subscription-Id": subscription_id,
+        "Request-Id": str(uuid.uuid4()),
+        "Accept": "application/json"
+    }
+    resp = requests.post(url, json=payload, headers=headers)
+    resp.raise_for_status()
+    return resp.json()  # e.g. { "activityId": "..." }
+
+
 def search_activities_by_opportunity(opportunity_id, token):
     url = f"{BASE_URL}/sales/elead/v1/activities/search"
     headers = {
