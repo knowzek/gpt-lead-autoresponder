@@ -172,7 +172,10 @@ print("▶️ Starting GPT lead autoresponder...")
 
 if USE_EMAIL_MODE:
     print("📥 Email mode enabled — pulling latest email...")
-    email_body = fetch_adf_xml_from_gmail(os.getenv("GMAIL_USER"), os.getenv("GMAIL_APP_PASSWORD"))
+    email_body, from_header = fetch_adf_xml_from_gmail(
+        os.getenv("GMAIL_USER"),
+        os.getenv("GMAIL_APP_PASSWORD")
+    )
     if not email_body:
         print("❌ No email lead found.")
         exit()
