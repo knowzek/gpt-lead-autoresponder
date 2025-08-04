@@ -243,15 +243,15 @@ for lead in filtered_leads:
     if USE_EMAIL_MODE:
         # Fabricate a fake opportunity object using parsed email values
         opportunity = {
-            "salesTeam": [{"firstName": "Pavan", "lastName": "Singh"}],  # Default fallback
-            "source": parsed_lead.get("source", "Email"),
+            "salesTeam": [{"firstName": "Pavan", "lastName": "Singh"}],
+            "source": lead.get("source", "Email"),
             "subSource": "",
-            "soughtVehicles": [parsed_lead.get("vehicle", {})],
+            "soughtVehicles": [lead.get("vehicle", {})],
             "customer": {"id": "email"},
             "tradeIns": [],
             "createdBy": "Patti Assistant"
         }
-        inquiry_text = parsed_lead.get("notes", "")
+        inquiry_text = lead.get("notes", "")
     else:
         opportunity = get_opportunity(opportunity_id, token)
         print("📄 Opportunity data:", json.dumps(opportunity, indent=2))
