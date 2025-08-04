@@ -26,33 +26,44 @@ def fetch_adf_xml_from_gmail(email_address, app_password, sender_filters=None):
             "sales@missionviejokia.edealerhub.com"
         ]
 
+    results = []
     with IMAPClient("imap.gmail.com", ssl=True) as client:
         client.login(email_address, app_password)
         client.select_folder("INBOX")
 
+        # fetch all unseen messages
         messages = client.search(["UNSEEN"])
-
         if not messages:
             print("📭 No new lead emails found.")
-            return None, None
+            return []  # return empty list when there’s nothing
 
+        # retrieve each message
         for uid, message_data in client.fetch(messages, ["RFC822"]).items():
             msg = email.message_from_bytes(message_data[b"RFC822"])
             from_header = msg.get("From", "").lower()
             print("📤 Email from:", from_header)
+
+            # only process matching senders
             if any(sender.lower() in from_header for sender in sender_filters):
                 print("✉️ Subject:", msg.get("Subject"))
 
+                # grab the first text part
                 for part in msg.walk():
                     content_type = part.get_content_type()
                     if content_type in ["text/plain", "text/html"]:
                         body = part.get_payload(decode=True).decode(errors="ignore")
-                        print("📨 Raw email preview:\n", body[:500])
-                        return body.strip(), from_header
+                        print("📨 Raw email preview:\n", body[:200])
+                        results.append((body.strip(), from_header, uid))
+                        break  # stop after first match
 
+        # mark all processed messages as seen
+        for _, _, uid in results:
+            client.add_flags(uid, ["\\Seen"])
 
-    print("⚠️ No ADF/XML found in email body.")
-    return None, None
+        if not results:
+            print("⚠️ No ADF/XML found in matching emails.")
+
+    return results
 
 
 def parse_plaintext_lead(body):
@@ -171,42 +182,47 @@ DEALERSHIP_URL_MAP = {
 print("▶️ Starting GPT lead autoresponder...")
 
 if USE_EMAIL_MODE:
-    print("📥 Email mode enabled — pulling latest email...")
-    email_body, from_header = fetch_adf_xml_from_gmail(
+    print("📥 Email mode enabled — pulling all unread emails...")
+    raw_items = fetch_adf_xml_from_gmail(
         os.getenv("GMAIL_USER"),
         os.getenv("GMAIL_APP_PASSWORD")
     )
-    if not email_body:
-        print("❌ No email lead found.")
-        exit()
-    
-    print("📨 Raw email preview:\n", email_body[:500])
-
-
-    if "<?xml" in email_body:
-        parsed_lead = parse_adf_xml_to_lead(email_body)
-    else:
-        parsed_lead = parse_plaintext_lead(email_body)
-
-    if not parsed_lead:
-        print("❌ Failed to parse lead from email body.")
+    if not raw_items:
+        print("❌ No email leads found.")
         exit()
 
-        # ─── override dealership by sender domain ───
-    hdr = from_header.lower()
-    if "missionviejokia" in hdr:
-        email_dealership = "Mission Viejo Kia"
-    elif "tustinhyundai" in hdr:
-        email_dealership = "Tustin Hyundai"
-    elif "huntingtonbeachmazda" in hdr:
-        email_dealership = "Huntington Beach Mazda"
-    elif "tustinmazda" in hdr:
-        email_dealership = "Tustin Mazda"
-    else:
-        email_dealership = "Patterson Auto Group"
-    # ─────────────────────────────────────────────
+    leads = []
+    for email_body, from_header, uid in raw_items:
+        # 1️⃣ parse into a lead dict
+        if "<?xml" in email_body:
+            parsed = parse_adf_xml_to_lead(email_body)
+        else:
+            parsed = parse_plaintext_lead(email_body)
 
-    leads = [parsed_lead]
+        if not parsed:
+            print(f"❌ Failed to parse lead from email uid={uid}")
+            continue
+
+        # 2️⃣ override dealership by sender domain
+        hdr = from_header.lower()
+        if "missionviejokia" in hdr:
+            parsed["dealership"] = "Mission Viejo Kia"
+        elif "tustinhyundai" in hdr:
+            parsed["dealership"] = "Tustin Hyundai"
+        elif "huntingtonbeachmazda" in hdr:
+            parsed["dealership"] = "Huntington Beach Mazda"
+        elif "tustinmazda" in hdr:
+            parsed["dealership"] = "Tustin Mazda"
+        else:
+            parsed["dealership"] = "Patterson Auto Group"
+
+        leads.append(parsed)
+
+    print(f"📬 Parsed {len(leads)} lead(s) from email")
+else:
+    token = get_token()
+    leads = get_recent_leads(token)
+
 
 else:
     token = get_token()
@@ -323,7 +339,7 @@ for lead in filtered_leads:
     position_name = salesperson_obj.get("positionName", "")
     
     if USE_EMAIL_MODE:
-        dealership = email_dealership
+        dealership = lead["dealership"]
     else:
         dealership = (
             DEALERSHIP_MAP.get(first_name)
