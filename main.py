@@ -314,7 +314,16 @@ for lead in filtered_leads:
         or DEALERSHIP_MAP.get(created_by)
         or "Patterson Auto Group"
     )
-    
+
+    CONTACT_INFO_MAP = {
+        "Tustin Hyundai":    "Tustin Hyundai, 16 Auto Center Dr, Tustin, CA 92782 | (714) 838-4554 | https://www.tustinhyundai.com/",
+        "Mission Viejo Kia": "Mission Viejo Kia, 24041 El Toro Rd, Lake Forest, CA 92630 | (949) 768-7900 | https://www.missionviejokia.com/",
+        "Tustin Mazda":      "Tustin Mazda, 28 Auto Center Dr, Tustin, CA 92782 | (714) 258-2300 | https://www.tustinmazda.com/",
+        "Huntington Beach Mazda": "Huntington Beach Mazda, 16800 Beach Blvd, Huntington Beach, CA 92647 | (714) 847-7686 | https://www.huntingtonbeachmazda.com/",
+        "Patterson Auto Group":   "Patterson Auto Group, 123 Main St, Irvine, CA 92618 | (949) 555-0100 | https://www.pattersonautos.com/"
+    }
+contact_info = CONTACT_INFO_MAP[dealership]
+
     # Set base_url for VDP/SRP linking
     base_url = DEALERSHIP_URL_MAP.get(dealership)
 
@@ -411,6 +420,7 @@ for lead in filtered_leads:
         - Mentions the salesperson by name
     
         {debug_block}
+        Dealership Contact Info: {contact_info}
         """
     else:
         prompt = f"""
@@ -433,8 +443,10 @@ for lead in filtered_leads:
         "{inquiry_text}"
         
         Please write a warm, professional email reply from Patti. Be sure to apply Patti’s voice, formatting, and rules.
-        
+
         {debug_block}
+        Dealership Contact Info: {contact_info}
+        
         """
 
     response = run_gpt(prompt, customer_name)
