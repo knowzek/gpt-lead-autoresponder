@@ -224,11 +224,6 @@ else:
     leads = get_recent_leads(token)
 
 
-else:
-    token = get_token()
-    leads = get_recent_leads(token)
-
-
 print(f"📬 Found {len(leads)} leads from Fortellis")
 
 filtered_leads = leads[:5]
