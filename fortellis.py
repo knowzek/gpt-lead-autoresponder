@@ -3,6 +3,7 @@ import os
 import uuid
 import requests
 from datetime import datetime, timedelta
+import json
 
 BASE_URL = "https://api.fortellis.io/cdk-test"
 TOKEN_URL = "https://identity.fortellis.io/oauth2/aus1p1ixy7YL8cMq02p7/v1/token"
@@ -11,7 +12,6 @@ CLIENT_ID = os.getenv("FORTELLIS_CLIENT_ID")
 CLIENT_SECRET = os.getenv("FORTELLIS_CLIENT_SECRET")
 SUBSCRIPTION_ID = os.getenv("FORTELLIS_SUBSCRIPTION_ID")
 
-# ── fortellis.py ──
 
 BASE_URL = "https://api.fortellis.io/cdk-test"  # your test‐env base
 
