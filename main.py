@@ -516,6 +516,10 @@ for lead in filtered_leads:
     # pull from the sandbox’s customer.emails array:
     cust = lead.get("customer", {})
     emails = cust.get("emails", [])
+    # ─── DEBUG: show where the email might be hiding ───
+    print("🔍 lead.customer object:", json.dumps(lead.get("customer", {}), indent=2))
+    print("🔍 lead.email_address:", repr(lead.get("email_address", "")))
+
     recipient = emails[0].get("address", "").strip() if emails else ""
 
     if recipient:
