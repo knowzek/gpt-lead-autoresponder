@@ -404,7 +404,7 @@ for lead in filtered_leads:
     # 👤 Customer name
     if USE_EMAIL_MODE:
         # in email mode, we know the guest’s first name already
-        customer_name = parsed_lead.get("email_first", "there")
+        customer_name = lead.get("email_first", "there")
     else:
         customer = opportunity.get("customer", {})
         customer_url = ""
