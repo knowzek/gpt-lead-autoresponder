@@ -34,7 +34,7 @@ def fetch_adf_xml_from_gmail(email_address, app_password, sender_filters=None):
 
         if not messages:
             print("📭 No new lead emails found.")
-            return None
+            return None, None
 
         for uid, message_data in client.fetch(messages, ["RFC822"]).items():
             msg = email.message_from_bytes(message_data[b"RFC822"])
