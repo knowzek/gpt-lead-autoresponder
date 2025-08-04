@@ -439,7 +439,7 @@ for lead in filtered_leads:
         They didn’t leave a detailed message.
     
         Please write a warm, professional email reply that:
-        - Begin your reply with exactly `Hi {customer_name},` where `{customer_namet}` is the lead’s first name as extracted from the email
+        - Begin your reply with exactly `Hi {customer_name},` where `{customer_name}` is the lead’s first name as extracted from the email
         - Starts with 1–2 appealing vehicle features or dealership Why Buys (if available)
         - Welcomes the guest and highlights your team's helpfulness
         - Encourages them to share any specific questions or preferences
