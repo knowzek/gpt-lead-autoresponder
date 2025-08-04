@@ -535,7 +535,7 @@ for lead in filtered_leads:
     recipient = lead.get("email_address", "")
     
     if not USE_EMAIL_MODE and recipient:
-        from_address = os.getenv("FORTELLIS_FROM_EMAIL", "deskmanager1@demo.com)
+        from_address = os.getenv("FORTELLIS_FROM_EMAIL", "deskmanager1@demo.com")
         try:
             activity_log = send_opportunity_email_activity(
                 token,
