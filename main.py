@@ -514,12 +514,13 @@ for lead in filtered_leads:
     
     recipient = lead.get("email_address", "").strip()
     recipients = [recipient] if recipient else []
-    
+
+    from_address = os.getenv("FORTELLIS_FROM_EMAIL", "FortellisSalesLeads@eleadcrm.com")
     activity_log = send_opportunity_email_activity(
         token,
         subscription_id,
         opportunity_id,
-        os.getenv("GMAIL_USER"),   # from address
+        from_address,             # from address
         recipients,                # either [“user@…”] or []
         [],                        # cc if you want
         response["subject"],
