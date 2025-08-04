@@ -489,10 +489,16 @@ for lead in filtered_leads:
 
     response = run_gpt(prompt, customer_name)
     print(f"💬 GPT response: {response['body'][:100]}...")
-
+    
+    # ─── Override generic fallback subject if necessary ───
+    subject = response["subject"]
+    if subject.strip() == "Your vehicle inquiry with Patterson Auto Group":
+        subject = f"Your vehicle inquiry with {dealership}"
+    # ──────────────────────────────────────────────────────
+    
     send_email(
         to=["knowzek@gmail.com", "knowzek@gmail.com"],
-        subject=response["subject"],
+        subject=subject,
         body=response["body"]
     )
     print(f"📧 Email sent to Mickey for lead {activity_id}")
