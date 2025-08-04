@@ -255,6 +255,26 @@ for lead in filtered_leads:
     else:
         opportunity = get_opportunity(opportunity_id, token)
         print("📄 Opportunity data:", json.dumps(opportunity, indent=2))
+
+        # ─── PULL THE ACTUAL EMAIL FROM THE SANDBOX CUSTOMER RECORD ───
+        try:
+            # find the “self” link to the customer
+            customer_url = None
+            for link in opportunity.get("customer", {}).get("links", []):
+                if link.get("rel") in ("self", "Fetch Customer", "Get Customer"):
+                    customer_url = link["href"]
+                    break
+
+            if customer_url:
+                customer_data = get_customer_by_url(customer_url, token)
+                emails = customer_data.get("emails", [])
+                # promote the first email address into lead["email_address"]
+                lead["email_address"] = emails[0].get("address", "").strip() if emails else ""
+            else:
+                lead["email_address"] = ""
+        except Exception as e:
+            print(f"⚠️ Failed to fetch customer email from CRM: {e}")
+            lead["email_address"] = ""
     
     if not USE_EMAIL_MODE:
         # 🔍 Fetch inquiry notes from activity link or fallback to ID
