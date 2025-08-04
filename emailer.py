@@ -5,7 +5,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 GMAIL_USER = os.getenv("GMAIL_USER")
-GMAIL_PASS = os.getenv("GMAIL_PASS")
+GMAIL_PASS = os.getenv("GMAIL_APP_PASSWORD")
 
 def send_email(to, subject, body):
     msg = MIMEMultipart()
