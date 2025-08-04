@@ -48,11 +48,11 @@ def fetch_adf_xml_from_gmail(email_address, app_password, sender_filters=None):
                     if content_type in ["text/plain", "text/html"]:
                         body = part.get_payload(decode=True).decode(errors="ignore")
                         print("📨 Raw email preview:\n", body[:500])
-                        return body.strip()
+                        return body.strip(), from_header
 
 
     print("⚠️ No ADF/XML found in email body.")
-    return None
+    return None, None
 
 
 def parse_plaintext_lead(body):
@@ -189,6 +189,20 @@ if USE_EMAIL_MODE:
         print("❌ Failed to parse lead from email body.")
         exit()
 
+        # ─── override dealership by sender domain ───
+    hdr = from_header.lower()
+    if "missionviejokia" in hdr:
+        email_dealership = "Mission Viejo Kia"
+    elif "tustinhyundai" in hdr:
+        email_dealership = "Tustin Hyundai"
+    elif "huntingtonbeachmazda" in hdr:
+        email_dealership = "Huntington Beach Mazda"
+    elif "tustinmazda" in hdr:
+        email_dealership = "Tustin Mazda"
+    else:
+        email_dealership = "Patterson Auto Group"
+    # ─────────────────────────────────────────────
+
     leads = [parsed_lead]
 
 else:
@@ -305,15 +319,17 @@ for lead in filtered_leads:
     sub_source = opportunity.get("subSource", "")
     position_name = salesperson_obj.get("positionName", "")
     
-    # Map to a known dealership from test data
-    dealership = (
-        DEALERSHIP_MAP.get(first_name)
-        or DEALERSHIP_MAP.get(full_name)
-        or DEALERSHIP_MAP.get(source)
-        or DEALERSHIP_MAP.get(sub_source)
-        or DEALERSHIP_MAP.get(created_by)
-        or "Patterson Auto Group"
-    )
+    if USE_EMAIL_MODE:
+        dealership = email_dealership
+    else:
+        dealership = (
+            DEALERSHIP_MAP.get(first_name)
+            or DEALERSHIP_MAP.get(full_name)
+            or DEALERSHIP_MAP.get(source)
+            or DEALERSHIP_MAP.get(sub_source)
+            or DEALERSHIP_MAP.get(created_by)
+            or "Patterson Auto Group"
+        )
 
     CONTACT_INFO_MAP = {
         "Tustin Hyundai":    "Tustin Hyundai, 16 Auto Center Dr, Tustin, CA 92782 | (714) 838-4554 | https://www.tustinhyundai.com/",
