@@ -496,11 +496,33 @@ for lead in filtered_leads:
         subject = f"Your vehicle inquiry with {dealership}"
     # ──────────────────────────────────────────────────────
     
+    # send via SMTP
     send_email(
-        to=["knowzek@gmail.com", "mickeyt@the-dms.com"],
-        subject=subject,
+        to=["knowzek@gmail.com"],
+        subject=response["subject"],
         body=response["body"]
     )
+    print(f"📧 Email sent to customer for lead {activity_id}")
+    
+    # now log it back into Fortellis
+    from fortellis import get_token, send_opportunity_email_activity
+    
+    # get a fresh token
+    token = get_token()
+    subscription_id = os.getenv("FORTELLIS_SUBSCRIPTION_ID")
+    
+    activity_log = send_opportunity_email_activity(
+        token,
+        subscription_id,
+        opportunity_id,
+        os.getenv("GMAIL_USER"),                # from address
+        [lead["email_address"]],                 # to
+        [],                                       # cc if you want
+        response["subject"],
+        response["body"].replace("\n", "<br/>")   # since isHtml=True
+    )
+    print(f"🗄️ Logged email activity to CRM: {activity_log['activityId']}")
+
     print(f"📧 Email sent to Mickey for lead {activity_id}")
 
     # mark_processed(opportunity_id)
