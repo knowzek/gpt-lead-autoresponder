@@ -497,7 +497,7 @@ for lead in filtered_leads:
     # ──────────────────────────────────────────────────────
     
     send_email(
-        to=["knowzek@gmail.com", "knowzek@gmail.com"],
+        to=["knowzek@gmail.com", "mickeyt@the-dms.com"],
         subject=subject,
         body=response["body"]
     )
