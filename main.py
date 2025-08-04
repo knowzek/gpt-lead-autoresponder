@@ -530,30 +530,31 @@ for lead in filtered_leads:
     subscription_id = os.getenv("FORTELLIS_SUBSCRIPTION_ID")
     print(f"▸ Using Subscription-Id: {subscription_id!r}")
     
-        # ─── only log to CRM if we actually have a lead email ───
-    # ─── only log when we have promoted lead["email_address"] ───
+   # ─── only log when not in email mode and we have a recipient ───
     print("🔍 lead.email_address:", repr(lead.get("email_address", "")))
     recipient = lead.get("email_address", "")
-
-    if recipient:
-        from_address = os.getenv("FORTELLIS_FROM_EMAIL", "FortellisSalesLeads@eleadcrm.com")
-        activity_log = send_opportunity_email_activity(
-            token,
-            subscription_id,
-            opportunity_id,
-            from_address,
-            [recipient],
-            [],
-            subject,
-            response["body"].replace("\n", "<br/>")
-        )
-        print(f"🗄️ Logged email activity to CRM: {activity_log['activityId']}")
-    else:
+    
+    if not USE_EMAIL_MODE and recipient:
+        from_address = os.getenv("FORTELLIS_FROM_EMAIL", "deskmanager1@demo.com)
+        try:
+            activity_log = send_opportunity_email_activity(
+                token,
+                subscription_id,
+                opportunity_id,
+                from_address,
+                [recipient],
+                [],
+                subject,
+                response["body"].replace("\n", "<br/>")
+            )
+            print(f"🗄️ Logged email activity to CRM: {activity_log['activityId']}")
+        except Exception as e:
+            print(f"❌ CRM logging failed: {e}")
+    elif not recipient:
         print(f"⚠️ No lead email for opportunity {opportunity_id}, skipping CRM log.")
-
+    else:
+        print("🛑 Skipping CRM log (email mode).")
+    
     print(f"📧 Email sent to Mickey for lead {activity_id}")
-
-    # mark_processed(opportunity_id)
-    # print(f"✅ Marked lead {activity_id} as processed")
 
 print("🏁 Done.")
