@@ -255,6 +255,8 @@ for lead in filtered_leads:
     else:
         opportunity = get_opportunity(opportunity_id, token)
         print("📄 Opportunity data:", json.dumps(opportunity, indent=2))
+        print("📇 Sales team info:", json.dumps(opportunity.get("salesTeam", []), indent=2))
+
 
         # ─── PULL THE ACTUAL EMAIL FROM THE SANDBOX CUSTOMER RECORD ───
         # ─── PULL THE ACTUAL EMAIL FROM THE SANDBOX CUSTOMER ───
