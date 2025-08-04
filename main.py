@@ -322,7 +322,10 @@ for lead in filtered_leads:
         "Huntington Beach Mazda": "Huntington Beach Mazda, 16800 Beach Blvd, Huntington Beach, CA 92647 | (714) 847-7686 | https://www.huntingtonbeachmazda.com/",
         "Patterson Auto Group":   "Patterson Auto Group, 123 Main St, Irvine, CA 92618 | (949) 555-0100 | https://www.pattersonautos.com/"
     }
-    contact_info = CONTACT_INFO_MAP[dealership]
+    contact_info = CONTACT_INFO_MAP.get(
+        dealership,
+        CONTACT_INFO_MAP["Patterson Auto Group"]
+    )
 
     # Set base_url for VDP/SRP linking
     base_url = DEALERSHIP_URL_MAP.get(dealership)
