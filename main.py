@@ -391,23 +391,26 @@ for lead in filtered_leads:
     trade_text = f"They may also be trading in a {trade_in}." if trade_in else ""
 
     # 👤 Customer name
-    customer = opportunity.get("customer", {})
-    customer_url = ""
-    for link in customer.get("links", []):
-        if link.get("rel") == "self":
-            customer_url = link.get("href")
-            break
+    if USE_EMAIL_MODE:
+        # in email mode, we know the guest’s first name already
+        customer_name = parsed_lead.get("email_first", "there")
+    else:
+        customer = opportunity.get("customer", {})
+        customer_url = ""
+        for link in customer.get("links", []):
+            if link.get("rel") == "self":
+                customer_url = link.get("href")
+                break
 
-    customer_name = "there"
-    if customer_url:
-        try:
-            customer_data = get_customer_by_url(customer_url, token)
-            print("📄 Customer data:", json.dumps(customer_data, indent=2))
-            first_name = customer_data.get("firstName", "").strip()
-            if first_name and first_name.lower() not in ["mobile", "test", "unknown"]:
-                customer_name = first_name
-        except Exception as e:
-            print(f"⚠️ Failed to fetch customer name: {e}")
+        customer_name = "there"
+        if customer_url:
+            try:
+                customer_data = get_customer_by_url(customer_url, token)
+                first_name = customer_data.get("firstName", "").strip()
+                if first_name and first_name.lower() not in ["mobile", "test", "unknown"]:
+                    customer_name = first_name
+            except Exception as e:
+                print(f"⚠️ Failed to fetch customer name: {e}")
 
     # 🧪 Debug info for GPT
     debug_block = f"""
