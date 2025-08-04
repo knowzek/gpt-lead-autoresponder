@@ -513,7 +513,11 @@ for lead in filtered_leads:
     print(f"▸ Using Subscription-Id: {subscription_id!r}")
     
         # ─── only log to CRM if we actually have a lead email ───
-    recipient = lead.get("email_address", "").strip()
+    # pull from the sandbox’s customer.emails array:
+    cust = lead.get("customer", {})
+    emails = cust.get("emails", [])
+    recipient = emails[0].get("address", "").strip() if emails else ""
+
     if recipient:
         from_address = os.getenv("FORTELLIS_FROM_EMAIL", "FortellisSalesLeads@eleadcrm.com")
         activity_log = send_opportunity_email_activity(
