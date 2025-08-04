@@ -41,7 +41,11 @@ def send_opportunity_email_activity(token, subscription_id,
         "Accept": "application/json"
     }
     resp = requests.post(url, json=payload, headers=headers)
+    if resp.status_code != 200:
+        print("❌ sendEmail payload:", json.dumps(payload, indent=2))
+        print("❌ sendEmail response:", resp.status_code, resp.text)
     resp.raise_for_status()
+
     return resp.json()  # e.g. { "activityId": "..." }
 
 
