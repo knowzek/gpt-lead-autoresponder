@@ -510,6 +510,7 @@ for lead in filtered_leads:
     # get a fresh token
     token = get_token()
     subscription_id = os.getenv("FORTELLIS_SUBSCRIPTION_ID")
+    print(f"▸ Using Subscription-Id: {subscription_id!r}")
     
     activity_log = send_opportunity_email_activity(
         token,
