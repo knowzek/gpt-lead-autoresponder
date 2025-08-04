@@ -14,7 +14,7 @@ from fortellis import (
 
 from gpt import run_gpt
 from emailer import send_email
-USE_EMAIL_MODE = True  # Set to False to use Fortellis API
+USE_EMAIL_MODE = False  # Set to False to use Fortellis API
 from imapclient import IMAPClient
 import email
 
