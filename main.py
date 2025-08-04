@@ -512,15 +512,18 @@ for lead in filtered_leads:
     subscription_id = os.getenv("FORTELLIS_SUBSCRIPTION_ID")
     print(f"▸ Using Subscription-Id: {subscription_id!r}")
     
+    recipient = lead.get("email_address", "").strip()
+    recipients = [recipient] if recipient else []
+    
     activity_log = send_opportunity_email_activity(
         token,
         subscription_id,
         opportunity_id,
-        os.getenv("GMAIL_USER"),                # from address
-        [lead["email_address"]],                 # to
-        [],                                       # cc if you want
+        os.getenv("GMAIL_USER"),   # from address
+        recipients,                # either [“user@…”] or []
+        [],                        # cc if you want
         response["subject"],
-        response["body"].replace("\n", "<br/>")   # since isHtml=True
+        response["body"].replace("\n", "<br/>")
     )
     print(f"🗄️ Logged email activity to CRM: {activity_log['activityId']}")
 
