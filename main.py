@@ -257,18 +257,16 @@ for lead in filtered_leads:
         print("📄 Opportunity data:", json.dumps(opportunity, indent=2))
 
         # ─── PULL THE ACTUAL EMAIL FROM THE SANDBOX CUSTOMER RECORD ───
+        # ─── PULL THE ACTUAL EMAIL FROM THE SANDBOX CUSTOMER ───
         try:
-            # find the “self” link to the customer
-            customer_url = None
-            for link in opportunity.get("customer", {}).get("links", []):
-                if link.get("rel") in ("self", "Fetch Customer", "Get Customer"):
-                    customer_url = link["href"]
-                    break
-
+            customer_url = next(
+                (l["href"] for l in opportunity["customer"]["links"]
+                 if l["rel"] in ("self", "Fetch Customer", "Get Customer")),
+                None
+            )
             if customer_url:
                 customer_data = get_customer_by_url(customer_url, token)
                 emails = customer_data.get("emails", [])
-                # promote the first email address into lead["email_address"]
                 lead["email_address"] = emails[0].get("address", "").strip() if emails else ""
             else:
                 lead["email_address"] = ""
@@ -533,14 +531,9 @@ for lead in filtered_leads:
     print(f"▸ Using Subscription-Id: {subscription_id!r}")
     
         # ─── only log to CRM if we actually have a lead email ───
-    # pull from the sandbox’s customer.emails array:
-    cust = lead.get("customer", {})
-    emails = cust.get("emails", [])
-    # ─── DEBUG: show where the email might be hiding ───
-    print("🔍 lead.customer object:", json.dumps(lead.get("customer", {}), indent=2))
+    # ─── only log when we have promoted lead["email_address"] ───
     print("🔍 lead.email_address:", repr(lead.get("email_address", "")))
-
-    recipient = emails[0].get("address", "").strip() if emails else ""
+    recipient = lead.get("email_address", "")
 
     if recipient:
         from_address = os.getenv("FORTELLIS_FROM_EMAIL", "FortellisSalesLeads@eleadcrm.com")
