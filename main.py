@@ -447,7 +447,7 @@ for lead in filtered_leads:
         Your job is to write personalized, dealership-branded emails from Patti, a friendly virtual assistant.
     
         When writing:
-        - Start with a personalized greeting using the guest’s first name (e.g. "Hi Eufemia,")
+        - Start with a personalized greeting using the guest’s first name (e.g. "Hi John,")
         - Lead with VALUE: if you have Why Buy info or vehicle features, make that the first thing Patti shares
         - If the customer mentioned a vehicle, answer them confidently and link to that inventory if possible
         - If there’s a specific question, answer it first before offering general help
