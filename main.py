@@ -327,10 +327,11 @@ for lead in filtered_leads:
     stock = vehicle.get("stockNumber", "")
     vehicle_str = f"{year} {make} {model} {trim}".strip()
 
-    # 🔁 Fallback: parse ADF XML if vehicle is blank
-    if not any([year, make, model]):
+    # 🔁 Fallback: parse ADF XML if vehicle is blank (only in API mode)
+    if not USE_EMAIL_MODE and not any([year, make, model]):
         try:
             xml = activity_data.get("message", {}).get("body", "")
+
             root = ET.fromstring(xml)
             v = root.find(".//vehicle")
             if v is not None:
