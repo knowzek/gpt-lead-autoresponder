@@ -18,6 +18,9 @@ USE_EMAIL_MODE = False  # Set to False to use Fortellis API
 from imapclient import IMAPClient
 import email
 
+# Ensure this always exists, even if upstream logic didn't set it
+inquiry_text = None   # <- add this line
+
 def fetch_adf_xml_from_gmail(email_address, app_password, sender_filters=None):
     if sender_filters is None:
         sender_filters = [
