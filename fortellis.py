@@ -4,6 +4,29 @@ import uuid
 import requests
 from datetime import datetime, timedelta
 import json
+import time
+import logging
+
+# --- simple JSON logger (stdout) ---
+def _mask_headers(h):
+    h = dict(h or {})
+    if "Authorization" in h:
+        h["Authorization"] = "Bearer ***redacted***"
+    return h
+
+def _log_txn(method, url, headers, req_body, status, resp_body, duration_ms):
+    import json
+    print(json.dumps({
+        "kind": "fortellis_transaction",
+        "method": method,
+        "url": url,
+        "request_headers": _mask_headers(headers),
+        "request_body": req_body,
+        "status_code": status,
+        "response_body": resp_body,
+        "duration_ms": duration_ms
+    }, ensure_ascii=False))
+
 
 BASE_URL = "https://api.fortellis.io/cdk-test"
 TOKEN_URL = "https://identity.fortellis.io/oauth2/aus1p1ixy7YL8cMq02p7/v1/token"
@@ -15,13 +38,22 @@ SUBSCRIPTION_ID = os.getenv("FORTELLIS_SUBSCRIPTION_ID")
 
 BASE_URL = "https://api.fortellis.io/cdk-test"  # your test‐env base
 
+def _request(method, url, headers=None, json_body=None, params=None):
+    t0 = time.time()
+    resp = requests.request(method, url, headers=headers, json=json_body, params=params)
+    dt = int((time.time() - t0) * 1000)
+    try:
+        body = resp.json()
+    except Exception:
+        body = resp.text
+    _log_txn(method, url, headers, json_body, resp.status_code, body, dt)
+    resp.raise_for_status()
+    return resp
+
 def send_opportunity_email_activity(token, subscription_id,
                                     opportunity_id, sender,
                                     recipients, carbon_copies,
                                     subject, body_html):
-    """
-    Logs an email in the CRM by POST /sales/v2/elead/opportunities/sendEmail
-    """
     url = f"{BASE_URL}/sales/v2/elead/opportunities/sendEmail"
     payload = {
         "opportunityId": opportunity_id,
@@ -40,13 +72,9 @@ def send_opportunity_email_activity(token, subscription_id,
         "Request-Id": str(uuid.uuid4()),
         "Accept": "application/json"
     }
-    resp = requests.post(url, json=payload, headers=headers)
-    if resp.status_code != 200:
-        print("❌ sendEmail payload:", json.dumps(payload, indent=2))
-        print("❌ sendEmail response:", resp.status_code, resp.text)
-    resp.raise_for_status()
+    resp = _request("POST", url, headers=headers, json_body=payload)
+    return resp.json()
 
-    return resp.json()  # e.g. { "activityId": "..." }
 
 
 def search_activities_by_opportunity(opportunity_id, token):
@@ -123,9 +151,8 @@ def get_recent_leads(token, since_minutes=10):
         "Request-Id": str(uuid.uuid4()),
         "Accept": "application/json"
     }
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()
-    return response.json().get("items", [])
+    resp = _request("GET", url, headers=headers)
+    return resp.json().get("items", [])
 
 def get_customer_by_url(url, token):
     headers = {
