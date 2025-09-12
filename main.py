@@ -602,17 +602,19 @@ for lead in filtered_leads:
         due_dt_iso = (_dt.datetime.utcnow() + _dt.timedelta(minutes=10)) \
             .replace(microsecond=0).isoformat() + "Z"
     
+        # v1 requires: activityName (string), activityType (numeric), comments (string)
         sched_resp = schedule_activity(
-            token, subscription_id, opportunity_id,
-            subject="Demo: Follow up call",
-            notes="Patti demo—schedule a call in ~10 minutes.",
+            token,
+            subscription_id,
+            opportunity_id,
             due_dt_iso_utc=due_dt_iso,
-            activity_type="Phone Call"   # use a known-good type from your sandbox
+            activity_name="Send Email/Letter",   # matches your Postman body
+            activity_type=14,                    # numeric code from Postman
+            comments="Patti demo—schedule a follow-up in ~10 minutes."
         )
         print("📅 Scheduled activity.")
         post_results["activities_schedule"] = sched_resp
     
-        # capture activityId if present
         scheduled_activity_id = (
             sched_resp.get("id")
             or sched_resp.get("activityId")
