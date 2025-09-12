@@ -654,6 +654,16 @@ for lead in filtered_leads:
         proof_path = None
 
     # Send you the proof bundle
+
+    # Format JSON results into a pretty string
+    email_body = "Fortellis Demo Results\n\n"
+    email_body += json.dumps(post_results, indent=2)
+    
+    send_email(
+        to="YOUR_TEST_EMAIL@example.com",
+        subject="Fortellis Demo Run Results",
+        body=email_body
+    )
     try:
         send_email(
             to=["knowzek@gmail.com"],
