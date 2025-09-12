@@ -35,8 +35,17 @@ CLIENT_ID = os.getenv("FORTELLIS_CLIENT_ID")
 CLIENT_SECRET = os.getenv("FORTELLIS_CLIENT_SECRET")
 SUBSCRIPTION_ID = os.getenv("FORTELLIS_SUBSCRIPTION_ID")
 
-
-BASE_URL = "https://api.fortellis.io/cdk-test"  # your test‐env base
+def _post_and_wrap(url, headers, payload):
+    resp = _request("POST", url, headers=headers, json_body=payload)
+    try:
+        body = resp.json() if resp.text else None
+    except ValueError:
+        body = None
+    if isinstance(body, dict):
+        body = {"status": resp.status_code, **body}
+    else:
+        body = {"status": resp.status_code}
+    return body
 
 def _request(method, url, headers=None, json_body=None, params=None):
     t0 = time.time()
@@ -114,8 +123,7 @@ def add_vehicle_sought(token, subscription_id, opportunity_id,
         "Accept": "application/json",
         "Content-Type": "application/json"
     }
-    resp = _request("POST", url, headers=headers, json_body=payload)
-    return resp.json()
+    return post_and_wrap("POST", url, headers=headers, json_body=payload)
 
 import uuid
 from datetime import datetime, timedelta
@@ -179,12 +187,8 @@ def schedule_activity(
         "Accept": "application/json",
         "Content-Type": "application/json",
     }
-    resp = _request("POST", url, headers=headers, json_body=payload)
-    try:
-        return resp.json()
-    except Exception:
-        # Some success cases may return 204/empty
-        return {"status": resp.status_code}
+    return post_and_wrap("POST", url, headers=headers, json_body=payload)
+
 
 def complete_activity(
     token,
@@ -233,12 +237,7 @@ def complete_activity(
         "Accept": "application/json",
         "Content-Type": "application/json",
     }
-    resp = _request("POST", url, headers=headers, json_body=payload)
-    try:
-        return resp.json()
-    except Exception:
-        return {"status": resp.status_code}
-
+    return post_and_wrap("POST", url, headers=headers, json_body=payload)
 
 
 def search_activities_by_opportunity(opportunity_id, token):
