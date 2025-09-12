@@ -656,12 +656,26 @@ for lead in filtered_leads:
     from datetime import datetime as _dt
     from emailer import send_email
     
+    def _get_status(val):
+        # Expecting each API call to return a dict; grab 'status' if present
+        if isinstance(val, dict):
+            return val.get("status", "N/A")
+        return "N/A"
+    
     ts_utc = _dt.utcnow().strftime("%Y-%m-%d %H:%M:%SZ")
+    
+    # Build a concise status section
+    status_lines = ["=== HTTP Statuses ==="]
+    for key, val in post_results.items():
+        status_lines.append(f"{key}: {_get_status(val)}")
+    
     body_lines = [
         "Fortellis Demo Proof",
         f"Timestamp (UTC): {ts_utc}",
         f"Opportunity Id: {opportunity_id}",
         f"Lead Activity Id: {activity_id if activity_id else 'N/A'}",
+        "",
+        *status_lines,
         "",
         "=== POST Results (raw JSON) ===",
         _json.dumps(post_results, indent=2, ensure_ascii=False, sort_keys=True),
