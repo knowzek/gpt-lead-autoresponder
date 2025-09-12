@@ -117,23 +117,91 @@ def add_vehicle_sought(token, subscription_id, opportunity_id,
     resp = _request("POST", url, headers=headers, json_body=payload)
     return resp.json()
 
-def schedule_activity(token, subscription_id, opportunity_id,
-                      subject, notes, due_dt_iso_utc, activity_type="Call"):
-    # Note: v1 schedule endpoint
+import uuid
+from datetime import datetime, timedelta
+
+def _coerce_activity_type(value):
+    """
+    Accepts an int (pass-through), a numeric string ('14' -> 14),
+    or a small set of known labels -> codes. Raise if unrecognized.
+    """
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+
+    # Known-safe label(s) you've confirmed in Postman:
+    LABEL_TO_CODE = {
+        "Send Email/Letter": 14,
+        # Add more when you verify their exact numeric codes.
+    }
+    if isinstance(value, str) and value in LABEL_TO_CODE:
+        return LABEL_TO_CODE[value]
+
+    raise ValueError(f"Unrecognized activityType: {value!r}. Use a numeric code "
+                     "or a known label like 'Send Email/Letter'.")
+
+def schedule_activity(
+    token,
+    subscription_id,
+    opportunity_id,
+    *,
+    due_dt_iso_utc,
+    activity_name,
+    activity_type,
+    comments=""
+):
+    """
+    CDK CRM Activities v1 — Schedule activity
+    Endpoint: /sales/v1/elead/activities/schedule
+
+    Required payload:
+    {
+        "opportunityId": "...",
+        "dueDate": "2025-09-13T10:39:51.402Z",
+        "activityName": "Send Email/Letter",
+        "activityType": 14,
+        "comments": "Comments go here"
+    }
+    """
     url = f"{BASE_URL}/sales/v1/elead/activities/schedule"
     payload = {
         "opportunityId": opportunity_id,
-        "subject": subject,
-        "notes": notes,
-        "dueDate": due_dt_iso_utc,   # ISO UTC, e.g. '2025-09-12T20:33:00Z'
-        "activityType": activity_type
+        "dueDate": due_dt_iso_utc,                   # e.g., '2025-09-13T10:39:51.402Z'
+        "activityName": activity_name,               # e.g., 'Send Email/Letter'
+        "activityType": _coerce_activity_type(activity_type),  # numeric or mapped
+        "comments": comments or ""
     }
     headers = {
         "Authorization": f"Bearer {token}",
         "Subscription-Id": subscription_id,
         "Request-Id": str(uuid.uuid4()),
         "Accept": "application/json",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+    }
+    resp = _request("POST", url, headers=headers, json_body=payload)
+    try:
+        return resp.json()
+    except Exception:
+        # Some success cases may return 204/empty
+        return {"status": resp.status_code}
+
+def complete_activity(token, subscription_id, activity_id):
+    """
+    CDK CRM Activities v1 — Complete activity
+    Endpoint: /sales/v1/elead/activities/complete
+
+    Expected payload:
+    { "activityId": "..." }
+    """
+    url = f"{BASE_URL}/sales/v1/elead/activities/complete"
+    payload = {"activityId": activity_id}
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Subscription-Id": subscription_id,
+        "Request-Id": str(uuid.uuid4()),
+        "Accept": "application/json",
+        "Content-Type": "application/json",
     }
     resp = _request("POST", url, headers=headers, json_body=payload)
     try:
@@ -141,22 +209,6 @@ def schedule_activity(token, subscription_id, opportunity_id,
     except Exception:
         return {"status": resp.status_code}
 
-def complete_activity(token, subscription_id, activity_id):
-    # Note: v1 complete endpoint
-    url = f"{BASE_URL}/sales/v1/elead/activities/complete"
-    payload = { "activityId": activity_id }
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Subscription-Id": subscription_id,
-        "Request-Id": str(uuid.uuid4()),
-        "Accept": "application/json",
-        "Content-Type": "application/json"
-    }
-    resp = _request("POST", url, headers=headers, json_body=payload)
-    try:
-        return resp.json()
-    except Exception:
-        return {"status": resp.status_code}
 
 def search_activities_by_opportunity(opportunity_id, token):
     url = f"{BASE_URL}/sales/elead/v1/activities/search"
