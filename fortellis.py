@@ -35,8 +35,10 @@ CLIENT_ID = os.getenv("FORTELLIS_CLIENT_ID")
 CLIENT_SECRET = os.getenv("FORTELLIS_CLIENT_SECRET")
 SUBSCRIPTION_ID = os.getenv("FORTELLIS_SUBSCRIPTION_ID")
 
-def post_and_wrap(method, url, *, headers, payload):
-    resp = _request(method, url, headers=headers, json_body=payload)
+def post_and_wrap(method, url, *, headers, payload=None, json_body=None):
+    """Accept both 'payload' and legacy 'json_body'."""
+    body_to_send = payload if payload is not None else json_body
+    resp = _request(method, url, headers=headers, json_body=body_to_send)
     try:
         body = resp.json() if resp.text else None
     except ValueError:
@@ -46,6 +48,7 @@ def post_and_wrap(method, url, *, headers, payload):
     else:
         body = {"status": resp.status_code}
     return body
+
 
 def _request(method, url, headers=None, json_body=None, params=None):
     t0 = time.time()
