@@ -637,43 +637,27 @@ for lead in filtered_leads:
         print(f"❌ Complete activity failed: {e}")
         post_results["activities_complete"] = {"error": str(e)}
 
-    # ── Write results to a .txt and email it ─────────────────────────
-    import os as _os, json as _json, time as _time
-    ts = _time.strftime("%Y%m%d-%H%M%S")
-    proof_path = f"/mnt/data/fortellis_demo_{opportunity_id}_{ts}.txt"
-    try:
-        with open(proof_path, "w", encoding="utf-8") as f:
-            f.write(_json.dumps({
-                "lead_activityId": activity_id,
-                "opportunityId": opportunity_id,
-                "post_results": post_results
-            }, indent=2, ensure_ascii=False))
-        print(f"🧾 Wrote proof file: {proof_path}")
-    except Exception as e:
-        print(f"❌ Failed to write proof file: {e}")
-        proof_path = None
-
-    # Send you the proof bundle
-
-    # Format JSON results into a pretty string
-    email_body = "Fortellis Demo Results\n\n"
-    email_body += json.dumps(post_results, indent=2)
+    # ── Email the results inline (no attachments) ─────────────────────
+    import json as _json
+    from datetime import datetime as _dt
+    from emailer import send_email
+    
+    ts_utc = _dt.utcnow().strftime("%Y-%m-%d %H:%M:%SZ")
+    body_lines = [
+        "Fortellis Demo Proof",
+        f"Timestamp (UTC): {ts_utc}",
+        f"Opportunity Id: {opportunity_id}",
+        f"Lead Activity Id: {activity_id if activity_id else 'N/A'}",
+        "",
+        "=== POST Results (raw JSON) ===",
+        _json.dumps(post_results, indent=2, ensure_ascii=False, sort_keys=True),
+    ]
+    email_body = "\n".join(body_lines)
     
     send_email(
-        to="YOUR_TEST_EMAIL@example.com",
-        subject="Fortellis Demo Run Results",
-        body=email_body
+        to=["knowzek@gmail.com"],  # or your DEMO_PROOF_TO list/var
+        subject=f"Patti Fortellis Demo Proof — Opp {opportunity_id}",
+        body=email_body,  # plain text
     )
-    try:
-        send_email(
-            to=["knowzek@gmail.com"],
-            subject=f"Patti Fortellis Demo Proof – Opp {opportunity_id}",
-            body="Attached: raw JSON results from the five POST calls executed just now.",
-            attachments=[p for p in [proof_path] if p]
-        )
-    except Exception as e:
-        print(f"❌ Failed to email proof file: {e}")
-
-    print(f"📧 Email sent to Mickey for lead {activity_id}")
-
-print("🏁 Done.")
+    
+    print(f"📧 Sent inline proof email for lead {activity_id or 'N/A'}")
