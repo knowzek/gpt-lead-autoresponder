@@ -18,6 +18,19 @@ USE_EMAIL_MODE = False  # Set to False to use Fortellis API
 from imapclient import IMAPClient
 import email
 
+# ── Fortellis Sandbox email requirements ───────────────────────────
+FORTELLIS_TEST_FROM = os.getenv(
+    "FORTELLIS_TEST_FROM",
+    "sales@claycooleygenesisofmesquite.edealerhub.com",
+)
+FORTELLIS_TEST_TO = os.getenv(
+    "FORTELLIS_TEST_TO",
+    "rishabhrajendraprasad.shukla@cdk.com",
+)
+# If True, always send CRM email to the sandbox-approved address,
+# regardless of the customer's email.
+FORTELLIS_FORCE_SANDBOX_EMAIL = os.getenv("FORTELLIS_FORCE_SANDBOX_EMAIL", "1") in ("1", "true", "True")
+
 # Ensure this always exists, even if upstream logic didn't set it
 inquiry_text = None   # <- add this line
 
@@ -533,38 +546,54 @@ for lead in filtered_leads:
                            schedule_activity, complete_activity)
     
     # get a fresh token
+
     token = get_token()
     subscription_id = os.getenv("FORTELLIS_SUBSCRIPTION_ID")
     print(f"▸ Using Subscription-Id: {subscription_id!r}")
     
-   # ─── only log when not in email mode and we have a recipient ───
-    print("🔍 lead.email_address:", repr(lead.get("email_address", "")))
-    recipient = lead.get("email_address", "")
-    
     # Accumulate POST call results for proof bundle
     post_results = {}
-
-    if not USE_EMAIL_MODE and recipient:
-        from_address = os.getenv("FORTELLIS_FROM_EMAIL", "sales@claycooleygenesisofmesquite.edealerhub.com")
-        try:
-            activity_log = send_opportunity_email_activity(
-                token,
-                subscription_id,
-                opportunity_id,
-                from_address,
-                [recipient],
-                [],
-                subject,
-                response["body"].replace("\n", "<br/>")
-            )
-            print(f"🗄️ Logged email activity to CRM: {activity_log['activityId']}")
-        except Exception as e:
-            print(f"❌ CRM logging failed: {e}")
-    elif not recipient:
-        print(f"⚠️ No lead email for opportunity {opportunity_id}, skipping CRM log.")
-    else:
-        print("🛑 Skipping CRM log (email mode).")
     
+    # ─── Fortellis CRM email logging (sandbox-safe) ────────────────────
+    try:
+        # Use sandbox-approved addresses when forced (default) or when we lack a customer email.
+        lead_recipient = (lead.get("email_address", "") or "").strip()
+        use_sandbox = FORTELLIS_FORCE_SANDBOX_EMAIL or not lead_recipient
+    
+        sender_address = FORTELLIS_TEST_FROM if use_sandbox else os.getenv(
+            "FORTELLIS_FROM_EMAIL",
+            FORTELLIS_TEST_FROM  # fallback to sandbox if unset
+        )
+        recipients_list = [FORTELLIS_TEST_TO] if use_sandbox else [lead_recipient]
+    
+        print(f"✉️ CRM sendEmail FROM={sender_address} TO={recipients_list} (sandbox={use_sandbox})")
+    
+        activity_log = send_opportunity_email_activity(
+            token,
+            subscription_id,
+            opportunity_id,
+            sender_address,
+            recipients_list,
+            [],
+            subject,
+            response["body"].replace("\n", "<br/>")
+        )
+    
+        # Store the wrapped response (should include 'status' if your post_and_wrap is wired)
+        post_results["opportunities_sendEmail"] = activity_log
+    
+        # Friendly console proof
+        if isinstance(activity_log, dict):
+            aid = activity_log.get("activityId") or activity_log.get("id")
+            sc = activity_log.get("status")
+            print(f"🗄️ Logged email activity to CRM: activityId={aid!r}, status={sc}")
+        else:
+            print("🗄️ Logged email activity to CRM (no dict body returned).")
+    
+    except Exception as e:
+        print(f"❌ CRM logging failed: {e}")
+        post_results["opportunities_sendEmail"] = {"error": str(e)}
+        
     # ── POST #2: Opportunities → Add Comment ─────────────────────────
     try:
         comment_resp = add_opportunity_comment(
