@@ -35,8 +35,8 @@ CLIENT_ID = os.getenv("FORTELLIS_CLIENT_ID")
 CLIENT_SECRET = os.getenv("FORTELLIS_CLIENT_SECRET")
 SUBSCRIPTION_ID = os.getenv("FORTELLIS_SUBSCRIPTION_ID")
 
-def post_and_wrap(url, headers, payload):
-    resp = _request("POST", url, headers=headers, json_body=payload)
+def post_and_wrap(method, url, *, headers, payload):
+    resp = _request(method, url, headers=headers, json_body=payload)
     try:
         body = resp.json() if resp.text else None
     except ValueError:
