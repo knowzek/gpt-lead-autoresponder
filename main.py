@@ -72,11 +72,11 @@ def fetch_adf_xml_from_gmail(email_address, app_password, sender_filters=None):
 def parse_plaintext_lead(body):
     try:
         # Rough match for vehicle block
-        vehicle_match = re.search(r"Vehicle:\s+([^\n<]+)", body)
-        name_match = re.search(r"Name:\s+([^\n<]+)", body)
-        phone_match = re.search(r"Phone:\s+([^\n<]+)", body)
-        email_match = re.search(r"E-?Mail:\s+([^\s<]+)", body)
-        comment_match = re.search(r"Comments:\s+(.*?)<", body)
+        vehicle_match = re.search(r"Vehicle:\s([^\n<])", body)
+        name_match = re.search(r"Name:\s([^\n<])", body)
+        phone_match = re.search(r"Phone:\s([^\n<])", body)
+        email_match = re.search(r"E-?Mail:\s([^\s<])", body)
+        comment_match = re.search(r"Comments:\s(.*?)<", body)
 
         vehicle_parts = vehicle_match.group(1).split() if vehicle_match else []
         year = vehicle_parts[0] if len(vehicle_parts) > 0 else ""
@@ -528,7 +528,9 @@ for lead in filtered_leads:
     print(f"📧 Email sent to customer for lead {activity_id}")
     
     # now log it back into Fortellis
-    from fortellis import get_token, send_opportunity_email_activity
+    from fortellis import (get_token, send_opportunity_email_activity,
+                           add_opportunity_comment, add_vehicle_sought,
+                           schedule_activity, complete_activity)
     
     # get a fresh token
     token = get_token()
@@ -539,6 +541,9 @@ for lead in filtered_leads:
     print("🔍 lead.email_address:", repr(lead.get("email_address", "")))
     recipient = lead.get("email_address", "")
     
+    # Accumulate POST call results for proof bundle
+    post_results = {}
+
     if not USE_EMAIL_MODE and recipient:
         from_address = os.getenv("FORTELLIS_FROM_EMAIL", "sales@claycooleygenesisofmesquite.edealerhub.com")
         try:
@@ -560,6 +565,98 @@ for lead in filtered_leads:
     else:
         print("🛑 Skipping CRM log (email mode).")
     
+    # ── POST #2: Opportunities → Add Comment ─────────────────────────
+    try:
+        comment_resp = add_opportunity_comment(
+            token, subscription_id, opportunity_id,
+            "Demo: Patti generated and sent the intro email."
+        )
+        print(f"📝 Added comment on opportunity {opportunity_id}")
+        post_results["opportunities_addComment"] = comment_resp
+    except Exception as e:
+        print(f"❌ Add comment failed: {e}")
+        post_results["opportunities_addComment"] = {"error": str(e)}
+
+    # ── POST #3: Opportunities → Add Vehicle Sought ──────────────────
+    try:
+        vs_payload = add_vehicle_sought(
+            token, subscription_id, opportunity_id,
+            is_new=True,
+            year_from=2023, year_to=2025,
+            make=make or "Kia",
+            model=model or "Telluride",
+            trim=trim or "SX-Prestige",
+            stock_number=stock or "DEMO-123",
+            is_primary=True
+        )
+        print(f"🚗 Added vehicle sought on opportunity {opportunity_id}")
+        post_results["opportunities_addVehicleSought"] = vs_payload
+    except Exception as e:
+        print(f"❌ Add vehicle sought failed: {e}")
+        post_results["opportunities_addVehicleSought"] = {"error": str(e)}
+
+    # ── POST #4: Activities → Schedule Activity ──────────────────────
+    import datetime as _dt
+    try:
+        due_dt_iso = (_dt.datetime.utcnow()  _dt.timedelta(minutes=10)).replace(microsecond=0).isoformat()  "Z"
+        sched_resp = schedule_activity(
+            token, subscription_id, opportunity_id,
+            subject="Demo: Follow up call",
+            notes="Patti demo—schedule a call in ~10 minutes.",
+            due_dt_iso_utc=due_dt_iso,
+            activity_type="Call"   # use a known-good type for your sandbox
+        )
+        print("📅 Scheduled activity.")
+        post_results["activities_schedule"] = sched_resp
+        # try to capture activityId if present
+        scheduled_activity_id = (sched_resp.get("id") or
+                                 sched_resp.get("activityId") or
+                                 None)
+    except Exception as e:
+        print(f"❌ Schedule activity failed: {e}")
+        post_results["activities_schedule"] = {"error": str(e)}
+        scheduled_activity_id = None
+
+    # ── POST #5: Activities → Complete Activity ──────────────────────
+    try:
+        if scheduled_activity_id:
+            comp_resp = complete_activity(token, subscription_id, scheduled_activity_id)
+        else:
+            # Fallback: if schedule didn’t return an id, skip gracefully
+            comp_resp = {"skipped": "no activityId from schedule"}
+        print("✅ Completed activity (or skipped if no id).")
+        post_results["activities_complete"] = comp_resp
+    except Exception as e:
+        print(f"❌ Complete activity failed: {e}")
+        post_results["activities_complete"] = {"error": str(e)}
+
+    # ── Write results to a .txt and email it ─────────────────────────
+    import os as _os, json as _json, time as _time
+    ts = _time.strftime("%Y%m%d-%H%M%S")
+    proof_path = f"/mnt/data/fortellis_demo_{opportunity_id}_{ts}.txt"
+    try:
+        with open(proof_path, "w", encoding="utf-8") as f:
+            f.write(_json.dumps({
+                "lead_activityId": activity_id,
+                "opportunityId": opportunity_id,
+                "post_results": post_results
+            }, indent=2, ensure_ascii=False))
+        print(f"🧾 Wrote proof file: {proof_path}")
+    except Exception as e:
+        print(f"❌ Failed to write proof file: {e}")
+        proof_path = None
+
+    # Send you the proof bundle
+    try:
+        send_email(
+            to=["knowzek@gmail.com"],
+            subject=f"Patti Fortellis Demo Proof – Opp {opportunity_id}",
+            body="Attached: raw JSON results from the five POST calls executed just now.",
+            attachments=[p for p in [proof_path] if p]
+        )
+    except Exception as e:
+        print(f"❌ Failed to email proof file: {e}")
+
     print(f"📧 Email sent to Mickey for lead {activity_id}")
 
 print("🏁 Done.")
