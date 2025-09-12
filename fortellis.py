@@ -186,16 +186,46 @@ def schedule_activity(
         # Some success cases may return 204/empty
         return {"status": resp.status_code}
 
-def complete_activity(token, subscription_id, activity_id):
+def complete_activity(
+    token,
+    subscription_id,
+    opportunity_id,
+    *,
+    due_dt_iso_utc,
+    completed_dt_iso_utc,
+    activity_name,
+    activity_type,
+    comments="",
+    activity_id=None,
+):
     """
     CDK CRM Activities v1 — Complete activity
     Endpoint: /sales/v1/elead/activities/complete
 
-    Expected payload:
-    { "activityId": "..." }
+    Expected payload (per your Postman):
+    {
+        "opportunityId": "...",
+        "dueDate": "2025-09-13T10:39:51.402Z",
+        "completedDate": "2025-09-11T10:39:51.402Z",
+        "activityName": "Send Email/Letter",
+        "activityType": 14,
+        "comments": "Comments go here",
+        # Some tenants may also accept/require activityId:
+        # "activityId": "..."
+    }
     """
     url = f"{BASE_URL}/sales/v1/elead/activities/complete"
-    payload = {"activityId": activity_id}
+    payload = {
+        "opportunityId": opportunity_id,
+        "dueDate": due_dt_iso_utc,
+        "completedDate": completed_dt_iso_utc,
+        "activityName": activity_name,
+        "activityType": _coerce_activity_type(activity_type),
+        "comments": comments or ""
+    }
+    if activity_id:
+        payload["activityId"] = activity_id
+
     headers = {
         "Authorization": f"Bearer {token}",
         "Subscription-Id": subscription_id,
@@ -208,6 +238,7 @@ def complete_activity(token, subscription_id, activity_id):
         return resp.json()
     except Exception:
         return {"status": resp.status_code}
+
 
 
 def search_activities_by_opportunity(opportunity_id, token):
