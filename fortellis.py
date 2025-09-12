@@ -75,7 +75,88 @@ def send_opportunity_email_activity(token, subscription_id,
     resp = _request("POST", url, headers=headers, json_body=payload)
     return resp.json()
 
+def add_opportunity_comment(token, subscription_id, opportunity_id, comment_text):
+    url = f"{BASE_URL}/sales/v2/elead/opportunities/comment"
+    payload = {
+        "opportunityId": opportunity_id,
+        "comment": comment_text
+    }
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Subscription-Id": subscription_id,
+        "Request-Id": str(uuid.uuid4()),
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+    }
+    resp = _request("POST", url, headers=headers, json_body=payload)
+    # This endpoint commonly returns 204 No Content; normalize to dict for logging bundle
+    return {"status": resp.status_code}
 
+def add_vehicle_sought(token, subscription_id, opportunity_id,
+                       is_new=True, year_from=None, year_to=None,
+                       make="", model="", trim="", stock_number="", is_primary=True):
+    url = f"{BASE_URL}/sales/v2/elead/opportunities/vehicleSought"
+    payload = {
+        "opportunityId": opportunity_id,
+        "isNew": bool(is_new),
+        "yearFrom": year_from,
+        "yearTo": year_to,
+        "make": make,
+        "model": model,
+        "trim": trim,
+        "stockNumber": stock_number,
+        "isPrimary": bool(is_primary)
+    }
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Subscription-Id": subscription_id,
+        "Request-Id": str(uuid.uuid4()),
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+    }
+    resp = _request("POST", url, headers=headers, json_body=payload)
+    return resp.json()
+
+def schedule_activity(token, subscription_id, opportunity_id,
+                      subject, notes, due_dt_iso_utc, activity_type="Call"):
+    # Note: v1 schedule endpoint
+    url = f"{BASE_URL}/sales/v1/elead/activities/schedule"
+    payload = {
+        "opportunityId": opportunity_id,
+        "subject": subject,
+        "notes": notes,
+        "dueDate": due_dt_iso_utc,   # ISO UTC, e.g. '2025-09-12T20:33:00Z'
+        "activityType": activity_type
+    }
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Subscription-Id": subscription_id,
+        "Request-Id": str(uuid.uuid4()),
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+    }
+    resp = _request("POST", url, headers=headers, json_body=payload)
+    try:
+        return resp.json()
+    except Exception:
+        return {"status": resp.status_code}
+
+def complete_activity(token, subscription_id, activity_id):
+    # Note: v1 complete endpoint
+    url = f"{BASE_URL}/sales/v1/elead/activities/complete"
+    payload = { "activityId": activity_id }
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Subscription-Id": subscription_id,
+        "Request-Id": str(uuid.uuid4()),
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+    }
+    resp = _request("POST", url, headers=headers, json_body=payload)
+    try:
+        return resp.json()
+    except Exception:
+        return {"status": resp.status_code}
 
 def search_activities_by_opportunity(opportunity_id, token):
     url = f"{BASE_URL}/sales/elead/v1/activities/search"
@@ -143,7 +224,7 @@ def get_token():
 
 
 def get_recent_leads(token, since_minutes=10):
-    since = (datetime.utcnow() - timedelta(days=6, hours=20)).isoformat() + "Z"
+    since = (datetime.utcnow() - timedelta(days=6, hours=20)).isoformat()  "Z"
     url = f"{BASE_URL}/sales/elead/v1/leads/search-delta?since={since}&page=1&pageSize=100"
     headers = {
         "Authorization": f"Bearer {token}",
