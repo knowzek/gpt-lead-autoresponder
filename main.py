@@ -598,24 +598,31 @@ for lead in filtered_leads:
     # ── POST #4: Activities → Schedule Activity ──────────────────────
     import datetime as _dt
     try:
-        due_dt_iso = (_dt.datetime.utcnow()  _dt.timedelta(minutes=10)).replace(microsecond=0).isoformat()  "Z"
+        # add 10 minutes to now, drop microseconds, append "Z" for UTC
+        due_dt_iso = (_dt.datetime.utcnow() + _dt.timedelta(minutes=10)) \
+            .replace(microsecond=0).isoformat() + "Z"
+    
         sched_resp = schedule_activity(
             token, subscription_id, opportunity_id,
             subject="Demo: Follow up call",
             notes="Patti demo—schedule a call in ~10 minutes.",
             due_dt_iso_utc=due_dt_iso,
-            activity_type="Call"   # use a known-good type for your sandbox
+            activity_type="Phone Call"   # use a known-good type from your sandbox
         )
         print("📅 Scheduled activity.")
         post_results["activities_schedule"] = sched_resp
-        # try to capture activityId if present
-        scheduled_activity_id = (sched_resp.get("id") or
-                                 sched_resp.get("activityId") or
-                                 None)
+    
+        # capture activityId if present
+        scheduled_activity_id = (
+            sched_resp.get("id")
+            or sched_resp.get("activityId")
+            or None
+        )
     except Exception as e:
         print(f"❌ Schedule activity failed: {e}")
         post_results["activities_schedule"] = {"error": str(e)}
         scheduled_activity_id = None
+
 
     # ── POST #5: Activities → Complete Activity ──────────────────────
     try:
