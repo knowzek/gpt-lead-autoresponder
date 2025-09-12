@@ -97,9 +97,7 @@ def add_opportunity_comment(token, subscription_id, opportunity_id, comment_text
         "Accept": "application/json",
         "Content-Type": "application/json"
     }
-    resp = _request("POST", url, headers=headers, json_body=payload)
-    # This endpoint commonly returns 204 No Content; normalize to dict for logging bundle
-    return {"status": resp.status_code}
+    return _post_and_wrap("POST", url, headers=headers, json_body=payload)
 
 def add_vehicle_sought(token, subscription_id, opportunity_id,
                        is_new=True, year_from=None, year_to=None,
