@@ -229,7 +229,7 @@ else:
 
 print(f"📬 Found {len(leads)} leads from Fortellis")
 
-filtered_leads = leads[:5]
+filtered_leads = leads[:1]
 
 pprint.pprint(leads[0])  # Debug: show first lead structure
 
@@ -629,15 +629,27 @@ for lead in filtered_leads:
     # ── POST #5: Activities → Complete Activity ──────────────────────
     try:
         if scheduled_activity_id:
-            comp_resp = complete_activity(token, subscription_id, scheduled_activity_id)
+            completed_dt_iso = _dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    
+            comp_resp = complete_activity(
+                token,
+                subscription_id,
+                opportunity_id,
+                due_dt_iso_utc=due_dt_iso,                 # same due as schedule
+                completed_dt_iso_utc=completed_dt_iso,     # now
+                activity_name="Send Email/Letter",         # same as schedule
+                activity_type=14,                          # same code
+                comments="Patti demo—completed as proof.",
+                activity_id=scheduled_activity_id          # include if you have it
+            )
         else:
-            # Fallback: if schedule didn’t return an id, skip gracefully
             comp_resp = {"skipped": "no activityId from schedule"}
         print("✅ Completed activity (or skipped if no id).")
         post_results["activities_complete"] = comp_resp
     except Exception as e:
         print(f"❌ Complete activity failed: {e}")
         post_results["activities_complete"] = {"error": str(e)}
+
 
     # ── Email the results inline (no attachments) ─────────────────────
     import json as _json
