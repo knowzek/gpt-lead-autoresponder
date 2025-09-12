@@ -81,8 +81,7 @@ def send_opportunity_email_activity(token, subscription_id,
         "Request-Id": str(uuid.uuid4()),
         "Accept": "application/json"
     }
-    resp = _request("POST", url, headers=headers, json_body=payload)
-    return resp.json()
+    return post_and_wrap("POST", url, headers=headers, json_body=payload)
 
 def add_opportunity_comment(token, subscription_id, opportunity_id, comment_text):
     url = f"{BASE_URL}/sales/v2/elead/opportunities/comment"
@@ -97,7 +96,7 @@ def add_opportunity_comment(token, subscription_id, opportunity_id, comment_text
         "Accept": "application/json",
         "Content-Type": "application/json"
     }
-    return _post_and_wrap("POST", url, headers=headers, json_body=payload)
+    return post_and_wrap("POST", url, headers=headers, json_body=payload)
 
 def add_vehicle_sought(token, subscription_id, opportunity_id,
                        is_new=True, year_from=None, year_to=None,
