@@ -36,18 +36,16 @@ CLIENT_SECRET = os.getenv("FORTELLIS_CLIENT_SECRET")
 SUBSCRIPTION_ID = os.getenv("FORTELLIS_SUBSCRIPTION_ID")
 
 def post_and_wrap(method, url, *, headers, payload=None, json_body=None):
-    """Accept both 'payload' and legacy 'json_body'."""
     body_to_send = payload if payload is not None else json_body
     resp = _request(method, url, headers=headers, json_body=body_to_send)
     try:
         body = resp.json() if resp.text else None
     except ValueError:
         body = None
+    result = {"status": resp.status_code, "requestId": getattr(resp, "request_id", None)}
     if isinstance(body, dict):
-        body = {"status": resp.status_code, **body}
-    else:
-        body = {"status": resp.status_code}
-    return body
+        result.update(body)
+    return result
 
 
 def _request(method, url, headers=None, json_body=None, params=None):
@@ -60,6 +58,9 @@ def _request(method, url, headers=None, json_body=None, params=None):
         body = resp.text
     _log_txn(method, url, headers, json_body, resp.status_code, body, dt)
     resp.raise_for_status()
+    # Attach request id for downstream logging
+    req_id = headers.get("Request-Id") if headers else None
+    resp.request_id = req_id
     return resp
 
 def send_opportunity_email_activity(token, subscription_id,
