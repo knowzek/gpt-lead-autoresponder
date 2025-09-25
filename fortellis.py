@@ -97,7 +97,7 @@ def post_and_wrap(method, url, *, headers, payload=None, json_body=None):
     return result
 
 
-def _request(method, url, headers=None, json_body=None, params=None):
+def _request(method, url, headers=None, params=None, json=None, allow_404=False):
     t0 = time.time()
     req_id = (headers or {}).get("Request-Id")
     try:
@@ -143,7 +143,7 @@ def _since_iso(minutes: int | None = 30) -> str:
     dt = datetime.now(timezone.utc) - timedelta(minutes=minutes or 30)
     return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
-def get_recent_opportunities(token, dealer_key, since_minutes=30, page=1, page_size=100):
+def get_recent_opportunities(token, dealer_key, since_minutes=360, page=1, page_size=100):
     url = f"{BASE_URL}{OPPS_BASE}/searchDelta"  # OPPS_BASE == "/sales/v2/elead/opportunities"
     params = {
         "dateFrom": _since_iso(since_minutes),  # NOTE: camelCase
@@ -151,7 +151,7 @@ def get_recent_opportunities(token, dealer_key, since_minutes=30, page=1, page_s
         "pageSize": page_size,
     }
     try:
-        resp = _request("GET", url, headers=_headers(dealer_key, token), params=params)
+        resp = _request("GET", url, headers=_headers(dealer_key, token), params=params, allow_404=True)
         resp.raise_for_status()
 
         # Handle 204 or empty body safely
