@@ -34,6 +34,22 @@ LEADS_BASE = "/sales/crm/v1/leads"
 OPPS_BASE  = "/sales/v2/elead/opportunities"
 ACTIVITIES_BASE = "/sales/v1/elead/activities"
 SUB_MAP = json.loads(os.getenv("FORTELLIS_SUBSCRIPTIONS_JSON","{}"))
+TOKEN_URL = os.getenv("FORTELLIS_TOKEN_URL", "https://api.fortellis.io/oauth2/v1/token")
+
+def get_token(dealer_key: str):
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Subscription-Id": SUB_MAP[dealer_key],
+    }
+    data = {
+        "grant_type": "client_credentials",
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "scope": "anonymous",
+    }
+    resp = requests.post(TOKEN_URL, headers=headers, data=data)
+    resp.raise_for_status()
+    return resp.json()["access_token"]
 
 def _headers(dealer_key:str, token:str):
     return {
