@@ -32,7 +32,7 @@ def _log_txn_compact(level, *, method, url, headers, status, duration_ms, reques
 
 
 BASE_URL = os.getenv("FORTELLIS_BASE_URL", "https://api.fortellis.io")  # prod default
-LEADS_BASE = "/sales/elead/v1/leads"
+LEADS_BASE = "/sales/crm/v1/leads"
 OPPS_BASE  = "/sales/v2/elead/opportunities"
 ACTIVITIES_BASE = "/sales/v1/elead/activities"
 SUB_MAP = json.loads(os.getenv("FORTELLIS_SUBSCRIPTIONS_JSON","{}"))
@@ -273,7 +273,7 @@ def get_activity_by_id_v1(activity_id, token, dealer_key):
 def get_recent_leads(token, dealer_key, since_minutes=10):
     # Fortellis requires 'since' within the last 7 days. Your old value was ~6d20h.
     since_iso = (datetime.utcnow() - timedelta(minutes=since_minutes)).isoformat() + "Z"
-    url = f"{BASE_URL}{LEADS_BASE}/search-delta"
+    url = f"{BASE_URL}{LEADS_BASE}/searchDelta"
     params = {"since": since_iso, "page": 1, "pageSize": 100}
     resp = _request("GET", url, headers=_headers(dealer_key, token), params=params)
     return resp.json().get("items", [])
