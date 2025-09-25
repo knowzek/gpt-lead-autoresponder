@@ -7,7 +7,7 @@ from datetime import datetime as _dt, timedelta as _td, timezone as _tz
 from fortellis import (
     SUB_MAP,
     get_token,
-    get_recent_opportunities,   # ← add this
+    get_recent_opportunities,   
     get_opportunity,
     get_customer_by_url,
     get_activity_by_url,
@@ -36,6 +36,8 @@ TEST_FROM = os.getenv("FORTELLIS_TEST_FROM", "sales@claycooleygenesisofmesquite.
 TEST_TO   = os.getenv("FORTELLIS_TEST_TO",   "rishabhrajendraprasad.shukla@cdk.com")
 
 MICKEY_EMAIL = os.getenv("MICKEY_EMAIL", "knowzek@gmail.com")  # proof recipient
+ELIGIBLE_UPTYPES = {s.strip().lower() for s in os.getenv("ELIGIBLE_UPTYPES", "internet").split(",")}
+
 inquiry_text = None  # ensure defined
 
 # === Dealership name → dealer_key (keys must match your SUB_MAP env) ==
@@ -160,7 +162,7 @@ log.info("Starting GPT lead autoresponder (SAFE_MODE=%s, EMAIL_MODE=%s)",
 all_items = []
 per_rooftop_counts = {dk: 0 for dk in SUB_MAP}
 
-WINDOW_MIN = int(os.getenv("DELTA_WINDOW_MINUTES", "1440"))  # default 24h
+WINDOW_MIN = int(os.getenv("DELTA_WINDOW_MINUTES", "30"))  
 PAGE_SIZE  = int(os.getenv("DELTA_PAGE_SIZE", "500"))
 
 for dealer_key in SUB_MAP.keys():
@@ -175,14 +177,21 @@ for dealer_key in SUB_MAP.keys():
              dealer_key, (opp_data or {}).get("totalItems", "N/A"))
 
     # Normalize opportunities → your downstream “lead-like” shape
+    raw_count = len(opp_items)
     items = []
+    
     for op in opp_items:
+        up_type = (op.get("upType") or "").lower()
+        if up_type not in ELIGIBLE_UPTYPES:
+            continue  # skip showroom/phone/etc.
+    
         items.append({
             "_dealer_key": dealer_key,
             "opportunityId": op.get("id"),
-            "activityId": None,                   # may not exist; we’ll guard later
+            "activityId": None,                   # may be None
             "links": op.get("links", []),
             "source": op.get("source"),
+            "upType": op.get("upType"),           # <-- keep for later logs/debug
             # carry common fields you already read later:
             "soughtVehicles": op.get("soughtVehicles"),
             "salesTeam": op.get("salesTeam"),
@@ -190,12 +199,19 @@ for dealer_key in SUB_MAP.keys():
             "tradeIns": op.get("tradeIns"),
             "createdBy": op.get("createdBy"),
         })
-
+    
+    eligible_count = len(items)
+    
     # stamp + tally + aggregate
     for it in items:
         it["_dealer_key"] = dealer_key
     all_items.extend(items)
-    per_rooftop_counts[dealer_key] += len(items)
+    per_rooftop_counts[dealer_key] += eligible_count
+    
+    # logs: show both API total and eligible after filter
+    log.info("Eligible opportunities (upType in %s) for %s: %d/%d",
+             ",".join(sorted(ELIGIBLE_UPTYPES)), dealer_key, eligible_count, raw_count)
+
 
 # per-rooftop + total logs (opportunity counts)
 for dk in sorted(per_rooftop_counts):
