@@ -164,10 +164,12 @@ else:
     for dealer_key in SUB_MAP.keys():
         token = get_token(dealer_key)
         leads = get_recent_leads(token, dealer_key, since_minutes=30)
-        log.info("Fetched %d lead(s) for %s", len(leads), dealer_key)
-        for ld in leads:
-            ld["_dealer_key"] = dealer_key
-        all_leads.extend(leads)
+
+        items = leads.get("items", [])
+        for ld in items:
+            if isinstance(ld, dict):
+                ld["_dealer_key"] = dealer_key
+        all_leads.extend(items) 
 
 log.info("Total leads fetched: %d", len(all_leads))
 if not all_leads:
