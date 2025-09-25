@@ -32,12 +32,12 @@ def _log_txn_compact(level, *, method, url, headers, status, duration_ms, reques
 
 
 BASE_URL = os.getenv("FORTELLIS_BASE_URL", "https://api.fortellis.io")  # prod default
-LEADS_BASE       = "/sales/crm/v1/leads"          # GET /search-delta
-OPPS_BASE        = "/sales/crm/v2/opportunities"  # e.g., GET/POST, sendEmail lives here in CRM v2
-ACTIVITIES_BASE  = "/sales/crm/v2/activities"     # GET activity by id, etc.
-CUSTOMERS_BASE   = "/sales/crm/v1/customers"      # GET customer by id
-REFDATA_BASE     = "/sales/crm/v1/reference-data" # if you call product reference data via CRM
-MESSAGING_BASE   = "/sales/crm/v1/messaging"      # if you call CRM Post Messaging
+LEADS_BASE = "/cdk/sales/elead/v1/leads"
+OPPS_BASE       = "/cdk/sales/v2/elead/opportunities"
+ACTIVITIES_BASE = "/cdk/sales/v1/elead/activities"
+CUSTOMERS_BASE  = "/cdk/sales/v1/elead/customers"
+REFDATA_BASE     = "/cdk/sales/crm/v1/reference-data" # if you call product reference data via CRM
+MESSAGING_BASE   = "/cdk/sales/crm/v1/messaging"      # if you call CRM Post Messaging
 SUB_MAP = json.loads(os.getenv("FORTELLIS_SUBSCRIPTIONS_JSON","{}"))
 # Fortellis Identity token endpoint (prod)
 AUTH_SERVER_ID = os.getenv("FORTELLIS_AUTH_SERVER_ID", "aus1p1ixy7YL8cMq02p7")
