@@ -101,30 +101,40 @@ def _request(method, url, headers=None, params=None, json=None, allow_404=False)
     t0 = time.time()
     req_id = (headers or {}).get("Request-Id")
     try:
-        resp = requests.request(method, url, headers=headers, json=json_body, params=params, timeout=30)
+        resp = requests.request(method, url, headers=headers, json=json, params=params, timeout=30)
         dt = int((time.time() - t0) * 1000)
+        status = resp.status_code
 
-        # success path: compact info only
-        _log_txn_compact(
-            logging.INFO,
-            method=method, url=url, headers=_mask_headers(headers),
-            status=resp.status_code, duration_ms=dt, request_id=req_id,
-            note=None
-        )
-
-        # surface non-2xx with a short preview to help debug quickly
-        if not (200 <= resp.status_code < 300):
-            preview = (resp.text or "")[:400].replace("\n", " ")
+        # allow 404 without warning/exception (e.g., empty searchDelta window)
+        if status == 404 and allow_404:
             _log_txn_compact(
-                logging.WARN,
+                logging.INFO,
                 method=method, url=url, headers=_mask_headers(headers),
-                status=resp.status_code, duration_ms=dt, request_id=req_id,
-                note=f"non-2xx body_preview={preview}"
+                status=status, duration_ms=dt, request_id=req_id,
+                note="empty-delta (404 allowed)"
             )
+            resp.request_id = req_id
+            return resp
 
+        if 200 <= status < 300:
+            _log_txn_compact(
+                logging.INFO,
+                method=method, url=url, headers=_mask_headers(headers),
+                status=status, duration_ms=dt, request_id=req_id,
+                note=None
+            )
+            resp.request_id = req_id
+            return resp
+
+        # non-2xx and not an allowed 404 → warn + raise
+        preview = (resp.text or "")[:400].replace("\n", " ")
+        _log_txn_compact(
+            logging.WARNING,  # (use WARNING not WARN)
+            method=method, url=url, headers=_mask_headers(headers),
+            status=status, duration_ms=dt, request_id=req_id,
+            note=f"non-2xx body_preview={preview}"
+        )
         resp.raise_for_status()
-        resp.request_id = req_id
-        return resp
 
     except requests.RequestException as e:
         dt = int((time.time() - t0) * 1000)
@@ -132,16 +142,20 @@ def _request(method, url, headers=None, params=None, json=None, allow_404=False)
         _log_txn_compact(
             logging.ERROR,
             method=method, url=url, headers=_mask_headers(headers or {}),
-            status=getattr(e.response, "status_code", "ERR"),
+            status=getattr(getattr(e, 'response', None), 'status_code', 'ERR'),
             duration_ms=dt, request_id=req_id, note=note
         )
         raise
+
 
 from datetime import datetime, timezone, timedelta
 
 def _since_iso(minutes: int | None = 30) -> str:
     dt = datetime.now(timezone.utc) - timedelta(minutes=minutes or 30)
     return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+# make sure at top of fortellis.py:
+# import requests
 
 def get_recent_opportunities(token, dealer_key, since_minutes=360, page=1, page_size=100):
     url = f"{BASE_URL}{OPPS_BASE}/searchDelta"  # OPPS_BASE == "/sales/v2/elead/opportunities"
@@ -150,34 +164,33 @@ def get_recent_opportunities(token, dealer_key, since_minutes=360, page=1, page_
         "page": page,
         "pageSize": page_size,
     }
+
+    # allow_404=True: _request will return the response without warning/raising on 404
+    resp = _request("GET", url, headers=_headers(dealer_key, token), params=params, allow_404=True)
+
+    # Fortellis uses 404 for “no opportunities in this window”
+    if resp.status_code == 404:
+        return {"items": [], "totalItems": 0, "searchDate": params["dateFrom"]}
+
+    # 204 or empty body → treat as empty window
+    if resp.status_code == 204 or not (resp.content and resp.text.strip()):
+        return {"items": [], "totalItems": 0, "searchDate": params["dateFrom"]}
+
+    # For other non-2xx, raise now
+    resp.raise_for_status()
+
+    # Parse & normalize
     try:
-        resp = _request("GET", url, headers=_headers(dealer_key, token), params=params, allow_404=True)
-        resp.raise_for_status()
+        data = resp.json() or {}
+    except ValueError:
+        data = {}
 
-        # Handle 204 or empty body safely
-        if resp.status_code == 204 or not resp.content or not resp.text.strip():
-            return {"items": [], "totalItems": 0, "searchDate": _since_iso(0)}
+    items = data.get("items") or []
+    total = data.get("totalItems", len(items))
+    search_date = data.get("searchDate", params["dateFrom"])
 
-        data = resp.json()
-        # Normalize if API omits fields on empty
-        if not isinstance(data, dict):
-            return {"items": [], "totalItems": 0, "searchDate": _since_iso(0)}
-        data.setdefault("items", [])
-        data.setdefault("totalItems", len(data["items"]))
-        data.setdefault("searchDate", _since_iso(0))
-        return data
+    return {"items": items, "totalItems": total, "searchDate": search_date}
 
-    except requests.HTTPError as e:
-        r = e.response
-        if r is not None and r.status_code == 404:
-            # Fortellis uses 404 for "no matches" on searchDelta
-            try:
-                payload = r.json()
-            except Exception:
-                payload = {}
-            if (payload or {}).get("code") in {"OpportunitiesNotFoundError", "ResourceNotFound", "NotFound"}:
-                return {"items": [], "totalItems": 0, "searchDate": _since_iso(0)}
-        raise
 
 
 def send_opportunity_email_activity(token, dealer_key,
