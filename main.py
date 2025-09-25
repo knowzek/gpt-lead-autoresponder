@@ -1,6 +1,8 @@
 import os, json, re, xml.etree.ElementTree as ET, email
 from imapclient import IMAPClient
 import logging
+from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+
 
 from fortellis import (
     SUB_MAP,                    # mapping {dealer_key: subscription_id}
@@ -39,10 +41,9 @@ inquiry_text = None  # ensure defined
 # === Dealership name → dealer_key (keys must match your SUB_MAP env) ==
 DEALERSHIP_TO_KEY = {
     "Tustin Mazda": "tustin-mazda",
-    "Huntington Beach Mazda": "hbm-mazda",
+    "Huntington Beach Mazda": "huntington-beach-mazda",
     "Tustin Hyundai": "tustin-hyundai",
     "Mission Viejo Kia": "mission-viejo-kia",
-    "Patterson Auto Group": "patterson-auto-group",
 }
 
 # === SRP URL bases ===================================================
@@ -155,33 +156,46 @@ log.info("Starting GPT lead autoresponder (SAFE_MODE=%s, EMAIL_MODE=%s)",
          os.getenv("PATTI_SAFE_MODE","1"), str(USE_EMAIL_MODE))
 
 # === Pull leads ======================================================
+
 all_leads = []
+per_rooftop_counts = {dk: 0 for dk in SUB_MAP}  # log zeros too
+
 if USE_EMAIL_MODE:
     raw_items = fetch_adf_xml_from_gmail(os.getenv("GMAIL_USER"), os.getenv("GMAIL_APP_PASSWORD"))
-    # (omitted: same parsing+dealership inference as before)
 else:
-    # Loop over each dealership subscription and pull recent leads
+    since_iso = compute_since_iso(since_minutes=None)  # keep or swap to minutes if you prefer
     for dealer_key in SUB_MAP.keys():
         token = get_token(dealer_key)
-        leads = get_recent_leads(token, dealer_key, since_minutes=60*24*3)  # 7 days back
-
-        items = leads.get("items", [])
+        data = get_recent_leads(token, dealer_key, since_minutes=30)
+        items = (data or {}).get("items", []) or []
         for ld in items:
             if isinstance(ld, dict):
                 ld["_dealer_key"] = dealer_key
-        all_leads.extend(items) 
+        all_leads.extend(items)
+        per_rooftop_counts[dealer_key] += len(items)
+        
+        log.info("API reported totalItems for %s: %s",
+                 dealer_key, (data or {}).get("totalItems", "N/A"))
 
+
+# log per rooftop + total
+for dk in sorted(per_rooftop_counts):
+    log.info("Leads fetched for %s: %d", dk, per_rooftop_counts[dk])
 log.info("Total leads fetched: %d", len(all_leads))
+
 if not all_leads:
     log.info("No leads. Exiting.")
     raise SystemExit(0)
 
-# For now, process the first lead
+
 lead = all_leads[0]
 
 activity_id = lead.get("activityId")
 opportunity_id = lead.get("opportunityId")
-dealer_key = lead.get("_dealer_key") or "patterson-auto-group"  # safety default
+dealer_key = lead.get("_dealer_key")
+if dealer_key not in SUB_MAP:
+    raise KeyError(f"Missing/unknown dealer_key on lead: {dealer_key}. Valid: {list(SUB_MAP.keys())}")
+token = get_token(dealer_key)
 
 log.info("Evaluating lead activity=%s opportunity=%s dealer_key=%s", activity_id, opportunity_id, dealer_key)
 
@@ -260,8 +274,12 @@ dealership = (
     or "Patterson Auto Group"
 )
 
-# ensure dealer_key aligns with name (if we got name differently)
-dealer_key = DEALERSHIP_TO_KEY.get(dealership, dealer_key)
+# ensure dealer_key aligns with name (only if it maps to a real rooftop key)
+mapped = DEALERSHIP_TO_KEY.get(dealership)
+if mapped and mapped in SUB_MAP and mapped != dealer_key:
+    log.info("Switching dealer_key from %s to %s based on dealership='%s'",
+             dealer_key, mapped, dealership)
+    dealer_key = mapped
 
 contact_info = CONTACT_INFO_MAP.get(dealership, CONTACT_INFO_MAP["Patterson Auto Group"])
 
@@ -331,7 +349,7 @@ send_email(to=[MICKEY_EMAIL], subject=subject, body=response["body"])
 log.info("Proof email sent to %s", MICKEY_EMAIL)
 
 # === Log to Fortellis (SAFE first) ==================================
-from datetime import datetime as _dt, timedelta as _td
+
 post_results = {}
 
 token = get_token(dealer_key)
@@ -384,7 +402,8 @@ except Exception as e:
 
 # 4) Schedule & Complete follow-up activity
 try:
-    due_dt_iso = (_dt.utcnow() + _td(minutes=10)).replace(microsecond=0).isoformat() + "Z"
+    due_dt_iso = (_dt.now(_tz.utc) + _td(minutes=10)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
     sched = schedule_activity(
         token, dealer_key, opportunity_id,
         due_dt_iso_utc=due_dt_iso, activity_name="Send Email/Letter",
@@ -395,7 +414,7 @@ try:
     log.info("Schedule activity: status=%s", sched.get("status", "N/A"))
 
     if activity_id_new:
-        completed_dt_iso = _dt.utcnow().replace(microsecond=0).isoformat() + "Z"
+        completed_dt_iso = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         comp = complete_activity(
             token, dealer_key, opportunity_id,
             due_dt_iso_utc=due_dt_iso, completed_dt_iso_utc=completed_dt_iso,
@@ -411,8 +430,8 @@ except Exception as e:
     post_results["activities_schedule/complete"] = {"error": str(e)}
 
 # === Email the proof bundle (concise) ================================
-from datetime import datetime as _dtnow
-ts_utc = _dtnow.utcnow().strftime("%Y-%m-%d %H:%M:%SZ")
+
+ts_utc = _dt.now(_tz.utc).strftime("%Y-%m-%d %H:%M:%SZ")
 
 def _get_status(val):
     return val.get("status", "N/A") if isinstance(val, dict) else "N/A"
