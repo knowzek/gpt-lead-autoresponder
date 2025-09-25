@@ -32,9 +32,12 @@ def _log_txn_compact(level, *, method, url, headers, status, duration_ms, reques
 
 
 BASE_URL = os.getenv("FORTELLIS_BASE_URL", "https://api.fortellis.io")  # prod default
-LEADS_BASE = "/sales/crm/v1/leads"
-OPPS_BASE  = "/sales/v2/elead/opportunities"
-ACTIVITIES_BASE = "/sales/v1/elead/activities"
+LEADS_BASE       = "/sales/crm/v1/leads"          # GET /search-delta
+OPPS_BASE        = "/sales/crm/v2/opportunities"  # e.g., GET/POST, sendEmail lives here in CRM v2
+ACTIVITIES_BASE  = "/sales/crm/v2/activities"     # GET activity by id, etc.
+CUSTOMERS_BASE   = "/sales/crm/v1/customers"      # GET customer by id
+REFDATA_BASE     = "/sales/crm/v1/reference-data" # if you call product reference data via CRM
+MESSAGING_BASE   = "/sales/crm/v1/messaging"      # if you call CRM Post Messaging
 SUB_MAP = json.loads(os.getenv("FORTELLIS_SUBSCRIPTIONS_JSON","{}"))
 # Fortellis Identity token endpoint (prod)
 AUTH_SERVER_ID = os.getenv("FORTELLIS_AUTH_SERVER_ID", "aus1p1ixy7YL8cMq02p7")
@@ -270,13 +273,13 @@ def get_activity_by_id_v1(activity_id, token, dealer_key):
     resp.raise_for_status()
     return resp.json()
 
-def get_recent_leads(token, dealer_key, since_minutes=10):
-    # Fortellis requires 'since' within the last 7 days. Your old value was ~6d20h.
-    since_iso = (datetime.utcnow() - timedelta(minutes=since_minutes)).isoformat() + "Z"
-    url = f"{BASE_URL}{LEADS_BASE}/searchDelta"
-    params = {"since": since_iso, "page": 1, "pageSize": 100}
+def get_recent_leads(token, dealer_key, since_minutes=30, page=1, page_size=100):
+    since_iso = (datetime.utcnow() - timedelta(minutes=since_minutes)).replace(microsecond=0).isoformat() + "Z"
+    url = f"{BASE_URL}{LEADS_BASE}/search-delta"   # ← CRM op name uses a hyphen
+    params = {"since": since_iso, "page": page, "pageSize": page_size}
     resp = _request("GET", url, headers=_headers(dealer_key, token), params=params)
-    return resp.json().get("items", [])
+    resp.raise_for_status()
+    return resp.json()
 
 
 def get_customer_by_url(url, token, dealer_key):
