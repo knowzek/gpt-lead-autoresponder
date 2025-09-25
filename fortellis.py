@@ -144,19 +144,40 @@ def _since_iso(minutes: int | None = 30) -> str:
     return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 def get_recent_opportunities(token, dealer_key, since_minutes=30, page=1, page_size=100):
-    """
-    Elead Opportunities searchDelta (prod, non-/cdk path).
-    NOTE: this endpoint expects 'dateFrom' (camelCase), not 'since'.
-    """
-    url = f"{BASE_URL}{OPPS_BASE}/searchDelta"
+    url = f"{BASE_URL}{OPPS_BASE}/searchDelta"  # OPPS_BASE == "/sales/v2/elead/opportunities"
     params = {
-        "dateFrom": _since_iso(since_minutes),
+        "dateFrom": _since_iso(since_minutes),  # NOTE: camelCase
         "page": page,
         "pageSize": page_size,
     }
-    resp = _request("GET", url, headers=_headers(dealer_key, token), params=params)
-    resp.raise_for_status()
-    return resp.json()
+    try:
+        resp = _request("GET", url, headers=_headers(dealer_key, token), params=params)
+        resp.raise_for_status()
+
+        # Handle 204 or empty body safely
+        if resp.status_code == 204 or not resp.content or not resp.text.strip():
+            return {"items": [], "totalItems": 0, "searchDate": _since_iso(0)}
+
+        data = resp.json()
+        # Normalize if API omits fields on empty
+        if not isinstance(data, dict):
+            return {"items": [], "totalItems": 0, "searchDate": _since_iso(0)}
+        data.setdefault("items", [])
+        data.setdefault("totalItems", len(data["items"]))
+        data.setdefault("searchDate", _since_iso(0))
+        return data
+
+    except requests.HTTPError as e:
+        r = e.response
+        if r is not None and r.status_code == 404:
+            # Fortellis uses 404 for "no matches" on searchDelta
+            try:
+                payload = r.json()
+            except Exception:
+                payload = {}
+            if (payload or {}).get("code") in {"OpportunitiesNotFoundError", "ResourceNotFound", "NotFound"}:
+                return {"items": [], "totalItems": 0, "searchDate": _since_iso(0)}
+        raise
 
 
 def send_opportunity_email_activity(token, dealer_key,
