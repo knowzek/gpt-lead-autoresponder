@@ -170,30 +170,30 @@ else:
         data = get_recent_leads(token, dealer_key, since_minutes=30)
         items = (data or {}).get("items", []) or []
 
-        # Fallback: if the leads feed is empty, try opportunity delta
+        # 2) Fallback to Opportunities delta if Leads are empty
         if not items:
             opp_data = get_recent_opportunities(token, dealer_key, since_minutes=30)
             opp_items = (opp_data or {}).get("items", []) or []
             log.info("API reported opp totalItems for %s: %s",
                      dealer_key, (opp_data or {}).get("totalItems", "N/A"))
-        
-            # Wrap opportunities to look like your current "lead" dicts
+    
+            # Normalize each opportunity into a "lead-like" dict your pipeline can handle
             for op in opp_items:
-                ld = {
+                items.append({
                     "_dealer_key": dealer_key,
                     "opportunityId": op.get("id"),
-                    "activityId": None,              # you’ll fetch notes later, or fall back
-                    "links": op.get("links", []),    # used to pull customer/activity
+                    "activityId": None,             # may be hydrated via links later
+                    "links": op.get("links", []),
                     "source": op.get("source"),
-                }
-                items.append(ld)
+                })
         
+        # stamp, tally, extend
         for ld in items:
             if isinstance(ld, dict):
                 ld["_dealer_key"] = dealer_key
         all_leads.extend(items)
         per_rooftop_counts[dealer_key] += len(items)
-        
+    
         log.info("API reported totalItems for %s: %s",
                  dealer_key, (data or {}).get("totalItems", "N/A"))
 
