@@ -33,11 +33,11 @@ def _log_txn_compact(level, *, method, url, headers, status, duration_ms, reques
 
 BASE_URL = os.getenv("FORTELLIS_BASE_URL", "https://api.fortellis.io")  # prod default
 LEADS_BASE = "/cdk/sales/elead/v1/leads"
-OPPS_BASE       = "/cdk/sales/v2/elead/opportunities"
-ACTIVITIES_BASE = "/cdk/sales/v1/elead/activities"
-CUSTOMERS_BASE  = "/cdk/sales/v1/elead/customers"
-REFDATA_BASE     = "/cdk/sales/crm/v1/reference-data" # if you call product reference data via CRM
-MESSAGING_BASE   = "/cdk/sales/crm/v1/messaging"      # if you call CRM Post Messaging
+OPPS_BASE        = "/cdk/sales/elead/v2/opportunities"   
+ACTIVITIES_BASE  = "/cdk/sales/elead/v1/activities" 
+CUSTOMERS_BASE  = "/cdk/sales/elead/v1/customers"
+REFDATA_BASE     = "/cdk/sales/elead/v1/reference-data" # if you call product reference data via CRM
+MESSAGING_BASE   = "/cdk/sales/elead/v1/messaging"      # if you call CRM Post Messaging
 SUB_MAP = json.loads(os.getenv("FORTELLIS_SUBSCRIPTIONS_JSON","{}"))
 # Fortellis Identity token endpoint (prod)
 AUTH_SERVER_ID = os.getenv("FORTELLIS_AUTH_SERVER_ID", "aus1p1ixy7YL8cMq02p7")
