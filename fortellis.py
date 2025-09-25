@@ -137,6 +137,16 @@ def _request(method, url, headers=None, json_body=None, params=None):
         )
         raise
 
+def get_recent_opportunities(token, dealer_key, since_minutes=30, page=1, page_size=100):
+    url = f"{BASE_URL}{OPPS_BASE}/searchDelta"   # /cdk/sales/elead/v2/opportunities/searchDelta
+    params = {
+        "since": _since_iso(since_minutes),
+        "page": page,
+        "pageSize": page_size,
+    }
+    resp = _request("GET", url, headers=_headers(dealer_key, token), params=params)
+    resp.raise_for_status()
+    return resp.json()
 
 def send_opportunity_email_activity(token, dealer_key,
                                     opportunity_id, sender,
