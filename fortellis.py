@@ -262,20 +262,22 @@ def get_activity_by_id_v1(activity_id, token, dealer_key):
     return resp.json()
 
 
-def get_token():
+TOKEN_URL = os.getenv("FORTELLIS_TOKEN_URL", "https://api.fortellis.io/oauth2/v1/token")
+
+def get_token(dealer_key: str):
     headers = {
         "Content-Type": "application/x-www-form-urlencoded",
-        "Subscription-Id": SUBSCRIPTION_ID
+        "Subscription-Id": SUB_MAP[dealer_key],
     }
     data = {
         "grant_type": "client_credentials",
         "client_id": CLIENT_ID,
         "client_secret": CLIENT_SECRET,
-        "scope": "anonymous"
+        "scope": "anonymous",
     }
-    response = requests.post(TOKEN_URL, headers=headers, data=data)
-    response.raise_for_status()
-    return response.json()["access_token"]
+    resp = requests.post(TOKEN_URL, headers=headers, data=data)
+    resp.raise_for_status()
+    return resp.json()["access_token"]
 
 
 def get_recent_leads(token, dealer_key, since_minutes=10):
