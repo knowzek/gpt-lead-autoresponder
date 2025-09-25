@@ -33,7 +33,7 @@ def _log_txn_compact(level, *, method, url, headers, status, duration_ms, reques
 
 BASE_URL = os.getenv("FORTELLIS_BASE_URL", "https://api.fortellis.io")  # prod default
 LEADS_BASE = "/cdk/sales/elead/v1/leads"
-OPPS_BASE        = "/sales/v2/elead/opportunities/"   
+OPPS_BASE        = "/sales/v2/elead/opportunities"   
 ACTIVITIES_BASE  = "/sales/v1/elead/activities" 
 CUSTOMERS_BASE  = "/cdk/sales/elead/v1/customers"
 REFDATA_BASE     = "/cdk/sales/elead/v1/reference-data" # if you call product reference data via CRM
