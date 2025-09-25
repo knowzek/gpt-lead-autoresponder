@@ -33,7 +33,7 @@ def _log_txn_compact(level, *, method, url, headers, status, duration_ms, reques
 
 BASE_URL = os.getenv("FORTELLIS_BASE_URL", "https://api.fortellis.io")  # prod default
 LEADS_BASE = "/cdk/sales/elead/v1/leads"
-OPPS_BASE        = "/sales/v2/elead/opportunities"   
+OPPS_BASE        = "/sales/v2/elead/opportunities/"   
 ACTIVITIES_BASE  = "/sales/v1/elead/activities" 
 CUSTOMERS_BASE  = "/cdk/sales/elead/v1/customers"
 REFDATA_BASE     = "/cdk/sales/elead/v1/reference-data" # if you call product reference data via CRM
@@ -137,21 +137,27 @@ def _request(method, url, headers=None, json_body=None, params=None):
         )
         raise
 
+from datetime import datetime, timezone, timedelta
+
 def _since_iso(minutes: int | None = 30) -> str:
     dt = datetime.now(timezone.utc) - timedelta(minutes=minutes or 30)
     return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 def get_recent_opportunities(token, dealer_key, since_minutes=30, page=1, page_size=100):
-    """Elead Opportunities delta (prod, /cdk)."""
-    url = f"{BASE_URL}{OPPS_BASE}/searchDelta"   # note the camelCase
+    """
+    Elead Opportunities searchDelta (prod, non-/cdk path).
+    NOTE: this endpoint expects 'dateFrom' (camelCase), not 'since'.
+    """
+    url = f"{BASE_URL}{OPPS_BASE}/searchDelta"
     params = {
-        "since": _since_iso(since_minutes),
+        "dateFrom": _since_iso(since_minutes),
         "page": page,
         "pageSize": page_size,
     }
     resp = _request("GET", url, headers=_headers(dealer_key, token), params=params)
     resp.raise_for_status()
     return resp.json()
+
 
 def send_opportunity_email_activity(token, dealer_key,
                                     opportunity_id, sender,
