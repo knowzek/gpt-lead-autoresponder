@@ -168,6 +168,25 @@ else:
         token = get_token(dealer_key)
         data = get_recent_leads(token, dealer_key, since_minutes=30)
         items = (data or {}).get("items", []) or []
+
+        # Fallback: if the leads feed is empty, try opportunity delta
+        if not items:
+            opp_data = get_recent_opportunities(token, dealer_key, since_minutes=30)
+            opp_items = (opp_data or {}).get("items", []) or []
+            log.info("API reported opp totalItems for %s: %s",
+                     dealer_key, (opp_data or {}).get("totalItems", "N/A"))
+        
+            # Wrap opportunities to look like your current "lead" dicts
+            for op in opp_items:
+                ld = {
+                    "_dealer_key": dealer_key,
+                    "opportunityId": op.get("id"),
+                    "activityId": None,              # you’ll fetch notes later, or fall back
+                    "links": op.get("links", []),    # used to pull customer/activity
+                    "source": op.get("source"),
+                }
+                items.append(ld)
+        
         for ld in items:
             if isinstance(ld, dict):
                 ld["_dealer_key"] = dealer_key
