@@ -7,7 +7,6 @@ from datetime import datetime as _dt, timedelta as _td, timezone as _tz
 from fortellis import (
     SUB_MAP,
     get_token,
-    get_recent_leads,
     get_recent_opportunities,   # ← add this
     get_opportunity,
     get_customer_by_url,
@@ -156,60 +155,59 @@ def extract_adf_comment(adf_xml: str) -> str:
 log.info("Starting GPT lead autoresponder (SAFE_MODE=%s, EMAIL_MODE=%s)",
          os.getenv("PATTI_SAFE_MODE","1"), str(USE_EMAIL_MODE))
 
-# === Pull leads ======================================================
+# === Pull opportunity leads ======================================================
 
-all_leads = []
-per_rooftop_counts = {dk: 0 for dk in SUB_MAP}  # log zeros too
+all_items = []
+per_rooftop_counts = {dk: 0 for dk in SUB_MAP}
 
-if USE_EMAIL_MODE:
-    raw_items = fetch_adf_xml_from_gmail(os.getenv("GMAIL_USER"), os.getenv("GMAIL_APP_PASSWORD"))
-else:
+WINDOW_MIN = int(os.getenv("DELTA_WINDOW_MINUTES", "1440"))  # default 24h
+PAGE_SIZE  = int(os.getenv("DELTA_PAGE_SIZE", "500"))
 
-    for dealer_key in SUB_MAP.keys():
-        token = get_token(dealer_key)
-        data = get_recent_leads(token, dealer_key, since_minutes=30)
-        items = (data or {}).get("items", []) or []
+for dealer_key in SUB_MAP.keys():
+    token = get_token(dealer_key)
 
-        # 2) Fallback to Opportunities delta if Leads are empty
-        if not items:
-            opp_data = get_recent_opportunities(token, dealer_key, since_minutes=30)
-            opp_items = (opp_data or {}).get("items", []) or []
-            log.info("API reported opp totalItems for %s: %s",
-                     dealer_key, (opp_data or {}).get("totalItems", "N/A"))
-    
-            # Normalize each opportunity into a "lead-like" dict your pipeline can handle
-            for op in opp_items:
-                items.append({
-                    "_dealer_key": dealer_key,
-                    "opportunityId": op.get("id"),
-                    "activityId": None,             # may be hydrated via links later
-                    "links": op.get("links", []),
-                    "source": op.get("source"),
-                })
-        
-        # stamp, tally, extend
-        for ld in items:
-            if isinstance(ld, dict):
-                ld["_dealer_key"] = dealer_key
-        all_leads.extend(items)
-        per_rooftop_counts[dealer_key] += len(items)
-    
-        log.info("API reported totalItems for %s: %s",
-                 dealer_key, (data or {}).get("totalItems", "N/A"))
+    # Opportunities delta (the base you confirmed in Postman)
+    opp_data  = get_recent_opportunities(token, dealer_key,
+                                         since_minutes=WINDOW_MIN,
+                                         page_size=PAGE_SIZE)
+    opp_items = (opp_data or {}).get("items", []) or []
+    log.info("API reported opportunity totalItems for %s: %s",
+             dealer_key, (opp_data or {}).get("totalItems", "N/A"))
 
+    # Normalize opportunities → your downstream “lead-like” shape
+    items = []
+    for op in opp_items:
+        items.append({
+            "_dealer_key": dealer_key,
+            "opportunityId": op.get("id"),
+            "activityId": None,                   # may not exist; we’ll guard later
+            "links": op.get("links", []),
+            "source": op.get("source"),
+            # carry common fields you already read later:
+            "soughtVehicles": op.get("soughtVehicles"),
+            "salesTeam": op.get("salesTeam"),
+            "customer": op.get("customer"),
+            "tradeIns": op.get("tradeIns"),
+            "createdBy": op.get("createdBy"),
+        })
 
-# log per rooftop + total
+    # stamp + tally + aggregate
+    for it in items:
+        it["_dealer_key"] = dealer_key
+    all_items.extend(items)
+    per_rooftop_counts[dealer_key] += len(items)
+
+# per-rooftop + total logs (opportunity counts)
 for dk in sorted(per_rooftop_counts):
-    log.info("Leads fetched for %s: %d", dk, per_rooftop_counts[dk])
-log.info("Total leads fetched: %d", len(all_leads))
+    log.info("Opportunities fetched for %s: %d", dk, per_rooftop_counts[dk])
+log.info("Total opportunities fetched: %d", len(all_items))
 
-if not all_leads:
-    log.info("No leads. Exiting.")
+if not all_items:
+    log.info("No opportunities. Exiting.")
     raise SystemExit(0)
 
-
-lead = all_leads[0]
-
+# pick the first item for processing
+lead = all_items[0]  # keep variable name 'lead' to minimize downstream edits
 activity_id = lead.get("activityId")
 opportunity_id = lead.get("opportunityId")
 dealer_key = lead.get("_dealer_key")
@@ -252,21 +250,30 @@ else:
         lead["email_address"] = ""
 
     # Inquiry text via activity record
+
     try:
         activity_url = None
         for link in lead.get("links", []):
-            if "activity" in link.get("title", "").lower():
+            if "activity" in (link.get("title") or "").lower():
                 activity_url = link.get("href"); break
+    
+        activity_id = lead.get("activityId")  # may be None for opp-only
+        activity_data = {}
+    
         if activity_url:
             activity_data = get_activity_by_url(activity_url, token, dealer_key)
-        else:
+        elif activity_id:
             activity_data = get_activity_by_id_v1(activity_id, token, dealer_key)
-        inquiry_text = activity_data.get("notes", "") or ""
+        else:
+            log.info("No activity link/id on opportunity %s; skipping activity fetch.", opportunity_id)
+    
+        inquiry_text = (activity_data.get("notes", "") or "")
         if not inquiry_text and "message" in activity_data:
             inquiry_text = extract_adf_comment(activity_data["message"].get("body", ""))
     except Exception as e:
         log.warning("Failed to fetch activity: %s", e)
         inquiry_text = ""
+
 
 # === Salesperson / dealership mapping ================================
 salesperson_obj = opportunity.get("salesTeam", [{}])[0]
@@ -366,7 +373,7 @@ if subject == "Your vehicle inquiry with Patterson Auto Group":
 
 # === Send YOU a copy (proof), not the customer =======================
 send_email(to=[MICKEY_EMAIL], subject=subject, body=response["body"])
-log.info("Proof email sent to %s", MICKEY_EMAIL)
+log.info("Reply email sent to %s", MICKEY_EMAIL)
 
 # === Log to Fortellis (SAFE first) ==================================
 
@@ -448,33 +455,3 @@ try:
 except Exception as e:
     log.error("Schedule/Complete failed: %s", e)
     post_results["activities_schedule/complete"] = {"error": str(e)}
-
-# === Email the proof bundle (concise) ================================
-
-ts_utc = _dt.now(_tz.utc).strftime("%Y-%m-%d %H:%M:%SZ")
-
-def _get_status(val):
-    return val.get("status", "N/A") if isinstance(val, dict) else "N/A"
-
-status_lines = [
-    f"addComment: {_get_status(post_results.get('opportunities_addComment', {}))}",
-    f"sendEmail: {_get_status(post_results.get('opportunities_sendEmail', {}))}",
-    f"addVehicleSought: {_get_status(post_results.get('opportunities_addVehicleSought', {}))}",
-    f"schedule: {_get_status(post_results.get('activities_schedule', {}))}",
-    f"complete: {_get_status(post_results.get('activities_complete', {}))}",
-]
-
-email_body = "\n".join([
-    "Fortellis Demo Proof (summary)",
-    f"Timestamp (UTC): {ts_utc}",
-    f"Dealer Key: {dealer_key}",
-    f"Opportunity Id: {opportunity_id}",
-    f"Lead Activity Id: {activity_id or 'N/A'}",
-    "",
-    "=== HTTP Statuses ===",
-    *status_lines,
-])
-
-send_email(to=[MICKEY_EMAIL], subject=f"Patti Fortellis Demo Proof — Opp {opportunity_id}", body=email_body)
-log.info("Proof summary emailed. Run complete for opportunity=%s activity=%s dealer=%s",
-         opportunity_id, activity_id, dealer_key)
