@@ -163,7 +163,7 @@ per_rooftop_counts = {dk: 0 for dk in SUB_MAP}  # log zeros too
 if USE_EMAIL_MODE:
     raw_items = fetch_adf_xml_from_gmail(os.getenv("GMAIL_USER"), os.getenv("GMAIL_APP_PASSWORD"))
 else:
-    since_iso = compute_since_iso(since_minutes=None)  # keep or swap to minutes if you prefer
+
     for dealer_key in SUB_MAP.keys():
         token = get_token(dealer_key)
         data = get_recent_leads(token, dealer_key, since_minutes=30)
