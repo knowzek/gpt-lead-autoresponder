@@ -32,13 +32,17 @@ def _log_txn_compact(level, *, method, url, headers, status, duration_ms, reques
 
 
 BASE_URL = os.getenv("FORTELLIS_BASE_URL", "https://api.fortellis.io")  # prod default
-LEADS_BASE = "/sales/crm/v1/leads"
+LEADS_BASE = "/sales/elead/v1/leads"
 OPPS_BASE  = "/sales/v2/elead/opportunities"
 ACTIVITIES_BASE = "/sales/v1/elead/activities"
 SUB_MAP = json.loads(os.getenv("FORTELLIS_SUBSCRIPTIONS_JSON","{}"))
 # Fortellis Identity token endpoint (prod)
-AUTH_SERVER_ID = os.getenv("FORTELLIS_AUTH_SERVER_ID", "aus1p1ixy7YL8cMq02p7")  # <-- set your real ID in env
-TOKEN_URL = os.getenv("FORTELLIS_TOKEN_URL", f"https://identity.fortellis.io/oauth2/{AUTH_SERVER_ID}/v1/token")
+AUTH_SERVER_ID = os.getenv("FORTELLIS_AUTH_SERVER_ID", "aus1p1ixy7YL8cMq02p7")
+TOKEN_URL = os.getenv(
+    "FORTELLIS_TOKEN_URL",
+    f"https://identity.fortellis.io/oauth2/{AUTH_SERVER_ID}/v1/token"
+)
+
 
 def get_token(dealer_key: str):
     # Note: Subscription-Id is NOT required on the token call; it’s used on API calls.
@@ -287,16 +291,3 @@ def get_opportunity(opportunity_id, token, dealer_key):
     resp = requests.get(url, headers=_headers(dealer_key, token))
     resp.raise_for_status()
     return resp.json()
-
-
-def get_opportunity(opportunity_id, token):
-    url = f"{BASE_URL}{OPPS_BASE}/opportunities/{opportunity_id}"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Subscription-Id": SUBSCRIPTION_ID,
-        "Request-Id": str(uuid.uuid4()),
-        "Accept": "application/json"
-    }
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()
-    return response.json()
