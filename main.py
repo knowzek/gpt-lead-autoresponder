@@ -163,7 +163,7 @@ else:
     # Loop over each dealership subscription and pull recent leads
     for dealer_key in SUB_MAP.keys():
         token = get_token(dealer_key)
-        leads = get_recent_leads(token, dealer_key, since_minutes=60*24*6)  # 7 days back
+        leads = get_recent_leads(token, dealer_key, since_minutes=60*24*3)  # 7 days back
 
         items = leads.get("items", [])
         for ld in items:
