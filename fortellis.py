@@ -32,6 +32,7 @@ def _log_txn(method, url, headers, req_body, status, resp_body, duration_ms):
 BASE_URL = os.getenv("FORTELLIS_BASE_URL", "https://api.fortellis.io")  # prod default
 LEADS_BASE = "/sales/crm/v1/leads"
 OPPS_BASE  = "/sales/v2/elead/opportunities"
+ACTIVITIES_BASE = "/sales/v1/elead/activities"
 SUB_MAP = json.loads(os.getenv("FORTELLIS_SUBSCRIPTIONS_JSON","{}"))
 
 def _headers(dealer_key:str, token:str):
@@ -45,7 +46,6 @@ def _headers(dealer_key:str, token:str):
 
 CLIENT_ID = os.getenv("FORTELLIS_CLIENT_ID")
 CLIENT_SECRET = os.getenv("FORTELLIS_CLIENT_SECRET")
-SUBSCRIPTION_ID = os.getenv("FORTELLIS_SUBSCRIPTION_ID")
 
 def post_and_wrap(method, url, *, headers, payload=None, json_body=None):
     body_to_send = payload if payload is not None else json_body
@@ -75,11 +75,11 @@ def _request(method, url, headers=None, json_body=None, params=None):
     resp.request_id = req_id
     return resp
 
-def send_opportunity_email_activity(token, subscription_id,
+def send_opportunity_email_activity(token, dealer_key,
                                     opportunity_id, sender,
                                     recipients, carbon_copies,
                                     subject, body_html):
-    url = f"{BASE_URL}/sales/v2/elead/opportunities/sendEmail"
+    url = f"{BASE_URL}{OPPS_BASE}/sendEmail"
     payload = {
         "opportunityId": opportunity_id,
         "message": {
@@ -91,33 +91,22 @@ def send_opportunity_email_activity(token, subscription_id,
             "isHtml": True
         }
     }
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Subscription-Id": subscription_id,
-        "Request-Id": str(uuid.uuid4()),
-        "Accept": "application/json"
-    }
-    return post_and_wrap("POST", url, headers=headers, json_body=payload)
+    return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json_body=payload)
 
-def add_opportunity_comment(token, subscription_id, opportunity_id, comment_text):
-    url = f"{BASE_URL}/sales/v2/elead/opportunities/comment"
+
+def add_opportunity_comment(token, dealer_key, opportunity_id, comment_text):
+    url = f"{BASE_URL}{OPPS_BASE}/comment"
     payload = {
         "opportunityId": opportunity_id,
         "comment": comment_text
     }
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Subscription-Id": subscription_id,
-        "Request-Id": str(uuid.uuid4()),
-        "Accept": "application/json",
-        "Content-Type": "application/json"
-    }
-    return post_and_wrap("POST", url, headers=headers, json_body=payload)
+    return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json_body=payload)
 
-def add_vehicle_sought(token, subscription_id, opportunity_id,
+
+def add_vehicle_sought(token, dealer_key, opportunity_id,
                        is_new=True, year_from=None, year_to=None,
                        make="", model="", trim="", stock_number="", is_primary=True):
-    url = f"{BASE_URL}/sales/v2/elead/opportunities/vehicleSought"
+    url = f"{BASE_URL}{OPPS_BASE}/vehicleSought"
     payload = {
         "opportunityId": opportunity_id,
         "isNew": bool(is_new),
@@ -129,14 +118,7 @@ def add_vehicle_sought(token, subscription_id, opportunity_id,
         "stockNumber": stock_number,
         "isPrimary": bool(is_primary)
     }
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Subscription-Id": subscription_id,
-        "Request-Id": str(uuid.uuid4()),
-        "Accept": "application/json",
-        "Content-Type": "application/json"
-    }
-    return post_and_wrap("POST", url, headers=headers, json_body=payload)
+    return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json_body=payload)
 
 import uuid
 from datetime import datetime, timedelta
@@ -164,7 +146,7 @@ def _coerce_activity_type(value):
 
 def schedule_activity(
     token,
-    subscription_id,
+    dealer_key,
     opportunity_id,
     *,
     due_dt_iso_utc,
@@ -172,40 +154,20 @@ def schedule_activity(
     activity_type,
     comments=""
 ):
-    """
-    CDK CRM Activities v1 — Schedule activity
-    Endpoint: /sales/v1/elead/activities/schedule
-
-    Required payload:
-    {
-        "opportunityId": "...",
-        "dueDate": "2025-09-13T10:39:51.402Z",
-        "activityName": "Send Email/Letter",
-        "activityType": 14,
-        "comments": "Comments go here"
-    }
-    """
-    url = f"{BASE_URL}/sales/v1/elead/activities/schedule"
+    url = f"{BASE_URL}{ACTIVITIES_BASE}/schedule"
     payload = {
         "opportunityId": opportunity_id,
-        "dueDate": due_dt_iso_utc,                   # e.g., '2025-09-13T10:39:51.402Z'
-        "activityName": activity_name,               # e.g., 'Send Email/Letter'
-        "activityType": _coerce_activity_type(activity_type),  # numeric or mapped
+        "dueDate": due_dt_iso_utc,
+        "activityName": activity_name,
+        "activityType": _coerce_activity_type(activity_type),
         "comments": comments or ""
     }
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Subscription-Id": subscription_id,
-        "Request-Id": str(uuid.uuid4()),
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-    }
-    return post_and_wrap("POST", url, headers=headers, json_body=payload)
+    return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json_body=payload)
 
 
 def complete_activity(
     token,
-    subscription_id,
+    dealer_key,
     opportunity_id,
     *,
     due_dt_iso_utc,
@@ -215,23 +177,7 @@ def complete_activity(
     comments="",
     activity_id=None,
 ):
-    """
-    CDK CRM Activities v1 — Complete activity
-    Endpoint: /sales/v1/elead/activities/complete
-
-    Expected payload (per your Postman):
-    {
-        "opportunityId": "...",
-        "dueDate": "2025-09-13T10:39:51.402Z",
-        "completedDate": "2025-09-11T10:39:51.402Z",
-        "activityName": "Send Email/Letter",
-        "activityType": 14,
-        "comments": "Comments go here",
-        # Some tenants may also accept/require activityId:
-        # "activityId": "..."
-    }
-    """
-    url = f"{BASE_URL}/sales/v1/elead/activities/complete"
+    url = f"{BASE_URL}{ACTIVITIES_BASE}/complete"
     payload = {
         "opportunityId": opportunity_id,
         "dueDate": due_dt_iso_utc,
@@ -243,64 +189,34 @@ def complete_activity(
     if activity_id:
         payload["activityId"] = activity_id
 
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Subscription-Id": subscription_id,
-        "Request-Id": str(uuid.uuid4()),
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-    }
-    return post_and_wrap("POST", url, headers=headers, json_body=payload)
+    return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json_body=payload)
 
 
-def search_activities_by_opportunity(opportunity_id, token):
-    url = f"{BASE_URL}/sales/elead/v1/activities/search"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Subscription-Id": SUBSCRIPTION_ID,
-        "Request-Id": str(uuid.uuid4()),
-        "Accept": "application/json",
-        "Content-Type": "application/json"
-    }
+def search_activities_by_opportunity(opportunity_id, token, dealer_key, page=1, page_size=10):
+    url = f"{BASE_URL}{ACTIVITIES_BASE}/search"
     payload = {
-        "filters": [
-            {
-                "field": "opportunityId",
-                "operator": "eq",
-                "value": opportunity_id
-            }
-        ],
+        "filters": [{"field": "opportunityId", "operator": "eq", "value": opportunity_id}],
         "sort": [{"field": "createdDate", "direction": "desc"}],
-        "page": 1,
-        "pageSize": 10
+        "page": page,
+        "pageSize": page_size
     }
-    response = requests.post(url, headers=headers, json=payload)
-    response.raise_for_status()
-    return response.json().get("items", [])
+    resp = requests.post(url, headers=_headers(dealer_key, token), json=payload)
+    resp.raise_for_status()
+    return resp.json().get("items", [])
 
 
-def get_activity_by_url(url, token):
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Subscription-Id": SUBSCRIPTION_ID,
-        "Request-Id": str(uuid.uuid4()),
-        "Accept": "application/json"
-    }
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()
-    return response.json()
+def get_activity_by_url(url, token, dealer_key):
+    resp = requests.get(url, headers=_headers(dealer_key, token))
+    resp.raise_for_status()
+    return resp.json()
 
-def get_activity_by_id_v1(activity_id, token):
-    url = f"{BASE_URL}/sales/v1/elead/activities/{activity_id}"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Subscription-Id": SUBSCRIPTION_ID,
-        "Request-Id": str(uuid.uuid4()),
-        "Accept": "application/json"
-    }
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()
-    return response.json()
+
+def get_activity_by_id_v1(activity_id, token, dealer_key):
+    url = f"{BASE_URL}{ACTIVITIES_BASE}/{activity_id}"
+    resp = requests.get(url, headers=_headers(dealer_key, token))
+    resp.raise_for_status()
+    return resp.json()
+
 
 def get_token():
     headers = {
@@ -318,34 +234,31 @@ def get_token():
     return response.json()["access_token"]
 
 
-def get_recent_leads(token, since_minutes=10):
-    # go back ~1 week (6 days + 20 hours) and format as ISO 8601 UTC with "Z"
-    since = (datetime.utcnow() - timedelta(days=6, hours=20)) \
-        .isoformat() + "Z"
-
-    url = f"{BASE_URL}/sales/elead/v1/leads/search-delta?since={since}&page=1&pageSize=100"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Subscription-Id": SUBSCRIPTION_ID,
-        "Request-Id": str(uuid.uuid4()),
-        "Accept": "application/json"
-    }
-    resp = _request("GET", url, headers=headers)
+def get_recent_leads(token, dealer_key, since_minutes=10):
+    # Fortellis requires 'since' within the last 7 days. Your old value was ~6d20h.
+    since_iso = (datetime.utcnow() - timedelta(minutes=since_minutes)).isoformat() + "Z"
+    url = f"{BASE_URL}{LEADS_BASE}/search-delta"
+    params = {"since": since_iso, "page": 1, "pageSize": 100}
+    resp = _request("GET", url, headers=_headers(dealer_key, token), params=params)
     return resp.json().get("items", [])
 
-def get_customer_by_url(url, token):
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Subscription-Id": SUBSCRIPTION_ID,
-        "Request-Id": str(uuid.uuid4()),
-        "Accept": "application/json"
-    }
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()
-    return response.json()
+
+def get_customer_by_url(url, token, dealer_key):
+    resp = requests.get(url, headers=_headers(dealer_key, token))
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_opportunity(opportunity_id, token, dealer_key):
+    # FIX: OPPS_BASE already ends with '/opportunities'
+    url = f"{BASE_URL}{OPPS_BASE}/{opportunity_id}"
+    resp = requests.get(url, headers=_headers(dealer_key, token))
+    resp.raise_for_status()
+    return resp.json()
+
 
 def get_opportunity(opportunity_id, token):
-    url = f"{BASE_URL}/sales/v2/elead/opportunities/{opportunity_id}"
+    url = f"{BASE_URL}{OPPS_BASE}/opportunities/{opportunity_id}"
     headers = {
         "Authorization": f"Bearer {token}",
         "Subscription-Id": SUBSCRIPTION_ID,
