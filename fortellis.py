@@ -7,26 +7,28 @@ import json
 import time
 import logging
 
+LOG_LEVEL = os.getenv("APP_LOG_LEVEL", "INFO").upper()
+logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO),
+                    format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger("fortellis")
 
-# --- simple JSON logger (stdout) ---
-def _mask_headers(h):
+
+SENSITIVE_HEADERS = {"Authorization"}
+
+def _mask_headers(h: dict) -> dict:
     h = dict(h or {})
-    if "Authorization" in h:
-        h["Authorization"] = "Bearer ***redacted***"
+    for k in list(h.keys()):
+        if k in SENSITIVE_HEADERS:
+            h[k] = "***redacted***"
     return h
 
-def _log_txn(method, url, headers, req_body, status, resp_body, duration_ms):
-    import json
-    print(json.dumps({
-        "kind": "fortellis_transaction",
-        "method": method,
-        "url": url,
-        "request_headers": _mask_headers(headers),
-        "request_body": req_body,
-        "status_code": status,
-        "response_body": resp_body,
-        "duration_ms": duration_ms
-    }, ensure_ascii=False))
+def _log_txn_compact(level, *, method, url, headers, status, duration_ms, request_id, note=None):
+    sub_id = (headers or {}).get("Subscription-Id", "N/A")
+    msg = f"{method} {url} status={status} dur_ms={duration_ms} req_id={request_id} sub_id={sub_id}"
+    if note:
+        msg += f" note={note}"
+    log.log(level, msg)
+
 
 
 BASE_URL = os.getenv("FORTELLIS_BASE_URL", "https://api.fortellis.io")  # prod default
@@ -78,18 +80,44 @@ def post_and_wrap(method, url, *, headers, payload=None, json_body=None):
 
 def _request(method, url, headers=None, json_body=None, params=None):
     t0 = time.time()
-    resp = requests.request(method, url, headers=headers, json=json_body, params=params)
-    dt = int((time.time() - t0) * 1000)
+    req_id = (headers or {}).get("Request-Id")
     try:
-        body = resp.json()
-    except Exception:
-        body = resp.text
-    _log_txn(method, url, headers, json_body, resp.status_code, body, dt)
-    resp.raise_for_status()
-    # Attach request id for downstream logging
-    req_id = headers.get("Request-Id") if headers else None
-    resp.request_id = req_id
-    return resp
+        resp = requests.request(method, url, headers=headers, json=json_body, params=params, timeout=30)
+        dt = int((time.time() - t0) * 1000)
+
+        # success path: compact info only
+        _log_txn_compact(
+            logging.INFO,
+            method=method, url=url, headers=_mask_headers(headers),
+            status=resp.status_code, duration_ms=dt, request_id=req_id,
+            note=None
+        )
+
+        # surface non-2xx with a short preview to help debug quickly
+        if not (200 <= resp.status_code < 300):
+            preview = (resp.text or "")[:400].replace("\n", " ")
+            _log_txn_compact(
+                logging.WARN,
+                method=method, url=url, headers=_mask_headers(headers),
+                status=resp.status_code, duration_ms=dt, request_id=req_id,
+                note=f"non-2xx body_preview={preview}"
+            )
+
+        resp.raise_for_status()
+        resp.request_id = req_id
+        return resp
+
+    except requests.RequestException as e:
+        dt = int((time.time() - t0) * 1000)
+        note = f"exception={type(e).__name__} msg={str(e)[:200].replace(chr(10),' ')}"
+        _log_txn_compact(
+            logging.ERROR,
+            method=method, url=url, headers=_mask_headers(headers or {}),
+            status=getattr(e.response, "status_code", "ERR"),
+            duration_ms=dt, request_id=req_id, note=note
+        )
+        raise
+
 
 def send_opportunity_email_activity(token, dealer_key,
                                     opportunity_id, sender,
