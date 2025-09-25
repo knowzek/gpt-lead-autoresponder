@@ -28,7 +28,7 @@ def _log_txn(method, url, headers, req_body, status, resp_body, duration_ms):
     }, ensure_ascii=False))
 
 
-BASE_URL = "https://api.fortellis.io/cdk-test"
+BASE_URL = "https://api.fortellis.io/sales"
 TOKEN_URL = "https://identity.fortellis.io/oauth2/aus1p1ixy7YL8cMq02p7/v1/token"
 
 CLIENT_ID = os.getenv("FORTELLIS_CLIENT_ID")
