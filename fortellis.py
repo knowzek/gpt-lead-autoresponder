@@ -36,22 +36,27 @@ LEADS_BASE = "/sales/crm/v1/leads"
 OPPS_BASE  = "/sales/v2/elead/opportunities"
 ACTIVITIES_BASE = "/sales/v1/elead/activities"
 SUB_MAP = json.loads(os.getenv("FORTELLIS_SUBSCRIPTIONS_JSON","{}"))
-TOKEN_URL = os.getenv("FORTELLIS_TOKEN_URL", "https://api.fortellis.io/oauth2/v1/token")
+# Fortellis Identity token endpoint (prod)
+AUTH_SERVER_ID = os.getenv("FORTELLIS_AUTH_SERVER_ID", "aus1p1ixy7YL8cMq02p7")  # <-- set your real ID in env
+TOKEN_URL = os.getenv("FORTELLIS_TOKEN_URL", f"https://identity.fortellis.io/oauth2/{AUTH_SERVER_ID}/v1/token")
 
 def get_token(dealer_key: str):
+    # Note: Subscription-Id is NOT required on the token call; it’s used on API calls.
     headers = {
+        "Accept": "application/json",
+        "Cache-Control": "no-cache",
         "Content-Type": "application/x-www-form-urlencoded",
-        "Subscription-Id": SUB_MAP[dealer_key],
     }
     data = {
         "grant_type": "client_credentials",
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET,
         "scope": "anonymous",
     }
-    resp = requests.post(TOKEN_URL, headers=headers, data=data)
+    # Prefer HTTP Basic for client_id/secret per Fortellis examples
+    resp = requests.post(TOKEN_URL, headers=headers, data=data,
+                         auth=(CLIENT_ID, CLIENT_SECRET), timeout=30)
     resp.raise_for_status()
     return resp.json()["access_token"]
+
 
 def _headers(dealer_key:str, token:str):
     return {
@@ -260,25 +265,6 @@ def get_activity_by_id_v1(activity_id, token, dealer_key):
     resp = requests.get(url, headers=_headers(dealer_key, token))
     resp.raise_for_status()
     return resp.json()
-
-
-TOKEN_URL = os.getenv("FORTELLIS_TOKEN_URL", "https://api.fortellis.io/oauth2/v1/token")
-
-def get_token(dealer_key: str):
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Subscription-Id": SUB_MAP[dealer_key],
-    }
-    data = {
-        "grant_type": "client_credentials",
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET,
-        "scope": "anonymous",
-    }
-    resp = requests.post(TOKEN_URL, headers=headers, data=data)
-    resp.raise_for_status()
-    return resp.json()["access_token"]
-
 
 def get_recent_leads(token, dealer_key, since_minutes=10):
     # Fortellis requires 'since' within the last 7 days. Your old value was ~6d20h.
