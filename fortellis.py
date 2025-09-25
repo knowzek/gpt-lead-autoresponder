@@ -7,6 +7,7 @@ import json
 import time
 import logging
 
+
 # --- simple JSON logger (stdout) ---
 def _mask_headers(h):
     h = dict(h or {})
@@ -28,8 +29,19 @@ def _log_txn(method, url, headers, req_body, status, resp_body, duration_ms):
     }, ensure_ascii=False))
 
 
-BASE_URL = "https://api.fortellis.io/sales"
-TOKEN_URL = "https://identity.fortellis.io/oauth2/aus1p1ixy7YL8cMq02p7/v1/token"
+BASE_URL = os.getenv("FORTELLIS_BASE_URL", "https://api.fortellis.io")  # prod default
+LEADS_BASE = "/sales/crm/v1/leads"
+OPPS_BASE  = "/sales/v2/elead/opportunities"
+SUB_MAP = json.loads(os.getenv("FORTELLIS_SUBSCRIPTIONS_JSON","{}"))
+
+def _headers(dealer_key:str, token:str):
+    return {
+        "Authorization": f"Bearer {token}",
+        "Subscription-Id": SUB_MAP[dealer_key],   # <-- per rooftop
+        "Request-Id": str(uuid.uuid4()),
+        "Accept": "application/json",
+    }
+
 
 CLIENT_ID = os.getenv("FORTELLIS_CLIENT_ID")
 CLIENT_SECRET = os.getenv("FORTELLIS_CLIENT_SECRET")
