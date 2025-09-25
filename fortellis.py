@@ -209,7 +209,7 @@ def send_opportunity_email_activity(token, dealer_key,
             "isHtml": True
         }
     }
-    return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json_body=payload)
+    return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
 
 
 def add_opportunity_comment(token, dealer_key, opportunity_id, comment_text):
@@ -218,7 +218,7 @@ def add_opportunity_comment(token, dealer_key, opportunity_id, comment_text):
         "opportunityId": opportunity_id,
         "comment": comment_text
     }
-    return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json_body=payload)
+    return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
 
 
 def add_vehicle_sought(token, dealer_key, opportunity_id,
@@ -236,7 +236,7 @@ def add_vehicle_sought(token, dealer_key, opportunity_id,
         "stockNumber": stock_number,
         "isPrimary": bool(is_primary)
     }
-    return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json_body=payload)
+    return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
 
 import uuid
 from datetime import datetime, timedelta
@@ -280,7 +280,7 @@ def schedule_activity(
         "activityType": _coerce_activity_type(activity_type),
         "comments": comments or ""
     }
-    return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json_body=payload)
+    return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
 
 
 def complete_activity(
@@ -307,7 +307,7 @@ def complete_activity(
     if activity_id:
         payload["activityId"] = activity_id
 
-    return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json_body=payload)
+    return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
 
 
 def search_activities_by_opportunity(opportunity_id, token, dealer_key, page=1, page_size=10):
