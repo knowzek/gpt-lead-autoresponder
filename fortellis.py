@@ -280,7 +280,7 @@ def get_activity_by_id_v1(activity_id, token, dealer_key):
     resp.raise_for_status()
     return resp.json()
 
-def get_recent_leads(token, dealer_key, since_minutes=30, page=1, page_size=100):
+def get_recent_leads(token, dealer_key, since_minutes=600, page=1, page_size=100):
     since_iso = (datetime.utcnow() - timedelta(minutes=since_minutes)).replace(microsecond=0).isoformat() + "Z"
     url = f"{BASE_URL}{LEADS_BASE}/search-delta"   # ← CRM op name uses a hyphen
     params = {"since": since_iso, "page": page, "pageSize": page_size}
