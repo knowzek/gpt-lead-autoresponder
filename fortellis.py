@@ -2,7 +2,7 @@
 import os
 import uuid
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 import json
 import time
 import logging
@@ -137,8 +137,13 @@ def _request(method, url, headers=None, json_body=None, params=None):
         )
         raise
 
+def _since_iso(minutes: int | None = 30) -> str:
+    dt = datetime.now(timezone.utc) - timedelta(minutes=minutes or 30)
+    return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
 def get_recent_opportunities(token, dealer_key, since_minutes=30, page=1, page_size=100):
-    url = f"{BASE_URL}{OPPS_BASE}/searchDelta"   # /cdk/sales/elead/v2/opportunities/searchDelta
+    """Elead Opportunities delta (prod, /cdk)."""
+    url = f"{BASE_URL}{OPPS_BASE}/searchDelta"   # note the camelCase
     params = {
         "since": _since_iso(since_minutes),
         "page": page,
