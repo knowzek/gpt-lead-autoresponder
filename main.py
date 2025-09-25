@@ -5,18 +5,19 @@ from datetime import datetime as _dt, timedelta as _td, timezone as _tz
 
 
 from fortellis import (
-    SUB_MAP,                    # mapping {dealer_key: subscription_id}
-    get_token,                  # get_token(dealer_key)
-    get_recent_leads,           # get_recent_leads(token, dealer_key, ...)
-    get_opportunity,            # get_opportunity(opportunity_id, token, dealer_key)
-    get_customer_by_url,        # get_customer_by_url(url, token, dealer_key)
-    get_activity_by_url,        # get_activity_by_url(url, token, dealer_key)
-    get_activity_by_id_v1,      # get_activity_by_id_v1(activity_id, token, dealer_key)
+    SUB_MAP,
+    get_token,
+    get_recent_leads,
+    get_recent_opportunities,   # ← add this
+    get_opportunity,
+    get_customer_by_url,
+    get_activity_by_url,
+    get_activity_by_id_v1,
     send_opportunity_email_activity,
     add_opportunity_comment,
     add_vehicle_sought,
-    schedule_activity,          # schedule_activity(token, dealer_key, ...)
-    complete_activity,          # complete_activity(token, dealer_key, ...)
+    schedule_activity,
+    complete_activity,
 )
 
 from gpt import run_gpt
