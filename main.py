@@ -162,21 +162,21 @@ log.info("Starting GPT lead autoresponder (SAFE_MODE=%s, EMAIL_MODE=%s)",
 # === Pull opportunity leads ======================================================
 
 all_items = []
-per_rooftop_counts = {dk: 0 for dk in SUB_MAP}
+per_rooftop_counts = {sub_id: 0 for sub_id in SUB_MAP.values()}
 
 WINDOW_MIN = int(os.getenv("DELTA_WINDOW_MINUTES", "30"))  
 PAGE_SIZE  = int(os.getenv("DELTA_PAGE_SIZE", "500"))
 
-for dealer_key in SUB_MAP.keys():
-    token = get_token(dealer_key)
+for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
+    token = get_token(subscription_id) 
 
     # Opportunities delta (the base you confirmed in Postman)
-    opp_data  = get_recent_opportunities(token, dealer_key,
+    opp_data  = get_recent_opportunities(token, subscription_id,
                                          since_minutes=WINDOW_MIN,
                                          page_size=PAGE_SIZE)
     opp_items = (opp_data or {}).get("items", []) or []
     log.info("API reported opportunity totalItems for %s: %s",
-             dealer_key, (opp_data or {}).get("totalItems", "N/A"))
+             subscription_id, (opp_data or {}).get("totalItems", "N/A"))
 
     # Normalize opportunities → your downstream “lead-like” shape
     raw_count = len(opp_items)
@@ -188,7 +188,7 @@ for dealer_key in SUB_MAP.keys():
             continue  # skip showroom/phone/etc.
     
         items.append({
-            "_dealer_key": dealer_key,
+            "_subscription_id": subscription_id,
             "opportunityId": op.get("id"),
             "activityId": None,                   # may be None
             "links": op.get("links", []),
@@ -206,13 +206,13 @@ for dealer_key in SUB_MAP.keys():
     
     # stamp + tally + aggregate
     for it in items:
-        it["_dealer_key"] = dealer_key
+        it["_subscription_id"] = subscription_id
     all_items.extend(items)
-    per_rooftop_counts[dealer_key] += eligible_count
+    per_rooftop_counts[subscription_id] += eligible_count
     
     # logs: show both API total and eligible after filter
     log.info("Eligible opportunities (upType in %s) for %s: %d/%d",
-             ",".join(sorted(ELIGIBLE_UPTYPES)), dealer_key, eligible_count, raw_count)
+             ",".join(sorted(ELIGIBLE_UPTYPES)), subscription_id, eligible_count, raw_count)
 
 
 # per-rooftop + total logs (opportunity counts)
@@ -225,15 +225,17 @@ if not all_items:
     raise SystemExit(0)
 
 # pick the first item for processing
-lead = all_items[0]  # keep variable name 'lead' to minimize downstream edits
+lead = all_items[0]
 activity_id = lead.get("activityId")
 opportunity_id = lead.get("opportunityId")
-dealer_key = lead.get("_dealer_key")
-if dealer_key not in SUB_MAP:
-    raise KeyError(f"Missing/unknown dealer_key on lead: {dealer_key}. Valid: {list(SUB_MAP.keys())}")
-token = get_token(dealer_key)
+subscription_id = lead.get("_subscription_id")
+if not subscription_id:
+    raise KeyError("Lead missing _subscription_id")
+token = get_token(subscription_id)
 
-log.info("Evaluating lead activity=%s opportunity=%s dealer_key=%s", activity_id, opportunity_id, dealer_key)
+log.info("Evaluating lead activity=%s opportunity=%s subscription_id=%s",
+         activity_id, opportunity_id, subscription_id)
+
 
 # === Pull the opportunity & context =================================
 if USE_EMAIL_MODE:
@@ -248,8 +250,7 @@ if USE_EMAIL_MODE:
     }
     inquiry_text = lead.get("notes", "")
 else:
-    token = get_token(dealer_key)
-    opportunity = get_opportunity(opportunity_id, token, dealer_key)
+    opportunity = get_opportunity(opportunity_id, token, subscription_id)
 
     # --- Fetch customer email/name if available ---
     # Always define a default so later code doesn't NameError
@@ -262,7 +263,7 @@ else:
             None
         )
         if customer_url:
-            customer_data = get_customer_by_url(customer_url, token, dealer_key)
+            customer_data = get_customer_by_url(customer_url, token, subscription_id)
             emails = customer_data.get("emails") or []
     
             # Prefer primary email if flagged, else first non-empty
@@ -293,9 +294,9 @@ else:
         activity_data = {}
     
         if activity_url:
-            activity_data = get_activity_by_url(activity_url, token, dealer_key)
+            activity_data = get_activity_by_url(activity_url, token, subscription_id)
         elif activity_id:
-            activity_data = get_activity_by_id_v1(activity_id, token, dealer_key)
+            activity_data = get_activity_by_id_v1(activity_id, token, subscription_id)
         else:
             log.info("No activity link/id on opportunity %s; skipping activity fetch.", opportunity_id)
     
@@ -305,6 +306,12 @@ else:
     except Exception as e:
         log.warning("Failed to fetch activity: %s", e)
         inquiry_text = ""
+
+    # --- Rooftop resolution (from Subscription-Id) ---
+    rt = get_rooftop_info(subscription_id)
+    rooftop_name   = rt.get("name")   or "Patterson Auto Group"
+    rooftop_sender = rt.get("sender") or TEST_FROM
+    rooftop_addr   = rt.get("address") or ""
 
 
 # === Salesperson / dealership mapping ================================
@@ -330,15 +337,8 @@ dealership = (
     or DEALERSHIP_MAP.get(full_name)
     or DEALERSHIP_MAP.get(source)
     or DEALERSHIP_MAP.get(sub_source)
-    or "Patterson Auto Group"
+    or rooftop_name
 )
-
-# ensure dealer_key aligns with name (only if it maps to a real rooftop key)
-mapped = DEALERSHIP_TO_KEY.get(dealership)
-if mapped and mapped in SUB_MAP and mapped != dealer_key:
-    log.info("Switching dealer_key from %s to %s based on dealership='%s'",
-             dealer_key, mapped, dealership)
-    dealer_key = mapped
 
 contact_info = CONTACT_INFO_MAP.get(dealership, CONTACT_INFO_MAP["Patterson Auto Group"])
 
@@ -376,7 +376,6 @@ Please write a warm, professional email reply that:
 - Invite specific questions or preferences
 - Mention the salesperson by name
 
-Dealership Contact Info: {contact_info}
 """
 else:
     prompt = f"""
@@ -393,15 +392,7 @@ When writing:
 Guest inquiry:
 \"\"\"{inquiry_text}\"\"\"
 
-Dealership Contact Info: {contact_info}
 """
-
-# --- Rooftop resolution (must be before run_gpt) ---
-# dealer_key here should be the same value you pass into _headers(dealer_key, token)
-rt = get_rooftop_info(dealer_key)                   # or pass the Subscription-Id if that’s what you have here
-rooftop_name   = rt.get("name")   or "Patterson Auto Group"
-rooftop_sender = rt.get("sender") or TEST_FROM     # fallback to your default sender
-# rooftop_addr = rt.get("address")                  # optional; run_gpt can append it in the signature
 
 # Generate subject/body with rooftop branding
 response  = run_gpt(prompt, customer_name, rooftop_name)
@@ -417,14 +408,15 @@ log.info("Reply email sent to %s", MICKEY_EMAIL)
 
 post_results = {}
 
-token = get_token(dealer_key)
+token = get_token(subscription_id)
+
 
 # 1) Comment (always safe)
 try:
     comment_text = "Patti generated a reply (safe mode). Email content stored in comments."
     if not SAFE_MODE:
         comment_text = "Patti generated and sent an intro email (test)."
-    r = add_opportunity_comment(token, dealer_key, opportunity_id, comment_text)
+    r = add_opportunity_comment(token, subscription_id, opportunity_id, comment_text)
     post_results["opportunities_addComment"] = r
     log.info("Added CRM comment: status=%s", r.get("status", "N/A"))
 except Exception as e:
@@ -438,7 +430,7 @@ try:
         recipients_list = [TEST_TO]  # test-only recipient in NOT SAFE runs
         act = send_opportunity_email_activity(
             token=token,
-            dealer_key=dealer_key,
+            dealer_key=subscription_id,
             opportunity_id=opportunity_id,
             sender=rooftop_sender,
             recipients=recipients_list,         # <-- use test recipient list
@@ -459,7 +451,7 @@ except Exception as e:
 # 3) Vehicle sought (demo data)
 try:
     vs = add_vehicle_sought(
-        token, dealer_key, opportunity_id,
+        token, subscription_id, opportunity_id,
         is_new=True, year_from=2023, year_to=2025,
         make=make or "Kia", model=model or "Telluride",
         trim=trim or "SX-Prestige", stock_number=stock or "DEMO-123",
@@ -476,7 +468,7 @@ try:
     due_dt_iso = (_dt.now(_tz.utc) + _td(minutes=10)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
     sched = schedule_activity(
-        token, dealer_key, opportunity_id,
+        token, subscription_id, opportunity_id,
         due_dt_iso_utc=due_dt_iso, activity_name="Send Email/Letter",
         activity_type=14, comments="Patti demo—schedule a follow-up in ~10 minutes.",
     )
@@ -487,7 +479,7 @@ try:
     if activity_id_new:
         completed_dt_iso = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         comp = complete_activity(
-            token, dealer_key, opportunity_id,
+            token, subscription_id, opportunity_id,
             due_dt_iso_utc=due_dt_iso, completed_dt_iso_utc=completed_dt_iso,
             activity_name="Send Email/Letter", activity_type=14,
             comments="Patti demo—completed as proof.", activity_id=activity_id_new,
