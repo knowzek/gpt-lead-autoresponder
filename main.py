@@ -440,9 +440,15 @@ try:
         sender_address = TEST_FROM
         recipients_list = [TEST_TO]  # never the real customer in tests
         act = send_opportunity_email_activity(
-            token, dealer_key, opportunity_id, sender_address,
-            recipients_list, [], f"[PATTI TEST] {subject}",
-            response["body"].replace("\n", "<br/>"),
+            token=token,
+            dealer_key=dealer_key,                # still used to set Subscription-Id header
+            opportunity_id=opportunity_id,
+            sender=rooftop_sender,                # <- NOT hardcoded
+            recipients=[customer_email],
+            carbon_copies=[],
+            subject=subject,
+            body_html=body_html,
+            rooftop_name=rooftop_name,            # lets the function scrub/append branding
         )
         post_results["opportunities_sendEmail"] = act
         log.info("Logged sendEmail activity (test recipient): status=%s", act.get("status", "N/A"))
