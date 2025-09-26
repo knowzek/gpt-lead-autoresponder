@@ -84,9 +84,8 @@ def _headers(dealer_key: str, token: str, extra: dict | None = None) -> dict:
 CLIENT_ID = os.getenv("FORTELLIS_CLIENT_ID")
 CLIENT_SECRET = os.getenv("FORTELLIS_CLIENT_SECRET")
 
-def post_and_wrap(method, url, *, headers, payload=None, json_body=None):
-    body_to_send = payload if payload is not None else json_body
-    resp = _request(method, url, headers=headers, json_body=body_to_send)
+def post_and_wrap(method, url, *, headers, params=None, json=None, allow_404=False):
+    resp = _request(method, url, headers=headers, params=params, json=json, allow_404=allow_404)
     try:
         body = resp.json() if resp.text else None
     except ValueError:
@@ -95,6 +94,7 @@ def post_and_wrap(method, url, *, headers, payload=None, json_body=None):
     if isinstance(body, dict):
         result.update(body)
     return result
+
 
 
 def _request(method, url, headers=None, params=None, json=None, allow_404=False):
@@ -213,10 +213,16 @@ def send_opportunity_email_activity(token,
     url = f"{BASE_URL}{OPPS_BASE}/sendEmail"
 
     # Normalize lists
-    recipients = recipients if isinstance(recipients, list) else [recipients]
+    recipients = recipients if isinstance(recipients, list) else ([recipients] if recipients else [])
     carbon_copies = carbon_copies or []
     if not isinstance(carbon_copies, list):
         carbon_copies = [carbon_copies]
+
+    # Basic sanity warnings (after normalization)
+    if not sender:
+        log.warning("sendEmail: empty sender for dealer_key=%s", dealer_key)
+    if not recipients:
+        log.warning("sendEmail: empty recipients for dealer_key=%s", dealer_key)
 
     # Rooftop-aware subject/body cleanup (no hardcoding of sender)
     subj = subject or ""
@@ -229,7 +235,6 @@ def send_opportunity_email_activity(token,
 
         # Ensure subject contains the rooftop name (idempotent)
         if rooftop_name not in subj:
-            # Keep your original subject wording, just append brand context
             subj = f"{subj} | {rooftop_name}" if subj else f"Your vehicle inquiry with {rooftop_name}"
 
     payload = {
@@ -245,6 +250,7 @@ def send_opportunity_email_activity(token,
     }
 
     return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
+
 
 
 
@@ -274,8 +280,6 @@ def add_vehicle_sought(token, dealer_key, opportunity_id,
     }
     return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
 
-import uuid
-from datetime import datetime, timedelta
 
 def _coerce_activity_type(value):
     """
