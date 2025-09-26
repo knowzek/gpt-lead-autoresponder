@@ -251,7 +251,10 @@ else:
     token = get_token(dealer_key)
     opportunity = get_opportunity(opportunity_id, token, dealer_key)
 
-    # Fetch customer email/name if available
+    # --- Fetch customer email/name if available ---
+    # Always define a default so later code doesn't NameError
+    customer_email = (lead.get("email_address") or "").strip()
+    
     try:
         customer_url = next(
             (l["href"] for l in opportunity.get("customer", {}).get("links", [])
@@ -260,12 +263,23 @@ else:
         )
         if customer_url:
             customer_data = get_customer_by_url(customer_url, token, dealer_key)
-            emails = customer_data.get("emails", [])
-            lead["email_address"] = emails[0].get("address", "").strip() if emails else ""
-            lead["customer_first"] = (customer_data.get("firstName", "") or "").strip()
+            emails = customer_data.get("emails") or []
+    
+            # Prefer primary email if flagged, else first non-empty
+            email_obj = next((e for e in emails if e.get("isPrimary")), (emails[0] if emails else {}))
+            lead["email_address"] = (email_obj.get("address") or "").strip()
+    
+            # First name
+            lead["customer_first"] = (customer_data.get("firstName") or "").strip()
+    
     except Exception as e:
         log.warning("Failed to fetch customer info: %s", e)
-        lead["email_address"] = ""
+        # keep any preexisting lead["email_address"] if set; otherwise blank
+        lead["email_address"] = (lead.get("email_address") or "").strip()
+    
+    # Finalize a guaranteed-defined variable
+    customer_email = (lead.get("email_address") or "").strip()
+
 
     # Inquiry text via activity record
 
@@ -420,18 +434,18 @@ except Exception as e:
 # 2) Email activity (only if NOT safe; still forced to TEST_TO)
 try:
     if not SAFE_MODE:
-        sender_address = TEST_FROM
-        recipients_list = [TEST_TO]  # never the real customer in tests
+        # choose recipient correctly
+        recipients_list = [TEST_TO]  # test-only recipient in NOT SAFE runs
         act = send_opportunity_email_activity(
             token=token,
-            dealer_key=dealer_key,                # still used to set Subscription-Id header
+            dealer_key=dealer_key,
             opportunity_id=opportunity_id,
-            sender=rooftop_sender,                # <- NOT hardcoded
-            recipients=[customer_email],
+            sender=rooftop_sender,
+            recipients=recipients_list,         # <-- use test recipient list
             carbon_copies=[],
             subject=subject,
             body_html=body_html,
-            rooftop_name=rooftop_name,            # lets the function scrub/append branding
+            rooftop_name=rooftop_name,
         )
         post_results["opportunities_sendEmail"] = act
         log.info("Logged sendEmail activity (test recipient): status=%s", act.get("status", "N/A"))
