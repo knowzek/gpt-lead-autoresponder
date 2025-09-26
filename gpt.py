@@ -29,13 +29,23 @@ def _coerce_reply(text: str):
         "body": text.strip() if text.strip() else "Thanks for reaching out — happy to help!"
     }
 
-def run_gpt(prompt: str, customer_name: str, max_retries: int = MAX_RETRIES):
+def run_gpt(prompt: str, customer_name: str, rooftop_name: str = None, max_retries: int = MAX_RETRIES):
     """
     Compose a reply using the Assistants API. Retries on 5xx/429 and degrades gracefully
     so the job never crashes on transient OpenAI errors.
     """
     backoff = 1.0
     last_err = None
+
+    # Optional: lazy import so the function doesn't crash if the mapping isn't present
+    rooftop_address = ""
+    try:
+        from rooftops import ROOFTOP_INFO  # expected shape: {"Mission Viejo Kia": {"address": "...", "email": "..."}}
+        if rooftop_name:
+            rooftop_address = (ROOFTOP_INFO.get(rooftop_name, {}) or {}).get("address", "")
+    except Exception:
+        # No mapping available; we’ll still include the rooftop name without an address.
+        pass
 
     for attempt in range(max_retries):
         try:
@@ -70,7 +80,33 @@ def run_gpt(prompt: str, customer_name: str, max_retries: int = MAX_RETRIES):
             if not text.strip():
                 raise RuntimeError("Assistant message had no text content")
 
-            return _coerce_reply(text)
+            # Parse into {"subject": ..., "body": ...}
+            reply = _coerce_reply(text)
+
+            # 1) Swap out "Patterson Auto Group" with the specific rooftop, if provided
+            if rooftop_name:
+                if "subject" in reply and reply["subject"]:
+                    reply["subject"] = reply["subject"].replace("Patterson Auto Group", rooftop_name)
+                if "body" in reply and reply["body"]:
+                    reply["body"] = reply["body"].replace("Patterson Auto Group", rooftop_name)
+
+            # 2) Personalize guest name placeholders if present (preserving your existing behavior)
+            if customer_name and "body" in reply and reply["body"]:
+                reply["body"] = (
+                    reply["body"]
+                    .replace("[Guest's Name]", customer_name)
+                    .replace("[Guest’s Name]", customer_name)
+                )
+
+            # 3) Append rooftop signature (name + address) when available
+            if rooftop_name:
+                signature_lines = ["", "Patti", "Virtual Assistant", rooftop_name]
+                if rooftop_address:
+                    signature_lines.append(rooftop_address)
+                signature = "\n".join(signature_lines)
+                reply["body"] = (reply.get("body") or "").rstrip() + "\n\n" + signature
+
+            return reply
 
         except APIStatusError as e:
             status = getattr(e, "status_code", None)
@@ -94,8 +130,23 @@ def run_gpt(prompt: str, customer_name: str, max_retries: int = MAX_RETRIES):
             break
 
     # graceful fallback so the cron keeps going
+    fallback_rooftop = rooftop_name or "Patterson Auto Group"
+    subject = f"Your vehicle inquiry with {fallback_rooftop}"
+
+    body_lines = [
+        f"Hi {customer_name or 'there'},",
+        "",
+        "Thanks for your inquiry! I’m happy to help with details, availability, and next steps. "
+        "Let me know any preferences on trim, color, or timing and I’ll get everything lined up.",
+        "",
+        "Patti",
+        "Virtual Assistant",
+        fallback_rooftop
+    ]
+    if rooftop_name and rooftop_address:
+        body_lines.append(rooftop_address)
+
     return {
-        "subject": "Your vehicle inquiry with Patterson Auto Group",
-        "body": "Hi {},\n\nThanks for your inquiry! I’m happy to help with details, availability, and next steps. "
-                "Let me know any preferences on trim, color, or timing and I’ll get everything lined up.\n\n— Patti".format(customer_name or "there")
+        "subject": subject,
+        "body": "\n".join(body_lines)
     }
