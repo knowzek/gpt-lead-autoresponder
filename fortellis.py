@@ -193,23 +193,59 @@ def get_recent_opportunities(token, dealer_key, since_minutes=360, page=1, page_
 
 
 
-def send_opportunity_email_activity(token, dealer_key,
-                                    opportunity_id, sender,
-                                    recipients, carbon_copies,
-                                    subject, body_html):
+def send_opportunity_email_activity(token,
+                                    dealer_key,
+                                    opportunity_id,
+                                    sender,
+                                    recipients,
+                                    carbon_copies,
+                                    subject,
+                                    body_html,
+                                    rooftop_name: str = None):
+    """
+    Send an email via Opportunities POST /sendEmail.
+
+    Notes:
+      - We don't hardcode 'from'. Caller must pass a rooftop-specific sender (or alias).
+      - If rooftop_name is provided, we (a) scrub any 'Patterson Auto Group' and
+        (b) ensure the subject mentions the rooftop.
+    """
     url = f"{BASE_URL}{OPPS_BASE}/sendEmail"
+
+    # Normalize lists
+    recipients = recipients if isinstance(recipients, list) else [recipients]
+    carbon_copies = carbon_copies or []
+    if not isinstance(carbon_copies, list):
+        carbon_copies = [carbon_copies]
+
+    # Rooftop-aware subject/body cleanup (no hardcoding of sender)
+    subj = subject or ""
+    body = body_html or ""
+
+    if rooftop_name:
+        # Replace any legacy branding
+        subj = subj.replace("Patterson Auto Group", rooftop_name)
+        body = body.replace("Patterson Auto Group", rooftop_name)
+
+        # Ensure subject contains the rooftop name (idempotent)
+        if rooftop_name not in subj:
+            # Keep your original subject wording, just append brand context
+            subj = f"{subj} | {rooftop_name}" if subj else f"Your vehicle inquiry with {rooftop_name}"
+
     payload = {
         "opportunityId": opportunity_id,
         "message": {
-            "from": sender,
+            "from": sender,                  # caller supplies per-rooftop/alias
             "recipients": recipients,
-            "carbonCopies": carbon_copies or [],
-            "subject": subject,
-            "body": body_html,
+            "carbonCopies": carbon_copies,
+            "subject": subj,
+            "body": body,
             "isHtml": True
         }
     }
+
     return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
+
 
 
 def add_opportunity_comment(token, dealer_key, opportunity_id, comment_text):
