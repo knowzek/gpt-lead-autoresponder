@@ -40,6 +40,29 @@ DEALERKEY_TO_SUBSCRIPTION = {
     # e.g., "mv-kia": "1a1077bb-7340-430a-8ed8-e7f67155674a",
 }
 
+ROOFTOP_INFO = {
+    "Mission Viejo Kia": {
+        "address": "24041 El Toro Rd, Lake Forest, CA 92630",
+        "email": "sales@missionviejokia.com"
+    },
+    "Tustin Mazda": {
+        "address": "28 Auto Center Dr, Tustin, CA 92782",
+        "email": "sales@tustinmazda.com"
+    },
+    "Huntington Beach Mazda": {
+        "address": "16800 Beach Blvd, Huntington Beach, CA 92647",
+        "email": "sales@huntingtonbeachmazda.com"
+    },
+    "Tustin Hyundai": {
+        "address": "16 Auto Center Dr, Tustin, CA 92782",
+        "email": "sales@tustinhyundai.com"
+    },
+    "Tustin Kia": {
+        "address": "",
+        "email": "sales@tustinkia.com"
+    },
+}
+
 def get_rooftop_info(dealer_key_or_subscription: str) -> dict:
     """Return rooftop dict for a given dealer_key or Subscription-Id (may be empty if unknown)."""
     sub = dealer_key_or_subscription
