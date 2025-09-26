@@ -205,8 +205,7 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
     eligible_count = len(items)
     
     # stamp + tally + aggregate
-    for it in items:
-        it["_subscription_id"] = subscription_id
+
     all_items.extend(items)
     per_rooftop_counts[subscription_id] += eligible_count
     
@@ -307,11 +306,14 @@ else:
         log.warning("Failed to fetch activity: %s", e)
         inquiry_text = ""
 
-    # --- Rooftop resolution (from Subscription-Id) ---
-    rt = get_rooftop_info(subscription_id)
-    rooftop_name   = rt.get("name")   or "Patterson Auto Group"
-    rooftop_sender = rt.get("sender") or TEST_FROM
-    rooftop_addr   = rt.get("address") or ""
+
+# --- Rooftop resolution (from Subscription-Id) ---
+rt = get_rooftop_info(subscription_id)
+rooftop_name   = rt.get("name")   or "Patterson Auto Group"
+rooftop_sender = rt.get("sender") or TEST_FROM
+rooftop_addr   = rt.get("address") or ""
+log.info("Resolved rooftop: sub_id=%s name=%s", subscription_id, rooftop_name)
+
 
 
 # === Salesperson / dealership mapping ================================
@@ -376,6 +378,8 @@ Please write a warm, professional email reply that:
 - Invite specific questions or preferences
 - Mention the salesperson by name
 
+Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
+
 """
 else:
     prompt = f"""
@@ -391,6 +395,9 @@ When writing:
 
 Guest inquiry:
 \"\"\"{inquiry_text}\"\"\"
+
+Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
+
 
 """
 
