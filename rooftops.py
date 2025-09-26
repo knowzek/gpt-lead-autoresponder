@@ -64,8 +64,31 @@ ROOFTOP_INFO = {
 }
 
 def get_rooftop_info(dealer_key_or_subscription: str) -> dict:
-    """Return rooftop dict for a given dealer_key or Subscription-Id (may be empty if unknown)."""
-    sub = dealer_key_or_subscription
-    if sub not in SUBSCRIPTION_TO_ROOOFTOP := SUBSCRIPTION_TO_ROOFTOP:  # alias for readability
-        sub = DEALERKEY_TO_SUBSCRIPTION.get(dealer_key_or_subscription, dealer_key_or_subscription)
-    return SUBSCRIPTION_TO_ROOFTOP.get(sub, {})
+    """
+    Return a dict with {name, sender, address} for a given dealer_key or Subscription-Id.
+    - Looks up dealer_key -> subscription, then subscription -> {name, sender}
+    - Fills address from ROOFTOP_INFO[name] if present
+    - Falls back gracefully if mappings are incomplete
+    """
+    # If we were given a dealer_key, translate it to a subscription id
+    sub = DEALERKEY_TO_SUBSCRIPTION.get(dealer_key_or_subscription, dealer_key_or_subscription)
+
+    # Get basic rooftop record from the subscription map
+    record = SUBSCRIPTION_TO_ROOFTOP.get(sub, {})
+
+    # Name & sender from subscription record (if any)
+    name = record.get("name")
+    sender = record.get("sender", "")
+
+    # If name is still unknown, allow passing a literal rooftop name directly
+    if not name and dealer_key_or_subscription in ROOFTOP_INFO:
+        name = dealer_key_or_subscription
+
+    # Final fallback name to keep things running
+    if not name:
+        name = "Patterson Auto Group"
+
+    # Address from canonical info (if available)
+    address = ROOFTOP_INFO.get(name, {}).get("address", "")
+
+    return {"name": name, "sender": sender, "address": address}
