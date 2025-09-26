@@ -65,11 +65,13 @@ def get_token(dealer_key: str):
     return resp.json()["access_token"]
 
 
-def _headers(dealer_key: str, token: str, extra: dict | None = None) -> dict:
-    # ✅ Guard: make sure this dealer_key exists in SUB_MAP
-    sub_id = SUB_MAP.get(dealer_key)
-    if not sub_id:
-        raise KeyError(f"Unknown dealer_key '{dealer_key}'. Valid: {list(SUB_MAP.keys())}")
+def _headers(id_or_key: str, token: str, extra: dict | None = None) -> dict:
+    """
+    Accepts either:
+      - a dealer_key present in SUB_MAP  -> resolves to Subscription-Id, or
+      - a raw Subscription-Id string     -> used as-is
+    """
+    sub_id = SUB_MAP.get(id_or_key) or id_or_key  # if not a key, treat as Subscription-Id
 
     headers = {
         "Authorization": f"Bearer {token}",
@@ -80,6 +82,7 @@ def _headers(dealer_key: str, token: str, extra: dict | None = None) -> dict:
     if extra:
         headers.update(extra)
     return headers
+
   
 CLIENT_ID = os.getenv("FORTELLIS_CLIENT_ID")
 CLIENT_SECRET = os.getenv("FORTELLIS_CLIENT_SECRET")
