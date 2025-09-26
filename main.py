@@ -31,7 +31,18 @@ ROOFTOP_INFO = {
         "address": "28 Auto Center Dr, Tustin, CA 92782",
         "email": "sales@tustinmazda.com"
     },
-    # add more rooftops here
+    "Huntington Beach Mazda": {
+        "address": "16800 Beach Blvd, Huntington Beach, CA 92647",
+        "email": "sales@huntingtonbeachmazda.com"
+    },
+    "Tustin Hyundai": {
+        "address": "16 Auto Center Dr, Tustin, CA 92782",
+        "email": "sales@tustinhyundai.com"
+    },
+    "Tustin Kia": {
+        "address": "",
+        "email": "sales@tustinkia.com"
+    },
 }
 
 
