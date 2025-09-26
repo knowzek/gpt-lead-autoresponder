@@ -2,6 +2,7 @@ import os, json, re, xml.etree.ElementTree as ET, email
 from imapclient import IMAPClient
 import logging
 from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+from rooftops import get_rooftop_info
 
 
 from fortellis import (
@@ -21,29 +22,6 @@ from fortellis import (
 
 from gpt import run_gpt
 from emailer import send_email
-
-ROOFTOP_INFO = {
-    "Mission Viejo Kia": {
-        "address": "24041 El Toro Rd, Lake Forest, CA 92630",
-        "email": "sales@missionviejokia.com"
-    },
-    "Tustin Mazda": {
-        "address": "28 Auto Center Dr, Tustin, CA 92782",
-        "email": "sales@tustinmazda.com"
-    },
-    "Huntington Beach Mazda": {
-        "address": "16800 Beach Blvd, Huntington Beach, CA 92647",
-        "email": "sales@huntingtonbeachmazda.com"
-    },
-    "Tustin Hyundai": {
-        "address": "16 Auto Center Dr, Tustin, CA 92782",
-        "email": "sales@tustinhyundai.com"
-    },
-    "Tustin Kia": {
-        "address": "",
-        "email": "sales@tustinkia.com"
-    },
-}
 
 
 # ── Logging (compact) ────────────────────────────────────────────────
@@ -404,13 +382,18 @@ Guest inquiry:
 Dealership Contact Info: {contact_info}
 """
 
-response = run_gpt(prompt, customer_name, rooftop_name)
+# --- Rooftop resolution (must be before run_gpt) ---
+# dealer_key here should be the same value you pass into _headers(dealer_key, token)
+rt = get_rooftop_info(dealer_key)                   # or pass the Subscription-Id if that’s what you have here
+rooftop_name   = rt.get("name")   or "Patterson Auto Group"
+rooftop_sender = rt.get("sender") or GMAIL_USER     # fallback to your default sender
+# rooftop_addr = rt.get("address")                  # optional; run_gpt can append it in the signature
 
-log.info("Composed reply (subject=%s)", response['subject'][:80])
+# Generate subject/body with rooftop branding
+response  = run_gpt(prompt, customer_name, rooftop_name)
+subject   = response["subject"]
+body_html = response["body"]
 
-subject = response["subject"].strip()
-if subject == "Your vehicle inquiry with Patterson Auto Group":
-    subject = f"Your vehicle inquiry with {dealership}"
 
 # === Send YOU a copy (proof), not the customer =======================
 send_email(to=[MICKEY_EMAIL], subject=subject, body=response["body"])
