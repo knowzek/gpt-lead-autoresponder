@@ -400,7 +400,7 @@ Dealership Contact Info: {contact_info}
 # dealer_key here should be the same value you pass into _headers(dealer_key, token)
 rt = get_rooftop_info(dealer_key)                   # or pass the Subscription-Id if that’s what you have here
 rooftop_name   = rt.get("name")   or "Patterson Auto Group"
-rooftop_sender = rt.get("sender") or GMAIL_USER     # fallback to your default sender
+rooftop_sender = rt.get("sender") or TEST_FROM     # fallback to your default sender
 # rooftop_addr = rt.get("address")                  # optional; run_gpt can append it in the signature
 
 # Generate subject/body with rooftop branding
