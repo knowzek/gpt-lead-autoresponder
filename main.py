@@ -22,6 +22,19 @@ from fortellis import (
 from gpt import run_gpt
 from emailer import send_email
 
+ROOFTOP_INFO = {
+    "Mission Viejo Kia": {
+        "address": "24041 El Toro Rd, Lake Forest, CA 92630",
+        "email": "sales@missionviejokia.com"
+    },
+    "Tustin Mazda": {
+        "address": "28 Auto Center Dr, Tustin, CA 92782",
+        "email": "sales@tustinmazda.com"
+    },
+    # add more rooftops here
+}
+
+
 # ── Logging (compact) ────────────────────────────────────────────────
 LOG_LEVEL = os.getenv("APP_LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -380,7 +393,8 @@ Guest inquiry:
 Dealership Contact Info: {contact_info}
 """
 
-response = run_gpt(prompt, customer_name)
+response = run_gpt(prompt, customer_name, rooftop_name)
+
 log.info("Composed reply (subject=%s)", response['subject'][:80])
 
 subject = response["subject"].strip()
