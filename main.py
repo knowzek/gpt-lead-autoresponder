@@ -456,9 +456,17 @@ response  = run_gpt(prompt, customer_name, rooftop_name)
 subject   = response["subject"]
 body_html = response["body"]
 
+# Strip any user-typed signature that sneaks in
+body_html = re.sub(
+    r"(?:\n\s*)?patti\s*(?:\n|\r|\r\n)+(?:virtual assistant|mission viejo kia|tustin mazda|tustin kia|huntington beach mazda|huntington beach kia).*?$",
+    "",
+    body_html,
+    flags=re.I | re.S
+)
+
 # Append dynamic appointment link token literally
 # (not an f-string, so the braces are safe; '{{...}}' also works if you prefer)
-body_html += '\n\n<a href="<{LegacySalesApptSchLink}>">Schedule an appointment</a>'
+body_html += "<br><br><{LegacySalesApptSchLink}>"
 
 
 # === Send a proof to Mickey via Fortellis sendEmail (never to customer) ===
