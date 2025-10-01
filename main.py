@@ -23,6 +23,15 @@ from fortellis import (
 from gpt import run_gpt
 from emailer import send_email
 
+# Cache Fortellis tokens per Subscription-Id so we don’t re-auth every lead
+_token_cache = {}
+def _get_token_cached(subscription_id: str):
+    tok = _token_cache.get(subscription_id)
+    if not tok:
+        tok = get_token(subscription_id)
+        _token_cache[subscription_id] = tok
+    return tok
+
 
 # ── Logging (compact) ────────────────────────────────────────────────
 LOG_LEVEL = os.getenv("APP_LOG_LEVEL", "INFO").upper()
