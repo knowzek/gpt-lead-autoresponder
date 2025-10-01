@@ -373,8 +373,7 @@ if "mvk bucket" in (source or "").lower() or "mvk bucket" in (sub_source or "").
     except Exception as e:
         log.error("MVK forward failed: %s", e)
 
-    continue  # skip GPT + normal flow
-
+    raise SystemExit(0) 
 
 dealership = (
     DEALERSHIP_MAP.get(first_name)
