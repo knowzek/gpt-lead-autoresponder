@@ -334,6 +334,48 @@ salesperson = (
 source = opportunity.get("source", "")
 sub_source = opportunity.get("subSource", "")
 
+# === Skip MVK Bucket leads: forward internally via sendEmail =========
+if "mvk bucket" in (source or "").lower() or "mvk bucket" in (sub_source or "").lower():
+    rt = get_rooftop_info(subscription_id)
+    rooftop_name   = rt.get("name")   or rooftop_name
+    rooftop_sender = rt.get("sender") or rooftop_sender
+
+    MVK_FORWARD_MAP = {
+        "Mission Viejo Kia": "knowzek@gmail.com",
+        "Tustin Mazda": "knowzek@gmail.com",
+        "Tustin Hyundai": "knowzek@gmail.com",
+        "Huntington Beach Mazda": "knowzek@gmail.com",
+        "Tustin Kia": "knowzek@gmail.com",
+    }
+    fwd_to = MVK_FORWARD_MAP.get(rooftop_name, MICKEY_EMAIL)
+
+    try:
+        subj = f"[MVK BUCKET] {rooftop_name} — Opportunity {opportunity_id}"
+        body = (
+            f"This lead was identified as an MVK Bucket Lead and was NOT handled by Patti.\n\n"
+            f"Opportunity ID: {opportunity_id}\n"
+            f"Source: {source}\nSubSource: {sub_source}\n"
+            f"Rooftop: {rooftop_name}\n\n"
+            "Please follow up directly."
+        )
+        _ = send_opportunity_email_activity(
+            token=token,
+            dealer_key=subscription_id,
+            opportunity_id=opportunity_id,
+            sender=rooftop_sender,
+            recipients=[fwd_to],              # 👈 internal-only
+            carbon_copies=[MICKEY_EMAIL],     # optional: keep Mickey in the loop
+            subject=subj,
+            body_html=body.replace("\n", "<br>"),
+            rooftop_name=rooftop_name,
+        )
+        log.info("Forwarded MVK bucket lead via sendEmail API to %s", fwd_to)
+    except Exception as e:
+        log.error("MVK forward failed: %s", e)
+
+    continue  # skip GPT + normal flow
+
+
 dealership = (
     DEALERSHIP_MAP.get(first_name)
     or DEALERSHIP_MAP.get(full_name)
@@ -406,17 +448,40 @@ response  = run_gpt(prompt, customer_name, rooftop_name)
 subject   = response["subject"]
 body_html = response["body"]
 
+# Append dynamic appointment link token literally
+# (not an f-string, so the braces are safe; '{{...}}' also works if you prefer)
+body_html += '\n\n<a href="<{LegacySalesApptSchLink}>">Schedule an appointment</a>'
 
-# === Send YOU a copy (proof), not the customer =======================
-send_email(to=[MICKEY_EMAIL], subject=subject, body=response["body"])
-log.info("Reply email sent to %s", MICKEY_EMAIL)
+
+# === Send a proof to Mickey via Fortellis sendEmail (never to customer) ===
+# Rooftop context is already resolved above
+try:
+    proof_subject = f"[PROOF] {subject}"
+    proof_body = (
+        body_html.replace("\n", "<br>")
+        + "<br><br><hr><p><em>Note: Proof-only email sent to Mickey via CRM sendEmail; "
+          "customer was NOT emailed.</em></p>"
+    )
+
+    _ = send_opportunity_email_activity(
+        token=token,
+        dealer_key=subscription_id,       # you pass Subscription-Id here (your code already does this)
+        opportunity_id=opportunity_id,
+        sender=rooftop_sender,            # from rooftops.py mapping
+        recipients=[MICKEY_EMAIL],        # 👈 proof only
+        carbon_copies=[],                 # or keep empty in production
+        subject=proof_subject,
+        body_html=proof_body,
+        rooftop_name=rooftop_name,
+    )
+    log.info("Proof sent to Mickey via sendEmail API")
+except Exception as e:
+    log.error("sendEmail proof to Mickey failed: %s", e)
+
 
 # === Log to Fortellis (SAFE first) ==================================
 
 post_results = {}
-
-token = get_token(subscription_id)
-
 
 # 1) Comment (always safe)
 try:
@@ -430,30 +495,10 @@ except Exception as e:
     log.error("Add comment failed: %s", e)
     post_results["opportunities_addComment"] = {"error": str(e)}
 
-# 2) Email activity (only if NOT safe; still forced to TEST_TO)
-try:
-    if not SAFE_MODE:
-        # choose recipient correctly
-        recipients_list = [TEST_TO]  # test-only recipient in NOT SAFE runs
-        act = send_opportunity_email_activity(
-            token=token,
-            dealer_key=subscription_id,
-            opportunity_id=opportunity_id,
-            sender=rooftop_sender,
-            recipients=recipients_list,         # <-- use test recipient list
-            carbon_copies=[],
-            subject=subject,
-            body_html=body_html,
-            rooftop_name=rooftop_name,
-        )
-        post_results["opportunities_sendEmail"] = act
-        log.info("Logged sendEmail activity (test recipient): status=%s", act.get("status", "N/A"))
-    else:
-        post_results["opportunities_sendEmail"] = {"skipped": "SAFE_MODE"}
-        log.info("sendEmail skipped (SAFE_MODE)")
-except Exception as e:
-    log.error("sendEmail failed: %s", e)
-    post_results["opportunities_sendEmail"] = {"error": str(e)}
+# 2) Email activity — disabled for customer sends (we only send proof to Mickey above)
+post_results["opportunities_sendEmail"] = {"note": "customer send disabled; proof sent to Mickey via sendEmail"}
+log.info("Customer send disabled by config; proof already sent to Mickey")
+
 
 # 3) Vehicle sought (demo data)
 try:
