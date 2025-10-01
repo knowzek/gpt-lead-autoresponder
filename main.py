@@ -472,10 +472,10 @@ body_html += "<br><br><{LegacySalesApptSchLink}>"
 # === Send a proof to Mickey via Fortellis sendEmail (never to customer) ===
 # Rooftop context is already resolved above
 try:
-    proof_subject = f"[PROOF] {subject}"
+    proof_subject = f"{subject}"
     proof_body = (
         body_html.replace("\n", "<br>")
-        + "<br><br><hr><p><em>Note: Proof-only email sent to Mickey via CRM sendEmail; "
+        + "<br><br><hr><p><em>Note: QA-only email sent to Mickey via CRM sendEmail; "
           "customer was NOT emailed.</em></p>"
     )
 
