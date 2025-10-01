@@ -6,25 +6,25 @@ SUBSCRIPTION_TO_ROOFTOP = {
     "a4efeb74-2289-43d5-9814-1049fd35e894": {
         "name":    "Mission Viejo Kia",
         "address": "28802 Marguerite Pkwy, Mission Viejo, CA 92692",
-        "sender":  "Sales@huntingtonbeachmazda.edealerhub.com",
+        "sender":  "sales@missionviejokia.edealerhub.com",
     },
     # Tustin Mazda
     "7a05ce2c-cf00-4748-b841-45b3442665a7": {
         "name":    "Tustin Mazda",
         "address": "28 Auto Center Dr, Tustin, CA 92782",
-        "sender":  "Sales@huntingtonbeachmazda.edealerhub.com",
+        "sender":  "Sales@tustinmazda.edealerhub.com",
     },
    # Tustin Kia
     "c27d7f4f-4a4c-45c8-8154-a5de48421fc3": {
         "name":    "Tustin Kia",
         "address": "",
-        "sender":  "Sales@huntingtonbeachmazda.edealerhub.com",
+        "sender":  "Sales@tustinkia.edealerhub.com",
     },
   # Tustin Hyundai
     "2c61b27b-b239-4b54-bd34-dfd73aa5a568": {
         "name":    "Tustin Hyundai",
         "address": "16 Auto Center Dr, Tustin, CA 92782",
-        "sender":  "Sales@huntingtonbeachmazda.edealerhub.com",
+        "sender":  "Sales@tustinhyundai.edealerhub.com",
     },
   # Huntington Beach Mazda
     "cbb4a4f18-1693-4450-a08e-40d8df30c139": {
