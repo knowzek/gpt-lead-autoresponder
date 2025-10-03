@@ -48,6 +48,11 @@ TEST_TO   = os.getenv("FORTELLIS_TEST_TO",   "rishabhrajendraprasad.shukla@cdk.c
 
 MICKEY_EMAIL = os.getenv("MICKEY_EMAIL", "knowzek@gmail.com")  # proof recipient
 ELIGIBLE_UPTYPES = {s.strip().lower() for s in os.getenv("ELIGIBLE_UPTYPES", "internet").split(",")}
+PROOF_RECIPIENTS = [
+    "knowzek@gmail.com",
+    "mickeyt@the-dms.com",
+    "dev.almousa@gmail.com"
+]
 
 inquiry_text = None  # ensure defined
 
@@ -484,7 +489,7 @@ try:
         dealer_key=subscription_id,       # you pass Subscription-Id here (your code already does this)
         opportunity_id=opportunity_id,
         sender=rooftop_sender,            # from rooftops.py mapping
-        recipients=[MICKEY_EMAIL],        # 👈 proof only
+        recipients=PROOF_RECIPIENTS,       # 👈 proof only
         carbon_copies=[],                 # or keep empty in production
         subject=proof_subject,
         body_html=proof_body,
