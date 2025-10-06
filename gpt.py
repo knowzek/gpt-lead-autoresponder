@@ -1,8 +1,13 @@
-import os, time, json, logging
+import os, time, json, logging, re
 from datetime import datetime
 from openai import OpenAI
-from openai import APIStatusError  # available in recent SDKs; if import fails, just catch Exception
-OPENAI_CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-5.1-mini")
+from openai import APIStatusError, NotFoundError  # available in recent SDKs; if import fails, just catch Exception
+client = OpenAI()
+
+PRIMARY_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini")
+FALLBACK_MODELS = [m.strip() for m in os.getenv("OPENAI_FALLBACK_MODELS", "gpt-4o,gpt-4o-mini").split(",") if m.strip()]
+MODEL_CHAIN = [PRIMARY_MODEL] + [m for m in FALLBACK_MODELS if m and m != PRIMARY_MODEL]
+
 # Dynamically determine current month
 CURRENT_MONTH = datetime.now().strftime("%B")
 
@@ -21,7 +26,40 @@ PATTERSON_SITES = [
     "https://www.pattersonautos.com/",
 ]
 
-client = OpenAI(timeout=CLIENT_TIMEOUT)
+def chat_complete_with_fallback(messages, want_json: bool = True, temperature: float = 0.6):
+    """
+    Try models in MODEL_CHAIN until one works.
+    If JSON mode isn't supported by a model, retry without strict JSON.
+    """
+    last_err = None
+    for m in MODEL_CHAIN:
+        # First try with JSON format (if requested)
+        for attempt in (0, 1):  # 0 = with json, 1 = without json
+            try:
+                kwargs = dict(model=m, messages=messages, temperature=temperature)
+                if want_json and attempt == 0:
+                    # Some SDKs support response_format={"type":"json_object"}
+                    kwargs["response_format"] = {"type": "json_object"}
+                resp = client.chat.completions.create(**kwargs)
+                return m, resp
+            except NotFoundError as e:
+                last_err = e
+                # Model truly not available; try next model
+                break
+            except APIStatusError as e:
+                last_err = e
+                # If the error might be due to response_format not supported, retry once without it
+                if attempt == 0:
+                    continue
+                # otherwise try next model
+                break
+            except Exception as e:
+                last_err = e
+                # On unknown errors, try next model (or next attempt without JSON)
+                if attempt == 0:
+                    continue
+                break
+    raise last_err or RuntimeError("OpenAI chat completion failed with all models")
 
 # --- Patti system instruction builders --------------------------------
 
@@ -165,22 +203,17 @@ def run_gpt(prompt: str,
         {"role": "user", "content": prompt}
     ]
 
-    # Single chat completion call
-    resp = client.chat.completions.create(
-        model=OPENAI_CHAT_MODEL,
-        messages=messages,
-        temperature=0.6,
-        response_format={"type": "json_object"}  # if your SDK supports it; remove otherwise
-    )
+    # Single chat completion call with fallback logic
+    model_used, resp = chat_complete_with_fallback(messages, want_json=True, temperature=0.6)
     text = (resp.choices[0].message.content or "").strip()
-
+    
     # Parse JSON into your canonical reply structure
     try:
         data = json.loads(text)
         reply = {"subject": data.get("subject","").strip(),
                  "body":    data.get("body","").strip()}
     except Exception:
-        reply = _coerce_reply(text)  # fallback to your existing parser
+        reply = _coerce_reply(text)  # fallback if not valid JSON
 
         # --- Rooftop substitutions (kept from your original) ---
         if rooftop_name:
