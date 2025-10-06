@@ -288,26 +288,23 @@ def run_gpt(prompt: str,
     
     # --- Append dynamic schedule link + closing signature ---
     if rooftop_name:
-        schedule_line = (
-            "Please let us know a convenient time for you, or you can instantly "
-            "reserve your time here: <{LegacySalesApptSchLink}>."
-        )
-        closing_line = "Looking forward to assisting you further."
-    
+        # Start from the model body and remove any prior "looking forward ..." lines
+        body = (reply.get("body") or "")
+        body = re.sub(r"(?im)^\s*looking forward to[^\n]*\n?", "", body)  # de-dupe closers
+        # Also remove any stray "Schedule Your Visit" the model might have typed
+        body = re.sub(r"(?i)Schedule Your Visit\.?", "", body)
+
+        # Build Patti signature (no appointment/link lines here)
         signature_lines = [
-            "", schedule_line, closing_line, "",
+            "",
             "Patti",
             rooftop_name,
         ]
-    
-        if rooftop_addr:  # <-- use rooftop_addr here
+        if rooftop_addr:
             signature_lines.append(rooftop_addr)
-    
-        # Remove stray “Schedule Your Visit”
-        body = (reply.get("body") or "")
-        body = re.sub(r"Schedule Your Visit\.?", "", body, flags=re.I)
-    
-        reply["body"] = body.rstrip() + "\n\n" + "\n".join(signature_lines)
+
+        # Compose final body + put the schedule token AFTER the signature
+        reply["body"] = body.rstrip() + "\n\n" + "\n".join(signature_lines) + "\n\n<{LegacySalesApptSchLink}>"
 
     
     # helpful debug (won't crash cron)
