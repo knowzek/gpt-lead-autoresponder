@@ -27,6 +27,13 @@ PATTERSON_SITES = [
     "https://www.pattersonautos.com/",
 ]
 
+def _get_rooftop_address(rooftop_name: str) -> str:
+    try:
+        from rooftops import ROOFTOP_INFO
+        return ((ROOFTOP_INFO.get(rooftop_name, {}) or {}).get("address") or "")
+    except Exception:
+        return ""
+
 def _safe_extract_text(resp):
     try:
         return (resp.choices[0].message.content or "").strip()
@@ -222,6 +229,8 @@ def run_gpt(prompt: str,
             rooftop_name: str = None,
             max_retries: int = MAX_RETRIES):
 
+     rooftop_addr = _get_rooftop_address(rooftop_name)
+                
     # Build system stack
     system_msgs = [
         {"role": "system", "content": _patti_persona_system()},
@@ -277,7 +286,7 @@ def run_gpt(prompt: str,
             .replace("[Guest’s Name]", customer_name)
         )
     
-    # --- Append dynamic schedule link + closing signature (your new requirement) ---
+    # --- Append dynamic schedule link + closing signature ---
     if rooftop_name:
         schedule_line = (
             "Please let us know a convenient time for you, or you can instantly "
@@ -291,15 +300,15 @@ def run_gpt(prompt: str,
             rooftop_name,
         ]
     
-        # if you computed rooftop_address earlier, include it
-        if rooftop_address:
-            signature_lines.append(rooftop_address)
+        if rooftop_addr:  # <-- use rooftop_addr here
+            signature_lines.append(rooftop_addr)
     
-        # remove any stray unlinked "Schedule Your Visit"
+        # Remove stray “Schedule Your Visit”
         body = (reply.get("body") or "")
         body = re.sub(r"Schedule Your Visit\.?", "", body, flags=re.I)
     
         reply["body"] = body.rstrip() + "\n\n" + "\n".join(signature_lines)
+
     
     # helpful debug (won't crash cron)
     log.debug("OpenAI model_used=%s, chars=%d", model_used, len(text or ""))
