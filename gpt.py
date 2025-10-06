@@ -229,7 +229,7 @@ def run_gpt(prompt: str,
             rooftop_name: str = None,
             max_retries: int = MAX_RETRIES):
 
-     rooftop_addr = _get_rooftop_address(rooftop_name)
+    rooftop_addr = _get_rooftop_address(rooftop_name)
                 
     # Build system stack
     system_msgs = [
