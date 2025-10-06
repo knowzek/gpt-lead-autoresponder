@@ -287,23 +287,34 @@ def add_vehicle_sought(token, dealer_key, opportunity_id,
 def _coerce_activity_type(value):
     """
     Accepts an int (pass-through), a numeric string ('14' -> 14),
-    or a small set of known labels -> codes. Raise if unrecognized.
+    or a small set of known labels -> codes.
+
+    Standardized for all rooftops:
+      - "Send Email" -> 3
     """
     if isinstance(value, int):
         return value
     if isinstance(value, str) and value.isdigit():
         return int(value)
 
-    # Known-safe label(s) you've confirmed in Postman:
-    LABEL_TO_CODE = {
-        "Send Email/Letter": 14,
-        # Add more when you verify their exact numeric codes.
-    }
-    if isinstance(value, str) and value in LABEL_TO_CODE:
-        return LABEL_TO_CODE[value]
+    label = (value or "").strip()
 
-    raise ValueError(f"Unrecognized activityType: {value!r}. Use a numeric code "
-                     "or a known label like 'Send Email/Letter'.")
+    BUILTIN = {
+        "Send Email": 3,   # <-- standardize on 3
+        "Task": 3,
+        "Call": 1,
+        "Appointment": 2,
+        # note: we intentionally drop "Send Email/Letter"
+    }
+    if label in BUILTIN:
+        return BUILTIN[label]
+
+    raise ValueError(
+        f"Unrecognized activityType: {value!r}. "
+        "Use a numeric code or one of the supported labels: "
+        f"{', '.join(BUILTIN.keys())}"
+    )
+
 
 def schedule_activity(
     token,
