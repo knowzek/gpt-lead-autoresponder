@@ -1,14 +1,126 @@
 import os, time, json, logging
+from datetime import datetime
 from openai import OpenAI
 from openai import APIStatusError  # available in recent SDKs; if import fails, just catch Exception
+OPENAI_CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-5.1-mini")
+# Dynamically determine current month
+CURRENT_MONTH = datetime.now().strftime("%B")
 
 log = logging.getLogger("patti")
 
 CLIENT_TIMEOUT = float(os.getenv("OPENAI_TIMEOUT", "30"))
 MAX_RETRIES    = int(os.getenv("OPENAI_MAX_RETRIES", "4"))
-ASSISTANT_ID   = os.getenv("OPENAI_ASSISTANT_ID")  # must be set
+ASSISTANT_ID   = os.getenv("OPENAI_ASSISTANT_ID") 
+
+# Allowed site list (persist here so the model never invents off-brand links)
+PATTERSON_SITES = [
+    "https://www.tustinmazda.com/",
+    "https://www.huntingtonbeachmazda.com/",
+    "https://www.tustinhyundai.com/",
+    "https://www.missionviejokia.com/",
+    "https://www.pattersonautos.com/",
+]
 
 client = OpenAI(timeout=CLIENT_TIMEOUT)
+
+# --- Patti system instruction builders --------------------------------
+
+def _patti_persona_system():
+    return (
+        "You are Patti, the virtual assistant for Patterson Auto Group "
+        "(Tustin Mazda, Huntington Beach Mazda, Mission Viejo Kia, Tustin Hyundai). "
+        "Your tone matches our best team members: warm, professional, helpful, and never pushy."
+    )
+
+def _patti_rules_system(customer_first: str):
+    return (
+        "Objectives:\n"
+        "- Start a natural conversation with a strong, value-forward opening.\n"
+        "- Always reflect Patterson brand values and Why Buys.\n"
+        "- Make helpful vehicle recommendations; encourage action (booking a visit).\n"
+        "- Follow through based on the guest’s replies or silence.\n\n"
+        "Hard Rules:\n"
+        f"- Begin with exactly: Hi {customer_first or 'there'},\n"
+        "- Keep 120–180 words unless more detail is clearly requested.\n"
+        "- Mention the assigned salesperson by name when provided.\n"
+        "- If a model is known, speak to it; otherwise invite specifics (trim, color, timing).\n"
+        "- Do NOT include any signature block, phone numbers, or URLs; the system will append them.\n"
+        "- Be truthful; never guess. If info is missing, ask one clear follow-up question."
+    )
+
+def _patterson_why_buys_system():
+    return (
+        "Patterson Why Buys (prioritize early):\n"
+        "- No Addendums or Dealer MarkUps\n"
+        "- Orange County Top Workplace for 20 years running\n"
+        "- Community Driven\n"
+        "- Master Technicians and Experienced Staff"
+    )
+
+def _first_message_rules_system():
+    return (
+        "First Message Guidance:\n"
+        "- Lead with VALUE: include 1–2 Why Buys and/or model benefits up front.\n"
+        "- If a valid SRP/VDP URL is supplied in the prompt, you may hyperlink the model name; "
+        "otherwise do not add links yourself."
+    )
+
+def _personalization_rules_system():
+    return (
+        "Personalization:\n"
+        "- If CRM includes an assigned salesperson, include their name on the first appointment mention."
+    )
+
+def _appointment_cta_system():
+    return (
+        "Scheduling CTA:\n"
+        "- When inviting a guest to book, include this phrasing verbatim (without a URL):\n"
+        "  You can also reserve your time instantly here: Schedule Your Visit\n"
+        "- Place it after proposed times or as an alternative. "
+        "The system will append the actual scheduling link token later."
+    )
+
+def _compliance_system():
+    # Charity months logic: we keep the instruction authoritative; model should avoid outside windows.
+    return (
+        "Compliance & Brand Values:\n"
+        "- Comply with California laws, ComplyAuto standards, and manufacturer ad guidelines.\n"
+        "- Only reference charity campaigns during these windows:\n"
+        "  March – Autism Speaks; May – Didi Hirsch Mental Health Awareness; July – OC Rescue Mission;\n"
+        "  September – HomeAid / Ronald McDonald House; November – Autism Speaks (1st half), "
+        "OC Rescue Mission & St. Jude (2nd half); December – OC Rescue Mission / Teen Risk.\n"
+        "- If outside those months, do not mention charity at all.\n"
+        "Sample charity phrasing when in-window:\n"
+        "  “This month, a portion of every vehicle sold or serviced supports [Charity Name]. "
+        "Thank you for helping us give back!”"
+    )
+
+def _links_and_boundaries_system():
+    sites = "\n".join(f"- {u}" for u in PATTERSON_SITES)
+    return (
+        "Links & Boundaries:\n"
+        f"- Only link to these dealership sites:\n{sites}\n"
+        "- Hyperlink model names only if a valid SRP/VDP URL is provided in the prompt.\n"
+        "- Focus on the dealership the lead originated from; do not promote other Patterson stores.\n"
+        "- Do not mention specials/incentives unless clearly visible on the store’s own site.\n"
+        "- Do not link to third-party sites (Autotrader, TrueCar, etc.)."
+    )
+
+def _objection_handling_system():
+    return (
+        "Objection Handling (tone & approach examples; adapt concisely):\n"
+        "- “Just looking”: No pressure, offer a casual visit/test drive.\n"
+        "- “Found a better price”: Acknowledge; emphasize No Addendums & transparency; invite a review visit.\n"
+        "- “Email me numbers”: Offer what you can, suggest a quick visit/call to tailor the quote.\n"
+        "- “Not ready to buy”: Supportive; suggest a no-commitment visit to learn more.\n"
+        "- “Comparing brands/dealers”: Respectful; highlight Why Buys; offer a specific visit time."
+    )
+
+def _format_system():
+    return (
+        "Output JSON with keys exactly: subject, body. "
+        "No markdown, no extra text. Example: {\"subject\":\"...\",\"body\":\"...\"}"
+    )
 
 def _retryable(status):
     return status in (429, 500, 502, 503, 504)
@@ -29,124 +141,83 @@ def _coerce_reply(text: str):
         "body": text.strip() if text.strip() else "Thanks for reaching out — happy to help!"
     }
 
-def run_gpt(prompt: str, customer_name: str, rooftop_name: str = None, max_retries: int = MAX_RETRIES):
-    """
-    Compose a reply using the Assistants API. Retries on 5xx/429 and degrades gracefully
-    so the job never crashes on transient OpenAI errors.
-    """
-    backoff = 1.0
-    last_err = None
+def run_gpt(prompt: str,
+            customer_name: str,
+            rooftop_name: str = None,
+            max_retries: int = MAX_RETRIES):
 
-    # Optional: lazy import so the function doesn't crash if the mapping isn't present
-    rooftop_address = ""
-    try:
-        from rooftops import ROOFTOP_INFO  # expected shape: {"Mission Viejo Kia": {"address": "...", "email": "..."}}
-        if rooftop_name:
-            rooftop_address = (ROOFTOP_INFO.get(rooftop_name, {}) or {}).get("address", "")
-    except Exception:
-        # No mapping available; we’ll still include the rooftop name without an address.
-        pass
-
-    for attempt in range(max_retries):
-        try:
-            thread = client.beta.threads.create()
-            client.beta.threads.messages.create(
-                thread_id=thread.id,
-                role="user",
-                content=prompt
-            )
-            run = client.beta.threads.runs.create(
-                thread_id=thread.id,
-                assistant_id=ASSISTANT_ID,
-            )
-
-            # poll briefly for completion
-            for _ in range(60):  # ~30s @0.5s
-                run = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-                if run.status == "completed":
-                    break
-                if run.status in ("failed", "cancelled", "expired"):
-                    raise RuntimeError(f"Assistant run status={run.status}")
-                time.sleep(0.5)
-
-            msgs = client.beta.threads.messages.list(thread_id=thread.id, order="desc", limit=1)
-            if not msgs.data:
-                raise RuntimeError("Assistant returned no messages")
-            parts = msgs.data[0].content
-            text = ""
-            for p in parts:
-                if hasattr(p, "text") and getattr(p.text, "value", None):
-                    text += p.text.value
-            if not text.strip():
-                raise RuntimeError("Assistant message had no text content")
-
-            # Parse into {"subject": ..., "body": ...}
-            reply = _coerce_reply(text)
-
-            # 1) Swap out "Patterson Auto Group" with the specific rooftop, if provided
-            if rooftop_name:
-                if "subject" in reply and reply["subject"]:
-                    reply["subject"] = reply["subject"].replace("Patterson Auto Group", rooftop_name)
-                if "body" in reply and reply["body"]:
-                    reply["body"] = reply["body"].replace("Patterson Auto Group", rooftop_name)
-
-            # 2) Personalize guest name placeholders if present (preserving your existing behavior)
-            if customer_name and "body" in reply and reply["body"]:
-                reply["body"] = (
-                    reply["body"]
-                    .replace("[Guest's Name]", customer_name)
-                    .replace("[Guest’s Name]", customer_name)
-                )
-
-            # 3) Append rooftop signature (name + address) when available
-            if rooftop_name:
-                signature_lines = ["", "Patti", "Virtual Assistant", rooftop_name]
-                if rooftop_address:
-                    signature_lines.append(rooftop_address)
-                signature = "\n".join(signature_lines)
-                reply["body"] = (reply.get("body") or "").rstrip() + "\n\n" + signature
-
-            return reply
-
-        except APIStatusError as e:
-            status = getattr(e, "status_code", None)
-            last_err = e
-            if status is not None and _retryable(status) and attempt < max_retries - 1:
-                log.warning("OpenAI %s on attempt %d; retrying in %.1fs", status, attempt + 1, backoff)
-                time.sleep(backoff)
-                backoff = min(backoff * 2, 8.0)
-                continue
-            log.error("OpenAI APIStatusError (status=%s): %s", status, str(e)[:200])
-            break
-        except Exception as e:
-            last_err = e
-            # Retry unknown transient errors once or twice, otherwise fall back
-            if attempt < max_retries - 1:
-                log.warning("OpenAI call failed (%s); retrying in %.1fs", type(e).__name__, backoff)
-                time.sleep(backoff)
-                backoff = min(backoff * 2, 8.0)
-                continue
-            log.error("OpenAI call failed: %s", str(e)[:200])
-            break
-
-    # graceful fallback so the cron keeps going
-    fallback_rooftop = rooftop_name or "Patterson Auto Group"
-    subject = f"Your vehicle inquiry with {fallback_rooftop}"
-
-    body_lines = [
-        f"Hi {customer_name or 'there'},",
-        "",
-        "Thanks for your inquiry! I’m happy to help with details, availability, and next steps. "
-        "Let me know any preferences on trim, color, or timing and I’ll get everything lined up.",
-        "",
-        "Patti",
-        "Virtual Assistant",
-        fallback_rooftop
+    # Build system stack
+    system_msgs = [
+        {"role": "system", "content": _patti_persona_system()},
+        {"role": "system", "content": _patti_rules_system(customer_name)},
+        {"role": "system", "content": _patterson_why_buys_system()},
+        {"role": "system", "content": _first_message_rules_system()},
+        {"role": "system", "content": _personalization_rules_system()},
+        {"role": "system", "content": _appointment_cta_system()},
+        {"role": "system", "content": _compliance_system()},
+        {"role": "system", "content": f"Current month: {CURRENT_MONTH}. Only reference charity campaigns if this month is listed; otherwise do not mention charity at all."},
+        {"role": "system", "content": _links_and_boundaries_system()},
+        {"role": "system", "content": _objection_handling_system()},
+        {"role": "system", "content": _format_system()},
     ]
-    if rooftop_name and rooftop_address:
-        body_lines.append(rooftop_address)
 
-    return {
-        "subject": subject,
-        "body": "\n".join(body_lines)
-    }
+    messages = system_msgs + [
+        {"role": "user", "content": prompt}
+    ]
+
+    # Single chat completion call
+    resp = client.chat.completions.create(
+        model=OPENAI_CHAT_MODEL,
+        messages=messages,
+        temperature=0.6,
+        response_format={"type": "json_object"}  # if your SDK supports it; remove otherwise
+    )
+    text = (resp.choices[0].message.content or "").strip()
+
+    # Parse JSON into your canonical reply structure
+    try:
+        data = json.loads(text)
+        reply = {"subject": data.get("subject","").strip(),
+                 "body":    data.get("body","").strip()}
+    except Exception:
+        reply = _coerce_reply(text)  # fallback to your existing parser
+
+        # --- Rooftop substitutions (kept from your original) ---
+        if rooftop_name:
+            if reply.get("subject"):
+                reply["subject"] = reply["subject"].replace("Patterson Auto Group", rooftop_name)
+            if reply.get("body"):
+                reply["body"] = reply["body"].replace("Patterson Auto Group", rooftop_name)
+    
+        # --- First-name personalization (kept from your original) ---
+        if customer_name and reply.get("body"):
+            reply["body"] = (
+                reply["body"]
+                .replace("[Guest's Name]", customer_name)
+                .replace("[Guest’s Name]", customer_name)
+            )
+    
+        # --- Append dynamic schedule link + closing signature ---
+        if rooftop_name:
+            schedule_line = (
+                "Please let us know a convenient time for you, or you can instantly "
+                "reserve your time here: <{LegacySalesApptSchLink}>."
+            )
+            closing_line = "Looking forward to assisting you further."
+    
+            signature_lines = [
+                "", schedule_line, closing_line, "",
+                "Patti",
+                rooftop_name,
+            ]
+    
+            if rooftop_address:
+                signature_lines.append(rooftop_address)
+    
+            # Remove stray “Schedule Your Visit” text the model might have produced
+            body = (reply.get("body") or "")
+            body = re.sub(r"Schedule Your Visit\.?", "", body, flags=re.I)
+    
+            reply["body"] = body.rstrip() + "\n\n" + "\n".join(signature_lines)
+    
+        return reply
