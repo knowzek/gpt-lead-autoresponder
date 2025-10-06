@@ -542,8 +542,10 @@ try:
 
     sched = schedule_activity(
         token, subscription_id, opportunity_id,
-        due_dt_iso_utc=due_dt_iso, activity_name="Send Email/Letter",
-        activity_type=14, comments="Patti demo—schedule a follow-up in ~10 minutes.",
+        due_dt_iso_utc=due_dt_iso,
+        activity_name="Send Email",
+        activity_type=3,  # standardized across rooftops
+        comments="Patti demo—schedule a follow-up in ~10 minutes.",
     )
     post_results["activities_schedule"] = sched
     activity_id_new = sched.get("id") or sched.get("activityId")
@@ -554,8 +556,10 @@ try:
         comp = complete_activity(
             token, subscription_id, opportunity_id,
             due_dt_iso_utc=due_dt_iso, completed_dt_iso_utc=completed_dt_iso,
-            activity_name="Send Email/Letter", activity_type=14,
-            comments="Patti demo—completed as proof.", activity_id=activity_id_new,
+            activity_name="Send Email",
+            activity_type=3,  # standardized across rooftops
+            comments="Patti demo—completed as proof.",
+            activity_id=activity_id_new,
         )
     else:
         comp = {"skipped": "no activityId from schedule"}
