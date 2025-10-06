@@ -3,6 +3,9 @@ from imapclient import IMAPClient
 import logging
 from datetime import datetime as _dt, timedelta as _td, timezone as _tz
 from rooftops import get_rooftop_info
+from gpt import run_gpt
+from emailer import send_email
+import requests
 
 from fortellis import (
     SUB_MAP,
@@ -19,9 +22,6 @@ from fortellis import (
     complete_activity,
     search_activities_by_opportunity,  # <-- add this
 )
-
-from gpt import run_gpt
-from emailer import send_email
 
 # Cache Fortellis tokens per Subscription-Id so we don’t re-auth every lead
 _token_cache = {}
@@ -53,6 +53,15 @@ PROOF_RECIPIENTS = [
     "mickeyt@the-dms.com",
     "dev.almousa@gmail.com"
 ]
+
+# Preferred activity type + rooftop-safe fallback
+ACTIVITY_COMBOS = [
+    ("Send Email", 3),          # try first
+    ("Send Email/Letter", 14),  # fallback
+]
+
+# Per-run cache: sub_id -> (name, type) that succeeded
+GOOD_ACTIVITY_COMBO: dict[str, tuple[str, int]] = {}
 
 PATTI_FIRST_REPLY_SENTINEL = "[patti:first-reply]"
 
@@ -564,35 +573,68 @@ except Exception as e:
     log.error("Add vehicle sought failed: %s", e)
     post_results["opportunities_addVehicleSought"] = {"error": str(e)}
 
-# 4) Schedule & Complete follow-up activity
+# 4) Schedule & Complete follow-up activity (two-step rooftop-aware fallback)
 try:
     due_dt_iso = (_dt.now(_tz.utc) + _td(minutes=10)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
-    sched = schedule_activity(
-        token, subscription_id, opportunity_id,
-        due_dt_iso_utc=due_dt_iso,
-        activity_name="Send Email",
-        activity_type=3,  # standardized across rooftops
-        comments="Patti demo—schedule a follow-up in ~10 minutes.",
-    )
-    post_results["activities_schedule"] = sched
-    activity_id_new = sched.get("id") or sched.get("activityId")
-    log.info("Schedule activity: status=%s", sched.get("status", "N/A"))
+    used_name: str | None = None
+    used_type: int | None = None
+    last_err = None
+
+    def _schedule_with(name: str, atype: int):
+        return schedule_activity(
+            token, subscription_id, opportunity_id,
+            due_dt_iso_utc=due_dt_iso,
+            activity_name=name,
+            activity_type=atype,
+            comments="Patti demo—schedule a follow-up in ~10 minutes.",
+        )
+
+    # If we already learned a good combo for this rooftop in this run, use it straight away.
+    if subscription_id in GOOD_ACTIVITY_COMBO:
+        used_name, used_type = GOOD_ACTIVITY_COMBO[subscription_id]
+        sched = _schedule_with(used_name, used_type)
+        post_results["activities_schedule"] = sched
+        log.info("Schedule activity (cached) succeeded with combo name=%r type=%r", used_name, used_type)
+    else:
+        for cand_name, cand_type in ACTIVITY_COMBOS:
+            try:
+                sched = _schedule_with(cand_name, cand_type)
+                used_name, used_type = cand_name, cand_type
+                GOOD_ACTIVITY_COMBO[subscription_id] = (used_name, used_type)
+                post_results["activities_schedule"] = sched
+                log.info("Schedule activity succeeded with combo name=%r type=%r", used_name, used_type)
+                break
+            except requests.exceptions.HTTPError as e:
+                code = getattr(getattr(e, "response", None), "status_code", None)
+                body = (getattr(getattr(e, "response", None), "text", "") or "")[:200]
+                log.warning("Schedule failed (name=%r,type=%r): status=%s body=%s", cand_name, cand_type, code, body)
+                last_err = e
+                continue
+
+        if not used_name:
+            raise last_err or RuntimeError("No valid activityType/name combination found for this rooftop.")
+
+    activity_id_new = (post_results["activities_schedule"].get("id")
+                       or post_results["activities_schedule"].get("activityId"))
 
     if activity_id_new:
         completed_dt_iso = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         comp = complete_activity(
             token, subscription_id, opportunity_id,
             due_dt_iso_utc=due_dt_iso, completed_dt_iso_utc=completed_dt_iso,
-            activity_name="Send Email",
-            activity_type=3,  # standardized across rooftops
+            activity_name=used_name,        # use the exact combo that worked
+            activity_type=used_type,
             comments="Patti demo—completed as proof.",
             activity_id=activity_id_new,
         )
     else:
         comp = {"skipped": "no activityId from schedule"}
+
     post_results["activities_complete"] = comp
     log.info("Complete activity: status=%s", comp.get("status", "N/A"))
+
 except Exception as e:
-    log.error("Schedule/Complete failed: %s", e)
+    log.error("Schedule/Complete failed after fallback: %s", str(e)[:300])
     post_results["activities_schedule/complete"] = {"error": str(e)}
+
