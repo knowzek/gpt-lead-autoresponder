@@ -3,6 +3,7 @@ from datetime import datetime
 from openai import OpenAI
 from openai import APIStatusError, NotFoundError  # available in recent SDKs; if import fails, just catch Exception
 client = OpenAI()
+log = logging.getLogger("patti.gpt")
 
 PRIMARY_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini")
 FALLBACK_MODELS = [m.strip() for m in os.getenv("OPENAI_FALLBACK_MODELS", "gpt-4o,gpt-4o-mini").split(",") if m.strip()]
@@ -25,6 +26,43 @@ PATTERSON_SITES = [
     "https://www.missionviejokia.com/",
     "https://www.pattersonautos.com/",
 ]
+
+def _safe_extract_text(resp):
+    try:
+        return (resp.choices[0].message.content or "").strip()
+    except Exception as e:
+        log.warning("OpenAI response missing content: %s", e)
+        return ""
+
+def _ensure_reply_dict(text: str, default_subject: str, default_body_leadin: str):
+    """
+    Try JSON first, then fall back to plain text -> dict, and finally a safe template.
+    Always returns {'subject','body'}.
+    """
+    # JSON path
+    try:
+        data = json.loads(text)
+        subj = (data.get("subject") or "").strip()
+        body = (data.get("body") or "").strip()
+        if subj and body:
+            return {"subject": subj, "body": body}
+    except Exception:
+        pass
+
+    # Plain text path (use the text as body if it looks like a sentence)
+    clean = (text or "").strip()
+    if clean:
+        # crude subject if not provided
+        subj = default_subject
+        # if the text accidentally contains JSON braces or HTML noise, trim a bit
+        trimmed = re.sub(r"^\s*[{[][\s\S]*$", "", clean).strip() or clean
+        return {"subject": subj, "body": trimmed}
+
+    # Final template fallback (should basically never happen)
+    return {
+        "subject": default_subject,
+        "body": default_body_leadin
+    }
 
 def chat_complete_with_fallback(messages, want_json: bool = True, temperature: float = 0.6):
     """
@@ -205,52 +243,65 @@ def run_gpt(prompt: str,
 
     # Single chat completion call with fallback logic
     model_used, resp = chat_complete_with_fallback(messages, want_json=True, temperature=0.6)
-    text = (resp.choices[0].message.content or "").strip()
-    
-    # Parse JSON into your canonical reply structure
-    try:
-        data = json.loads(text)
-        reply = {"subject": data.get("subject","").strip(),
-                 "body":    data.get("body","").strip()}
-    except Exception:
-        reply = _coerce_reply(text)  # fallback if not valid JSON
 
-        # --- Rooftop substitutions (kept from your original) ---
-        if rooftop_name:
-            if reply.get("subject"):
-                reply["subject"] = reply["subject"].replace("Patterson Auto Group", rooftop_name)
-            if reply.get("body"):
-                reply["body"] = reply["body"].replace("Patterson Auto Group", rooftop_name)
+    text = _safe_extract_text(resp)
+    if not text:
+        log.warning("OpenAI returned empty content (model=%s). Using fallback template.", model_used)
     
-        # --- First-name personalization (kept from your original) ---
-        if customer_name and reply.get("body"):
-            reply["body"] = (
-                reply["body"]
-                .replace("[Guest's Name]", customer_name)
-                .replace("[Guest’s Name]", customer_name)
-            )
+    # --- Make sure we ALWAYS have subject/body ---
+    fallback_rooftop = rooftop_name or "Patterson Auto Group"
+    default_subject = f"Your vehicle inquiry with {fallback_rooftop}"
+    default_body_leadin = (
+        f"Hi {customer_name or 'there'},\n\n"
+        "Thanks for your inquiry! I’m happy to help with details, availability, and next steps. "
+        "Let me know any preferences on trim, color, or timing and I’ll get everything lined up."
+    )
     
-        # --- Append dynamic schedule link + closing signature ---
-        if rooftop_name:
-            schedule_line = (
-                "Please let us know a convenient time for you, or you can instantly "
-                "reserve your time here: <{LegacySalesApptSchLink}>."
-            )
-            closing_line = "Looking forward to assisting you further."
+    reply = _ensure_reply_dict(text, default_subject, default_body_leadin)
+
+    if not reply or not reply.get("body"):
+        log.warning("Model text (truncated): %r", (text or '')[:120])
     
-            signature_lines = [
-                "", schedule_line, closing_line, "",
-                "Patti",
-                rooftop_name,
-            ]
+    # --- Rooftop substitutions (unchanged) ---
+    if rooftop_name:
+        if reply.get("subject"):
+            reply["subject"] = reply["subject"].replace("Patterson Auto Group", rooftop_name)
+        if reply.get("body"):
+            reply["body"] = reply["body"].replace("Patterson Auto Group", rooftop_name)
     
-            if rooftop_address:
-                signature_lines.append(rooftop_address)
+    # --- First-name personalization (unchanged) ---
+    if customer_name and reply.get("body"):
+        reply["body"] = (
+            reply["body"]
+            .replace("[Guest's Name]", customer_name)
+            .replace("[Guest’s Name]", customer_name)
+        )
     
-            # Remove stray “Schedule Your Visit” text the model might have produced
-            body = (reply.get("body") or "")
-            body = re.sub(r"Schedule Your Visit\.?", "", body, flags=re.I)
+    # --- Append dynamic schedule link + closing signature (your new requirement) ---
+    if rooftop_name:
+        schedule_line = (
+            "Please let us know a convenient time for you, or you can instantly "
+            "reserve your time here: <{LegacySalesApptSchLink}>."
+        )
+        closing_line = "Looking forward to assisting you further."
     
-            reply["body"] = body.rstrip() + "\n\n" + "\n".join(signature_lines)
+        signature_lines = [
+            "", schedule_line, closing_line, "",
+            "Patti",
+            rooftop_name,
+        ]
     
-        return reply
+        # if you computed rooftop_address earlier, include it
+        if rooftop_address:
+            signature_lines.append(rooftop_address)
+    
+        # remove any stray unlinked "Schedule Your Visit"
+        body = (reply.get("body") or "")
+        body = re.sub(r"Schedule Your Visit\.?", "", body, flags=re.I)
+    
+        reply["body"] = body.rstrip() + "\n\n" + "\n".join(signature_lines)
+    
+    # helpful debug (won't crash cron)
+    log.debug("OpenAI model_used=%s, chars=%d", model_used, len(text or ""))
+    
+    return reply
