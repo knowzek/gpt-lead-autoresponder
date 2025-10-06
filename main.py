@@ -4,7 +4,6 @@ import logging
 from datetime import datetime as _dt, timedelta as _td, timezone as _tz
 from rooftops import get_rooftop_info
 
-
 from fortellis import (
     SUB_MAP,
     get_token,
@@ -18,6 +17,7 @@ from fortellis import (
     add_vehicle_sought,
     schedule_activity,
     complete_activity,
+    search_activities_by_opportunity,  # <-- add this
 )
 
 from gpt import run_gpt
@@ -53,6 +53,8 @@ PROOF_RECIPIENTS = [
     "mickeyt@the-dms.com",
     "dev.almousa@gmail.com"
 ]
+
+PATTI_FIRST_REPLY_SENTINEL = "[patti:first-reply]"
 
 inquiry_text = None  # ensure defined
 
@@ -263,6 +265,33 @@ if USE_EMAIL_MODE:
     }
     inquiry_text = lead.get("notes", "")
 else:
+    # ---- Idempotency: has Patti already first-replied to this opportunity? ----
+    already_contacted = False
+    try:
+        recent_acts = search_activities_by_opportunity(
+            opportunity_id, token, subscription_id, page=1, page_size=50
+        )
+        for act in recent_acts:
+            comments = (act.get("comments") or "")
+            name     = (act.get("activityName") or "").strip().lower()
+            a_type   = act.get("activityType")
+
+            # 1) Our sentinel in any prior comment?
+            if PATTI_FIRST_REPLY_SENTINEL in comments:
+                already_contacted = True
+                break
+
+            # 2) Any prior email activity on the opp (conservative)
+            if ("send email" in name) or (a_type == 3):
+                already_contacted = True
+                break
+    except Exception as e:
+        log.warning("Activity search failed (continuing defensively): %s", e)
+
+    if already_contacted:
+        log.info("Skipping first reply: prior contact detected for opportunity %s", opportunity_id)
+        raise SystemExit(0)   # if later you loop multiple leads, change this to:  continue
+        
     opportunity = get_opportunity(opportunity_id, token, subscription_id)
 
     # --- Fetch customer email/name if available ---
@@ -503,9 +532,11 @@ post_results = {}
 
 # 1) Comment (always safe)
 try:
-    comment_text = "Patti generated a reply (safe mode). Email content stored in comments."
-    if not SAFE_MODE:
-        comment_text = "Patti generated and sent an intro email (test)."
+    if SAFE_MODE:
+        comment_text = f"{PATTI_FIRST_REPLY_SENTINEL} Patti generated a reply (safe mode). Email content stored in comments."
+    else:
+        comment_text = f"{PATTI_FIRST_REPLY_SENTINEL} Patti generated and sent an intro email (test)."
+
     r = add_opportunity_comment(token, subscription_id, opportunity_id, comment_text)
     post_results["opportunities_addComment"] = r
     log.info("Added CRM comment: status=%s", r.get("status", "N/A"))
