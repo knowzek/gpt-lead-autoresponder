@@ -288,23 +288,32 @@ def run_gpt(prompt: str,
     
     # --- Append dynamic schedule link + closing signature ---
     if rooftop_name:
-        # Start from the model body and remove any prior "looking forward ..." lines
         body = (reply.get("body") or "")
-        body = re.sub(r"(?im)^\s*looking forward to[^\n]*\n?", "", body)  # de-dupe closers
-        # Also remove any stray "Schedule Your Visit" the model might have typed
-        body = re.sub(r"(?i)Schedule Your Visit\.?", "", body)
-
-        # Build Patti signature (no appointment/link lines here)
-        signature_lines = [
-            "",
-            "Patti",
-            rooftop_name,
-        ]
+    
+        # Remove stray/duplicate schedule lines and raw tokens the model might have added
+        body = re.sub(r"(?im)^\s*schedule appointment\s*$", "", body)
+        body = re.sub(r"(?i)<\{LegacySalesApptSchLink\}>", "", body)
+        # If you still want to suppress duplicate 'looking forward...' sentences, keep the next line.
+        # It removes extra "Looking forward to ..." lines but leaves other closers intact.
+        body = re.sub(r"(?im)^\s*looking forward to[^\n]*\n?", "", body)
+    
+        # ✅ Your exact sentence (token renders as the 'Schedule Appointment' link text)
+        schedule_sentence = (
+            "Please let us know a convenient time for you, or you can instantly reserve your time here: "
+            "<{LegacySalesApptSchLink}>"
+        )
+    
+        signature_lines = ["", "Patti", rooftop_name]
         if rooftop_addr:
             signature_lines.append(rooftop_addr)
-
-        # Compose final body + put the schedule token AFTER the signature
-        reply["body"] = body.rstrip() + "\n\n" + "\n".join(signature_lines) + "\n\n<{LegacySalesApptSchLink}>"
+    
+        reply["body"] = (
+            body.rstrip()
+            + "\n\n"
+            + schedule_sentence
+            + "\n\n"
+            + "\n".join(signature_lines)
+        )
 
     
     # helpful debug (won't crash cron)
