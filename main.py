@@ -568,7 +568,6 @@ if SEND_SMTP_PROOF:
     try:
         send_email(
             to=PROOF_TO,
-            cc=[e for e in PROOF_CC if e],
             subject=proof_subject,
             html=proof_body,
             sender=PROOF_FROM,
@@ -605,6 +604,7 @@ try:
         rooftop_name=rooftop_name,
     )
     log.info("Proof sent to Mickey via sendEmail API")
+    log.info("CRM proof %s", "skipped (DRY_RUN)" if res.get("dry_run") else "sent")
 except Exception as e:
     log.error("sendEmail proof to Mickey failed: %s", e)
 
