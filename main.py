@@ -8,7 +8,9 @@ from emailer import send_email
 import requests
 from inventory_matcher import recommend_from_xml
 from fortellis import get_vehicle_inventory_xml  # we’ll add this helper next
+log = logging.getLogger(__name__)
 
+DRY_RUN = int(os.getenv("DRY_RUN", "1"))  # 1 = DO NOT write to CRM, 0 = allow writes
 
 from fortellis import (
     SUB_MAP,
@@ -34,6 +36,17 @@ def _get_token_cached(subscription_id: str):
         tok = get_token(subscription_id)
         _token_cache[subscription_id] = tok
     return tok
+
+def maybe_call(fn, *args, **kwargs):
+    if DRY_RUN:
+        # keep payloads visible in logs for testing
+        try:
+            preview = { "args": args, "kwargs": kwargs }
+        except Exception:
+            preview = "...payload not serializable..."
+        log.info(f"[DRY_RUN] Skipping {fn.__name__} with {preview}")
+        return {"ok": True, "dry_run": True}
+    return fn(*args, **kwargs)
 
 
 # ── Logging (compact) ────────────────────────────────────────────────
@@ -413,7 +426,7 @@ if "mvk bucket" in (source or "").lower() or "mvk bucket" in (sub_source or "").
             f"Rooftop: {rooftop_name}\n\n"
             "Please follow up directly."
         )
-        _ = send_opportunity_email_activity(
+        _ = maybe_call(send_opportunity_email_activity,
             token=token,
             dealer_key=subscription_id,
             opportunity_id=opportunity_id,
@@ -533,6 +546,39 @@ body_html = re.sub(
     body_html
 )
 
+# === Send an SMTP proof directly (no CRM write) =====================
+SEND_SMTP_PROOF = int(os.getenv("SEND_SMTP_PROOF", "1"))  # 1=send, 0=skip during testing
+
+PROOF_FROM = os.getenv("PROOF_FROM", rooftop_sender)  # use rooftop sender as default
+PROOF_TO   = [os.getenv("PROOF_TO", "knowzek@gmail.com")]  # 👈 set your address here (or via env)
+PROOF_CC   = [os.getenv("MICKEY_EMAIL", "knowzek@gmail.com")]  # Mickey
+
+proof_subject = f"[Patti Proof] {subject}"
+proof_body = (
+    body_html.replace("\n", "<br>")
+    + "<br><br><hr><p><em>Internal proof only — not sent to the customer.</em></p>"
+    + f"<p style='color:#888;font-size:12px'>{contact_info}</p>"
+)
+
+if SEND_SMTP_PROOF:
+    if DRY_RUN:
+        # Allow SMTP even during DRY_RUN (since DRY_RUN only blocks CRM writes)
+        # If you want DRY_RUN to block SMTP as well, wrap this in another if.
+        pass
+    try:
+        send_email(
+            to=PROOF_TO,
+            cc=[e for e in PROOF_CC if e],
+            subject=proof_subject,
+            html=proof_body,
+            sender=PROOF_FROM,
+        )
+        log.info("✅ SMTP proof sent to %s (cc %s)", PROOF_TO, PROOF_CC)
+    except Exception as e:
+        log.error("❌ SMTP proof send failed: %s", e)
+else:
+    log.info("SMTP proof sending disabled (SEND_SMTP_PROOF=0)")
+
 # Append dynamic appointment link token literally
 # (not an f-string, so the braces are safe; '{{...}}' also works if you prefer)
 
@@ -547,7 +593,7 @@ try:
           "customer was NOT emailed.</em></p>"
     )
 
-    _ = send_opportunity_email_activity(
+    _ = maybe_call(send_opportunity_email_activity,
         token=token,
         dealer_key=subscription_id,       # you pass Subscription-Id here (your code already does this)
         opportunity_id=opportunity_id,
@@ -574,9 +620,9 @@ try:
     else:
         comment_text = f"{PATTI_FIRST_REPLY_SENTINEL} Patti generated and sent an intro email (test)."
 
-    r = add_opportunity_comment(token, subscription_id, opportunity_id, comment_text)
+    r = maybe_call(add_opportunity_comment, token, subscription_id, opportunity_id, comment_text)
     post_results["opportunities_addComment"] = r
-    log.info("Added CRM comment: status=%s", r.get("status", "N/A"))
+    log.info("Added CRM comment (dry_run=%s)", r.get("dry_run", False))
 except Exception as e:
     log.error("Add comment failed: %s", e)
     post_results["opportunities_addComment"] = {"error": str(e)}
@@ -588,7 +634,7 @@ log.info("Customer send disabled by config; proof already sent to Mickey")
 
 # 3) Vehicle sought (demo data)
 try:
-    vs = add_vehicle_sought(
+    vs = maybe_call(add_vehicle_sought,
         token, subscription_id, opportunity_id,
         is_new=True, year_from=2023, year_to=2025,
         make=make or "Kia", model=model or "Telluride",
@@ -610,7 +656,7 @@ try:
     last_err = None
 
     def _schedule_with(name: str, atype: int):
-        return schedule_activity(
+        return maybe_call(schedule_activity,
             token, subscription_id, opportunity_id,
             due_dt_iso_utc=due_dt_iso,
             activity_name=name,
@@ -648,7 +694,7 @@ try:
 
     if activity_id_new:
         completed_dt_iso = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        comp = complete_activity(
+        comp = maybe_call(complete_activity,
             token, subscription_id, opportunity_id,
             due_dt_iso_utc=due_dt_iso, completed_dt_iso_utc=completed_dt_iso,
             activity_name=used_name,        # use the exact combo that worked
