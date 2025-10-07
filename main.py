@@ -493,11 +493,36 @@ Guest inquiry:
 \"\"\"{inquiry_text}\"\"\"
 
 Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
-
-
 """
+# === Inventory recommendations =====================================
 
-# Generate subject/body with rooftop branding
+# Get live inventory XML
+try:
+    inventory_xml = get_vehicle_inventory_xml("Patterson2", "FjX^PGwk63", "ZE", "ZE7")
+except Exception as e:
+    log.warning(f"❌ Could not retrieve inventory XML: {e}")
+    inventory_xml = None
+
+# 🔁 Use the same inquiry text you already computed.
+# If it's empty (fallback mode), feed a lightweight hint from the parsed vehicle fields.
+if inquiry_text and inquiry_text.strip():
+    customer_email_text = inquiry_text
+else:
+    # minimal hint so the matcher can still try (e.g., "Honda Pilot 2021 SUV")
+    hint_bits = [str(year or "").strip(), (make or "").strip(), (model or "").strip(), (trim or "").strip()]
+    customer_email_text = " ".join([b for b in hint_bits if b]) or "SUV car"
+
+recommendation_text = ""
+if inventory_xml and customer_email_text:
+    try:
+        recommendation_text = recommend_from_xml(inventory_xml, customer_email_text).strip()
+        if recommendation_text:
+            prompt += f"\n\nInventory suggestions to include:\n{recommendation_text}\n"
+            log.info("✅ Added inventory suggestions to prompt.")
+    except Exception as e:
+        log.warning(f"Recommendation failed: {e}")
+
+# === Generate subject/body with rooftop branding ====================
 response  = run_gpt(prompt, customer_name, rooftop_name)
 subject   = response["subject"]
 body_html = response["body"]
