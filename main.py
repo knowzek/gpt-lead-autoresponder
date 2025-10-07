@@ -6,6 +6,9 @@ from rooftops import get_rooftop_info
 from gpt import run_gpt
 from emailer import send_email
 import requests
+from inventory_matcher import recommend_from_xml
+from fortellis import get_vehicle_inventory_xml  # we’ll add this helper next
+
 
 from fortellis import (
     SUB_MAP,
