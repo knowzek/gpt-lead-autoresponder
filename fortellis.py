@@ -410,3 +410,47 @@ def get_opportunity(opportunity_id, token, dealer_key):
     resp = requests.get(url, headers=_headers(dealer_key, token))
     resp.raise_for_status()
     return resp.json()
+
+import requests
+
+def get_vehicle_inventory_xml(username: str, password: str, enterprise_code: str, company_number: str) -> str:
+    """
+    Calls the OpenTrack VehicleInventory endpoint and returns raw XML text.
+    """
+    url = "https://otstaging.arkona.com/vehicleapi.asmx"
+    soap = f"""<?xml version="1.0" encoding="utf-8"?>
+    <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                   xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+                   xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"
+                   xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">
+      <soap:Header>
+        <wsse:Security>
+          <wsu:Timestamp wsu:Id="TS-1">
+            <wsu:Created>2025-10-07T19:25:00Z</wsu:Created>
+            <wsu:Expires>2025-10-07T19:30:00Z</wsu:Expires>
+          </wsu:Timestamp>
+          <wsse:UsernameToken wsu:Id="UT-1">
+            <wsse:Username>{username}</wsse:Username>
+            <wsse:Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">{password}</wsse:Password>
+          </wsse:UsernameToken>
+        </wsse:Security>
+      </soap:Header>
+      <soap:Body>
+        <VehicleInventory xmlns="opentrack.dealertrack.com">
+          <Dealer>
+            <CompanyNumber>{company_number}</CompanyNumber>
+            <EnterpriseCode>{enterprise_code}</EnterpriseCode>
+          </Dealer>
+        </VehicleInventory>
+      </soap:Body>
+    </soap:Envelope>"""
+
+    headers = {
+        "Content-Type": "text/xml; charset=utf-8",
+        "SOAPAction": "opentrack.dealertrack.com/VehicleInventory",
+    }
+    resp = requests.post(url, data=soap.encode("utf-8"), headers=headers, timeout=60)
+    resp.raise_for_status()
+    return resp.text
+
