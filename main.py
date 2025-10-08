@@ -8,6 +8,7 @@ from emailer import send_email
 import requests
 from inventory_matcher import recommend_from_xml
 from fortellis import get_vehicle_inventory_xml  # we’ll add this helper next
+import re, html as _html
 log = logging.getLogger(__name__)
 
 DRY_RUN = int(os.getenv("DRY_RUN", "1"))  # 1 = DO NOT write to CRM, 0 = allow writes
@@ -27,6 +28,17 @@ from fortellis import (
     complete_activity,
     search_activities_by_opportunity,  # <-- add this
 )
+
+def _html_to_text(h: str) -> str:
+    if not h: return ""
+    # line breaks
+    h = re.sub(r'(?i)<br\s*/?>', '\n', h)
+    h = re.sub(r'(?is)<p[^>]*>', '', h)
+    h = re.sub(r'(?i)</p>', '\n\n', h)
+    # strip tags
+    h = re.sub(r'(?is)<[^>]+>', '', h)
+    # unescape entities
+    return _html.unescape(h).strip()
 
 # Cache Fortellis tokens per Subscription-Id so we don’t re-auth every lead
 _token_cache = {}
@@ -554,8 +566,8 @@ PROOF_TO   = [os.getenv("PROOF_TO", "knowzek@gmail.com")]  # 👈 set your addre
 PROOF_CC   = [os.getenv("MICKEY_EMAIL", "knowzek@gmail.com")]  # Mickey
 
 proof_subject = f"[Patti Proof] {subject}"
-proof_body = (
-    body_html.replace("\n", "<br>")
+proof_text = _html_to_text(
+    body_html
     + "<br><br><hr><p><em>Internal proof only — not sent to the customer.</em></p>"
     + f"<p style='color:#888;font-size:12px'>{contact_info}</p>"
 )
@@ -567,10 +579,9 @@ if SEND_SMTP_PROOF:
         pass
     try:
         send_email(
-            to=PROOF_TO,
+            to=PROOF_TO + [e for e in PROOF_CC if e],
             subject=proof_subject,
-            html=proof_body,
-            sender=PROOF_FROM,
+            body=proof_text,
         )
         log.info("✅ SMTP proof sent to %s (cc %s)", PROOF_TO, PROOF_CC)
     except Exception as e:
@@ -604,7 +615,6 @@ try:
         rooftop_name=rooftop_name,
     )
     log.info("Proof sent to Mickey via sendEmail API")
-    log.info("CRM proof %s", "skipped (DRY_RUN)" if res.get("dry_run") else "sent")
 except Exception as e:
     log.error("sendEmail proof to Mickey failed: %s", e)
 
