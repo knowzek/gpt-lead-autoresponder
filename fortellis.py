@@ -7,6 +7,9 @@ import json
 import time
 import logging
 
+from dotenv import load_dotenv
+load_dotenv()
+
 LOG_LEVEL = os.getenv("APP_LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO),
                     format="%(asctime)s %(levelname)s %(message)s")
@@ -35,6 +38,7 @@ BASE_URL = os.getenv("FORTELLIS_BASE_URL", "https://api.fortellis.io")  # prod d
 LEADS_BASE = "/cdk/sales/elead/v1/leads"
 OPPS_BASE        = "/sales/v2/elead/opportunities"   
 ACTIVITIES_BASE  = "/sales/v1/elead/activities" 
+ACTIVITIES_SEARCH = "cdk/sales/elead/v1/activity-history/search"
 CUSTOMERS_BASE  = "/cdk/sales/elead/v1/customers"
 REFDATA_BASE     = "/cdk/sales/elead/v1/reference-data" # if you call product reference data via CRM
 MESSAGING_BASE   = "/cdk/sales/elead/v1/messaging"      # if you call CRM Post Messaging
@@ -304,6 +308,7 @@ def _coerce_activity_type(value):
         "Task": 3,
         "Call": 1,
         "Appointment": 2,
+        "Note": 37
         # note: we intentionally drop "Send Email/Letter"
     }
     if label in BUILTIN:
@@ -375,6 +380,13 @@ def search_activities_by_opportunity(opportunity_id, token, dealer_key, page=1, 
     resp = requests.post(url, headers=_headers(dealer_key, token), json=payload)
     resp.raise_for_status()
     return resp.json().get("items", [])
+
+def get_activities(opportunity_id, customer_Id, token, dealer_key):
+    url = f"{BASE_URL}/{ACTIVITIES_SEARCH}?customerId={customer_Id}&opportunityId={opportunity_id}"
+    payload = {}
+    resp = requests.get(url, headers=_headers(dealer_key, token), json=payload)
+    resp.raise_for_status()
+    return resp.json()
 
 
 def get_activity_by_url(url, token, dealer_key):

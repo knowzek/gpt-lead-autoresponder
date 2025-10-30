@@ -2,7 +2,11 @@ import os, time, json, logging, re
 from datetime import datetime
 from openai import OpenAI
 from openai import APIStatusError, NotFoundError  # available in recent SDKs; if import fails, just catch Exception
-client = OpenAI()
+
+from dotenv import load_dotenv
+load_dotenv()
+client = OpenAI(api_key = os.getenv("OPENAI_API_KEY"))
+
 log = logging.getLogger("patti.gpt")
 
 PRIMARY_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini")
@@ -224,10 +228,89 @@ def _coerce_reply(text: str):
         "body": text.strip() if text.strip() else "Thanks for reaching out — happy to help!"
     }
 
+def _getCustomerMessagePrompts():
+    return (
+        'These rules will act as the “conversation flow brain” for Patti after the initial message has been sent, guiding how she replies to customers’ follow-ups.\n'
+        'Your goal in this stage is to:\n'
+        '1- "Understand the customer’s reply to your previous message."\n'
+        '2- "Generate a natural, helpful response that continues the conversation appropriately."\n'
+        '3- "Decide what action the system should take next (based on the following classification categories)."\n'
+        'Classification Categories:\n'
+        '{"Class": "availability_inquiry", "Description": "Customer asking if the vehicle is still available or listed.", "Example": "Is this car still available?"}\n'
+        '{"Class": "purchase_intent", "Description": "Customer expresses urgency or readiness to buy soon.", "Example": "I can purchase it as soon as today."}\n'
+        '{"Class": "specific_vehicle_request", "Description": "Customer mentions or requests a specific model,  color,  trim,  or features.", "Example": "Looking for a silver Sonata Hybrid Limited."}\n'
+        '{"Class": "trade_in", "Description": "Customer talks about trading in or appraising their vehicle.", "Example": "Considering trading in my car."}\n'
+        '{"Class": "price_quote_request", "Description": "Customer asks for pricing,  a quote,  or out-the-door cost.", "Example": "What’s your best out-the-door price?"}\n'
+        '{"Class": "appointment_request", "Description": "Customer requests or mentions a test drive or visit appointment.", "Example": "Would love to test drive tomorrow morning."}\n'
+        '{"Class": "contact_request", "Description": "Customer asks for or mentions a specific salesperson or contact person.", "Example": "Please have Joe contact me."}\n'
+        '{"Class": "system_or_metadata", "Description": "Text contains only system data,  links,  or IDs (no customer message).", "Example": "8a9e2903-f09b-f011-814f-00505690ec8c.json"}\n'
+        '{"Class": "others", "Description": "Message exists but does not fit any of the defined classes.", "Example": "Please send me more info."}\n'
+        '4- "Write a short note summarizing what the customer wants (suitable to save in CRM for the sales team)."\n'
+        '5- "Extract only the buyer’s intent or question — e.g. availability, test drive, preferences, etc."\n'
+        '6- "If multiple buyer messages appear, combine them into one clean text string."\n'
+        '7- "Write notes in short, neutral, professional language (one sentence max for each class)"\n'
+        '8- "Do not use "others" or "None" class when there is another classes the message belongs to."\n'
+        '9- "Always output valid JSON (no markdown or extra text)."\n'
+        '10- there may be no response from the customer; there are rules for this situation that I will add; do not deal with it in this stage.\n'
+        
+        'Input Provided to You (You will always receive these ONLY after the initial message and all follow up messages):\n'
+        'first inquery message sent by customer (may None)'
+        'messages:\n'
+        '{"msgFrom": "patti", "subject": "the subject of the first message sent by Patti", "body": "the body of the first message sent by Patti", "isFollowUp": false }\n'
+        '{"msgFrom": "customer", "customerName": "", "subject": "the subject from customer", "body": "the body of the reply to patti message that sent by customer"}\n'
+        'then patti replys and the customer replys and back and forth in the same struct.\n'
+        'Output You Must Return:\n'
+        '{"subject": "same as the customer subject (if not exist use patti ones)", "body": "the message Patti should send as a reply to the customer", "action": "high-level next step derived from classification categories (may multi ones)", "notes": "short CRM-style summary", "isFollowUp": "if it is a follow up true else false"}\n'
+    )
+
+def _getFollowUPRules():
+    return (
+        'These rules defines how you create follow-up messages when the customer has not replied to your previous outreach.\n'
+        'DO NOT generate follow-up message unless I tell you to do that.\n'
+        'Goal:\n'
+        'Encourage the customer to re-engage, confirm interest, or provide an update, while keeping every message polite, natural, and helpful. Your goal is to sound like a real, attentive sales assistant who is genuinely trying to help, not a spam bot.\n'
+        'output as the same json format that contains the "subject" and "body" and "isFollowUp" = True . \n'
+        'Writing Guidelines:\n'
+        '1- "Always personalize when possible (mention car model, previous interest, or name if provided)."\n'
+        '2- "Keep it short: 2–4 sentences."\n'
+        '3- "Use warm and natural tone."\n'
+        '4- "End every message with a simple call to action (e.g., “Would you like me to check availability for you?”)."\n'
+        '5- "Never sound robotic or aggressive — no repetition of same message wording."\n'
+        '""\n'
+        """
+        Follow-Up Behavior Rules:
+        {
+            "stage": "Follow-up #1",
+            "condition": "No reply after first message.",
+            "goal": "Send gentle reminder and confirm interest",
+            "message_style": "Friendly and conversational",
+            "example_subject": "Still interested in the [Car Model]?",
+            "example_cta": "Ask if they’re still considering or need details"
+        },
+        {
+            "stage": "Follow-up #2",
+            "condition": "No reply after first follow-up.",
+            "goal": "Encourage engagement and offer help",
+            "message_style": "Helpful and reassuring",
+            "example_subject": "Happy to help with your car search",
+            "example_cta": "Offer assistance or alternate options"
+        },
+        {
+            "stage": "Follow-up #3",
+            "condition": "No reply after second follow-up.",
+            "goal": "Soft close and confirm if still interested",
+            "message_style": "Polite and professional",
+            "example_subject": "Should I keep your inquiry open?",
+            "example_cta": "Invite them to respond or mark as inactive"
+        }
+        """
+    )
+
 def run_gpt(prompt: str,
             customer_name: str,
             rooftop_name: str = None,
-            max_retries: int = MAX_RETRIES):
+            max_retries: int = MAX_RETRIES,
+            prevMessages = False):
 
     rooftop_addr = _get_rooftop_address(rooftop_name)
                 
@@ -244,79 +327,216 @@ def run_gpt(prompt: str,
         {"role": "system", "content": _links_and_boundaries_system()},
         {"role": "system", "content": _objection_handling_system()},
         {"role": "system", "content": _format_system()},
+        {"role": "system", "content": _getCustomerMessagePrompts()},
+        {"role": "system", "content": _getFollowUPRules()}
+    ]
+
+    if prevMessages:
+        messages = system_msgs + [
+            {"role": "user", "content": prompt}
+        ]
+        
+        model_used, resp = chat_complete_with_fallback(messages, want_json=True, temperature=0.6)
+        text = _safe_extract_text(resp)
+        if not text:
+            log.warning("OpenAI returned empty content (model=%s). Using fallback template.", model_used)
+        
+        dictResult = getDictRes(text)
+
+        return dictResult
+
+    else:
+        messages = system_msgs + [
+            {"role": "user", "content": prompt}
+        ]
+
+        # Single chat completion call with fallback logic
+        model_used, resp = chat_complete_with_fallback(messages, want_json=True, temperature=0.6)
+
+        text = _safe_extract_text(resp)
+        if not text:
+            log.warning("OpenAI returned empty content (model=%s). Using fallback template.", model_used)
+        
+        # --- Make sure we ALWAYS have subject/body ---
+        fallback_rooftop = rooftop_name or "Patterson Auto Group"
+        default_subject = f"Your vehicle inquiry with {fallback_rooftop}"
+        default_body_leadin = (
+            f"Hi {customer_name or 'there'},\n\n"
+            "Thanks for your inquiry! I’m happy to help with details, availability, and next steps. "
+            "Let me know any preferences on trim, color, or timing and I’ll get everything lined up."
+        )
+        
+        reply = _ensure_reply_dict(text, default_subject, default_body_leadin)
+
+        if not reply or not reply.get("body"):
+            log.warning("Model text (truncated): %r", (text or '')[:120])
+        
+        # --- Rooftop substitutions (unchanged) ---
+        if rooftop_name:
+            if reply.get("subject"):
+                reply["subject"] = reply["subject"].replace("Patterson Auto Group", rooftop_name)
+            if reply.get("body"):
+                reply["body"] = reply["body"].replace("Patterson Auto Group", rooftop_name)
+        
+        # --- First-name personalization (unchanged) ---
+        if customer_name and reply.get("body"):
+            reply["body"] = (
+                reply["body"]
+                .replace("[Guest's Name]", customer_name)
+                .replace("[Guest’s Name]", customer_name)
+            )
+        
+        # --- Append dynamic schedule link + closing signature ---
+        if rooftop_name:
+            body = (reply.get("body") or "")
+        
+            # Remove stray/duplicate schedule lines and raw tokens the model might have added
+            body = re.sub(r"(?im)^\s*schedule appointment\s*$", "", body)
+            body = re.sub(r"(?i)<\{LegacySalesApptSchLink\}>", "", body)
+            # If you still want to suppress duplicate 'looking forward...' sentences, keep the next line.
+            # It removes extra "Looking forward to ..." lines but leaves other closers intact.
+            body = re.sub(r"(?im)^\s*looking forward to[^\n]*\n?", "", body)
+        
+            # ✅ Your exact sentence (token renders as the 'Schedule Appointment' link text)
+            schedule_sentence = (
+                "Please let us know a convenient time for you, or you can instantly reserve your time here: "
+                "<{LegacySalesApptSchLink}>"
+            )
+        
+            signature_lines = ["", "Patti", rooftop_name]
+            if rooftop_addr:
+                signature_lines.append(rooftop_addr)
+        
+            reply["body"] = (
+                body.rstrip()
+                + "\n\n"
+                + schedule_sentence
+                + "\n\n"
+                + "\n".join(signature_lines)
+            )
+        
+        reply['messages'] = messages
+
+        
+        # helpful debug (won't crash cron)
+        log.debug("OpenAI model_used=%s, chars=%d", model_used, len(text or ""))
+    
+
+    return reply
+
+
+# those for first inquery if exist
+def _getCustomerInqueryTextPrompts():
+    return (
+        'You are Patti, an AI assistant that reads CRM lead or chat transcript text and determines if there is an actual customer message (the buyer’s inquiry) inside.\n'
+        'Your task is to:\n'
+        '1- "analyze the text and detect if the text contains a real customer message (not system or dealer text)."\n'
+        '2- "Extract that message clearly."\n'
+        '3- "Classify it into one or more of the predefined categories separated by coma."\n'
+        '4- "Write a short note summarizing what the customer wants (suitable to save in CRM for the sales team)."\n'
+        '5-"if the text already have a converstion between the customer and the sales team add "salesAlreadyContact" = True"\n'
+        'return only JSON output in this exact structure:\n'
+        '{"customerMsg": "<the cleaned customer message>", "isCustomerMsg": true, "class": "<one or more of the predefined classes>", "notes": "<short CRM-style summary>", "salesAlreadyContact": False}\n'
+        'If there is no real customer message, return:\n'
+        '{"customerMsg": "", "isCustomerMsg": false, "class": "", "notes": "", "salesAlreadyContact": false}\n'
+        'Classification Categories:\n'
+        '{"Class": "availability_inquiry", "Description": "Customer asking if the vehicle is still available or listed.", "Example": "Is this car still available?"}\n'
+        '{"Class": "purchase_intent", "Description": "Customer expresses urgency or readiness to buy soon.", "Example": "I can purchase it as soon as today."}\n'
+        '{"Class": "specific_vehicle_request", "Description": "Customer mentions or requests a specific model,  color,  trim,  or features.", "Example": "Looking for a silver Sonata Hybrid Limited."}\n'
+        '{"Class": "trade_in", "Description": "Customer talks about trading in or appraising their vehicle.", "Example": "Considering trading in my car."}\n'
+        '{"Class": "price_quote_request", "Description": "Customer asks for pricing,  a quote,  or out-the-door cost.", "Example": "What’s your best out-the-door price?"}\n'
+        '{"Class": "appointment_request", "Description": "Customer requests or mentions a test drive or visit appointment.", "Example": "Would love to test drive tomorrow morning."}\n'
+        '{"Class": "contact_request", "Description": "Customer asks for or mentions a specific salesperson or contact person.", "Example": "Please have Joe contact me."}\n'
+        '{"Class": "system_or_metadata", "Description": "Text contains only system data,  links,  or IDs (no customer message).", "Example": "8a9e2903-f09b-f011-814f-00505690ec8c.json"}\n'
+        '{"Class": "others", "Description": "Message exists but does not fit any of the defined classes.", "Example": "Please send me more info."}\n'
+        '{"Class": "None", "Description": "No customer message present (system-only or blank input).", "Example": ""}'
+        'Rules:\n'
+        '1- "Customer message = any text written by the buyer, not by the dealer, system, or CRM platform"\n'
+        '2- Ignore:\n'
+        '"CRM logs, links, timestamps, system messages, markup."\n'
+        '"Dealer greetings, follow-ups, or signatures."\n'
+        '3- "Extract only the buyer’s intent or question — e.g. availability, test drive, preferences, etc."\n'
+        '4- "If multiple buyer messages appear, combine them into one clean text string."\n'
+        '5- "Write notes in short, neutral, professional language (one sentence max for each class)"\n'
+        '6- "If isCustomerMsg is false, leave both customerMsg and notes empty."\n'
+        '7- "Do not use "others" or "None" class when there is another classes the message belongs to."\n'
+        '8- "Always output valid JSON (no markdown or extra text)."\n'
+        'IMPORTANT NOTE: if the text already have a converstion between the customer and the sales team make "salesAlreadyContact" == True \n'
+        '\n'
+        'Examples:\n'
+        'input: Motivated Buyer: increased probability to purchase vehicle. <br /> *** DEALER PORTAL *** <br /> https://dealerportal.truecar.com/...\n'
+        'output: {"customerMsg": "", "isCustomerMsg": false, "class": "", "notes": "", "salesAlreadyContact": false}\n'
+        'input: Is this car still available?\n'
+        'output: {"customerMsg": "Is this car still available?", "isCustomerMsg": true, "class": "availability_inquiry", "notes": "The customer is inquiring about the availability of a specific used vehicle.", "salesAlreadyContact": false}\n'
+        'input: [11:16am] Tustin Mazda: Welcome to Tustin Mazda.[11:17am] Tustin Mazda: How may we help you today?[11:17am] Ashley Arias: Hi there, do you have any manual transmission mazda 3[11:17am] Tustin Mazda: Thank you. May I ask who I have the pleasure of speaking with?[11:17am] Ashley Arias: Ashley[11:17am] Tustin Mazda: One moment while I connect you with a member of our team.[11:17am] Fernando R: Hello Ashley, I am Fernando R. I will take just a moment to look into this for you.[11:18am] Ashley Arias: Thank you[11:18am] Fernando R: INVENTORY SENT - 2026 Mazda Mazda3 2.5 S Premium [M851143][11:18am] Fernando R: To confirm, this is the vehicle you are looking for?[11:18am] Ashley Arias: Manual right?[11:18am] Ashley Arias: You got anything a little bit cheaper?[11:19am] Fernando R: Yes, it is listed as a manual vehicle.[11:19am] Fernando R: Customer interested in pricing[11:19am] Fernando R: A member of our Sales Team would be able to answer any questions regarding vehicle pricing. I will forward your question and information over to them. What phone number and time of day would be best for them to reach out to you?[11:20am] Ashley Arias: 714-458-5919, they can call me at 12.[11:21am] Fernando R: Noted! What is the best email address to send that information to?[11:21am] Ashley Arias: ashley.arias07@gmail.com[11:21am] Fernando R: May I ask your last name as well?[11:22am] Ashley Arias: Arias[11:23am] Fernando R: I will forward your information over right away and a member of our team will be contacting you as soon as they are available. May I be of further assistance?[11:23am] Ashley Arias: that’ll be all, thank you![11:23am] Fernando R: Please feel free to reach out to us if we can be of any further assistance. Have a nice day and be safe.[11:33am] Fernando R: Customer is interested in pricing JM1BPAML5T1851143 - personal info provided - please call at 12PM\n'
+        'output: {"customerMsg": "Hi there, do you have any manual transmission mazda 3? You got anything a little bit cheaper?", "isCustomerMsg": true, "class": "specific_vehicle_request, price_quote_request", "notes": "The customer is requesting information about manual transmission Mazda 3 options and inquiring about cheaper alternatives.", "salesAlreadyContact": true}\n'
+
+    )
+
+def getDictRes(gptAns):
+    try:
+        res = json.loads(gptAns)
+        return res
+    except:
+        log.warning("OpenAI returned None JSON format content: %s", gptAns)
+        print(gptAns)
+        return None
+
+def getCustomerMsgDict(inqueryTextBody):
+    if not inqueryTextBody:
+        return {"customerMsg": "", "isCustomerMsg": False, "class": "", "notes": ""}
+    system_msgs = [
+        {"role": "system", "content": _getCustomerInqueryTextPrompts()}
     ]
 
     messages = system_msgs + [
-        {"role": "user", "content": prompt}
+        {"role": "user", "content": inqueryTextBody}
     ]
 
-    # Single chat completion call with fallback logic
     model_used, resp = chat_complete_with_fallback(messages, want_json=True, temperature=0.6)
-
     text = _safe_extract_text(resp)
     if not text:
         log.warning("OpenAI returned empty content (model=%s). Using fallback template.", model_used)
     
-    # --- Make sure we ALWAYS have subject/body ---
-    fallback_rooftop = rooftop_name or "Patterson Auto Group"
-    default_subject = f"Your vehicle inquiry with {fallback_rooftop}"
-    default_body_leadin = (
-        f"Hi {customer_name or 'there'},\n\n"
-        "Thanks for your inquiry! I’m happy to help with details, availability, and next steps. "
-        "Let me know any preferences on trim, color, or timing and I’ll get everything lined up."
-    )
-    
-    reply = _ensure_reply_dict(text, default_subject, default_body_leadin)
+    dictResult = getDictRes(text)
 
-    if not reply or not reply.get("body"):
-        log.warning("Model text (truncated): %r", (text or '')[:120])
-    
-    # --- Rooftop substitutions (unchanged) ---
-    if rooftop_name:
-        if reply.get("subject"):
-            reply["subject"] = reply["subject"].replace("Patterson Auto Group", rooftop_name)
-        if reply.get("body"):
-            reply["body"] = reply["body"].replace("Patterson Auto Group", rooftop_name)
-    
-    # --- First-name personalization (unchanged) ---
-    if customer_name and reply.get("body"):
-        reply["body"] = (
-            reply["body"]
-            .replace("[Guest's Name]", customer_name)
-            .replace("[Guest’s Name]", customer_name)
-        )
-    
-    # --- Append dynamic schedule link + closing signature ---
-    if rooftop_name:
-        body = (reply.get("body") or "")
-    
-        # Remove stray/duplicate schedule lines and raw tokens the model might have added
-        body = re.sub(r"(?im)^\s*schedule appointment\s*$", "", body)
-        body = re.sub(r"(?i)<\{LegacySalesApptSchLink\}>", "", body)
-        # If you still want to suppress duplicate 'looking forward...' sentences, keep the next line.
-        # It removes extra "Looking forward to ..." lines but leaves other closers intact.
-        body = re.sub(r"(?im)^\s*looking forward to[^\n]*\n?", "", body)
-    
-        # ✅ Your exact sentence (token renders as the 'Schedule Appointment' link text)
-        schedule_sentence = (
-            "Please let us know a convenient time for you, or you can instantly reserve your time here: "
-            "<{LegacySalesApptSchLink}>"
-        )
-    
-        signature_lines = ["", "Patti", rooftop_name]
-        if rooftop_addr:
-            signature_lines.append(rooftop_addr)
-    
-        reply["body"] = (
-            body.rstrip()
-            + "\n\n"
-            + schedule_sentence
-            + "\n\n"
-            + "\n".join(signature_lines)
-        )
+    return dictResult
 
-    
-    # helpful debug (won't crash cron)
-    log.debug("OpenAI model_used=%s, chars=%d", model_used, len(text or ""))
-    
-    return reply
+if __name__ == "__main__":
+    # inqueryTextBody = "Finance For $361 Per month for 72 months + tax, $2,358.00 Downpayment , Comments:would love to test drive and hear more about it, IP Address: 75.80.117.116"
+    # inqueryTextBody = "Motivated Buyer: increased probability to purchase vehicle. <br /> *** DEALER PORTAL *** <br /> https://dealerportal.truecar.com/dfe/prospects/J5NT6RDXP8?_xt=1&utm_source=crm&utm_medium=deeplink&utm_campaign=5113"
+    # inqueryTextBody = "Is your Certified 2022 MAZDA CX-9 Grand Touring listed for $28,987 still available? If so, please give me a call so I can test drive tomorrow morning when you guys open.<br/> --------<br/>My Wallet/Offer Details:<br/>    Deal Type: finance,<br/>    Sale Price: $28987,<br/>    Down Payment: $9701.0,<br/>    Amount Financed: $0.0,<br/>    Credit Range: Very Good,<br/>    Terms: 60 months,<br/>    Payment: $1053,<br/>    Trade-In Value: $40000.0<br/>;<br/>  TCPAOptIn: false;<br/> -------- Copy and paste the following link into your browser to visit this listing: https://www.autotrader.com/cars-for-sale/vehicle/758671792"
+    inqueryTextBody = "Preferred contact method: email\n\nThis lead contains customer provided telephone information. Recent changes to the Telephone Consumers Protection Act (TCPA) require a customer's prior express written consent prior to contacting the customer for marketing purposes by phone using automatic telephone dialing systems, SMS texts or artificial/prerecorded voice (each, an \"Unauthorized Contact Method\"). Please note that Mazda has not obtained such consent and you are required to obtain a customer's prior express written consent before contacting the customer through one of the Unauthorized Contact Methods."
+    # inqueryTextBody = 
+    # inqueryTextBody = 
+
+    ans = getCustomerMsgDict(inqueryTextBody)
+    print(ans)
+    print(type(ans))
+
+    # customer_name = "waleed"
+    # salesperson = "Jim Feinstein"
+    # vehicle_str = "2026 Mazda CX-90 3.3 Turbo S Premium Sport"
+
+    # prompt = f"""
+    #     Your job is to write personalized, dealership-branded emails from Patti, a friendly virtual assistant.
+
+    #     When writing:
+    #     - Begin with exactly `Hi {customer_name},`
+    #     - Lead with value (features / Why Buy)
+    #     - If a specific vehicle is mentioned, answer directly and link if possible
+    #     - If a specific question exists, answer it first
+    #     - Include the salesperson’s name
+    #     - Keep it warm, clear, and human
+
+    #     Info (may None):
+    #     - salesperson’s name: {salesperson}
+    #     - vehicle: {vehicle_str}
+
+
+    #     Guest inquiry:
+    #     \"\"\"{inqueryTextBody}\"\"\"
+
+    #     Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
+    #     """
+    # print(run_gpt(prompt, customer_name))
