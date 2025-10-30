@@ -1,0 +1,535 @@
+{
+    "_subscription_id": "bb4a4f18-1693-4450-a08e-40d8df30c139",
+    "opportunityId": "76ea4824-8da9-f011-814f-00505690ec8c",
+    "activityId": null,
+    "links": [
+        {
+            "rel": "create",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities",
+            "method": "POST",
+            "title": "Create Opportunity"
+        },
+        {
+            "rel": "self",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/76ea4824-8da9-f011-814f-00505690ec8c",
+            "method": "GET",
+            "title": "Get Opportunity"
+        },
+        {
+            "rel": "comment",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/comment",
+            "method": "POST",
+            "title": "Add Comment"
+        },
+        {
+            "rel": "email",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/sendEmail",
+            "method": "POST",
+            "title": "Send Email"
+        },
+        {
+            "rel": "tradein",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/tradein",
+            "method": "POST",
+            "title": "Add Trade-In"
+        },
+        {
+            "rel": "vehiclesought",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/vehicleSought",
+            "method": "POST",
+            "title": "Add Vehicle Sought"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/reassignPrimarySalesperson",
+            "method": "POST",
+            "title": "Reassign Primary Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/76ea4824-8da9-f011-814f-00505690ec8c/salesteam/add",
+            "method": "POST",
+            "title": "Add Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/76ea4824-8da9-f011-814f-00505690ec8c/salesteam/remove",
+            "method": "POST",
+            "title": "Remove Salesperson"
+        },
+        {
+            "rel": "substatus",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/76ea4824-8da9-f011-814f-00505690ec8c/subStatus/update",
+            "method": "POST",
+            "title": "Update SubStatus"
+        },
+        {
+            "rel": "inactive",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/76ea4824-8da9-f011-814f-00505690ec8c/set-inactive",
+            "method": "POST",
+            "title": "Set Opportunity Inactive"
+        }
+    ],
+    "source": "Roadster Online",
+    "upType": "Internet",
+    "soughtVehicles": [
+        {
+            "id": "77ea4824-8da9-f011-814f-00505690ec8c",
+            "isNew": true,
+            "yearFrom": 2025,
+            "yearTo": 2025,
+            "make": "Mazda",
+            "model": "MX-5 Miata",
+            "trim": "Sport (M6) 2dr Convertible",
+            "vin": "JM1NDAB73S0658294",
+            "stockNumber": "M658294",
+            "isPrimary": true
+        }
+    ],
+    "salesTeam": [
+        {
+            "id": "6487cab9-1e4e-f011-814d-00505690ec8c",
+            "firstName": "Kathleen",
+            "lastName": "Castanos",
+            "isPrimary": true,
+            "isPositionPrimary": true,
+            "positionName": "BDC Agent",
+            "positionCode": "BDC",
+            "links": []
+        },
+        {
+            "id": "b67e5380-34d0-ea11-a97e-005056b72b57",
+            "firstName": "Veronica",
+            "lastName": "Paco",
+            "isPrimary": false,
+            "isPositionPrimary": true,
+            "positionName": "Salesperson",
+            "positionCode": "S",
+            "links": []
+        },
+        {
+            "id": "db683b1a-7966-ea11-a977-005056b72b57",
+            "firstName": "Eric",
+            "lastName": "Magana",
+            "isPrimary": false,
+            "isPositionPrimary": false,
+            "positionName": "Salesperson",
+            "positionCode": "S",
+            "links": []
+        }
+    ],
+    "customer": {
+        "id": "74ea4824-8da9-f011-814f-00505690ec8c",
+        "isBusiness": false,
+        "firstName": "Jessica",
+        "middleName": "",
+        "lastName": "Lee",
+        "nickname": "",
+        "emails": [
+            {
+                "address": "jessica.lee2030@gmail.com",
+                "emailType": "Personal",
+                "doNotEmail": false,
+                "isPreferred": true
+            }
+        ],
+        "address": {
+            "city": "CANYON COUNTRY",
+            "state": "CA",
+            "zip": "91387",
+            "country": "US"
+        },
+        "privacySettings": [
+            {
+                "name": "CCPADoNotContact",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotShare",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotSell",
+                "value": "False"
+            }
+        ],
+        "links": [
+            {
+                "rel": "self",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/74ea4824-8da9-f011-814f-00505690ec8c",
+                "method": "GET",
+                "title": "Fetch Customer"
+            },
+            {
+                "rel": "create",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers",
+                "method": "POST",
+                "title": "Create Customer"
+            },
+            {
+                "rel": "update",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/74ea4824-8da9-f011-814f-00505690ec8c",
+                "method": "POST",
+                "title": "Update Customer"
+            }
+        ]
+    },
+    "tradeIns": null,
+    "createdBy": null,
+    "created_at": "2025-10-18",
+    "updated_at": "2025-10-20",
+    "isActive": true,
+    "completedActivities": [
+        {
+            "activityId": "5760114f-cea9-f011-814f-00505690ec8c",
+            "comments": "<i>Are You Still in Search of a Vehicle?</i>",
+            "activityName": "Send Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-19T00:43:02Z",
+            "outcome": "Send Email",
+            "completedBy": "Castanos, K"
+        },
+        {
+            "activityId": "67ff67c5-47ac-f011-814f-00505690ec8c",
+            "comments": "email only",
+            "activityName": "BDC Virtual Call #2",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-18T15:28:27Z",
+            "outcome": "No Phone",
+            "completedBy": "Castanos, K"
+        },
+        {
+            "activityId": "7aea4824-8da9-f011-814f-00505690ec8c",
+            "comments": "no phone",
+            "activityName": "BDC Virtual Immediate Call",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-18T15:27:59Z",
+            "outcome": "BDC Virtual Call #2",
+            "completedBy": "Castanos, K"
+        },
+        {
+            "activityId": "2af11245-e0a9-f011-814f-00505690ec8c",
+            "comments": "<i>Hey Jessica It Eric from HB Mazda</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-15T14:01:59.11Z",
+            "outcome": "Completed",
+            "completedBy": "Magana, E"
+        },
+        {
+            "activityId": "39f96220-e0a9-f011-814f-00505690ec8c",
+            "comments": "",
+            "activityName": "Outbound Call",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-15T14:01:00Z",
+            "outcome": "Completed",
+            "completedBy": "Magana, E"
+        },
+        {
+            "activityId": "8e251d68-cea9-f011-814f-00505690ec8c",
+            "comments": "<i>Thank you for contacting Huntington Beach Mazda</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-15T11:54:06.88Z",
+            "outcome": "Completed",
+            "completedBy": "Hicks, J"
+        },
+        {
+            "activityId": "79ea4824-8da9-f011-814f-00505690ec8c",
+            "comments": "",
+            "activityName": "Call # 1",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-15T11:53:21Z",
+            "outcome": "Text #1",
+            "completedBy": "Hicks, J"
+        },
+        {
+            "activityId": "78ea4824-8da9-f011-814f-00505690ec8c",
+            "comments": "<i>Mazda ADF XML Lead</i><br />/// URL ///https://dealers.roadster.com/huntingtonbeachmazda/customers/25602427?utm_medium=eLead&amp;utm_source=crm/// Representatives ///Representative Type: salesFirst Name: GeorgeLast Name: RochaEmail: georger@pattersonautos.comPhone: 714.454.0825ID: 11653481/// Locale ///en-us/// Deal Key - c39ffa0d-88aa-4659-b664-0ca971bd1420 ////// Customer Comments ///Roadster Unlock Inquiry/// Finance Details ///Finance Type: cashPricing Details:-- downPayment -  - 35971.31 - residualized:  - taxable: \r\n/// Price Details ///",
+            "activityName": "Internet Up",
+            "activityType": 13,
+            "category": "Completed",
+            "completedDate": "2025-10-15T04:06:52.463Z",
+            "outcome": "Auto Response",
+            "completedBy": "Paco, V"
+        }
+    ],
+    "scheduledActivities": [
+        {
+            "activityId": "89ac8d54-95ac-f011-814f-00505690ec8c",
+            "comments": "",
+            "dueDate": "2025-10-23T02:15:00Z",
+            "activityName": "Send Email",
+            "activityType": 3,
+            "assignedTo": "Castanos, K"
+        }
+    ],
+    "firstActivity": {
+        "id": "78ea4824-8da9-f011-814f-00505690ec8c",
+        "activityType": "Internet Up",
+        "category": "Completed",
+        "name": "Internet Up",
+        "completedDate": "2025-10-15T06:06:52.463Z",
+        "dueDate": "2025-10-15T06:07:00Z",
+        "outcome": "Auto Response",
+        "createdBy": "Paco, Veronica",
+        "assignedTo": "Paco, Veronica",
+        "completedBy": "Paco, Veronica",
+        "opportunityId": "76ea4824-8da9-f011-814f-00505690ec8c",
+        "upType": "Internet",
+        "source": "Roadster Online",
+        "subSource": "Roadster Online - Unlock Inquiry",
+        "createdByUserId": "b67e5380-34d0-ea11-a97e-005056b72b57",
+        "assignedToUserId": "b67e5380-34d0-ea11-a97e-005056b72b57",
+        "completedByUserId": "b67e5380-34d0-ea11-a97e-005056b72b57",
+        "message": {
+            "date": "2025-10-15T06:06:52Z",
+            "from": "starlead@eleadcrm.com",
+            "to": "starlead@eleadcrm.com",
+            "subject": "Mazda ADF XML Lead",
+            "body": "<adf>\r\n\t<prospect status=\"new\">\r\n\t\t<id source=\"Mazda Digital\">7c02e280-3bbd-4188-8f00-0b3b5b8c0104</id>\r\n    \r\n    <id sequence=\"2\" source=\"SD - sdSessionId\">1565ec3b-c670-4c59-83b2-43586a7f8f6e</id>\r\n<id sequence=\"3\" source=\"sd-deal-key\">c39ffa0d-88aa-4659-b664-0ca971bd1420</id>\r\n<id sequence=\"4\" source=\"sd-deal-id\">1223927</id>\r\n\r\n    <requestdate>2025-10-15T06:06:35</requestdate>\r\n\t\t<vehicle interest=\"buy\" status=\"new\">\r\n  <year>2025</year>\r\n  <make>Mazda</make>\r\n  <model>MX-5 MIATA</model>\r\n  <vin>JM1NDAB73S0658294</vin>\r\n  <stock>M658294</stock>\r\n  <trim>SPORT 6MT</trim>\r\n  <odometer>2</odometer>\r\n  <colorcombination>\r\n    <interiorcolor>Black Cloth</interiorcolor>\r\n    <exteriorcolor>Jet Black Mica</exteriorcolor>\r\n    <preference>1</preference>\r\n  </colorcombination>\r\n  <option>\r\n    <optionname><![CDATA[Appearance Package]]></optionname>\r\n    <manufacturercode><![CDATA[4AP]]></manufacturercode>\r\n  </option>\r\n  <option>\r\n    <optionname><![CDATA[Weather Package]]></optionname>\r\n    <manufacturercode><![CDATA[1WP]]></manufacturercode>\r\n  </option>\r\n  <comments>/// Price Details ///\r\n\r\n</comments>\r\n</vehicle>\r\n\t\t\r\n\t\t<customer>\r\n\t\t\t<contact primarycontact=\"1\">\r\n\t\t\t\t<name type=\"individual\" part=\"first\">Jessica</name>\r\n\t\t\t\t<name type=\"individual\" part=\"last\">Lee</name>\r\n\t\t\t\t<email>JESSICA.LEE2030@GMAIL.COM</email>\r\n\t\t\t\t<phone type=\"voice\" time=\"evening\"></phone>\r\n\t\t\t\t<phone type=\"voice\" time=\"day\"></phone>\r\n\t\t\t\t<phone type=\"cellphone\"></phone>\r\n\t\t\t\t<address type=\"home\">\r\n\t\t\t\t\t<street line=\"1\"></street>\r\n\t\t\t\t\t<street line=\"2\"></street>\r\n\t\t\t\t\t<city>CANYON COUNTRY</city>\r\n\t\t\t\t\t<regioncode>CA</regioncode>\r\n\t\t\t\t\t<postalcode>91387</postalcode>\r\n\t\t\t\t</address>\r\n\t\t\t</contact>\r\n\t\t\t<timeframe>\r\n\t\t\t\t<description></description>\r\n\t\t\t</timeframe>\r\n\t\t\t<comments><![CDATA[\r\n/// URL ///\r\nhttps://dealers.roadster.com/huntingtonbeachmazda/customers/25602427?utm_medium=eLead&utm_source=crm\r\n\r\n\r\n/// Representatives ///\r\nRepresentative Type: sales\r\nFirst Name: George\r\nLast Name: Rocha\r\nEmail: georger@pattersonautos.com\r\nPhone: 714.454.0825\r\nID: 11653481\r\n\r\n\r\n/// Locale ///\r\nen-us\r\n\r\n\r\n/// Deal Key - c39ffa0d-88aa-4659-b664-0ca971bd1420 ///\r\n\r\n/// Customer Comments ///\r\n\r\nRoadster Unlock Inquiry\r\n\r\n/// Finance Details ///\r\n\r\nFinance Type: cash\r\nPricing Details:\r\n-- downPayment -  - 35971.31 - residualized:  - taxable: \r\n]]></comments>\r\n\t\t</customer>\r\n\t\t<vendor>\r\n\t\t\t<id source=\"Mazda Digital\">42104</id>\r\n\t\t\t<vendorname>HUNTINGTON BEACH MAZDA</vendorname>\r\n\t\t\t<contact>\r\n\t\t\t\t<name type=\"business\" part=\"full\">HUNTINGTON BEACH MAZDA</name>\r\n\t\t\t\t<email></email>\r\n\t\t\t\t<phone type=\"voice\">7148487739</phone>\r\n\t\t\t\t<address>\r\n\t\t\t\t\t<street line=\"1\">16800 BEACH BLVD.</street>\r\n\t\t\t\t\t<city>HUNTINGTON BEACH</city>\r\n\t\t\t\t\t<regioncode>CA</regioncode>\r\n\t\t\t\t\t<postalcode>92647</postalcode>\r\n\t\t\t\t</address>\r\n\t\t\t</contact>\r\n\t\t</vendor>\r\n\t\t<provider>\r\n\t\t\t<name type=\"business\" part=\"full\">Roadster Online - Unlock Inquiry</name>\r\n\t\t\t<service>Mazda Digital</service>\r\n\t\t\t<url></url>\r\n\t\t</provider>\r\n\t</prospect>\r\n</adf>"
+        },
+        "links": [],
+        "adfDict": {
+            "adf": {
+                "prospect": {
+                    "@attributes": {
+                        "status": "new"
+                    },
+                    "id": [
+                        {
+                            "@attributes": {
+                                "source": "Mazda Digital"
+                            },
+                            "#text": "7c02e280-3bbd-4188-8f00-0b3b5b8c0104"
+                        },
+                        {
+                            "@attributes": {
+                                "sequence": "2",
+                                "source": "SD - sdSessionId"
+                            },
+                            "#text": "1565ec3b-c670-4c59-83b2-43586a7f8f6e"
+                        },
+                        {
+                            "@attributes": {
+                                "sequence": "3",
+                                "source": "sd-deal-key"
+                            },
+                            "#text": "c39ffa0d-88aa-4659-b664-0ca971bd1420"
+                        },
+                        {
+                            "@attributes": {
+                                "sequence": "4",
+                                "source": "sd-deal-id"
+                            },
+                            "#text": "1223927"
+                        }
+                    ],
+                    "requestdate": {
+                        "#text": "2025-10-15T06:06:35"
+                    },
+                    "vehicle": {
+                        "@attributes": {
+                            "interest": "buy",
+                            "status": "new"
+                        },
+                        "year": {
+                            "#text": "2025"
+                        },
+                        "make": {
+                            "#text": "Mazda"
+                        },
+                        "model": {
+                            "#text": "MX-5 MIATA"
+                        },
+                        "vin": {
+                            "#text": "JM1NDAB73S0658294"
+                        },
+                        "stock": {
+                            "#text": "M658294"
+                        },
+                        "trim": {
+                            "#text": "SPORT 6MT"
+                        },
+                        "odometer": {
+                            "#text": "2"
+                        },
+                        "colorcombination": {
+                            "interiorcolor": {
+                                "#text": "Black Cloth"
+                            },
+                            "exteriorcolor": {
+                                "#text": "Jet Black Mica"
+                            },
+                            "preference": {
+                                "#text": "1"
+                            }
+                        },
+                        "option": [
+                            {
+                                "optionname": {
+                                    "#text": "Appearance Package"
+                                },
+                                "manufacturercode": {
+                                    "#text": "4AP"
+                                }
+                            },
+                            {
+                                "optionname": {
+                                    "#text": "Weather Package"
+                                },
+                                "manufacturercode": {
+                                    "#text": "1WP"
+                                }
+                            }
+                        ],
+                        "comments": {
+                            "#text": "/// Price Details ///"
+                        }
+                    },
+                    "customer": {
+                        "contact": {
+                            "@attributes": {
+                                "primarycontact": "1"
+                            },
+                            "name": [
+                                {
+                                    "@attributes": {
+                                        "type": "individual",
+                                        "part": "first"
+                                    },
+                                    "#text": "Jessica"
+                                },
+                                {
+                                    "@attributes": {
+                                        "type": "individual",
+                                        "part": "last"
+                                    },
+                                    "#text": "Lee"
+                                }
+                            ],
+                            "email": {
+                                "#text": "JESSICA.LEE2030@GMAIL.COM"
+                            },
+                            "phone": [
+                                {
+                                    "@attributes": {
+                                        "type": "voice",
+                                        "time": "evening"
+                                    }
+                                },
+                                {
+                                    "@attributes": {
+                                        "type": "voice",
+                                        "time": "day"
+                                    }
+                                },
+                                {
+                                    "@attributes": {
+                                        "type": "cellphone"
+                                    }
+                                }
+                            ],
+                            "address": {
+                                "@attributes": {
+                                    "type": "home"
+                                },
+                                "street": [
+                                    {
+                                        "@attributes": {
+                                            "line": "1"
+                                        }
+                                    },
+                                    {
+                                        "@attributes": {
+                                            "line": "2"
+                                        }
+                                    }
+                                ],
+                                "city": {
+                                    "#text": "CANYON COUNTRY"
+                                },
+                                "regioncode": {
+                                    "#text": "CA"
+                                },
+                                "postalcode": {
+                                    "#text": "91387"
+                                }
+                            }
+                        },
+                        "timeframe": {
+                            "description": {}
+                        },
+                        "comments": {
+                            "#text": "/// URL ///\nhttps://dealers.roadster.com/huntingtonbeachmazda/customers/25602427?utm_medium=eLead&utm_source=crm\n\n\n/// Representatives ///\nRepresentative Type: sales\nFirst Name: George\nLast Name: Rocha\nEmail: georger@pattersonautos.com\nPhone: 714.454.0825\nID: 11653481\n\n\n/// Locale ///\nen-us\n\n\n/// Deal Key - c39ffa0d-88aa-4659-b664-0ca971bd1420 ///\n\n/// Customer Comments ///\n\nRoadster Unlock Inquiry\n\n/// Finance Details ///\n\nFinance Type: cash\nPricing Details:\n-- downPayment -  - 35971.31 - residualized:  - taxable:"
+                        }
+                    },
+                    "vendor": {
+                        "id": {
+                            "@attributes": {
+                                "source": "Mazda Digital"
+                            },
+                            "#text": "42104"
+                        },
+                        "vendorname": {
+                            "#text": "HUNTINGTON BEACH MAZDA"
+                        },
+                        "contact": {
+                            "name": {
+                                "@attributes": {
+                                    "type": "business",
+                                    "part": "full"
+                                },
+                                "#text": "HUNTINGTON BEACH MAZDA"
+                            },
+                            "email": {},
+                            "phone": {
+                                "@attributes": {
+                                    "type": "voice"
+                                },
+                                "#text": "7148487739"
+                            },
+                            "address": {
+                                "street": {
+                                    "@attributes": {
+                                        "line": "1"
+                                    },
+                                    "#text": "16800 BEACH BLVD."
+                                },
+                                "city": {
+                                    "#text": "HUNTINGTON BEACH"
+                                },
+                                "regioncode": {
+                                    "#text": "CA"
+                                },
+                                "postalcode": {
+                                    "#text": "92647"
+                                }
+                            }
+                        }
+                    },
+                    "provider": {
+                        "name": {
+                            "@attributes": {
+                                "type": "business",
+                                "part": "full"
+                            },
+                            "#text": "Roadster Online - Unlock Inquiry"
+                        },
+                        "service": {
+                            "#text": "Mazda Digital"
+                        },
+                        "url": {}
+                    }
+                }
+            }
+        }
+    }
+}

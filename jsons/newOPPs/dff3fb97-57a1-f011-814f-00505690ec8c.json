@@ -1,0 +1,537 @@
+{
+    "_subscription_id": "7a05ce2c-cf00-4748-b841-45b3442665a7",
+    "opportunityId": "dff3fb97-57a1-f011-814f-00505690ec8c",
+    "activityId": null,
+    "links": [
+        {
+            "rel": "create",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities",
+            "method": "POST",
+            "title": "Create Opportunity"
+        },
+        {
+            "rel": "self",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/dff3fb97-57a1-f011-814f-00505690ec8c",
+            "method": "GET",
+            "title": "Get Opportunity"
+        },
+        {
+            "rel": "comment",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/comment",
+            "method": "POST",
+            "title": "Add Comment"
+        },
+        {
+            "rel": "email",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/sendEmail",
+            "method": "POST",
+            "title": "Send Email"
+        },
+        {
+            "rel": "tradein",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/tradein",
+            "method": "POST",
+            "title": "Add Trade-In"
+        },
+        {
+            "rel": "vehiclesought",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/vehicleSought",
+            "method": "POST",
+            "title": "Add Vehicle Sought"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/reassignPrimarySalesperson",
+            "method": "POST",
+            "title": "Reassign Primary Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/dff3fb97-57a1-f011-814f-00505690ec8c/salesteam/add",
+            "method": "POST",
+            "title": "Add Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/dff3fb97-57a1-f011-814f-00505690ec8c/salesteam/remove",
+            "method": "POST",
+            "title": "Remove Salesperson"
+        },
+        {
+            "rel": "substatus",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/dff3fb97-57a1-f011-814f-00505690ec8c/subStatus/update",
+            "method": "POST",
+            "title": "Update SubStatus"
+        },
+        {
+            "rel": "inactive",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/dff3fb97-57a1-f011-814f-00505690ec8c/set-inactive",
+            "method": "POST",
+            "title": "Set Opportunity Inactive"
+        }
+    ],
+    "source": "TrueCar",
+    "upType": "Internet",
+    "soughtVehicles": [
+        {
+            "id": "e0f3fb97-57a1-f011-814f-00505690ec8c",
+            "isNew": false,
+            "yearFrom": 2021,
+            "yearTo": 2021,
+            "make": "Honda",
+            "model": "Civic",
+            "trim": "EX (CVT) 4dr Hatchback",
+            "vin": "SHHFK7H60MU206804",
+            "stockNumber": "SPM8065A",
+            "isPrimary": true
+        }
+    ],
+    "salesTeam": [
+        {
+            "id": "0084c9ba-94a8-f011-814f-00505690ec8c",
+            "firstName": "Al",
+            "lastName": "Alcontin",
+            "isPrimary": true,
+            "isPositionPrimary": true,
+            "positionName": "BDC Agent",
+            "positionCode": "BDC",
+            "links": []
+        },
+        {
+            "id": "83693b1a-7966-ea11-a977-005056b72b57",
+            "firstName": "Jim",
+            "lastName": "Feinstein",
+            "isPrimary": false,
+            "isPositionPrimary": true,
+            "positionName": "Salesperson",
+            "positionCode": "S",
+            "links": []
+        }
+    ],
+    "customer": {
+        "id": "ddf3fb97-57a1-f011-814f-00505690ec8c",
+        "isBusiness": false,
+        "firstName": "Sarah",
+        "middleName": "",
+        "lastName": "Navarro",
+        "nickname": "",
+        "emails": [
+            {
+                "address": "Sarahnavarro054@gmail.com",
+                "emailType": "Personal",
+                "doNotEmail": false,
+                "isPreferred": true
+            }
+        ],
+        "phones": [
+            {
+                "number": "(760) 780-3493",
+                "phoneType": "Home",
+                "preferredTimeToContact": "Day",
+                "onDoNotCallRegistry": false
+            },
+            {
+                "number": "(760) 780-3493",
+                "phoneType": "Cellular",
+                "preferredTimeToContact": "Day",
+                "onDoNotCallRegistry": false
+            }
+        ],
+        "address": {
+            "addressLine1": "9580 Macron Street",
+            "city": "Hesperia",
+            "state": "CA",
+            "zip": "92344",
+            "country": "US"
+        },
+        "privacySettings": [
+            {
+                "name": "CCPADoNotContact",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotShare",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotSell",
+                "value": "False"
+            }
+        ],
+        "links": [
+            {
+                "rel": "self",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/ddf3fb97-57a1-f011-814f-00505690ec8c",
+                "method": "GET",
+                "title": "Fetch Customer"
+            },
+            {
+                "rel": "create",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers",
+                "method": "POST",
+                "title": "Create Customer"
+            },
+            {
+                "rel": "update",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/ddf3fb97-57a1-f011-814f-00505690ec8c",
+                "method": "POST",
+                "title": "Update Customer"
+            }
+        ]
+    },
+    "tradeIns": null,
+    "createdBy": null,
+    "created_at": "2025-10-18",
+    "updated_at": "2025-10-20",
+    "isActive": true,
+    "completedActivities": [
+        {
+            "activityId": "94e5d561-16a2-f011-814f-00505690ec8c",
+            "comments": "<i>2021 Civic for Sarah</i>",
+            "activityName": "Email #2",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-15T13:15:29Z",
+            "outcome": "Call #3",
+            "completedBy": "Feinstein, J"
+        },
+        {
+            "activityId": "0c85bfc4-15a2-f011-814f-00505690ec8c",
+            "comments": "",
+            "activityName": "Text #2",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-05T16:09:08Z",
+            "outcome": "Email #2",
+            "completedBy": "Feinstein, J"
+        },
+        {
+            "activityId": "0e6e3e77-f1a1-f011-814f-00505690ec8c",
+            "comments": "(Left Message)",
+            "activityName": "Call #2",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-05T16:04:49Z",
+            "outcome": "Text #2",
+            "completedBy": "Feinstein, J"
+        },
+        {
+            "activityId": "7418def8-57a1-f011-814f-00505690ec8c",
+            "comments": "<i>Re: Your Civic inquiry</i>",
+            "activityName": "Email #1",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-05T11:44:53Z",
+            "outcome": "Call #2",
+            "completedBy": "Feinstein, J"
+        },
+        {
+            "activityId": "17da6809-8c66-ea11-a977-005056b72b57",
+            "comments": "Hi Sarah.  Here is a quick video of the Civic you inquired about.  For the quickest response please call or text me at 310.890.3592 - Jimmy\nhttps://vidmails.com/v/Qd6z57nwCs STOP to unsubscribe or HELP for support. Msg freq. varies, msg&data rates may apply.",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-04T17:33:20Z",
+            "outcome": "Completed",
+            "completedBy": "Feinstein, J"
+        },
+        {
+            "activityId": "16ad41c2-57a1-f011-814f-00505690ec8c",
+            "comments": "",
+            "activityName": "Text #1",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-04T17:26:09Z",
+            "outcome": "Email #1",
+            "completedBy": "Feinstein, J"
+        },
+        {
+            "activityId": "e4f3fb97-57a1-f011-814f-00505690ec8c",
+            "comments": "(Left Message)",
+            "activityName": "Call # 1",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-04T17:24:44Z",
+            "outcome": "Text #1",
+            "completedBy": "Feinstein, J"
+        },
+        {
+            "activityId": "e3f3fb97-57a1-f011-814f-00505690ec8c",
+            "comments": "<i>TrueCar / TrueCar: New Customer Inquiry</i><br />*** DEALER PORTAL ***; https://dealerportal.truecar.com/dfe/prospects/948TMYX89G?_xt=1&utm_source=crm&utm_medium=deeplink&utm_campaign=1144",
+            "activityName": "Internet Up",
+            "activityType": 13,
+            "category": "Completed",
+            "completedDate": "2025-10-04T17:23:00Z",
+            "outcome": "Auto Response",
+            "completedBy": "Feinstein, J"
+        }
+    ],
+    "scheduledActivities": [
+        {
+            "activityId": "121d6dc3-d9a9-f011-814f-00505690ec8c",
+            "comments": "",
+            "dueDate": "2025-10-16T15:00:00Z",
+            "activityName": "Call #3",
+            "activityType": 2,
+            "assignedTo": "Alcontin, A"
+        },
+        {
+            "activityId": "e5f3fb97-57a1-f011-814f-00505690ec8c",
+            "comments": "",
+            "dueDate": "2025-10-20T19:15:00Z",
+            "activityName": "BDC Virtual Immediate Call",
+            "activityType": 2,
+            "assignedTo": "Alcontin, A"
+        }
+    ],
+    "firstActivity": {
+        "id": "e3f3fb97-57a1-f011-814f-00505690ec8c",
+        "activityType": "Internet Up",
+        "category": "Completed",
+        "name": "Internet Up",
+        "completedDate": "2025-10-04T19:23:00Z",
+        "dueDate": "2025-10-04T21:23:00Z",
+        "outcome": "Auto Response",
+        "createdBy": "Feinstein, Jim",
+        "assignedTo": "Feinstein, Jim",
+        "completedBy": "Feinstein, Jim",
+        "opportunityId": "dff3fb97-57a1-f011-814f-00505690ec8c",
+        "upType": "Internet",
+        "source": "TrueCar",
+        "subSource": "New TrueCar/TrueCar Auto Buying Customer Inquiry",
+        "createdByUserId": "83693b1a-7966-ea11-a977-005056b72b57",
+        "assignedToUserId": "83693b1a-7966-ea11-a977-005056b72b57",
+        "completedByUserId": "83693b1a-7966-ea11-a977-005056b72b57",
+        "message": {
+            "date": "2025-10-04T19:23:22Z",
+            "from": "truecar@secureleads.truecarmail.com",
+            "to": "sales@tustinmazda.edealerhub.com",
+            "subject": "TrueCar / TrueCar: New Customer Inquiry",
+            "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<?ADF version=\"1.0\"?><adf>\r\n  <prospect>\r\n    <id source=\"TrueCar Lead ID\">1142521516</id>\r\n    <requestdate>2025-10-04T12:23:00-07:00</requestdate>\r\n    <vehicle interest=\"buy\" status=\"used\">\r\n      <id source=\"model code\">FK7H6MJW</id>\r\n      <year>2021</year>\r\n      <make>Honda</make>\r\n      <model>Civic</model>\r\n      <vin>SHHFK7H60MU206804</vin>\r\n      <stock>SPM8065A</stock>\r\n      <trim>EX</trim>\r\n      <doors>4</doors>\r\n      <bodystyle>Hatchback</bodystyle>\r\n      <transmission>Automatic</transmission>\r\n      <odometer units=\"mi\">59367</odometer>\r\n      <colorcombination>\r\n        <interiorcolor>Black</interiorcolor>\r\n        <exteriorcolor>Sonic Gray Pearl</exteriorcolor>\r\n        <preference>1</preference>\r\n      </colorcombination>\r\n      <price type=\"quote\">21412.0</price>\r\n      <pricecomments>\r\n        <![CDATA[<br />Consumer's Latest Saved Payment:<br />Deal Type = loan<br />VIN = SHHFK7H60MU206804<br />Monthly = $469.05<br />Down = $5000.00<br />Credit Score Used = 705<br />Bank =]]>\r\n      </pricecomments>\r\n      <finance>\r\n        <method>finance</method>\r\n        <amount>1.0</amount>\r\n      </finance>\r\n    </vehicle>\r\n    <customer>\r\n      <contact>\r\n        <name part=\"first\">Sarah</name>\r\n        <name part=\"last\">Navarro</name>\r\n        <email preferredcontact=\"0\">Sarahnavarro054@gmail.com</email>\r\n        <phone preferredcontact=\"0\" time=\"nopreference\" type=\"voice\">7607803493</phone>\r\n        <address>\r\n          <street line=\"1\">9580 Macron Street</street>\r\n          <city>Hesperia</city>\r\n          <regioncode>CA</regioncode>\r\n          <postalcode>92344</postalcode>\r\n          <country/>\r\n        </address>\r\n      </contact>\r\n      <timeframe>\r\n        <description>2 weeks</description>\r\n      </timeframe>\r\n      <comments>\r\n        <![CDATA[*** DEALER PORTAL *** <br /> https://dealerportal.truecar.com/dfe/prospects/948TMYX89G?_xt=1&utm_source=crm&utm_medium=deeplink&utm_campaign=1144]]>\r\n      </comments>\r\n    </customer>\r\n    <vendor>\r\n      <id source=\"205:ADF XML Email\"/>\r\n      <id source=\"AdditionalEmails\">jeffw@pattersonautos.com, jimf@pattersonautos.com, tustin-mazda-adf@testenv.impel.io</id>\r\n      <id source=\"DealerId\">1144</id>\r\n      <vendorname>Tustin Mazda</vendorname>\r\n      <contact>\r\n        <name part=\"full\" type=\"individual\">Jim Feinstein</name>\r\n        <email preferredcontact=\"0\">sales@tustinmazda.edealerhub.com</email>\r\n        <phone preferredcontact=\"0\" time=\"nopreference\" type=\"voice\"/>\r\n        <address>\r\n          <street line=\"1\">28 Auto Center Drive</street>\r\n          <city>Tustin</city>\r\n          <regioncode>CA</regioncode>\r\n          <postalcode>92782</postalcode>\r\n        </address>\r\n      </contact>\r\n    </vendor>\r\n    <provider>\r\n      <name part=\"full\">TrueCar/TrueCar</name>\r\n      <service>New TrueCar/TrueCar Auto Buying Customer Inquiry</service>\r\n      <leadtype>internet</leadtype>\r\n    </provider>\r\n  </prospect>\r\n</adf>"
+        },
+        "links": [],
+        "adfDict": {
+            "adf": {
+                "prospect": {
+                    "id": {
+                        "@attributes": {
+                            "source": "TrueCar Lead ID"
+                        },
+                        "#text": "1142521516"
+                    },
+                    "requestdate": {
+                        "#text": "2025-10-04T12:23:00-07:00"
+                    },
+                    "vehicle": {
+                        "@attributes": {
+                            "interest": "buy",
+                            "status": "used"
+                        },
+                        "id": {
+                            "@attributes": {
+                                "source": "model code"
+                            },
+                            "#text": "FK7H6MJW"
+                        },
+                        "year": {
+                            "#text": "2021"
+                        },
+                        "make": {
+                            "#text": "Honda"
+                        },
+                        "model": {
+                            "#text": "Civic"
+                        },
+                        "vin": {
+                            "#text": "SHHFK7H60MU206804"
+                        },
+                        "stock": {
+                            "#text": "SPM8065A"
+                        },
+                        "trim": {
+                            "#text": "EX"
+                        },
+                        "doors": {
+                            "#text": "4"
+                        },
+                        "bodystyle": {
+                            "#text": "Hatchback"
+                        },
+                        "transmission": {
+                            "#text": "Automatic"
+                        },
+                        "odometer": {
+                            "@attributes": {
+                                "units": "mi"
+                            },
+                            "#text": "59367"
+                        },
+                        "colorcombination": {
+                            "interiorcolor": {
+                                "#text": "Black"
+                            },
+                            "exteriorcolor": {
+                                "#text": "Sonic Gray Pearl"
+                            },
+                            "preference": {
+                                "#text": "1"
+                            }
+                        },
+                        "price": {
+                            "@attributes": {
+                                "type": "quote"
+                            },
+                            "#text": "21412.0"
+                        },
+                        "pricecomments": {
+                            "#text": "<br />Consumer's Latest Saved Payment:<br />Deal Type = loan<br />VIN = SHHFK7H60MU206804<br />Monthly = $469.05<br />Down = $5000.00<br />Credit Score Used = 705<br />Bank ="
+                        },
+                        "finance": {
+                            "method": {
+                                "#text": "finance"
+                            },
+                            "amount": {
+                                "#text": "1.0"
+                            }
+                        }
+                    },
+                    "customer": {
+                        "contact": {
+                            "name": [
+                                {
+                                    "@attributes": {
+                                        "part": "first"
+                                    },
+                                    "#text": "Sarah"
+                                },
+                                {
+                                    "@attributes": {
+                                        "part": "last"
+                                    },
+                                    "#text": "Navarro"
+                                }
+                            ],
+                            "email": {
+                                "@attributes": {
+                                    "preferredcontact": "0"
+                                },
+                                "#text": "Sarahnavarro054@gmail.com"
+                            },
+                            "phone": {
+                                "@attributes": {
+                                    "preferredcontact": "0",
+                                    "time": "nopreference",
+                                    "type": "voice"
+                                },
+                                "#text": "7607803493"
+                            },
+                            "address": {
+                                "street": {
+                                    "@attributes": {
+                                        "line": "1"
+                                    },
+                                    "#text": "9580 Macron Street"
+                                },
+                                "city": {
+                                    "#text": "Hesperia"
+                                },
+                                "regioncode": {
+                                    "#text": "CA"
+                                },
+                                "postalcode": {
+                                    "#text": "92344"
+                                },
+                                "country": {}
+                            }
+                        },
+                        "timeframe": {
+                            "description": {
+                                "#text": "2 weeks"
+                            }
+                        },
+                        "comments": {
+                            "#text": "*** DEALER PORTAL *** <br /> https://dealerportal.truecar.com/dfe/prospects/948TMYX89G?_xt=1&utm_source=crm&utm_medium=deeplink&utm_campaign=1144"
+                        }
+                    },
+                    "vendor": {
+                        "id": [
+                            {
+                                "@attributes": {
+                                    "source": "205:ADF XML Email"
+                                }
+                            },
+                            {
+                                "@attributes": {
+                                    "source": "AdditionalEmails"
+                                },
+                                "#text": "jeffw@pattersonautos.com, jimf@pattersonautos.com, tustin-mazda-adf@testenv.impel.io"
+                            },
+                            {
+                                "@attributes": {
+                                    "source": "DealerId"
+                                },
+                                "#text": "1144"
+                            }
+                        ],
+                        "vendorname": {
+                            "#text": "Tustin Mazda"
+                        },
+                        "contact": {
+                            "name": {
+                                "@attributes": {
+                                    "part": "full",
+                                    "type": "individual"
+                                },
+                                "#text": "Jim Feinstein"
+                            },
+                            "email": {
+                                "@attributes": {
+                                    "preferredcontact": "0"
+                                },
+                                "#text": "sales@tustinmazda.edealerhub.com"
+                            },
+                            "phone": {
+                                "@attributes": {
+                                    "preferredcontact": "0",
+                                    "time": "nopreference",
+                                    "type": "voice"
+                                }
+                            },
+                            "address": {
+                                "street": {
+                                    "@attributes": {
+                                        "line": "1"
+                                    },
+                                    "#text": "28 Auto Center Drive"
+                                },
+                                "city": {
+                                    "#text": "Tustin"
+                                },
+                                "regioncode": {
+                                    "#text": "CA"
+                                },
+                                "postalcode": {
+                                    "#text": "92782"
+                                }
+                            }
+                        }
+                    },
+                    "provider": {
+                        "name": {
+                            "@attributes": {
+                                "part": "full"
+                            },
+                            "#text": "TrueCar/TrueCar"
+                        },
+                        "service": {
+                            "#text": "New TrueCar/TrueCar Auto Buying Customer Inquiry"
+                        },
+                        "leadtype": {
+                            "#text": "internet"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

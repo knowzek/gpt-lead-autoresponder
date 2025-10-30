@@ -1,0 +1,497 @@
+{
+    "_subscription_id": "bb4a4f18-1693-4450-a08e-40d8df30c139",
+    "opportunityId": "233c911b-8bab-f011-814f-00505690ec8c",
+    "activityId": null,
+    "links": [
+        {
+            "rel": "create",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities",
+            "method": "POST",
+            "title": "Create Opportunity"
+        },
+        {
+            "rel": "self",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/233c911b-8bab-f011-814f-00505690ec8c",
+            "method": "GET",
+            "title": "Get Opportunity"
+        },
+        {
+            "rel": "comment",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/comment",
+            "method": "POST",
+            "title": "Add Comment"
+        },
+        {
+            "rel": "email",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/sendEmail",
+            "method": "POST",
+            "title": "Send Email"
+        },
+        {
+            "rel": "tradein",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/tradein",
+            "method": "POST",
+            "title": "Add Trade-In"
+        },
+        {
+            "rel": "vehiclesought",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/vehicleSought",
+            "method": "POST",
+            "title": "Add Vehicle Sought"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/reassignPrimarySalesperson",
+            "method": "POST",
+            "title": "Reassign Primary Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/233c911b-8bab-f011-814f-00505690ec8c/salesteam/add",
+            "method": "POST",
+            "title": "Add Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/233c911b-8bab-f011-814f-00505690ec8c/salesteam/remove",
+            "method": "POST",
+            "title": "Remove Salesperson"
+        },
+        {
+            "rel": "substatus",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/233c911b-8bab-f011-814f-00505690ec8c/subStatus/update",
+            "method": "POST",
+            "title": "Update SubStatus"
+        },
+        {
+            "rel": "inactive",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/233c911b-8bab-f011-814f-00505690ec8c/set-inactive",
+            "method": "POST",
+            "title": "Set Opportunity Inactive"
+        }
+    ],
+    "source": "Facebook",
+    "upType": "Internet",
+    "soughtVehicles": [
+        {
+            "id": "253c911b-8bab-f011-814f-00505690ec8c",
+            "isNew": false,
+            "yearFrom": 2025,
+            "yearTo": 2025,
+            "make": "Mazda",
+            "model": "Mazda3",
+            "trim": "2.5 S Preferred Package (A6) 4dr Front-Wheel Drive Hatchback",
+            "vin": "JM1BPALM1S1767832",
+            "stockNumber": "SAH7832",
+            "isPrimary": true
+        }
+    ],
+    "salesTeam": [
+        {
+            "id": "14b22ee3-ebcd-ea11-a97d-005056b72b57",
+            "firstName": "Manny",
+            "lastName": "Ayala Camacho",
+            "isPrimary": true,
+            "isPositionPrimary": true,
+            "positionName": "Salesperson",
+            "positionCode": "S",
+            "links": []
+        }
+    ],
+    "customer": {
+        "id": "f7120d23-5801-eb11-a980-005056b72b57",
+        "isBusiness": false,
+        "firstName": "Junior",
+        "middleName": "",
+        "lastName": "Williams",
+        "nickname": "",
+        "emails": [
+            {
+                "address": "cewilliam@gmail.com",
+                "emailType": "Personal",
+                "doNotEmail": false,
+                "isPreferred": true
+            },
+            {
+                "address": "cewilliamsjr@gmail.com",
+                "emailType": "Personal",
+                "doNotEmail": false,
+                "isPreferred": false
+            }
+        ],
+        "phones": [
+            {
+                "number": "(424) 200-8888",
+                "phoneType": "Home",
+                "preferredTimeToContact": "Day",
+                "onDoNotCallRegistry": false
+            },
+            {
+                "number": "(424) 200-8888",
+                "phoneType": "Cellular",
+                "preferredTimeToContact": "Day",
+                "onDoNotCallRegistry": false
+            }
+        ],
+        "address": {},
+        "privacySettings": [
+            {
+                "name": "CCPADoNotContact",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotShare",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotSell",
+                "value": "False"
+            }
+        ],
+        "links": [
+            {
+                "rel": "self",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/f7120d23-5801-eb11-a980-005056b72b57",
+                "method": "GET",
+                "title": "Fetch Customer"
+            },
+            {
+                "rel": "create",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers",
+                "method": "POST",
+                "title": "Create Customer"
+            },
+            {
+                "rel": "update",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/f7120d23-5801-eb11-a980-005056b72b57",
+                "method": "POST",
+                "title": "Update Customer"
+            }
+        ]
+    },
+    "tradeIns": null,
+    "createdBy": null,
+    "created_at": "2025-10-18",
+    "updated_at": "2025-10-20",
+    "isActive": true,
+    "completedActivities": [
+        {
+            "activityId": "fd529df4-42ac-f011-814f-00505690ec8c",
+            "comments": "<i>Mazda Mazda3 for Junior</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:53:25.977Z",
+            "outcome": "Completed",
+            "completedBy": "Ayala Camacho, M"
+        },
+        {
+            "activityId": "42481985-8bab-f011-814f-00505690ec8c",
+            "comments": "<i>Thank you for contacting Huntington Beach Mazda</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-17T17:00:22.74Z",
+            "outcome": "Completed",
+            "completedBy": "Ayala Camacho, M"
+        },
+        {
+            "activityId": "66a2c178-8bab-f011-814f-00505690ec8c",
+            "comments": "PHONE NUMBER IS FAKE",
+            "activityName": "Note",
+            "activityType": 37,
+            "category": "Completed",
+            "completedDate": "2025-10-17T17:00:01.937Z",
+            "outcome": "Completed",
+            "completedBy": "Ayala Camacho, M"
+        },
+        {
+            "activityId": "273c911b-8bab-f011-814f-00505690ec8c",
+            "comments": "",
+            "activityName": "Call # 1",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-17T16:59:48Z",
+            "outcome": "Text #1",
+            "completedBy": "Ayala Camacho, M"
+        },
+        {
+            "activityId": "263c911b-8bab-f011-814f-00505690ec8c",
+            "comments": "<i>Facebook Lead</i>",
+            "activityName": "Internet Up",
+            "activityType": 13,
+            "category": "Completed",
+            "completedDate": "2025-10-17T16:57:00Z",
+            "outcome": "Auto Response",
+            "completedBy": "Paco, V"
+        }
+    ],
+    "scheduledActivities": [
+        {
+            "activityId": "283c911b-8bab-f011-814f-00505690ec8c",
+            "comments": "",
+            "dueDate": "2025-10-20T18:57:00Z",
+            "activityName": "BDC Virtual Immediate Call",
+            "activityType": 2,
+            "assignedTo": "Castanos, K"
+        },
+        {
+            "activityId": "c18bb272-8bab-f011-814f-00505690ec8c",
+            "comments": "",
+            "dueDate": "2025-10-24T18:00:00Z",
+            "activityName": "Text #1",
+            "activityType": 48,
+            "assignedTo": "Ayala Camacho, M"
+        }
+    ],
+    "firstActivity": {
+        "id": "263c911b-8bab-f011-814f-00505690ec8c",
+        "activityType": "Internet Up",
+        "category": "Completed",
+        "name": "Internet Up",
+        "completedDate": "2025-10-17T18:57:00Z",
+        "dueDate": "2025-10-17T20:57:00Z",
+        "outcome": "Auto Response",
+        "createdBy": "Paco, Veronica",
+        "assignedTo": "Paco, Veronica",
+        "completedBy": "Paco, Veronica",
+        "opportunityId": "233c911b-8bab-f011-814f-00505690ec8c",
+        "upType": "Internet",
+        "source": "Facebook",
+        "createdByUserId": "b67e5380-34d0-ea11-a97e-005056b72b57",
+        "assignedToUserId": "b67e5380-34d0-ea11-a97e-005056b72b57",
+        "completedByUserId": "b67e5380-34d0-ea11-a97e-005056b72b57",
+        "message": {
+            "date": "2025-10-17T18:57:17Z",
+            "from": "noreply@tvmnotify.com",
+            "to": "sales@huntingtonbeachmazda.edealerhub.com",
+            "subject": "Facebook Lead",
+            "body": "<?xml version=\"1.0\" encoding=\"utf-8\" ?>\r\n<?adf version=\"1.0\"?><adf>\r\n  <prospect status=\"new\">\r\n    <id sequence=\"1\" source=\"TEAMVELOCITY\">1207850111154679</id>\r\n    <requestdate>10/17/2025 02:24:41 PM</requestdate>\r\n    <vehicle interest=\"buy\" status=\"New\">\r\n      <year>2025</year>\r\n      <make>Mazda</make>\r\n      <model>MAZDA3 Hatchback</model>\r\n      <vin>JM1BPALM1S1767832</vin>\r\n      <trim />\r\n      <bodystyle />\r\n      <transmission />\r\n      <odometer units=\"mi\" />\r\n      <colorcombination>\r\n        <interiorcolor />\r\n        <exteriorcolor />\r\n        <preference>1</preference>\r\n      </colorcombination>\r\n      <price type=\"quote\" currency=\"USD\" source=\"\" />\r\n      <pricecomments />\r\n      <comments />\r\n    </vehicle>\r\n    <customer>\r\n      <contact>\r\n        <name part=\"full\" type=\"individual\">Junior Williams</name>\r\n        <name part=\"first\" type=\"individual\">Junior</name>\r\n        <name part=\"last\" type=\"individual\">Williams</name>\r\n        <email preferredcontact=\"0\">cewilliam@gmail.com</email>\r\n        <phone time=\"morning\" type=\"voice\" preferredcontact=\"0\">+14242008888</phone>\r\n        <phone time=\"evening\" type=\"voice\" preferredcontact=\"0\" />\r\n        <address type=\"home\">\r\n          <street line=\"1\"></street>\r\n          <street line=\"2\"/>\r\n          <apartment />\r\n          <city></city>\r\n          <regioncode />\r\n          <postalcode></postalcode>\r\n          <country></country>\r\n        </address>\r\n      </contact>\r\n      <comments></comments>\r\n    </customer>\r\n    <vendor>\r\n      <id sequence=\"\" source=\"Apollo Ads\"></id>\r\n      <vendorname>Huntington Beach Mazda</vendorname>\r\n      <contact>\r\n        <name part=\"full\" type=\"individual\" />\r\n        <name part=\"first\" type=\"individual\" />\r\n        <name part=\"last\" type=\"individual\" />\r\n        <email />\r\n        <phone time=\"nopreference\" type=\"voice\" preferredcontact=\"0\" />\r\n        <phone time=\"nopreference\" type=\"voice\" preferredcontact=\"0\" />\r\n        <address type=\"home\">\r\n          <street line=\"1\"></street>\r\n          <street line=\"2\"></street>\r\n          <apartment />\r\n          <city></city>\r\n          <regioncode></regioncode>\r\n          <postalcode></postalcode>\r\n          <country />\r\n        </address>\r\n      </contact>\r\n    </vendor>\r\n    <provider>\r\n      <id sequence=\"1\" source=\"Apollo Ads\" />\r\n      <name part=\"full\" type=\"business\">Social Lead ads</name>\r\n      <service>TEAMVELOCITY-SD - Multiple Choice, FN, LN, EM, PH_20250912_101239</service>      \r\n    </provider>\r\n  </prospect>\r\n</adf>"
+        },
+        "links": [],
+        "adfDict": {
+            "adf": {
+                "prospect": {
+                    "@attributes": {
+                        "status": "new"
+                    },
+                    "id": {
+                        "@attributes": {
+                            "sequence": "1",
+                            "source": "TEAMVELOCITY"
+                        },
+                        "#text": "1207850111154679"
+                    },
+                    "requestdate": {
+                        "#text": "10/17/2025 02:24:41 PM"
+                    },
+                    "vehicle": {
+                        "@attributes": {
+                            "interest": "buy",
+                            "status": "New"
+                        },
+                        "year": {
+                            "#text": "2025"
+                        },
+                        "make": {
+                            "#text": "Mazda"
+                        },
+                        "model": {
+                            "#text": "MAZDA3 Hatchback"
+                        },
+                        "vin": {
+                            "#text": "JM1BPALM1S1767832"
+                        },
+                        "trim": {},
+                        "bodystyle": {},
+                        "transmission": {},
+                        "odometer": {
+                            "@attributes": {
+                                "units": "mi"
+                            }
+                        },
+                        "colorcombination": {
+                            "interiorcolor": {},
+                            "exteriorcolor": {},
+                            "preference": {
+                                "#text": "1"
+                            }
+                        },
+                        "price": {
+                            "@attributes": {
+                                "type": "quote",
+                                "currency": "USD",
+                                "source": ""
+                            }
+                        },
+                        "pricecomments": {},
+                        "comments": {}
+                    },
+                    "customer": {
+                        "contact": {
+                            "name": [
+                                {
+                                    "@attributes": {
+                                        "part": "full",
+                                        "type": "individual"
+                                    },
+                                    "#text": "Junior Williams"
+                                },
+                                {
+                                    "@attributes": {
+                                        "part": "first",
+                                        "type": "individual"
+                                    },
+                                    "#text": "Junior"
+                                },
+                                {
+                                    "@attributes": {
+                                        "part": "last",
+                                        "type": "individual"
+                                    },
+                                    "#text": "Williams"
+                                }
+                            ],
+                            "email": {
+                                "@attributes": {
+                                    "preferredcontact": "0"
+                                },
+                                "#text": "cewilliam@gmail.com"
+                            },
+                            "phone": [
+                                {
+                                    "@attributes": {
+                                        "time": "morning",
+                                        "type": "voice",
+                                        "preferredcontact": "0"
+                                    },
+                                    "#text": "+14242008888"
+                                },
+                                {
+                                    "@attributes": {
+                                        "time": "evening",
+                                        "type": "voice",
+                                        "preferredcontact": "0"
+                                    }
+                                }
+                            ],
+                            "address": {
+                                "@attributes": {
+                                    "type": "home"
+                                },
+                                "street": [
+                                    {
+                                        "@attributes": {
+                                            "line": "1"
+                                        }
+                                    },
+                                    {
+                                        "@attributes": {
+                                            "line": "2"
+                                        }
+                                    }
+                                ],
+                                "apartment": {},
+                                "city": {},
+                                "regioncode": {},
+                                "postalcode": {},
+                                "country": {}
+                            }
+                        },
+                        "comments": {}
+                    },
+                    "vendor": {
+                        "id": {
+                            "@attributes": {
+                                "sequence": "",
+                                "source": "Apollo Ads"
+                            }
+                        },
+                        "vendorname": {
+                            "#text": "Huntington Beach Mazda"
+                        },
+                        "contact": {
+                            "name": [
+                                {
+                                    "@attributes": {
+                                        "part": "full",
+                                        "type": "individual"
+                                    }
+                                },
+                                {
+                                    "@attributes": {
+                                        "part": "first",
+                                        "type": "individual"
+                                    }
+                                },
+                                {
+                                    "@attributes": {
+                                        "part": "last",
+                                        "type": "individual"
+                                    }
+                                }
+                            ],
+                            "email": {},
+                            "phone": [
+                                {
+                                    "@attributes": {
+                                        "time": "nopreference",
+                                        "type": "voice",
+                                        "preferredcontact": "0"
+                                    }
+                                },
+                                {
+                                    "@attributes": {
+                                        "time": "nopreference",
+                                        "type": "voice",
+                                        "preferredcontact": "0"
+                                    }
+                                }
+                            ],
+                            "address": {
+                                "@attributes": {
+                                    "type": "home"
+                                },
+                                "street": [
+                                    {
+                                        "@attributes": {
+                                            "line": "1"
+                                        }
+                                    },
+                                    {
+                                        "@attributes": {
+                                            "line": "2"
+                                        }
+                                    }
+                                ],
+                                "apartment": {},
+                                "city": {},
+                                "regioncode": {},
+                                "postalcode": {},
+                                "country": {}
+                            }
+                        }
+                    },
+                    "provider": {
+                        "id": {
+                            "@attributes": {
+                                "sequence": "1",
+                                "source": "Apollo Ads"
+                            }
+                        },
+                        "name": {
+                            "@attributes": {
+                                "part": "full",
+                                "type": "business"
+                            },
+                            "#text": "Social Lead ads"
+                        },
+                        "service": {
+                            "#text": "TEAMVELOCITY-SD - Multiple Choice, FN, LN, EM, PH_20250912_101239"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

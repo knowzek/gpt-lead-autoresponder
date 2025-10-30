@@ -1,0 +1,725 @@
+{
+    "_subscription_id": "2c61b27b-b239-4b54-bd34-dfd73aa5a568",
+    "opportunityId": "8a9e2903-f09b-f011-814f-00505690ec8c",
+    "activityId": null,
+    "links": [
+        {
+            "rel": "create",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities",
+            "method": "POST",
+            "title": "Create Opportunity"
+        },
+        {
+            "rel": "self",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/8a9e2903-f09b-f011-814f-00505690ec8c",
+            "method": "GET",
+            "title": "Get Opportunity"
+        },
+        {
+            "rel": "comment",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/comment",
+            "method": "POST",
+            "title": "Add Comment"
+        },
+        {
+            "rel": "email",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/sendEmail",
+            "method": "POST",
+            "title": "Send Email"
+        },
+        {
+            "rel": "tradein",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/tradein",
+            "method": "POST",
+            "title": "Add Trade-In"
+        },
+        {
+            "rel": "vehiclesought",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/vehicleSought",
+            "method": "POST",
+            "title": "Add Vehicle Sought"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/reassignPrimarySalesperson",
+            "method": "POST",
+            "title": "Reassign Primary Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/8a9e2903-f09b-f011-814f-00505690ec8c/salesteam/add",
+            "method": "POST",
+            "title": "Add Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/8a9e2903-f09b-f011-814f-00505690ec8c/salesteam/remove",
+            "method": "POST",
+            "title": "Remove Salesperson"
+        },
+        {
+            "rel": "substatus",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/8a9e2903-f09b-f011-814f-00505690ec8c/subStatus/update",
+            "method": "POST",
+            "title": "Update SubStatus"
+        },
+        {
+            "rel": "inactive",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/8a9e2903-f09b-f011-814f-00505690ec8c/set-inactive",
+            "method": "POST",
+            "title": "Set Opportunity Inactive"
+        }
+    ],
+    "source": "TrueCar",
+    "upType": "Internet",
+    "soughtVehicles": [
+        {
+            "id": "8b9e2903-f09b-f011-814f-00505690ec8c",
+            "isNew": true,
+            "yearFrom": 2025,
+            "yearTo": 2025,
+            "make": "Hyundai",
+            "model": "Tucson",
+            "trim": "xrt (a8) 4dr all-wheel drive",
+            "isPrimary": true
+        }
+    ],
+    "salesTeam": [
+        {
+            "id": "09753b1a-7966-ea11-a977-005056b72b57",
+            "firstName": "Rooben",
+            "lastName": "Khachatoorian",
+            "isPrimary": true,
+            "isPositionPrimary": true,
+            "positionName": "Salesperson",
+            "positionCode": "S",
+            "links": []
+        },
+        {
+            "id": "f6061eef-a036-f011-814d-00505690ec8c",
+            "firstName": "Jacqueline",
+            "lastName": "Cruz",
+            "isPrimary": false,
+            "isPositionPrimary": true,
+            "positionName": "BDC Agent",
+            "positionCode": "BDC",
+            "links": []
+        }
+    ],
+    "customer": {
+        "id": "899e2903-f09b-f011-814f-00505690ec8c",
+        "isBusiness": false,
+        "firstName": "Alan",
+        "middleName": "",
+        "lastName": "Frankel",
+        "nickname": "",
+        "emails": [
+            {
+                "address": "Afrankel@socal.rr.com",
+                "emailType": "Personal",
+                "doNotEmail": false,
+                "isPreferred": true
+            }
+        ],
+        "phones": [
+            {
+                "number": "(714) 258-5236",
+                "phoneType": "Home",
+                "preferredTimeToContact": "Day",
+                "onDoNotCallRegistry": false
+            },
+            {
+                "number": "(714) 258-5236",
+                "phoneType": "Cellular",
+                "preferredTimeToContact": "Day",
+                "onDoNotCallRegistry": false
+            }
+        ],
+        "address": {
+            "addressLine1": "2000 main",
+            "city": "Huntington Beach",
+            "state": "CA",
+            "zip": "92646",
+            "country": "US"
+        },
+        "privacySettings": [
+            {
+                "name": "CCPADoNotContact",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotShare",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotSell",
+                "value": "False"
+            }
+        ],
+        "links": [
+            {
+                "rel": "self",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/899e2903-f09b-f011-814f-00505690ec8c",
+                "method": "GET",
+                "title": "Fetch Customer"
+            },
+            {
+                "rel": "create",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers",
+                "method": "POST",
+                "title": "Create Customer"
+            },
+            {
+                "rel": "update",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/899e2903-f09b-f011-814f-00505690ec8c",
+                "method": "POST",
+                "title": "Update Customer"
+            }
+        ]
+    },
+    "tradeIns": null,
+    "createdBy": null,
+    "created_at": "2025-10-18",
+    "updated_at": "2025-10-20",
+    "isActive": true,
+    "completedActivities": [
+        {
+            "activityId": "a9afc700-bdaa-f011-814f-00505690ec8c",
+            "comments": "(No Answer)",
+            "activityName": "BDC Virtual Call #6",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-18T15:09:45Z",
+            "outcome": "Manager Review",
+            "completedBy": "Cruz, J"
+        },
+        {
+            "activityId": "741e51b4-8dab-f011-814f-00505690ec8c",
+            "comments": "<i>Drive Smart Offer: 2025 Tucson SEL!</i>",
+            "activityName": "Send Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-17T18:06:31.777Z",
+            "outcome": "Completed",
+            "completedBy": "Herman, C"
+        },
+        {
+            "activityId": "af7d2cb7-2ca9-f011-814f-00505690ec8c",
+            "comments": "(No Answer)",
+            "activityName": "BDC Virtual Call #5",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-16T16:22:02Z",
+            "outcome": "BDC Virtual Call #6",
+            "completedBy": "Cruz, J"
+        },
+        {
+            "activityId": "ee68f7f9-bcaa-f011-814f-00505690ec8c",
+            "comments": "<i>We truly Care \t</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-16T16:21:48.277Z",
+            "outcome": "Completed",
+            "completedBy": "Cruz, J"
+        },
+        {
+            "activityId": "fd977b37-8b66-ea11-a977-005056b72b57",
+            "comments": "Alan. Did you know Tustin Hyundai  have been a Top Workplace for 20 years? That is because we truly care. How can we assist you in making an informed choice?\n",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-16T16:21:21Z",
+            "outcome": "Completed",
+            "completedBy": "Cruz, J"
+        },
+        {
+            "activityId": "25246d4e-c7a3-f011-814f-00505690ec8c",
+            "comments": "(No Answer)",
+            "activityName": "BDC Virtual Call #4",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-14T16:36:40Z",
+            "outcome": "BDC Virtual Call #5",
+            "completedBy": "Cruz, J"
+        },
+        {
+            "activityId": "f3e826ab-2ca9-f011-814f-00505690ec8c",
+            "comments": "<i>We are waiting for you here at Tustin Hyundai!</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-14T16:36:23.6Z",
+            "outcome": "Completed",
+            "completedBy": "Cruz, J"
+        },
+        {
+            "activityId": "0b2fed38-8b66-ea11-a977-005056b72b57",
+            "comments": "Hello Alan. We are waiting for you here at Tustin Hyundai! Can you stop out tomorrow? Please let me know.\n",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-14T16:36:02Z",
+            "outcome": "Completed",
+            "completedBy": "Cruz, J"
+        },
+        {
+            "activityId": "61284706-25a6-f011-814f-00505690ec8c",
+            "comments": "",
+            "activityName": "Bulk Text",
+            "activityType": 69,
+            "category": "Completed",
+            "completedDate": "2025-10-10T20:14:07.46Z",
+            "outcome": "Completed",
+            "completedBy": "Thompson, M"
+        },
+        {
+            "activityId": "668a1e37-8b66-ea11-a977-005056b72b57",
+            "comments": "Hello Alan! Tustin Hyundai just dropped 0% financing on the 2025 Tucson — 72 months for ICE, 60 for Hybrid. Thought you’d want to know before it ends!\n\nFeel free to give us a call at 714-647-2000 for more info.",
+            "activityName": "Text Message: TextCampaign",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-10T20:14:07Z",
+            "outcome": "Completed",
+            "completedBy": "Thompson, M"
+        },
+        {
+            "activityId": "97f398f3-8ea0-f011-814f-00505690ec8c",
+            "comments": "(No Answer)",
+            "activityName": "BDC Virtual Call #3",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-07T19:48:14Z",
+            "outcome": "BDC Virtual Call #4",
+            "completedBy": "Cruz, J"
+        },
+        {
+            "activityId": "2e895a48-c7a3-f011-814f-00505690ec8c",
+            "comments": "<i>Don't miss out our great offerings!</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-07T19:48:06.09Z",
+            "outcome": "Completed",
+            "completedBy": "Cruz, J"
+        },
+        {
+            "activityId": "0ab83866-8b66-ea11-a977-005056b72b57",
+            "comments": "Alan. I would not want you to miss out on our great offerings here at Tustin Hyundai, including valuing your trade-in even if you don't buy. What's stopping you from booking a visit?\n",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-07T19:47:43Z",
+            "outcome": "Completed",
+            "completedBy": "Cruz, J"
+        },
+        {
+            "activityId": "401cd134-289f-f011-814f-00505690ec8c",
+            "comments": "(No Answer)",
+            "activityName": "BDC Virtual Call #2",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-03T17:27:14Z",
+            "outcome": "BDC Virtual Call #3",
+            "completedBy": "Cruz, J"
+        },
+        {
+            "activityId": "026b99ed-8ea0-f011-814f-00505690ec8c",
+            "comments": "<i>Come check out our lineup!</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-03T17:27:00.863Z",
+            "outcome": "Completed",
+            "completedBy": "Cruz, J"
+        },
+        {
+            "activityId": "b98b3236-8b66-ea11-a977-005056b72b57",
+            "comments": "Alan. Just touching base to see if you thought about when you would like to come check out our lineup here at Tustin Hyundai. Can we lock in a time tomorrow?\n",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-03T17:26:43Z",
+            "outcome": "Completed",
+            "completedBy": "Cruz, J"
+        },
+        {
+            "activityId": "939e2903-f09b-f011-814f-00505690ec8c",
+            "comments": "(No Answer)",
+            "activityName": "BDC Virtual Immediate Call",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-01T22:39:12Z",
+            "outcome": "BDC Virtual Call #2",
+            "completedBy": "Cruz, J"
+        },
+        {
+            "activityId": "9258cd2e-289f-f011-814f-00505690ec8c",
+            "comments": "<i>No Addendums here at Tustin Hyundai</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-01T22:39:00.74Z",
+            "outcome": "Completed",
+            "completedBy": "Cruz, J"
+        },
+        {
+            "activityId": "8f0f2aa2-8c66-ea11-a977-005056b72b57",
+            "comments": "Hi Alan. Here at Tustin Hyundai we stand out with no addendums and value every trade even if you don't buy with us! How about we start by finding the perfect Hyundai for you? When is a good time to visit us?\n",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-01T22:38:38Z",
+            "outcome": "Completed",
+            "completedBy": "Cruz, J"
+        },
+        {
+            "activityId": "4997ba82-899c-f011-814f-00505690ec8c",
+            "comments": "<i>Rooben Khachatoorian - Tustin Hyundai</i>",
+            "activityName": "Email #3",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-09-30T13:52:41Z",
+            "outcome": "Complete",
+            "completedBy": "Khachatoorian, R"
+        },
+        {
+            "activityId": "4be14f66-5a9d-f011-814f-00505690ec8c",
+            "comments": "",
+            "activityName": "Bulk Text",
+            "activityType": 69,
+            "category": "Completed",
+            "completedDate": "2025-09-29T15:36:36.08Z",
+            "outcome": "Completed",
+            "completedBy": "Thompson, M"
+        },
+        {
+            "activityId": "547c4937-8b66-ea11-a977-005056b72b57",
+            "comments": "🚙 Tustin Hyundai Deal Alert\n🚙 Tustin Hyundai Deal Alert!  Don’t miss this 2020 Hyundai Tucson Value — great price & ready now!\n👉 View Details - https://www.elead.us/go/gLHbcMW69UGbUdZGA7JpcA\n\nReply YES to schedule a test drive or call (714) 908-9535",
+            "activityName": "Text Message: TextCampaign",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-09-29T15:36:36Z",
+            "outcome": "Completed",
+            "completedBy": "Thompson, M"
+        },
+        {
+            "activityId": "9aba4b96-f19b-f011-814f-00505690ec8c",
+            "comments": "<i>Rooben Khachatoorian - Tustin Hyundai</i>",
+            "activityName": "Email #2",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-09-28T14:38:07Z",
+            "outcome": "Email #3",
+            "completedBy": "Khachatoorian, R"
+        },
+        {
+            "activityId": "c8f1f832-f29b-f011-814f-00505690ec8c",
+            "callDuration": "01:33",
+            "comments": "business number (Left Message)<br />https://audio.callrevu.com/ob/348632297",
+            "numberDialed": "(714) 258-5236",
+            "activityName": "Outbound Call",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-09-27T20:34:00Z",
+            "outcome": "Completed",
+            "completedBy": "Khachatoorian, R"
+        },
+        {
+            "activityId": "4854ce35-8b66-ea11-a977-005056b72b57",
+            "comments": "Dear Alan,\n My name is Rooben Khachatoorian, internet sales manager here at Tustin Hyundai.\nWe would love to create an opportunity to help you with your request .\nPlease call my cell directly or reply to this text to learn more.\n\nI look forward to assisting you in the process .\n\nRegards\n\nInternet Manager, Tustin Hyundai\nRooben Khachatoorian\n\t \t714-647-2000\n \n\t \t818-322-8015 (feel free to text)\n\t \troobenk@tustinhyundai.com\n\t \twww.tustinhyundai.com\n\t \t16 Auto Center Drive Tustin, CA 92782\n STOP to unsubscribe or HELP for support. Msg freq. varies, msg&data rates may apply.",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-09-27T20:31:40Z",
+            "outcome": "Completed",
+            "completedBy": "Khachatoorian, R"
+        },
+        {
+            "activityId": "8f9e2903-f09b-f011-814f-00505690ec8c",
+            "comments": "",
+            "activityName": "Text #1",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-09-27T20:30:56Z",
+            "outcome": "No Phone",
+            "completedBy": "Khachatoorian, R"
+        },
+        {
+            "activityId": "909e2903-f09b-f011-814f-00505690ec8c",
+            "comments": "<i>Rooben Khachatoorian - Tustin Hyundai</i>",
+            "activityName": "Email #1",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-09-27T20:30:43Z",
+            "outcome": "Email #2",
+            "completedBy": "Khachatoorian, R"
+        },
+        {
+            "activityId": "919e2903-f09b-f011-814f-00505690ec8c",
+            "comments": "",
+            "activityName": "Call #1",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-09-27T20:29:12Z",
+            "outcome": "No Phone",
+            "completedBy": "Khachatoorian, R"
+        },
+        {
+            "activityId": "8e9e2903-f09b-f011-814f-00505690ec8c",
+            "comments": "<i>TrueCar / U.S. News: New Customer Inquiry</i><br />*** DEALER PORTAL ***; https://url.usb.m.mimecastprotect.com/s/it0ZCg7qP6TGQzptNfzt4m9FP?domain=dealerportal.truecar.com; *** PROSPECT COMMENTS ***; Consumer selected; *** SEARCH ZIP ***; Search ZIP is 92649 which is different than the Address ZIP. Search ZIP was 92649, 15 miles from your dealership.; Customer phone number was identified as a landline.",
+            "activityName": "Internet Up",
+            "activityType": 13,
+            "category": "Completed",
+            "completedDate": "2025-09-27T20:19:00Z",
+            "outcome": "Auto Response",
+            "completedBy": "Khachatoorian, R"
+        }
+    ],
+    "scheduledActivities": [],
+    "firstActivity": {
+        "id": "8e9e2903-f09b-f011-814f-00505690ec8c",
+        "activityType": "Internet Up",
+        "category": "Completed",
+        "name": "Internet Up",
+        "completedDate": "2025-09-27T22:19:00Z",
+        "dueDate": "2025-09-28T00:19:00Z",
+        "outcome": "Auto Response",
+        "createdBy": "Khachatoorian, Rooben",
+        "assignedTo": "Khachatoorian, Rooben",
+        "completedBy": "Khachatoorian, Rooben",
+        "opportunityId": "8a9e2903-f09b-f011-814f-00505690ec8c",
+        "upType": "Internet",
+        "source": "TrueCar",
+        "subSource": "US News",
+        "createdByUserId": "09753b1a-7966-ea11-a977-005056b72b57",
+        "assignedToUserId": "09753b1a-7966-ea11-a977-005056b72b57",
+        "completedByUserId": "09753b1a-7966-ea11-a977-005056b72b57",
+        "message": {
+            "date": "2025-09-27T22:19:16Z",
+            "from": "usnews@secureleads.truecarmail.com",
+            "to": "sales@tustinhyundai.edealerhub.com",
+            "subject": "TrueCar / U.S. News: New Customer Inquiry",
+            "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<?ADF version=\"1.0\"?><adf>\r\n  <prospect>\r\n    <id source=\"TrueCar Lead ID\">1142327890</id>\r\n    <requestdate>2025-09-27T15:19:00-07:00</requestdate>\r\n    <vehicle interest=\"buy\" status=\"new\">\r\n      <id source=\"model code\">854C2ABS</id>\r\n      <year>2025</year>\r\n      <make>Hyundai</make>\r\n      <model>Tucson</model>\r\n      <trim>Hybrid Blue AWD</trim>\r\n      <doors>4</doors>\r\n      <bodystyle>SUV</bodystyle>\r\n      <transmission>Automatic</transmission>\r\n      <colorcombination>\r\n        <interiorcolor>Not Specified</interiorcolor>\r\n        <exteriorcolor>No Preference</exteriorcolor>\r\n        <preference>1</preference>\r\n      </colorcombination>\r\n      <price type=\"msrp\">34960.0</price>\r\n      <pricecomments>\r\n        <![CDATA[Total MSRP (with options) = $34,960.00]]>\r\n      </pricecomments>\r\n      <option>\r\n        <optionname>OPTION GROUP 01</optionname>\r\n        <manufacturercode>01-0</manufacturercode>\r\n        <price type=\"msrp\">0.0</price>\r\n      </option>\r\n      <finance>\r\n        <method>finance</method>\r\n        <amount>1.0</amount>\r\n      </finance>\r\n    </vehicle>\r\n    <customer>\r\n      <contact>\r\n        <name part=\"first\">alan</name>\r\n        <name part=\"last\">frankel</name>\r\n        <email preferredcontact=\"0\">Afrankel@socal.rr.com</email>\r\n        <phone preferredcontact=\"0\" time=\"nopreference\" type=\"voice\">(714) 258-5236</phone>\r\n        <address>\r\n          <street line=\"1\">2000 main</street>\r\n          <city>Huntington Beach</city>\r\n          <regioncode>CA</regioncode>\r\n          <postalcode>92646</postalcode>\r\n          <country/>\r\n        </address>\r\n      </contact>\r\n      <comments>\r\n        <![CDATA[*** DEALER PORTAL *** <br /> https://url.usb.m.mimecastprotect.com/s/it0ZCg7qP6TGQzptNfzt4m9FP?domain=dealerportal.truecar.com <br /> *** PROSPECT COMMENTS *** <br /> Consumer selected <br /> *** SEARCH ZIP *** <br /> Search ZIP is 92649 which is different than the Address ZIP. Search ZIP was 92649, 15 miles from your dealership. <br /> Customer phone number was identified as a landline.]]>\r\n      </comments>\r\n    </customer>\r\n    <vendor>\r\n      <id source=\"205:ADF XML Email\"/>\r\n      <id source=\"AdditionalEmails\"></id>\r\n      <id source=\"DealerId\">15642</id>\r\n      <vendorname>Tustin Hyundai</vendorname>\r\n      <contact>\r\n        <name part=\"full\" type=\"individual\"/>\r\n        <email preferredcontact=\"0\">sales@tustinHyundai.edealerhub.com</email>\r\n        <phone preferredcontact=\"0\" time=\"nopreference\" type=\"voice\"/>\r\n        <address>\r\n          <street line=\"1\">16 Auto Center Dr</street>\r\n          <city>Tustin</city>\r\n          <regioncode>CA</regioncode>\r\n          <postalcode>92782</postalcode>\r\n        </address>\r\n      </contact>\r\n    </vendor>\r\n    <provider>\r\n      <name part=\"full\">TrueCar/U.S. News</name>\r\n      <service>New TrueCar/U.S. News Auto Buying Customer Inquiry</service>\r\n      <leadtype>internet</leadtype>\r\n    </provider>\r\n  </prospect>\r\n</adf>"
+        },
+        "links": [],
+        "adfDict": {
+            "adf": {
+                "prospect": {
+                    "id": {
+                        "@attributes": {
+                            "source": "TrueCar Lead ID"
+                        },
+                        "#text": "1142327890"
+                    },
+                    "requestdate": {
+                        "#text": "2025-09-27T15:19:00-07:00"
+                    },
+                    "vehicle": {
+                        "@attributes": {
+                            "interest": "buy",
+                            "status": "new"
+                        },
+                        "id": {
+                            "@attributes": {
+                                "source": "model code"
+                            },
+                            "#text": "854C2ABS"
+                        },
+                        "year": {
+                            "#text": "2025"
+                        },
+                        "make": {
+                            "#text": "Hyundai"
+                        },
+                        "model": {
+                            "#text": "Tucson"
+                        },
+                        "trim": {
+                            "#text": "Hybrid Blue AWD"
+                        },
+                        "doors": {
+                            "#text": "4"
+                        },
+                        "bodystyle": {
+                            "#text": "SUV"
+                        },
+                        "transmission": {
+                            "#text": "Automatic"
+                        },
+                        "colorcombination": {
+                            "interiorcolor": {
+                                "#text": "Not Specified"
+                            },
+                            "exteriorcolor": {
+                                "#text": "No Preference"
+                            },
+                            "preference": {
+                                "#text": "1"
+                            }
+                        },
+                        "price": {
+                            "@attributes": {
+                                "type": "msrp"
+                            },
+                            "#text": "34960.0"
+                        },
+                        "pricecomments": {
+                            "#text": "Total MSRP (with options) = $34,960.00"
+                        },
+                        "option": {
+                            "optionname": {
+                                "#text": "OPTION GROUP 01"
+                            },
+                            "manufacturercode": {
+                                "#text": "01-0"
+                            },
+                            "price": {
+                                "@attributes": {
+                                    "type": "msrp"
+                                },
+                                "#text": "0.0"
+                            }
+                        },
+                        "finance": {
+                            "method": {
+                                "#text": "finance"
+                            },
+                            "amount": {
+                                "#text": "1.0"
+                            }
+                        }
+                    },
+                    "customer": {
+                        "contact": {
+                            "name": [
+                                {
+                                    "@attributes": {
+                                        "part": "first"
+                                    },
+                                    "#text": "alan"
+                                },
+                                {
+                                    "@attributes": {
+                                        "part": "last"
+                                    },
+                                    "#text": "frankel"
+                                }
+                            ],
+                            "email": {
+                                "@attributes": {
+                                    "preferredcontact": "0"
+                                },
+                                "#text": "Afrankel@socal.rr.com"
+                            },
+                            "phone": {
+                                "@attributes": {
+                                    "preferredcontact": "0",
+                                    "time": "nopreference",
+                                    "type": "voice"
+                                },
+                                "#text": "(714) 258-5236"
+                            },
+                            "address": {
+                                "street": {
+                                    "@attributes": {
+                                        "line": "1"
+                                    },
+                                    "#text": "2000 main"
+                                },
+                                "city": {
+                                    "#text": "Huntington Beach"
+                                },
+                                "regioncode": {
+                                    "#text": "CA"
+                                },
+                                "postalcode": {
+                                    "#text": "92646"
+                                },
+                                "country": {}
+                            }
+                        },
+                        "comments": {
+                            "#text": "*** DEALER PORTAL *** <br /> https://url.usb.m.mimecastprotect.com/s/it0ZCg7qP6TGQzptNfzt4m9FP?domain=dealerportal.truecar.com <br /> *** PROSPECT COMMENTS *** <br /> Consumer selected <br /> *** SEARCH ZIP *** <br /> Search ZIP is 92649 which is different than the Address ZIP. Search ZIP was 92649, 15 miles from your dealership. <br /> Customer phone number was identified as a landline."
+                        }
+                    },
+                    "vendor": {
+                        "id": [
+                            {
+                                "@attributes": {
+                                    "source": "205:ADF XML Email"
+                                }
+                            },
+                            {
+                                "@attributes": {
+                                    "source": "AdditionalEmails"
+                                }
+                            },
+                            {
+                                "@attributes": {
+                                    "source": "DealerId"
+                                },
+                                "#text": "15642"
+                            }
+                        ],
+                        "vendorname": {
+                            "#text": "Tustin Hyundai"
+                        },
+                        "contact": {
+                            "name": {
+                                "@attributes": {
+                                    "part": "full",
+                                    "type": "individual"
+                                }
+                            },
+                            "email": {
+                                "@attributes": {
+                                    "preferredcontact": "0"
+                                },
+                                "#text": "sales@tustinHyundai.edealerhub.com"
+                            },
+                            "phone": {
+                                "@attributes": {
+                                    "preferredcontact": "0",
+                                    "time": "nopreference",
+                                    "type": "voice"
+                                }
+                            },
+                            "address": {
+                                "street": {
+                                    "@attributes": {
+                                        "line": "1"
+                                    },
+                                    "#text": "16 Auto Center Dr"
+                                },
+                                "city": {
+                                    "#text": "Tustin"
+                                },
+                                "regioncode": {
+                                    "#text": "CA"
+                                },
+                                "postalcode": {
+                                    "#text": "92782"
+                                }
+                            }
+                        }
+                    },
+                    "provider": {
+                        "name": {
+                            "@attributes": {
+                                "part": "full"
+                            },
+                            "#text": "TrueCar/U.S. News"
+                        },
+                        "service": {
+                            "#text": "New TrueCar/U.S. News Auto Buying Customer Inquiry"
+                        },
+                        "leadtype": {
+                            "#text": "internet"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

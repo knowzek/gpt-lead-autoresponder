@@ -1,0 +1,110 @@
+{
+    "id": "2036c7b6-86a7-f011-814f-00505690ec8c",
+    "customer": {
+        "id": "1e36c7b6-86a7-f011-814f-00505690ec8c",
+        "links": [
+            {
+                "rel": "self",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/1e36c7b6-86a7-f011-814f-00505690ec8c",
+                "method": "GET",
+                "title": "Fetch Customer"
+            }
+        ]
+    },
+    "dateIn": "2025-10-12T16:16:00Z",
+    "source": "Corporate Partnerships",
+    "status": "Active",
+    "subStatus": "New",
+    "upType": "Campaign",
+    "soughtVehicles": [
+        {
+            "id": "2136c7b6-86a7-f011-814f-00505690ec8c",
+            "isNew": true,
+            "yearFrom": 2025,
+            "yearTo": 2025,
+            "make": "Mazda",
+            "model": "MX-5 Miata",
+            "isPrimary": true
+        }
+    ],
+    "salesTeam": [
+        {
+            "id": "b67e5380-34d0-ea11-a97e-005056b72b57",
+            "firstName": "Veronica",
+            "lastName": "Paco",
+            "isPrimary": true,
+            "isPositionPrimary": true,
+            "positionName": "Salesperson",
+            "positionCode": "S",
+            "links": []
+        }
+    ],
+    "links": [
+        {
+            "rel": "create",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities",
+            "method": "POST",
+            "title": "Create Opportunity"
+        },
+        {
+            "rel": "self",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/2036c7b6-86a7-f011-814f-00505690ec8c",
+            "method": "GET",
+            "title": "Get Opportunity"
+        },
+        {
+            "rel": "comment",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/comment",
+            "method": "POST",
+            "title": "Add Comment"
+        },
+        {
+            "rel": "email",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/sendEmail",
+            "method": "POST",
+            "title": "Send Email"
+        },
+        {
+            "rel": "tradein",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/tradein",
+            "method": "POST",
+            "title": "Add Trade-In"
+        },
+        {
+            "rel": "vehiclesought",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/vehicleSought",
+            "method": "POST",
+            "title": "Add Vehicle Sought"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/reassignPrimarySalesperson",
+            "method": "POST",
+            "title": "Reassign Primary Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/2036c7b6-86a7-f011-814f-00505690ec8c/salesteam/add",
+            "method": "POST",
+            "title": "Add Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/2036c7b6-86a7-f011-814f-00505690ec8c/salesteam/remove",
+            "method": "POST",
+            "title": "Remove Salesperson"
+        },
+        {
+            "rel": "substatus",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/2036c7b6-86a7-f011-814f-00505690ec8c/subStatus/update",
+            "method": "POST",
+            "title": "Update SubStatus"
+        },
+        {
+            "rel": "inactive",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/2036c7b6-86a7-f011-814f-00505690ec8c/set-inactive",
+            "method": "POST",
+            "title": "Set Opportunity Inactive"
+        }
+    ]
+}

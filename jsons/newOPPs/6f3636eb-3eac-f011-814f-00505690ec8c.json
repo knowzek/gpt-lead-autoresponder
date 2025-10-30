@@ -1,0 +1,839 @@
+{
+    "_subscription_id": "2c61b27b-b239-4b54-bd34-dfd73aa5a568",
+    "opportunityId": "6f3636eb-3eac-f011-814f-00505690ec8c",
+    "activityId": null,
+    "links": [
+        {
+            "rel": "create",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities",
+            "method": "POST",
+            "title": "Create Opportunity"
+        },
+        {
+            "rel": "self",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/6f3636eb-3eac-f011-814f-00505690ec8c",
+            "method": "GET",
+            "title": "Get Opportunity"
+        },
+        {
+            "rel": "comment",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/comment",
+            "method": "POST",
+            "title": "Add Comment"
+        },
+        {
+            "rel": "email",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/sendEmail",
+            "method": "POST",
+            "title": "Send Email"
+        },
+        {
+            "rel": "tradein",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/tradein",
+            "method": "POST",
+            "title": "Add Trade-In"
+        },
+        {
+            "rel": "vehiclesought",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/vehicleSought",
+            "method": "POST",
+            "title": "Add Vehicle Sought"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/reassignPrimarySalesperson",
+            "method": "POST",
+            "title": "Reassign Primary Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/6f3636eb-3eac-f011-814f-00505690ec8c/salesteam/add",
+            "method": "POST",
+            "title": "Add Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/6f3636eb-3eac-f011-814f-00505690ec8c/salesteam/remove",
+            "method": "POST",
+            "title": "Remove Salesperson"
+        },
+        {
+            "rel": "substatus",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/6f3636eb-3eac-f011-814f-00505690ec8c/subStatus/update",
+            "method": "POST",
+            "title": "Update SubStatus"
+        },
+        {
+            "rel": "inactive",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/6f3636eb-3eac-f011-814f-00505690ec8c/set-inactive",
+            "method": "POST",
+            "title": "Set Opportunity Inactive"
+        }
+    ],
+    "source": "Dealer.com",
+    "upType": "Internet",
+    "soughtVehicles": [
+        {
+            "id": "733636eb-3eac-f011-814f-00505690ec8c",
+            "isNew": true,
+            "yearFrom": 2025,
+            "yearTo": 2025,
+            "make": "Hyundai",
+            "model": "Ioniq 5",
+            "trim": "Limited (A1) 4x2",
+            "vin": "7YAKR4DA2SY034382",
+            "stockNumber": "HH034382",
+            "isPrimary": true
+        }
+    ],
+    "salesTeam": [
+        {
+            "id": "3c9c716f-57bf-ec11-b0c3-00505690dca3",
+            "firstName": "MICHAEL",
+            "lastName": "SHIEH",
+            "isPrimary": true,
+            "isPositionPrimary": true,
+            "positionName": "Salesperson",
+            "positionCode": "S",
+            "links": []
+        }
+    ],
+    "customer": {
+        "id": "971e6423-8066-ea11-a977-005056b72b57",
+        "isBusiness": false,
+        "firstName": "Bob",
+        "middleName": "",
+        "lastName": "Davis",
+        "birthday": "1971-04-19",
+        "emails": [
+            {
+                "address": "bdavis72@gmail.com",
+                "emailType": "Personal",
+                "doNotEmail": false,
+                "isPreferred": true
+            },
+            {
+                "address": "IBP419@MSN.COM",
+                "emailType": "Personal",
+                "doNotEmail": false,
+                "isPreferred": false
+            }
+        ],
+        "phones": [
+            {
+                "number": "(828) 446-5505",
+                "phoneType": "Cellular",
+                "preferredTimeToContact": "Unspecified",
+                "doNotCall": false,
+                "doNotText": true,
+                "preferText": false,
+                "onDoNotCallRegistry": false,
+                "doNotCallAfterDate": "2020-12-29T00:00:00"
+            },
+            {
+                "number": "(909) 388-4067",
+                "phoneType": "Work",
+                "preferredTimeToContact": "Unspecified",
+                "doNotText": true,
+                "preferText": false,
+                "onDoNotCallRegistry": false,
+                "doNotCallAfterDate": "2020-12-29T00:00:00"
+            }
+        ],
+        "address": {
+            "addressLine1": "1 Not Available",
+            "city": "Bakersfield",
+            "state": "CA",
+            "zip": "93307",
+            "country": "US"
+        },
+        "privacySettings": [
+            {
+                "name": "CCPADoNotContact",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotShare",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotSell",
+                "value": "False"
+            }
+        ],
+        "links": [
+            {
+                "rel": "self",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/971e6423-8066-ea11-a977-005056b72b57",
+                "method": "GET",
+                "title": "Fetch Customer"
+            },
+            {
+                "rel": "create",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers",
+                "method": "POST",
+                "title": "Create Customer"
+            },
+            {
+                "rel": "update",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/971e6423-8066-ea11-a977-005056b72b57",
+                "method": "POST",
+                "title": "Update Customer"
+            }
+        ]
+    },
+    "tradeIns": [
+        {
+            "id": "723636eb-3eac-f011-814f-00505690ec8c",
+            "year": 2017,
+            "make": "Subaru",
+            "model": "Outback",
+            "trim": "3.6R Touring 4dr All-wheel Dri",
+            "estimatedMileage": 0
+        }
+    ],
+    "createdBy": null,
+    "created_at": "2025-10-18",
+    "updated_at": "2025-10-20",
+    "isActive": true,
+    "completedActivities": [
+        {
+            "activityId": "04303bc4-50ad-f011-814f-00505690ec8c",
+            "comments": "<i>RE: Re: Re: Your time frame for buying - Tustin Hyundai</i><br />RE: Re: Re: Your time frame for buying - Tustin Hyundai",
+            "activityName": "Send Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-19T23:04:52.833Z",
+            "outcome": "Completed",
+            "completedBy": "SHIEH, M"
+        },
+        {
+            "activityId": "d9652554-47ad-f011-814f-00505690ec8c",
+            "comments": "<i>Re: Re: Your time frame for buying - Tustin Hyundai</i>",
+            "activityName": "Read Email",
+            "activityType": 20,
+            "category": "Completed",
+            "completedDate": "2025-10-19T21:57:20.6Z",
+            "outcome": "Completed",
+            "completedBy": "SHIEH, M"
+        },
+        {
+            "activityId": "b30ef18a-43ad-f011-814f-00505690ec8c",
+            "comments": "<i>RE: Re: Your time frame for buying - Tustin Hyundai</i><br />RE: Re: Your time frame for buying - Tustin Hyundai",
+            "activityName": "Send Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-19T21:30:09.97Z",
+            "outcome": "Completed",
+            "completedBy": "SHIEH, M"
+        },
+        {
+            "activityId": "ace599f0-37ad-f011-814f-00505690ec8c",
+            "comments": "<i>Re: Your time frame for buying - Tustin Hyundai</i>",
+            "activityName": "Read Email",
+            "activityType": 20,
+            "category": "Completed",
+            "completedDate": "2025-10-19T20:07:03.687Z",
+            "outcome": "Completed",
+            "completedBy": "SHIEH, M"
+        },
+        {
+            "activityId": "e3944872-41ac-f011-814f-00505690ec8c",
+            "comments": "<i>Your time frame for buying - Tustin Hyundai</i>",
+            "activityName": "Email #2",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-19T15:47:21.39Z",
+            "outcome": "Email #3",
+            "completedBy": "SHIEH, M"
+        },
+        {
+            "activityId": "783636eb-3eac-f011-814f-00505690ec8c",
+            "comments": "",
+            "activityName": "Text #1",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:50:48Z",
+            "outcome": "No Phone",
+            "completedBy": "SHIEH, M"
+        },
+        {
+            "activityId": "7a3636eb-3eac-f011-814f-00505690ec8c",
+            "callDuration": "01:15",
+            "comments": "https://audio.callrevu.com/ob/357139924",
+            "numberDialed": "(828) 446-5505",
+            "activityName": "Call #1",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:45:06Z",
+            "outcome": "No Phone",
+            "completedBy": "SHIEH, M"
+        },
+        {
+            "activityId": "69022936-8b66-ea11-a977-005056b72b57",
+            "comments": "STOP",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:44:29Z",
+            "outcome": "Completed",
+            "completedBy": "System"
+        },
+        {
+            "activityId": "793636eb-3eac-f011-814f-00505690ec8c",
+            "comments": "<i>MICHAEL SHIEH - Tustin Hyundai</i>",
+            "activityName": "Email #1",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:42:39Z",
+            "outcome": "Email #2",
+            "completedBy": "SHIEH, M"
+        },
+        {
+            "activityId": "d0757437-8b66-ea11-a977-005056b72b57",
+            "comments": "Please let me know how can I assist you on the Ioniq5, there is no blue limited trim available but SEL still available but not many in the market.  I believe I can get you SEL Blue if this trim works for you.  My direct line is 714-866-9268.  Let me know if you have any questions.  ",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:41:06Z",
+            "outcome": "Completed",
+            "completedBy": "SHIEH, M"
+        },
+        {
+            "activityId": "acb67637-8b66-ea11-a977-005056b72b57",
+            "comments": "Hi Bob, This is Michael Shieh with Tustin Hyundai and we just chat on our website for Ioniq5 Blue.  Let's chat here and I will close the website chat. STOP to unsubscribe or HELP for support. Msg freq. varies, msg&data rates may apply.",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:38:28Z",
+            "outcome": "Completed",
+            "completedBy": "SHIEH, M"
+        },
+        {
+            "activityId": "176de795-40ac-f011-814f-00505690ec8c",
+            "comments": "",
+            "activityName": "Outbound Call",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:36:00Z",
+            "outcome": "Completed",
+            "completedBy": "SHIEH, M"
+        },
+        {
+            "activityId": "735d9d08-40ac-f011-814f-00505690ec8c",
+            "comments": "<i>Hyundai Star XML Lead</i><br />[09:15am] Tustin Hyundai: Are there any questions we can answer about our inventory? Please don't hesitate to ask us over chat.[09:15am] Bob Davis: Is there a manufacturers rebate available?[09:15am] Tustin Hyundai: Thank you. May I ask who I have the pleasure of speaking with?[09:15am] Bob Davis: Bob[09:15am] Tustin Hyundai: Let me connect you with a member of our team who can help you further.One moment.[09:15am] Jessica H: Hi, my name is Jessica H. I would be happy to assist you with the current rebates, Bob.[09:15am] Jessica H: INVENTORY SENT - 2025 Hyundai IONIQ 5 Limited [HH034382][09:16am] Bob Davis: Do you include the manufacturers rebates?[09:16am] Jessica H: I would like to have a member of our Sales Team reach out to you to assist with the most current reabates. What phonenumber should they send that to? ou?[09:16am] Bob Davis: Email me at bdavis72@gmail.com[09:17am] Jessica H: May I ask your last name as well?[09:18am] Bob Davis: Davis[09:19am] Jessica H: I will forward your information over right away and a member of our team will be contacting you as soon as they're available. May I be of further assistance?[09:20am] Jessica H: Thank you for contacting us. If you need any additional help, please feel free to reach out. Have a fantastic day![09:23am] Jessica H: Hi, do you want to take over?[09:25am] Jessica H: The customer is interested in 7YAKR4DA2SY034382 current manufacturer's rebates information.--personal info provided.--[09:25am] MichaelShieh: Hi Davis, Thi",
+            "activityName": "Duplicate Lead",
+            "activityType": 40,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:32:31.417Z",
+            "outcome": "Completed",
+            "completedBy": "SHIEH, M"
+        },
+        {
+            "activityId": "463e997d-3fac-f011-814f-00505690ec8c",
+            "comments": "<i>Hyundai Star XML Lead</i><br />Options:  --- Lease or Rental Return:  --- Odometer Accurate:  --- Service Records Available:  --- Lien Holder Location:  --- Title Holder:  --- Body Rating: 0 --- Tire Rating: 0 --- Engine Rating: 0 --- Transmission Rating: 0 --- Glass Rating: 0 --- Interior Rating: 0 --- Exhaust Rating: 0 --- Equipment Comments:  --- New Vehicle Comments:  --- Accident Comments:  --- Damage Comments:  --- Paint Comments:  --- Title Comments:  --- Additional Comments:  ---------- ALT Fuel Tech Reg Fee: $3.00---------- APR: 5.99%---------- Abandoned Vehicle Fee: $0.00---------- Air Quality: $19.00---------- Amount Owed: $0.00---------- Annual Miles: 1---------- Auto Theft DUI Fee: $1.00---------- CHP Fee: $32.00---------- CONTACT_ID_FOR_DEALREFID: 505aceff0a0e087247b1140b2147a07e---------- Comments: Click to see the full shopper's deal: https://shop.dealer.com/sp/shells/main.html?route=shopper-platform-certificate&amp;theme=hyundai.css&amp;dealXgId=qWIziNCN-yUNMiz7M-vXa&amp;sponsor=ddc Device Type: desktopOffer Received:Preferred Method of Communication: email, phone, sms    Marketing Consent: No    Marketing Consent Disclaimer: By checking the box, you consent to Hyundai Motor America and its authorized dealers using automatic telephone dialing systems to call and/or send you periodic SMS (text) marketing messages to the number you have provided. You do not have to consent in order to obtain any of our products or services. Message and data rates may apply.    Vehicle:        Year: 2025     ",
+            "activityName": "Duplicate Lead",
+            "activityType": 40,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:28:42.883Z",
+            "outcome": "Completed",
+            "completedBy": "SHIEH, M"
+        },
+        {
+            "activityId": "773636eb-3eac-f011-814f-00505690ec8c",
+            "comments": "<i>Hyundai Star XML Lead</i><br />Options:  --- Lease or Rental Return:  --- Odometer Accurate:  --- Service Records Available:  --- Lien Holder Location:  --- Title Holder:  --- Body Rating: 0 --- Tire Rating: 0 --- Engine Rating: 0 --- Transmission Rating: 0 --- Glass Rating: 0 --- Interior Rating: 0 --- Exhaust Rating: 0 --- Equipment Comments:  --- New Vehicle Comments:  --- Accident Comments:  --- Damage Comments:  --- Paint Comments:  --- Title Comments:  --- Additional Comments:  ---------- ALT Fuel Tech Reg Fee: $3.00---------- APR: 6.49%---------- Abandoned Vehicle Fee: $0.00---------- Air Quality: $19.00---------- Amount Owed: $0.00---------- Annual Miles: 1---------- Auto Theft DUI Fee: $1.00---------- CHP Fee: $32.00---------- CONTACT_ID_FOR_DEALREFID: 505aceff0a0e087247b1140b2147a07e---------- Comments: Click to see the full shopper's deal: https://shop.dealer.com/sp/shells/main.html?route=shopper-platform-certificate&amp;theme=hyundai.css&amp;dealXgId=qWIziNCN-yUNMiz7M-vXa&amp;sponsor=dealereprocess Device Type: desktopOffer Received:    Marketing Consent: No    Marketing Consent Disclaimer: By checking the box, you consent to Hyundai Motor America and its authorized dealers using automatic telephone dialing systems to call and/or send you periodic SMS (text) marketing messages to the number you have provided. You do not have to consent in order to obtain any of our products or services. Message and data rates may apply.    Vehicle:        Year: 2025        Make: Hyundai        Model: Ioniq 5   ",
+            "activityName": "Internet Up",
+            "activityType": 13,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:24:34.547Z",
+            "outcome": "Auto Response",
+            "completedBy": "SHIEH, M"
+        }
+    ],
+    "scheduledActivities": [
+        {
+            "activityId": "7b3636eb-3eac-f011-814f-00505690ec8c",
+            "comments": "",
+            "dueDate": "2025-10-21T16:24:34.547Z",
+            "activityName": "BDC Virtual Immediate Call",
+            "activityType": 2,
+            "assignedTo": "Cruz, J"
+        },
+        {
+            "activityId": "9e09cca8-13ad-f011-814f-00505690ec8c",
+            "comments": "",
+            "dueDate": "2025-10-23T17:00:00Z",
+            "activityName": "Email #3",
+            "activityType": 3,
+            "assignedTo": "SHIEH, M"
+        }
+    ],
+    "firstActivity": {
+        "id": "773636eb-3eac-f011-814f-00505690ec8c",
+        "activityType": "Internet Up",
+        "category": "Completed",
+        "name": "Internet Up",
+        "completedDate": "2025-10-18T16:24:34.547Z",
+        "dueDate": "2025-10-18T16:25:00Z",
+        "outcome": "Auto Response",
+        "createdBy": "SHIEH, MICHAEL",
+        "assignedTo": "SHIEH, MICHAEL",
+        "completedBy": "SHIEH, MICHAEL",
+        "opportunityId": "6f3636eb-3eac-f011-814f-00505690ec8c",
+        "upType": "Internet",
+        "source": "Dealer.com",
+        "subSource": "DRS TRADE-IN FORM LEAD",
+        "createdByUserId": "3c9c716f-57bf-ec11-b0c3-00505690dca3",
+        "assignedToUserId": "3c9c716f-57bf-ec11-b0c3-00505690dca3",
+        "completedByUserId": "3c9c716f-57bf-ec11-b0c3-00505690dca3",
+        "message": {
+            "date": "2025-10-18T16:24:35Z",
+            "from": "starlead@eleadcrm.com",
+            "to": "starlead@eleadcrm.com",
+            "subject": "Hyundai Star XML Lead",
+            "body": "<ProcessSalesLead languageCode=\"en-US\" releaseID=\"5.2.4\" systemEnvironmentCode=\"Production\" versionID=\"5.0\" xmlns:ccts=\"urn:un:unece:uncefact:documentation:1.1\" xmlns:clm54217=\"http://www.openapplications.org/oagis/9/currencycode/54217:2001\" xmlns:clm5639=\"http://www.openapplications.org/oagis/9/languagecode/5639:1988\" xmlns:clm66411=\"http://www.openapplications.org/oagis/9/unitcode/66411:2001\" xmlns:clmIANAMIMEMediaTypes=\"http://www.openapplications.org/oagis/9/IANAMIMEMediaTypes:2003\" xmlns:nmmacl=\"http://www.nmma.org/CodeLists\" xmlns:oacl=\"http://www.openapplications.org/oagis/9/codelists\" xmlns:oagis=\"http://www.openapplications.org/oagis/9\" xmlns:qdt=\"http://www.openapplications.org/oagis/9/qualifieddatatypes/1.1\" xmlns:scl=\"http://www.starstandard.org/STAR/5/codelists\" xmlns:sqdt=\"http://www.starstandard.org/STAR/5/qualifieddatatypes/1.0\" xmlns:star=\"http://www.starstandard.org/STAR/5\" xmlns:udt=\"http://www.openapplications.org/oagis/9/unqualifieddatatypes/1.1\" xmlns:xfUOMcl=\"http://www.xfront.com/UnitsOfMeasure\"><ApplicationArea><Sender><CreatorNameCode>TG</CreatorNameCode><SenderNameCode>HYU</SenderNameCode></Sender><CreationDateTime>2025-10-18T11:23:37-05:00</CreationDateTime><Destination><DestinationNameCode><![CDATA[EL]]></DestinationNameCode><DealerNumberID>CA325</DealerNumberID></Destination></ApplicationArea><ProcessSalesLeadDataArea><Process /><SalesLead><SalesLeadHeader><DocumentDateTime>2025-10-18T16:23:35Z</DocumentDateTime><DocumentIdentificationGroup><DocumentIdentification><DocumentID>DWC0000104147182</DocumentID></DocumentIdentification></DocumentIdentificationGroup><LeadInterestCode>B</LeadInterestCode><SaleClassCode>New</SaleClassCode><LeadSourceCode><![CDATA[Dealer Website - Accelerate DR - Dealer.com - Deal Events]]></LeadSourceCode><CustomerComments><![CDATA[ Options:  --- Lease or Rental Return:  --- Odometer Accurate:  --- Service Records Available:  --- Lien Holder Location:  --- Title Holder:  --- Body Rating: 0 --- Tire Rating: 0 --- Engine Rating: 0 --- Transmission Rating: 0 --- Glass Rating: 0 --- Interior Rating: 0 --- Exhaust Rating: 0 --- Equipment Comments:  --- New Vehicle Comments:  --- Accident Comments:  --- Damage Comments:  --- Paint Comments:  --- Title Comments:  --- Additional Comments:  \n---------- ALT Fuel Tech Reg Fee: $3.00\n---------- APR: 6.49%\n---------- Abandoned Vehicle Fee: $0.00\n---------- Air Quality: $19.00\n---------- Amount Owed: $0.00\n---------- Annual Miles: 1\n---------- Auto Theft DUI Fee: $1.00\n---------- CHP Fee: $32.00\n---------- CONTACT_ID_FOR_DEALREFID: 505aceff0a0e087247b1140b2147a07e\n---------- Comments: Click to see the full shopper's deal: https://shop.dealer.com/sp/shells/main.html?route=shopper-platform-certificate&amp;theme=hyundai.css&amp;dealXgId=qWIziNCN-yUNMiz7M-vXa&amp;sponsor=dealereprocess \n\nDevice Type: desktop\nOffer Received:\n    Marketing Consent: No\n    Marketing Consent Disclaimer: By checking the box, you consent to Hyundai Motor America and its authorized dealers using automatic telephone dialing systems to call and/or send you periodic SMS (text) marketing messages to the number you have provided. You do not have to consent in order to obtain any of our products or services. Message and data rates may apply.\n\n    Vehicle:\n        Year: 2025\n        Make: Hyundai\n        Model: Ioniq 5\n        Trim: Limited\n        VIN: 7YAKR4DA2SY034382\n    Offer:\n\n            Monthly Pmt: $850\n            MSRP: $56,200\n            ------------------------\n            My Price: $56,200\n            Specials: $3,000\n            Cash Down: $5,620\n            Net Trade-in Value: $9,467\n            Taxes: $4,637\n            DMV Fees: $690\n            ------------------------\n            Total Financed: $43,440\n            ------------------------\n            Cash Down: $5,620\n            Net Trade-in Value: $9,467\n            ------------------------\n            Total Due At Signing\n            ------------------------\n            Term: 60\n            APR: 6.49%\n    Shopper Credit Tier: Very Good\n\n        Trade In:\n            Source: KBB Trade-in\n            Year: 2017\n            Make: Subaru\n            Model: Outback\n            Trim: 3.6R Touring Wagon 4D\n            VIN: 4S4BSETC7H3434816\n            Offer amount: $9,467\n            Amount Owed: $0\n            Net Equity: $9,467\n            Shopper Phone Number: Not available\n            Condition: Used\n            Mileage: 105000\n            Ownership Type: Purchase\n\n\n    ---------- PixAll ID: gmgR3F5rNUL5myClCIioRyff \n\n---------- Currency: USD\n---------- Deal ID: qWIziNCN-yUNMiz7M-vXa\n---------- Dealer ID: 12309\n---------- Down Payment: 5620.00\n---------- Due At Signing: .00\n---------- Fingerprint ID Fee: $2.00\n---------- License Fee: $366.00\n---------- Monthly Payment: 849.74\n---------- Net Trade-in Value: $9,467.00\n---------- Offer type: Finance\n---------- Pixall ID: gmgR3F5rNUL5myClCIioRyff\n---------- Registration Fee: $72.00\n---------- SAFE Fee: $1.00\n---------- Security Deposit: .00\n---------- Shopper ID: bdavis72@gmail.com\n---------- Taxes: 4636.50\n---------- Term: 60\n---------- Transportation Improvement Fee: $194.00\n---------- customers_consent: unchecked\n---------- dealerRefId: 610000000034058279\n---------- deviceType: desktop\n---------- leadTypes: [DEAL, TRADE]\n---------- originatingWebsite: https://www.tustinhyundai.com/auto/2025-hyundai-ioniq-5-limited-tustin-ca/108799129/?cdt_clid=1275312554.1760802760&amp;cdt_ssid=1760802760&amp;cdt_ts=1760803990738&amp;cdt_bid=-19189059&amp;adobe_mc=MCMID%3D70214771953648572430648650515037849619%7CMCORGID%3D3C3BCE0154FA24300A4C98A1%2540AdobeOrg%7CTS%3D1760803998&amp;adobe_mc=MCMID%3D70214771953648572430648650515037849619%7CMCORGID%3D3C3BCE0154FA24300A4C98A1%2540AdobeOrg%7CTS%3D1760804286&amp;_ga=2.158952764.702629347.1760802761-1275312554.1760802760&amp;_gac=1.23461320.1760802862.Cj0KCQjw9czHBhCyARIsAFZlN8QLXslvqiF-kw-X1TMKO5FcWVgp1Dbz56arbSoRbGTjJ0TxwYGXb1oaAnELEALw_wcB\n---------- tradeInSource: KBB Trade-in\n---------- vehicleReferenceId: null\n---------- vehicleReferenceType: OTHER ]]></CustomerComments><CustomerProspect><ProspectParty><SpecifiedPerson><GivenName><![CDATA[ROBERT]]></GivenName><FamilyName><![CDATA[DAVIS]]></FamilyName><TelephoneCommunication><ChannelCode>Telephone</ChannelCode><CompleteNumber><![CDATA[828-4465505]]></CompleteNumber><UsagePreference><PriorityRankingNumeric>0</PriorityRankingNumeric></UsagePreference></TelephoneCommunication><URICommunication><URIID>bdavis72@gmail.com</URIID><ChannelCode>email</ChannelCode><UsagePreference><PriorityRankingNumeric>0</PriorityRankingNumeric></UsagePreference></URICommunication><ContactMethodTypeCode>Home Email</ContactMethodTypeCode><PostalAddress><LineOne><![CDATA[1 Not Available]]></LineOne><CityName>Bakersfield</CityName><CountryID>US</CountryID><Postcode>93312</Postcode><StateOrProvinceCountrySub-DivisionID>CA</StateOrProvinceCountrySub-DivisionID></PostalAddress></SpecifiedPerson></ProspectParty></CustomerProspect><ReceivingDealerParty><PartyID>CA325</PartyID><SpecifiedOrganization><CompanyName><![CDATA[Tustin Hyundai]]></CompanyName><PrimaryContact><TypeCode>Primary Contact</TypeCode><TelephoneCommunication><ChannelCode>telephone</ChannelCode><CompleteNumber><![CDATA[714-6472000]]></CompleteNumber><UseCode>day</UseCode></TelephoneCommunication><PostalAddress><LineOne><![CDATA[16 AUTO CENTER DRIVE]]></LineOne><CityName>TUSTIN</CityName><CountryID>US</CountryID><Postcode>92782</Postcode><StateOrProvinceCountrySub-DivisionID>CA</StateOrProvinceCountrySub-DivisionID></PostalAddress></PrimaryContact></SpecifiedOrganization></ReceivingDealerParty><ProviderParty><SpecifiedOrganization><CompanyName>Dealer.com - DRS</CompanyName><PrimaryContact><TypeCode>Primary Contact</TypeCode><TelephoneCommunication><ChannelCode>telephone</ChannelCode><CompleteNumber><![CDATA[888-8952994]]></CompleteNumber></TelephoneCommunication><URICommunication><URIID><![CDATA[www.dealer.com]]></URIID><ChannelCode>URL</ChannelCode></URICommunication><URICommunication><URIID><![CDATA[support@dealer.com]]></URIID><ChannelCode>email</ChannelCode></URICommunication></PrimaryContact><PostalAddress><LineOne>1 Not Available</LineOne><CityName><![CDATA[Burlington]]></CityName><CountryID>US</CountryID><Postcode><![CDATA[05401]]></Postcode><StateOrProvinceCountrySub-DivisionID><![CDATA[VT]]></StateOrProvinceCountrySub-DivisionID></PostalAddress></SpecifiedOrganization></ProviderParty><Marketing><ProgramIdDescription>PurchaseDescription</ProgramIdDescription><MarketingComment><![CDATA[0-3 months]]></MarketingComment></Marketing><Marketing><ProgramIdDescription>IsCILead</ProgramIdDescription><MarketingComment>true</MarketingComment></Marketing><Marketing><ProgramIdDescription>LeadHandlingInstructions</ProgramIdDescription><MarketingComment><![CDATA[Not Available ]]></MarketingComment></Marketing><Marketing><ProgramIdDescription>NationalDoNotMarket</ProgramIdDescription><MarketingComment>No Communication Restriction</MarketingComment></Marketing><Marketing><ProgramIdDescription>TCPA_Consent</ProgramIdDescription><MarketingComment><![CDATA[No]]></MarketingComment></Marketing><Marketing><ProgramIdDescription>PreferredLanguage</ProgramIdDescription><MarketingComment><![CDATA[English]]></MarketingComment></Marketing><Marketing><ProgramIdDescription>Media Type</ProgramIdDescription><MarketingComment><![CDATA[Web]]></MarketingComment></Marketing><Marketing><ProgramIdDescription>Lead Category</ProgramIdDescription><MarketingComment><![CDATA[Dealer]]></MarketingComment></Marketing><Marketing><ProgramIdDescription>Lead Sub Category</ProgramIdDescription><MarketingComment><![CDATA[Dealer Website]]></MarketingComment></Marketing><Marketing><ProgramIdDescription>Lead Program</ProgramIdDescription><MarketingComment><![CDATA[DRS TRADE-IN FORM LEAD]]></MarketingComment></Marketing><Marketing><ProgramIdDescription>Lead Source</ProgramIdDescription><MarketingComment><![CDATA[Dealer.com - DRS]]></MarketingComment></Marketing><Marketing><ProgramIdDescription>Hyundai Program Code</ProgramIdDescription><MarketingComment><![CDATA[78766]]></MarketingComment></Marketing><Marketing><ProgramIdDescription>Hyundai Program Name</ProgramIdDescription><MarketingComment><![CDATA[DRS TRADE-IN FORM LEAD]]></MarketingComment></Marketing><Marketing><ProgramIdDescription>Campaign ID</ProgramIdDescription><MarketingComment><![CDATA[Accelerate DR - Dealer.com - Deal Events]]></MarketingComment></Marketing><LeadCreationDateTime>2025-10-18T11:23:37-05:00</LeadCreationDateTime></SalesLeadHeader><SalesLeadDetail><LeadStatus>New</LeadStatus><SalesLeadLineItem><SalesLeadVehicleLineItem><PricingABIE><PriceSourceCode>QUOTE</PriceSourceCode><Price><ChargeAmount currencyID=\"USD\"><![CDATA[0.0]]></ChargeAmount><PriceDescription /></Price></PricingABIE><SalesLeadVehicle><Model><![CDATA[IONIQ 5]]></Model><ModelYear>2025</ModelYear><MakeString>Hyundai</MakeString><SaleClassCode>New</SaleClassCode><TrimCode><![CDATA[Limited]]></TrimCode><DoorsQuantityNumeric><![CDATA[4]]></DoorsQuantityNumeric><BodyStyle /><ColorGroup><ColorItemCode>Exterior</ColorItemCode><ColorName><![CDATA[white]]></ColorName></ColorGroup><VehicleID>7YAKR4DA2SY034382</VehicleID></SalesLeadVehicle><CurrentDistanceMeasure unitCode=\"mile\"><![CDATA[23]]></CurrentDistanceMeasure><SalesStockNumberString>HH034382</SalesStockNumberString></SalesLeadVehicleLineItem><SalesLeadVehicleLineItem><SalesLeadVehicle><Model><![CDATA[Outback]]></Model><ModelYear><![CDATA[2017]]></ModelYear><MakeString><![CDATA[Subaru]]></MakeString><SaleClassCode>Trade In</SaleClassCode><VehicleNote /><TrimCode><![CDATA[3.6R Touring Wagon 4D]]></TrimCode><DoorsQuantityNumeric><![CDATA[4]]></DoorsQuantityNumeric><BodyStyle /><ColorGroup><ColorItemCode>Exterior</ColorItemCode><ColorName><![CDATA[white]]></ColorName></ColorGroup><VehicleID><![CDATA[4S4BSETC7H3434816]]></VehicleID></SalesLeadVehicle><CurrentDistanceMeasure unitCode=\"mile\"><![CDATA[0]]></CurrentDistanceMeasure><SalesStockNumberString /></SalesLeadVehicleLineItem></SalesLeadLineItem></SalesLeadDetail></SalesLead></ProcessSalesLeadDataArea></ProcessSalesLead>"
+        },
+        "links": [],
+        "adfDict": {
+            "ProcessSalesLead": {
+                "@attributes": {
+                    "languageCode": "en-US",
+                    "releaseID": "5.2.4",
+                    "systemEnvironmentCode": "Production",
+                    "versionID": "5.0"
+                },
+                "ApplicationArea": {
+                    "Sender": {
+                        "CreatorNameCode": {
+                            "#text": "TG"
+                        },
+                        "SenderNameCode": {
+                            "#text": "HYU"
+                        }
+                    },
+                    "CreationDateTime": {
+                        "#text": "2025-10-18T11:23:37-05:00"
+                    },
+                    "Destination": {
+                        "DestinationNameCode": {
+                            "#text": "EL"
+                        },
+                        "DealerNumberID": {
+                            "#text": "CA325"
+                        }
+                    }
+                },
+                "ProcessSalesLeadDataArea": {
+                    "Process": {},
+                    "SalesLead": {
+                        "SalesLeadHeader": {
+                            "DocumentDateTime": {
+                                "#text": "2025-10-18T16:23:35Z"
+                            },
+                            "DocumentIdentificationGroup": {
+                                "DocumentIdentification": {
+                                    "DocumentID": {
+                                        "#text": "DWC0000104147182"
+                                    }
+                                }
+                            },
+                            "LeadInterestCode": {
+                                "#text": "B"
+                            },
+                            "SaleClassCode": {
+                                "#text": "New"
+                            },
+                            "LeadSourceCode": {
+                                "#text": "Dealer Website - Accelerate DR - Dealer.com - Deal Events"
+                            },
+                            "CustomerComments": {
+                                "#text": "Options:  --- Lease or Rental Return:  --- Odometer Accurate:  --- Service Records Available:  --- Lien Holder Location:  --- Title Holder:  --- Body Rating: 0 --- Tire Rating: 0 --- Engine Rating: 0 --- Transmission Rating: 0 --- Glass Rating: 0 --- Interior Rating: 0 --- Exhaust Rating: 0 --- Equipment Comments:  --- New Vehicle Comments:  --- Accident Comments:  --- Damage Comments:  --- Paint Comments:  --- Title Comments:  --- Additional Comments:  \n---------- ALT Fuel Tech Reg Fee: $3.00\n---------- APR: 6.49%\n---------- Abandoned Vehicle Fee: $0.00\n---------- Air Quality: $19.00\n---------- Amount Owed: $0.00\n---------- Annual Miles: 1\n---------- Auto Theft DUI Fee: $1.00\n---------- CHP Fee: $32.00\n---------- CONTACT_ID_FOR_DEALREFID: 505aceff0a0e087247b1140b2147a07e\n---------- Comments: Click to see the full shopper's deal: https://shop.dealer.com/sp/shells/main.html?route=shopper-platform-certificate&amp;theme=hyundai.css&amp;dealXgId=qWIziNCN-yUNMiz7M-vXa&amp;sponsor=dealereprocess \n\nDevice Type: desktop\nOffer Received:\n    Marketing Consent: No\n    Marketing Consent Disclaimer: By checking the box, you consent to Hyundai Motor America and its authorized dealers using automatic telephone dialing systems to call and/or send you periodic SMS (text) marketing messages to the number you have provided. You do not have to consent in order to obtain any of our products or services. Message and data rates may apply.\n\n    Vehicle:\n        Year: 2025\n        Make: Hyundai\n        Model: Ioniq 5\n        Trim: Limited\n        VIN: 7YAKR4DA2SY034382\n    Offer:\n\n            Monthly Pmt: $850\n            MSRP: $56,200\n            ------------------------\n            My Price: $56,200\n            Specials: $3,000\n            Cash Down: $5,620\n            Net Trade-in Value: $9,467\n            Taxes: $4,637\n            DMV Fees: $690\n            ------------------------\n            Total Financed: $43,440\n            ------------------------\n            Cash Down: $5,620\n            Net Trade-in Value: $9,467\n            ------------------------\n            Total Due At Signing\n            ------------------------\n            Term: 60\n            APR: 6.49%\n    Shopper Credit Tier: Very Good\n\n        Trade In:\n            Source: KBB Trade-in\n            Year: 2017\n            Make: Subaru\n            Model: Outback\n            Trim: 3.6R Touring Wagon 4D\n            VIN: 4S4BSETC7H3434816\n            Offer amount: $9,467\n            Amount Owed: $0\n            Net Equity: $9,467\n            Shopper Phone Number: Not available\n            Condition: Used\n            Mileage: 105000\n            Ownership Type: Purchase\n\n\n    ---------- PixAll ID: gmgR3F5rNUL5myClCIioRyff \n\n---------- Currency: USD\n---------- Deal ID: qWIziNCN-yUNMiz7M-vXa\n---------- Dealer ID: 12309\n---------- Down Payment: 5620.00\n---------- Due At Signing: .00\n---------- Fingerprint ID Fee: $2.00\n---------- License Fee: $366.00\n---------- Monthly Payment: 849.74\n---------- Net Trade-in Value: $9,467.00\n---------- Offer type: Finance\n---------- Pixall ID: gmgR3F5rNUL5myClCIioRyff\n---------- Registration Fee: $72.00\n---------- SAFE Fee: $1.00\n---------- Security Deposit: .00\n---------- Shopper ID: bdavis72@gmail.com\n---------- Taxes: 4636.50\n---------- Term: 60\n---------- Transportation Improvement Fee: $194.00\n---------- customers_consent: unchecked\n---------- dealerRefId: 610000000034058279\n---------- deviceType: desktop\n---------- leadTypes: [DEAL, TRADE]\n---------- originatingWebsite: https://www.tustinhyundai.com/auto/2025-hyundai-ioniq-5-limited-tustin-ca/108799129/?cdt_clid=1275312554.1760802760&amp;cdt_ssid=1760802760&amp;cdt_ts=1760803990738&amp;cdt_bid=-19189059&amp;adobe_mc=MCMID%3D70214771953648572430648650515037849619%7CMCORGID%3D3C3BCE0154FA24300A4C98A1%2540AdobeOrg%7CTS%3D1760803998&amp;adobe_mc=MCMID%3D70214771953648572430648650515037849619%7CMCORGID%3D3C3BCE0154FA24300A4C98A1%2540AdobeOrg%7CTS%3D1760804286&amp;_ga=2.158952764.702629347.1760802761-1275312554.1760802760&amp;_gac=1.23461320.1760802862.Cj0KCQjw9czHBhCyARIsAFZlN8QLXslvqiF-kw-X1TMKO5FcWVgp1Dbz56arbSoRbGTjJ0TxwYGXb1oaAnELEALw_wcB\n---------- tradeInSource: KBB Trade-in\n---------- vehicleReferenceId: null\n---------- vehicleReferenceType: OTHER"
+                            },
+                            "CustomerProspect": {
+                                "ProspectParty": {
+                                    "SpecifiedPerson": {
+                                        "GivenName": {
+                                            "#text": "ROBERT"
+                                        },
+                                        "FamilyName": {
+                                            "#text": "DAVIS"
+                                        },
+                                        "TelephoneCommunication": {
+                                            "ChannelCode": {
+                                                "#text": "Telephone"
+                                            },
+                                            "CompleteNumber": {
+                                                "#text": "828-4465505"
+                                            },
+                                            "UsagePreference": {
+                                                "PriorityRankingNumeric": {
+                                                    "#text": "0"
+                                                }
+                                            }
+                                        },
+                                        "URICommunication": {
+                                            "URIID": {
+                                                "#text": "bdavis72@gmail.com"
+                                            },
+                                            "ChannelCode": {
+                                                "#text": "email"
+                                            },
+                                            "UsagePreference": {
+                                                "PriorityRankingNumeric": {
+                                                    "#text": "0"
+                                                }
+                                            }
+                                        },
+                                        "ContactMethodTypeCode": {
+                                            "#text": "Home Email"
+                                        },
+                                        "PostalAddress": {
+                                            "LineOne": {
+                                                "#text": "1 Not Available"
+                                            },
+                                            "CityName": {
+                                                "#text": "Bakersfield"
+                                            },
+                                            "CountryID": {
+                                                "#text": "US"
+                                            },
+                                            "Postcode": {
+                                                "#text": "93312"
+                                            },
+                                            "StateOrProvinceCountrySub-DivisionID": {
+                                                "#text": "CA"
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "ReceivingDealerParty": {
+                                "PartyID": {
+                                    "#text": "CA325"
+                                },
+                                "SpecifiedOrganization": {
+                                    "CompanyName": {
+                                        "#text": "Tustin Hyundai"
+                                    },
+                                    "PrimaryContact": {
+                                        "TypeCode": {
+                                            "#text": "Primary Contact"
+                                        },
+                                        "TelephoneCommunication": {
+                                            "ChannelCode": {
+                                                "#text": "telephone"
+                                            },
+                                            "CompleteNumber": {
+                                                "#text": "714-6472000"
+                                            },
+                                            "UseCode": {
+                                                "#text": "day"
+                                            }
+                                        },
+                                        "PostalAddress": {
+                                            "LineOne": {
+                                                "#text": "16 AUTO CENTER DRIVE"
+                                            },
+                                            "CityName": {
+                                                "#text": "TUSTIN"
+                                            },
+                                            "CountryID": {
+                                                "#text": "US"
+                                            },
+                                            "Postcode": {
+                                                "#text": "92782"
+                                            },
+                                            "StateOrProvinceCountrySub-DivisionID": {
+                                                "#text": "CA"
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "ProviderParty": {
+                                "SpecifiedOrganization": {
+                                    "CompanyName": {
+                                        "#text": "Dealer.com - DRS"
+                                    },
+                                    "PrimaryContact": {
+                                        "TypeCode": {
+                                            "#text": "Primary Contact"
+                                        },
+                                        "TelephoneCommunication": {
+                                            "ChannelCode": {
+                                                "#text": "telephone"
+                                            },
+                                            "CompleteNumber": {
+                                                "#text": "888-8952994"
+                                            }
+                                        },
+                                        "URICommunication": [
+                                            {
+                                                "URIID": {
+                                                    "#text": "www.dealer.com"
+                                                },
+                                                "ChannelCode": {
+                                                    "#text": "URL"
+                                                }
+                                            },
+                                            {
+                                                "URIID": {
+                                                    "#text": "support@dealer.com"
+                                                },
+                                                "ChannelCode": {
+                                                    "#text": "email"
+                                                }
+                                            }
+                                        ]
+                                    },
+                                    "PostalAddress": {
+                                        "LineOne": {
+                                            "#text": "1 Not Available"
+                                        },
+                                        "CityName": {
+                                            "#text": "Burlington"
+                                        },
+                                        "CountryID": {
+                                            "#text": "US"
+                                        },
+                                        "Postcode": {
+                                            "#text": "05401"
+                                        },
+                                        "StateOrProvinceCountrySub-DivisionID": {
+                                            "#text": "VT"
+                                        }
+                                    }
+                                }
+                            },
+                            "Marketing": [
+                                {
+                                    "ProgramIdDescription": {
+                                        "#text": "PurchaseDescription"
+                                    },
+                                    "MarketingComment": {
+                                        "#text": "0-3 months"
+                                    }
+                                },
+                                {
+                                    "ProgramIdDescription": {
+                                        "#text": "IsCILead"
+                                    },
+                                    "MarketingComment": {
+                                        "#text": "true"
+                                    }
+                                },
+                                {
+                                    "ProgramIdDescription": {
+                                        "#text": "LeadHandlingInstructions"
+                                    },
+                                    "MarketingComment": {
+                                        "#text": "Not Available"
+                                    }
+                                },
+                                {
+                                    "ProgramIdDescription": {
+                                        "#text": "NationalDoNotMarket"
+                                    },
+                                    "MarketingComment": {
+                                        "#text": "No Communication Restriction"
+                                    }
+                                },
+                                {
+                                    "ProgramIdDescription": {
+                                        "#text": "TCPA_Consent"
+                                    },
+                                    "MarketingComment": {
+                                        "#text": "No"
+                                    }
+                                },
+                                {
+                                    "ProgramIdDescription": {
+                                        "#text": "PreferredLanguage"
+                                    },
+                                    "MarketingComment": {
+                                        "#text": "English"
+                                    }
+                                },
+                                {
+                                    "ProgramIdDescription": {
+                                        "#text": "Media Type"
+                                    },
+                                    "MarketingComment": {
+                                        "#text": "Web"
+                                    }
+                                },
+                                {
+                                    "ProgramIdDescription": {
+                                        "#text": "Lead Category"
+                                    },
+                                    "MarketingComment": {
+                                        "#text": "Dealer"
+                                    }
+                                },
+                                {
+                                    "ProgramIdDescription": {
+                                        "#text": "Lead Sub Category"
+                                    },
+                                    "MarketingComment": {
+                                        "#text": "Dealer Website"
+                                    }
+                                },
+                                {
+                                    "ProgramIdDescription": {
+                                        "#text": "Lead Program"
+                                    },
+                                    "MarketingComment": {
+                                        "#text": "DRS TRADE-IN FORM LEAD"
+                                    }
+                                },
+                                {
+                                    "ProgramIdDescription": {
+                                        "#text": "Lead Source"
+                                    },
+                                    "MarketingComment": {
+                                        "#text": "Dealer.com - DRS"
+                                    }
+                                },
+                                {
+                                    "ProgramIdDescription": {
+                                        "#text": "Hyundai Program Code"
+                                    },
+                                    "MarketingComment": {
+                                        "#text": "78766"
+                                    }
+                                },
+                                {
+                                    "ProgramIdDescription": {
+                                        "#text": "Hyundai Program Name"
+                                    },
+                                    "MarketingComment": {
+                                        "#text": "DRS TRADE-IN FORM LEAD"
+                                    }
+                                },
+                                {
+                                    "ProgramIdDescription": {
+                                        "#text": "Campaign ID"
+                                    },
+                                    "MarketingComment": {
+                                        "#text": "Accelerate DR - Dealer.com - Deal Events"
+                                    }
+                                }
+                            ],
+                            "LeadCreationDateTime": {
+                                "#text": "2025-10-18T11:23:37-05:00"
+                            }
+                        },
+                        "SalesLeadDetail": {
+                            "LeadStatus": {
+                                "#text": "New"
+                            },
+                            "SalesLeadLineItem": {
+                                "SalesLeadVehicleLineItem": [
+                                    {
+                                        "PricingABIE": {
+                                            "PriceSourceCode": {
+                                                "#text": "QUOTE"
+                                            },
+                                            "Price": {
+                                                "ChargeAmount": {
+                                                    "@attributes": {
+                                                        "currencyID": "USD"
+                                                    },
+                                                    "#text": "0.0"
+                                                },
+                                                "PriceDescription": {}
+                                            }
+                                        },
+                                        "SalesLeadVehicle": {
+                                            "Model": {
+                                                "#text": "IONIQ 5"
+                                            },
+                                            "ModelYear": {
+                                                "#text": "2025"
+                                            },
+                                            "MakeString": {
+                                                "#text": "Hyundai"
+                                            },
+                                            "SaleClassCode": {
+                                                "#text": "New"
+                                            },
+                                            "TrimCode": {
+                                                "#text": "Limited"
+                                            },
+                                            "DoorsQuantityNumeric": {
+                                                "#text": "4"
+                                            },
+                                            "BodyStyle": {},
+                                            "ColorGroup": {
+                                                "ColorItemCode": {
+                                                    "#text": "Exterior"
+                                                },
+                                                "ColorName": {
+                                                    "#text": "white"
+                                                }
+                                            },
+                                            "VehicleID": {
+                                                "#text": "7YAKR4DA2SY034382"
+                                            }
+                                        },
+                                        "CurrentDistanceMeasure": {
+                                            "@attributes": {
+                                                "unitCode": "mile"
+                                            },
+                                            "#text": "23"
+                                        },
+                                        "SalesStockNumberString": {
+                                            "#text": "HH034382"
+                                        }
+                                    },
+                                    {
+                                        "SalesLeadVehicle": {
+                                            "Model": {
+                                                "#text": "Outback"
+                                            },
+                                            "ModelYear": {
+                                                "#text": "2017"
+                                            },
+                                            "MakeString": {
+                                                "#text": "Subaru"
+                                            },
+                                            "SaleClassCode": {
+                                                "#text": "Trade In"
+                                            },
+                                            "VehicleNote": {},
+                                            "TrimCode": {
+                                                "#text": "3.6R Touring Wagon 4D"
+                                            },
+                                            "DoorsQuantityNumeric": {
+                                                "#text": "4"
+                                            },
+                                            "BodyStyle": {},
+                                            "ColorGroup": {
+                                                "ColorItemCode": {
+                                                    "#text": "Exterior"
+                                                },
+                                                "ColorName": {
+                                                    "#text": "white"
+                                                }
+                                            },
+                                            "VehicleID": {
+                                                "#text": "4S4BSETC7H3434816"
+                                            }
+                                        },
+                                        "CurrentDistanceMeasure": {
+                                            "@attributes": {
+                                                "unitCode": "mile"
+                                            },
+                                            "#text": "0"
+                                        },
+                                        "SalesStockNumberString": {}
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
