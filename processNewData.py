@@ -345,10 +345,35 @@ def processHit(hit):
                 firstActivity['activityId'] = firstActivityFull['activityId']
     
             # Parse the first message into ADF → plain text inquiry
-            firstActivityAdfDict = adf_to_dict(firstActivityMessageBody or "")
+            #firstActivityAdfDict = adf_to_dict(firstActivityMessageBody or "")
+            #opportunity['firstActivityAdfDict'] = firstActivityAdfDict
+            #inquiry_text_body = getInqueryUsingAdf(firstActivityAdfDict) or ""
+            #opportunity['inquiry_text_body'] = inquiry_text_body
+
+            raw_body = (firstActivityMessageBody or "").strip()
+            
+            def _looks_like_adf(s: str) -> bool:
+                s0 = s.lstrip()
+                return s0.startswith("<") and ("<adf" in s0.lower() or "<customer" in s0.lower())
+            
+            inquiry_text_body = ""
+            firstActivityAdfDict = {}
+            
+            if raw_body and _looks_like_adf(raw_body):
+                try:
+                    firstActivityAdfDict = adf_to_dict(raw_body)
+                    inquiry_text_body = getInqueryUsingAdf(firstActivityAdfDict) or ""
+                except Exception:
+                    # Not valid ADF—fallback to plaintext by stripping tags
+                    inquiry_text_body = re.sub(r"<[^>]+>", "", raw_body)
+            else:
+                # Not XML/ADF—use plaintext (strip any HTML tags)
+                inquiry_text_body = re.sub(r"<[^>]+>", "", raw_body)
+            
             opportunity['firstActivityAdfDict'] = firstActivityAdfDict
-            inquiry_text_body = getInqueryUsingAdf(firstActivityAdfDict) or ""
             opportunity['inquiry_text_body'] = inquiry_text_body
+
+
     
             customerFirstMsgDict: dict = getCustomerMsgDict(inquiry_text_body)
             opportunity['customerFirstMsgDict'] = customerFirstMsgDict
