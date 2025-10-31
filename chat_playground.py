@@ -98,15 +98,37 @@ HTML = """
 </form>
 """
 
+def ensure_dir():
+    os.makedirs("jsons/process", exist_ok=True)
+
+def ensure_min_schema(state: dict | None) -> dict:
+    """Make the JSON look like what processNewData.processHit expects."""
+    state = state or {}
+    state.setdefault("messages", [])
+    state.setdefault("completedActivitiesTesting", [])
+    state.setdefault("alreadyProcessedActivities", [])
+    state.setdefault("patti_already_contacted", False)
+    state.setdefault("last_msg_by", None)
+    state.setdefault("followUP_count", 0)
+    state.setdefault("followUP_date", None)
+
+    cd = state.get("checkedDict") or {}
+    cd.setdefault("patti_already_contacted", state.get("patti_already_contacted", False))
+    cd.setdefault("last_msg_by", state.get("last_msg_by"))
+    cd.setdefault("followUP_count", state.get("followUP_count", 0))
+    cd.setdefault("followUP_date", state.get("followUP_date"))
+    cd.setdefault("alreadyProcessedActivities", state.get("alreadyProcessedActivities", []))
+    state["checkedDict"] = cd
+    return state
+
 def safe_process(state):
+    """Run processHit without crashing the web UI; log any error."""
     try:
         return processHit(state), None
     except Exception as e:
         traceback.print_exc(file=sys.stdout)
         return state, str(e)
      
-def ensure_dir():
-    os.makedirs("jsons/process", exist_ok=True)
 
 def norm_msgs(state):
     out = []
@@ -201,23 +223,18 @@ def seed_state(firstName, lastName, email, phone, make, model, year, source, not
 @app.route("/", methods=["GET"])
 def home():
     ensure_dir()
-    if os.path.exists(TEST_PATH):
-        state = rJson(TEST_PATH)
-        msgs = norm_msgs(state)
-    else:
-        state, msgs = {}, []
+    state = rJson(TEST_PATH) if os.path.exists(TEST_PATH) else {}
+    state = ensure_min_schema(state)
+    msgs = norm_msgs(state)
     return render_template_string(HTML, messages=msgs, path=TEST_PATH)
 
 @app.route("/kickoff", methods=["POST"])
 def kickoff():
     ensure_dir()
-    if os.path.exists(TEST_PATH):
-        state = rJson(TEST_PATH)
-    else:
-        state = seed_state("Alex","Rivera","alex@example.com","","Mazda","MX-5 Miata","2025","Website","")
+    state = rJson(TEST_PATH) if os.path.exists(TEST_PATH) else seed_state("Alex","Rivera","alex@example.com","","Mazda","MX-5 Miata","2025","Website","")
+    state = ensure_min_schema(state)
     state, err = safe_process(state)
     wJson(state, TEST_PATH)
-    # simple way to surface errors in the UI without crashing
     return redirect(url_for("home"))
 
 @app.route("/send", methods=["POST"])
@@ -226,11 +243,20 @@ def send():
     text = (request.form.get("text") or "").strip()
     if text:
         state = rJson(TEST_PATH) if os.path.exists(TEST_PATH) else seed_state("Alex","Rivera","alex@example.com","","Mazda","MX-5 Miata","2025","Website","")
-        state = add_customer_activity(state, text)
+        state = ensure_min_schema(state)
+        # append the customer message
+        acts = state.get("completedActivitiesTesting", [])
+        acts.append({
+            "id": f"web-{uuid.uuid4().hex[:8]}",
+            "typeId": 20,
+            "title": "Customer Email",
+            "notes": text,
+            "completedDate": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        })
+        state["completedActivitiesTesting"] = acts
         state, err = safe_process(state)
         wJson(state, TEST_PATH)
     return redirect(url_for("home"))
-
 
 @app.route("/seed", methods=["POST"])
 def seed():
@@ -246,11 +272,12 @@ def seed():
         request.form.get("source"),
         request.form.get("notes"),
     )
+    state = ensure_min_schema(state)
     wJson(state, TEST_PATH)
-    # immediately let Patti respond to that first message
-    state = processHit(state)
+    state, err = safe_process(state)  # immediate first run
     wJson(state, TEST_PATH)
     return redirect(url_for("home"))
+
 
 if __name__ == "__main__":
     # safety defaults
