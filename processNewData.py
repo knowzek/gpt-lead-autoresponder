@@ -47,7 +47,7 @@ def checkActivities(opportunity, currDate, rooftop_name):
         if activityId in alreadyProcessedActivities:
             continue
 
-        if not token and not DEBUGMODE:
+        if not token and not DEBUGMODE and not OFFLINE_MODE:
             token = get_token(subscription_id)
         
         comments = (act.get("comments") or "")
@@ -162,7 +162,7 @@ def checkActivities(opportunity, currDate, rooftop_name):
                 # TODO: fix in which line
                 opportunity['checkedDict']['last_msg_by'] = "patti"
 
-                opportunity['followUP_date'] = currDate
+                opportunity['followUP_date'] = currDate.isoformat()
                 opportunity['followUP_count'] = 0
                 opportunity['alreadyProcessedActivities'][activityId] = fullAct
    
@@ -206,8 +206,6 @@ def processHit(hit):
     # ========= Getting new activites from fortellis =====
 
     # print("opportunityId:", opportunityId)
-
-    token = get_token(subscription_id)
     
     if OFFLINE_MODE:
         local_completed = opportunity.get("completedActivitiesTesting", []) or []
@@ -306,8 +304,8 @@ def processHit(hit):
         vehicle_str = f'<a href="{base_url}?make={make}&model={model}">{vehicle_str}</a>'
 
     
-
-    completedActivities = opportunity.get('completedActivities', [])
+    completedActivities = activities.get('completedActivities', [])
+    # completedActivities = opportunity.get('completedActivities', [])
     # scheduledActivities = opportunity.get('scheduledActivities', [])
 
     patti_already_contacted = checkedDict.get('patti_already_contacted', False)
@@ -316,24 +314,52 @@ def processHit(hit):
 
         firstActivity = getFirstActivity(completedActivities)
         opportunity['firstActivity'] = firstActivity
+    
         if firstActivity:
-            token = get_token(subscription_id)
-            firstActivityFull = get_activity_by_id_v1(firstActivity['activityId'], token, subscription_id)
-            opportunity['firstActivityFull'] = firstActivityFull
-            firstActivityMessageBody = firstActivityFull.get('message', {}).get('body', '')
-            firstActivityAdfDict = adf_to_dict(firstActivityMessageBody)
+            firstActivityFull = None  # define up front for both branches
+    
+            if not OFFLINE_MODE:
+                token = get_token(subscription_id)
+                firstActivityFull = get_activity_by_id_v1(firstActivity['activityId'], token, subscription_id)
+                firstActivityMessageBody = (firstActivityFull.get('message') or {}).get('body', '') or ''
+            else:
+                # OFFLINE: derive a body from newest local activity
+                # Prefer the last completed activity we just built above
+                newest = (completedActivities[-1] if completedActivities else {}) or {}
+                msg = newest.get("message") or {}
+    
+                # Some offline items only have 'notes'
+                firstActivityMessageBody = (msg.get("body") or newest.get("notes") or "").strip()
+    
+                # Create an offline "full" act so the rest of the code can store it
+                import uuid, datetime as _dt
+                firstActivityFull = {
+                    "activityId": newest.get("activityId") or newest.get("id") or f"offline-{uuid.uuid4().hex[:8]}",
+                    "completedDate": newest.get("completedDate") or _dt.datetime.utcnow().isoformat() + "Z",
+                    "message": {"subject": newest.get("subject", ""), "body": firstActivityMessageBody},
+                    "activityType": newest.get("activityType", 20),
+                    "activityName": newest.get("activityName", "Read Email"),
+                }
+    
+                # Keep firstActivity in sync with the id we will store
+                firstActivity['activityId'] = firstActivityFull['activityId']
+    
+            # Parse the first message into ADF → plain text inquiry
+            firstActivityAdfDict = adf_to_dict(firstActivityMessageBody or "")
             opportunity['firstActivityAdfDict'] = firstActivityAdfDict
-            inquiry_text_body = getInqueryUsingAdf(firstActivityAdfDict)
+            inquiry_text_body = getInqueryUsingAdf(firstActivityAdfDict) or ""
             opportunity['inquiry_text_body'] = inquiry_text_body
+    
             customerFirstMsgDict: dict = getCustomerMsgDict(inquiry_text_body)
             opportunity['customerFirstMsgDict'] = customerFirstMsgDict
-            if "alreadyProcessedActivities" in opportunity:
-                opportunity["alreadyProcessedActivities"][firstActivity['activityId']] = firstActivityFull
-            else:
-                opportunity["alreadyProcessedActivities"] = {}
-                opportunity["alreadyProcessedActivities"][firstActivity['activityId']] = firstActivityFull
-            
-
+    
+            # Record this activity as processed (use the same key regardless of mode)
+            act_id = firstActivity.get('activityId') or (firstActivityFull and firstActivityFull.get('activityId'))
+            if act_id:
+                if "alreadyProcessedActivities" not in opportunity:
+                    opportunity["alreadyProcessedActivities"] = {}
+                opportunity["alreadyProcessedActivities"][act_id] = firstActivityFull
+   
 
             try:
                 inquiry_text = customerFirstMsgDict.get('customerMsg', None)
@@ -463,8 +489,8 @@ def processHit(hit):
         # handle follow-ups messages
         checkActivities(opportunity, currDate, rooftop_name)
 
-    followUP_date = opportunity['followUP_date']
-    followUP_date = datetime.fromisoformat(followUP_date)
+    fud = opportunity.get('followUP_date')
+    followUP_date = datetime.fromisoformat(fud) if isinstance(fud, str) else (fud if isinstance(fud, datetime) else currDate)
     followUP_count = opportunity['followUP_count']
 
     if followUP_date <= currDate and followUP_count > 3:
@@ -521,17 +547,13 @@ def processHit(hit):
 
 
 if __name__ == "__main__":
-
-    # data = getNewData()
-    data = getNewDataByDate("2025-10-31")
-
-    for i,hit in enumerate(data):
-        processHit(hit)
-        if i == 0:
-            exit()
-
-    # hit = rJson("jsons/process/d43f2231-1ab5-f011-814f-00505690ec8c.json")
-    # processHit(hit)
+    if not OFFLINE_MODE:
+        data = getNewDataByDate("2025-10-31")
+        for i, hit in enumerate(data):
+            processHit(hit)
+            if i == 0:
+                exit()
+    # playground drives processHit() via Flask; nothing to run here when OFFLINE_MODE=1
     
 
     
