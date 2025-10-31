@@ -103,23 +103,55 @@ def ensure_dir():
 
 def ensure_min_schema(state: dict | None) -> dict:
     """Make the JSON look like what processNewData.processHit expects."""
+    from datetime import datetime
+
     state = state or {}
+
+    # Required identifiers
+    state.setdefault("opportunityId", f"TEST-{uuid.uuid4().hex[:8]}")
+    state.setdefault("_subscription_id", os.environ.get("TEST_SUB_ID", "bb4a4f18-1693-4450-a08e-40d8df30c139"))
+
+    # Core arrays/flags used by processHit
     state.setdefault("messages", [])
     state.setdefault("completedActivitiesTesting", [])
     state.setdefault("alreadyProcessedActivities", [])
     state.setdefault("patti_already_contacted", False)
     state.setdefault("last_msg_by", None)
-    state.setdefault("followUP_count", 0)
-    state.setdefault("followUP_date", None)
 
+    # Normalize followUP_count and followUP_date
+    fu_count = state.get("followUP_count")
+    if not isinstance(fu_count, int):
+        try:
+            fu_count = int(fu_count or 0)
+        except Exception:
+            fu_count = 0
+    state["followUP_count"] = fu_count
+
+    fu_date = state.get("followUP_date")
+    # Accept None or str; if it's a datetime/other, coerce to ISO or clear it
+    if fu_date is None:
+        fu_date_str = None
+    elif isinstance(fu_date, str):
+        fu_date_str = fu_date
+    else:
+        try:
+            # datetime -> ISO
+            fu_date_str = fu_date.isoformat() if hasattr(fu_date, "isoformat") else None
+        except Exception:
+            fu_date_str = None
+    state["followUP_date"] = fu_date_str
+
+    # Mirror into checkedDict (processHit writes here)
     cd = state.get("checkedDict") or {}
-    cd.setdefault("patti_already_contacted", state.get("patti_already_contacted", False))
-    cd.setdefault("last_msg_by", state.get("last_msg_by"))
-    cd.setdefault("followUP_count", state.get("followUP_count", 0))
-    cd.setdefault("followUP_date", state.get("followUP_date"))
-    cd.setdefault("alreadyProcessedActivities", state.get("alreadyProcessedActivities", []))
+    cd.setdefault("patti_already_contacted", state["patti_already_contacted"])
+    cd.setdefault("last_msg_by", state["last_msg_by"])
+    cd.setdefault("followUP_count", state["followUP_count"])
+    cd.setdefault("followUP_date", state["followUP_date"])
+    cd.setdefault("alreadyProcessedActivities", state["alreadyProcessedActivities"])
     state["checkedDict"] = cd
+
     return state
+
 
 def safe_process(state):
     """Run processHit without crashing the web UI; log any error."""
