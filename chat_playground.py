@@ -98,6 +98,25 @@ HTML = """
 </form>
 """
 
+def coalesce_messages(state: dict) -> dict:
+    pool = []
+    for key in ("messages", "conversation", "thread"):
+        arr = state.get(key) or []
+        if isinstance(arr, list):
+            pool.extend(arr)
+    # de-dupe by (id,text/body/content)
+    seen = set()
+    deduped = []
+    for m in pool:
+        t = (m.get("content") or m.get("body") or m.get("text") or "")
+        k = (m.get("id"), t)
+        if k not in seen:
+            seen.add(k)
+            deduped.append(m)
+    state["messages"] = deduped
+    return state
+
+
 def ensure_dir():
     os.makedirs("jsons/process", exist_ok=True)
 
@@ -257,6 +276,15 @@ def home():
     ensure_dir()
     state = rJson(TEST_PATH) if os.path.exists(TEST_PATH) else {}
     state = ensure_min_schema(state)
+    state = coalesce_messages(state)  # ← add
+    # Fallback: if still empty, synthesize a visible customer message from the latest activity
+    if not state["messages"] and state.get("completedActivitiesTesting"):
+        last = state["completedActivitiesTesting"][-1]
+        state["messages"] = [{
+            "id": f"cust-{last.get('id')}",
+            "role": "user",
+            "content": last.get("notes") or "Hi, I’m interested…"
+        }]
     msgs = norm_msgs(state)
     return render_template_string(HTML, messages=msgs, path=TEST_PATH)
 
@@ -266,6 +294,7 @@ def kickoff():
     state = rJson(TEST_PATH) if os.path.exists(TEST_PATH) else seed_state("Alex","Rivera","alex@example.com","","Mazda","MX-5 Miata","2025","Website","")
     state = ensure_min_schema(state)
     state, err = safe_process(state)
+    state = coalesce_messages(state)  # ← add
     wJson(state, TEST_PATH)
     return redirect(url_for("home"))
 
@@ -276,7 +305,6 @@ def send():
     if text:
         state = rJson(TEST_PATH) if os.path.exists(TEST_PATH) else seed_state("Alex","Rivera","alex@example.com","","Mazda","MX-5 Miata","2025","Website","")
         state = ensure_min_schema(state)
-        # append the customer message
         acts = state.get("completedActivitiesTesting", [])
         acts.append({
             "id": f"web-{uuid.uuid4().hex[:8]}",
@@ -287,6 +315,7 @@ def send():
         })
         state["completedActivitiesTesting"] = acts
         state, err = safe_process(state)
+        state = coalesce_messages(state)  # ← add
         wJson(state, TEST_PATH)
     return redirect(url_for("home"))
 
@@ -307,8 +336,10 @@ def seed():
     state = ensure_min_schema(state)
     wJson(state, TEST_PATH)
     state, err = safe_process(state)  # immediate first run
+    state = coalesce_messages(state)  # ← add
     wJson(state, TEST_PATH)
     return redirect(url_for("home"))
+
 
 
 if __name__ == "__main__":
