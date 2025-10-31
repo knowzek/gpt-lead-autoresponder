@@ -405,6 +405,48 @@ def processHit(hit):
             
             # Save this activity under that key
             opportunity["alreadyProcessedActivities"][act_id] = firstActivityFull or firstActivity or {}
+
+            # --- ensure the seeded customer message exists and is visible to the UI ---
+
+            raw_inquiry = (opportunity.get('inquiry_text_body') or "").strip()
+            if not raw_inquiry:
+                raw_inquiry = (
+                    ((firstActivityFull or {}).get('message', {}) or {}).get('subject', '') or
+                    (firstActivityFull or {}).get('notes') or
+                    (firstActivity or {}).get('title') or
+                    "Hi! I'm interested in this vehicle and had a few questions."
+                ).strip()
+            
+            # Find or initialize conversation array
+            conv = (opportunity.get('messages')
+                    or opportunity.get('conversation')
+                    or opportunity.get('thread')
+                    or [])
+            if not isinstance(conv, list):
+                conv = []
+            
+            # Append seed message if missing
+            already = any(
+                isinstance(m, dict) and m.get('role') == 'customer' and m.get('source') == 'seed'
+                for m in conv
+            )
+            if not already:
+                conv.append({
+                    "id": f"cust-{act_id}",
+                    "role": "customer",
+                    "text": raw_inquiry,
+                    "source": "seed",
+                    "createdAt": currDate.isoformat()
+                })
+            
+            # Write back to all likely keys so the UI sees it
+            opportunity['messages'] = conv
+            opportunity['conversation'] = conv
+            opportunity['thread'] = conv
+            
+            # Optional: log for debugging
+            print(f"[SEED] Added seed customer message. len={len(conv)} act_id={act_id}")
+
    
 
             try:
