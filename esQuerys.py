@@ -1,11 +1,14 @@
 from elasticsearch import Elasticsearch
 
+# esClient = Elasticsearch(
+#     "https://my-elasticsearch-project-d64bd4.es.us-central1.gcp.elastic.cloud:443",
+#     api_key="Qm9LbDk1a0JqcG1uUl9iRjVrcUk6VUs2dW82eEZaQkE5OHd3aFZNeUxBUQ==",
+# )
+
 esClient = Elasticsearch(
-    "https://my-elasticsearch-project-d64bd4.es.us-central1.gcp.elastic.cloud:443",
-    api_key="Qm9LbDk1a0JqcG1uUl9iRjVrcUk6VUs2dW82eEZaQkE5OHd3aFZNeUxBUQ==",
+    "https://elastic.amserver.cloud/",
+    basic_auth=("elastic", "9*EhqLIs=pC8dlysUujK")
 )
-
-
 
 def getNewDataByDate(date = "2025-10-30"):
     query = {

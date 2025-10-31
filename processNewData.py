@@ -27,8 +27,8 @@ DEBUGMODE = True
 
 def checkActivities(opportunity, currDate, rooftop_name):
     # TODO: change this later to online one
-    # activities = opportunity.get('completedActivities', [])
-    activities = opportunity.get('completedActivitiesTesting', [])
+    activities = opportunity.get('completedActivities', [])
+    # activities = opportunity.get('completedActivitiesTesting', [])
     activities = sortActivities(activities)
     
     alreadyProcessedActivities =opportunity.get('alreadyProcessedActivities', {})
@@ -55,15 +55,12 @@ def checkActivities(opportunity, currDate, rooftop_name):
         # 1) Our sentinel in any prior comment?
         if PATTI_FIRST_REPLY_SENTINEL in comments:
             checkedDict["patti_already_contacted"] = True
-            break
+            continue
+            # break
 
         if activityName == "Read Email" or activityType == 20:
             if not DEBUGMODE:
                 fullAct = get_activity_by_id_v1(activityId, token, subscription_id)
-                opportunity['checkedDict']['last_msg_by'] = "customer"
-            else:
-                # testing...
-                fullAct = act
                 customerMsg = fullAct.get('message', {})
                 customerMsgDict = {
                     "msgFrom": "customer",
@@ -113,6 +110,58 @@ def checkActivities(opportunity, currDate, rooftop_name):
                 opportunity['followUP_date'] = currDate
                 opportunity['followUP_count'] = 0
                 opportunity['alreadyProcessedActivities'][activityId] = fullAct
+
+            else:
+                # testing...
+                fullAct = act
+                customerMsg = fullAct.get('message', {})
+                customerMsgDict = {
+                    "msgFrom": "customer",
+                    "customerName": customerInfo.get('firstName'),
+                    "subject": customerMsg.get('subject'),
+                    "body": customerMsg.get('body'),
+                    "date": fullAct.get('completedDate')
+                }
+
+                opportunity['messages'].append(customerMsgDict)
+                messages = opportunity['messages']
+
+                prompt = f"""
+                generate next patti reply, here is the current messages between patti and the customer (python list of dicts):
+                {messages}
+                """
+                response = run_gpt(
+                            prompt,
+                            customerInfo.get('firstName'),
+                            rooftop_name,
+                            prevMessages= True)
+
+                subject   = response["subject"]
+                body_html = response["body"]
+
+                body_html = re.sub(
+                    r"(?is)(?:\n\s*)?patti\s*(?:\r?\n)+virtual assistant.*?$",
+                    "",
+                    body_html
+                )
+
+                opportunity['messages'].append(
+                    {
+                        "msgFrom": "patti",
+                        "subject": subject,
+                        "body": body_html,
+                        "date": currDate,
+                        "action": response.get("action"),
+                        "notes": response.get("notes")
+                    }
+                )
+
+                # TODO: fix in which line
+                opportunity['checkedDict']['last_msg_by'] = "patti"
+
+                opportunity['followUP_date'] = currDate
+                opportunity['followUP_count'] = 0
+                opportunity['alreadyProcessedActivities'][activityId] = fullAct
    
 
 
@@ -127,9 +176,13 @@ def processHit(hit):
     inquiry_text = None  # ensure defined
 
     try:
-        opportunity = hit['_source']
+        opportunity : dict = hit['_source']
     except:
-        opportunity = hit
+        opportunity : dict = hit
+
+    if not opportunity.get('isActive', True):
+        print("pass...")
+        return
 
     subscription_id = opportunity['_subscription_id']
     opportunityId = opportunity['opportunityId']
@@ -151,15 +204,16 @@ def processHit(hit):
 
     # print("opportunityId:", opportunityId)
 
-    # token = get_token(subscription_id)
-    # activities = get_activities(opportunityId, customerId, token, subscription_id)
-    # currDate = datetime.now().date()
-    # docToUpdate = {
-    #     "scheduledActivities": activities.get("scheduledActivities", []),
-    #     "completedActivities": activities.get("completedActivities", []),
-    #     "updated_at": currDate
-    # }
-    # esClient.update(index="opportunities", id=opportunityId, doc=docToUpdate)
+    token = get_token(subscription_id)
+    activities = get_activities(opportunityId, customerId, token, subscription_id)
+    currDate = datetime.now()
+    docToUpdate = {
+        "scheduledActivities": activities.get("scheduledActivities", []),
+        "completedActivities": activities.get("completedActivities", []),
+        "updated_at": currDate
+    }
+    opportunity.update(docToUpdate)
+    esClient.update(index="opportunities", id=opportunityId, doc=opportunity)
     # continue
 
     # ====================================================
@@ -274,6 +328,8 @@ def processHit(hit):
             if customerFirstMsgDict.get('salesAlreadyContact', False):
                 opportunity['isActive'] = False
                 opportunity['checkedDict']['is_sales_contacted'] = True
+                esClient.update(index="opportunities", id=opportunityId, doc=opportunity)
+
                 wJson(opportunity, f"jsons/process/{opportunityId}.json")
 
                 return
@@ -384,6 +440,7 @@ def processHit(hit):
         opportunity['checkedDict']['last_msg_by'] = "patti"
         opportunity['followUP_date'] = currDate
         opportunity['followUP_count'] = 0
+        esClient.update(index="opportunities", id=opportunityId, doc=opportunity)
     else:
         # handle follow-ups messages
         checkActivities(opportunity, currDate, rooftop_name)
@@ -394,6 +451,9 @@ def processHit(hit):
 
     if followUP_date <= currDate and followUP_count > 3:
         opportunity['isActive'] = False
+        esClient.update(index="opportunities", id=opportunityId, doc=opportunity)        
+        wJson(opportunity, f"jsons/process/{opportunityId}.json")
+        return
     elif followUP_date <= currDate:
         messages = opportunity['messages']
         prompt = f"""
@@ -431,6 +491,7 @@ def processHit(hit):
 
         opportunity['followUP_date'] = currDate
         opportunity['followUP_count'] += 1
+        esClient.update(index="opportunities", id=opportunityId, doc=opportunity)
 
     
     
@@ -442,15 +503,15 @@ def processHit(hit):
 if __name__ == "__main__":
 
     # data = getNewData()
-    # data = getNewDataByDate()
+    data = getNewDataByDate("2025-10-31")
 
-    # for i,hit in enumerate(data):
-    #     processHit(hit)
-    #     if i == 4:
-    #         exit()
+    for i,hit in enumerate(data):
+        processHit(hit)
+        if i == 0:
+            exit()
 
-    hit = rJson("jsons/process/d43f2231-1ab5-f011-814f-00505690ec8c.json")
-    processHit(hit)
+    # hit = rJson("jsons/process/d43f2231-1ab5-f011-814f-00505690ec8c.json")
+    # processHit(hit)
     
 
     
