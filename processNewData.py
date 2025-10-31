@@ -110,7 +110,7 @@ def checkActivities(opportunity, currDate, rooftop_name):
                 # TODO: fix in which line
                 opportunity['checkedDict']['last_msg_by'] = "patti"
 
-                opportunity['followUP_date'] = currDate
+                opportunity['followUP_date'] = currDate.isoformat()
                 opportunity['followUP_count'] = 0
                 opportunity['alreadyProcessedActivities'][activityId] = fullAct
 
@@ -209,12 +209,17 @@ def processHit(hit):
 
     token = get_token(subscription_id)
     
-    if not OFFLINE_MODE:
-        # live CRM pull
-        activities = get_activities(opportunityId, customerId, token, subscription_id)
+    if OFFLINE_MODE:
+        local_completed = opportunity.get("completedActivitiesTesting", []) or []
+        activities = {"scheduledActivities": [], "completedActivities": local_completed}
     else:
-        # offline: read from our test JSON file
-        activities = opportunity.get("completedActivitiesTesting", [])
+        token = get_token(subscription_id)
+        activities = get_activities(opportunityId, customerId, token, subscription_id)
+
+
+    # Safety: if anything upstream handed us a list, coerce to the dict shape we expect
+    if isinstance(activities, list):
+        activities = {"scheduledActivities": [], "completedActivities": activities}
 
     currDate = datetime.now()
     docToUpdate = {
@@ -223,7 +228,8 @@ def processHit(hit):
         "updated_at": currDate
     }
     opportunity.update(docToUpdate)
-    esClient.update(index="opportunities", id=opportunityId, doc=opportunity)
+    if not OFFLINE_MODE:
+        esClient.update(index="opportunities", id=opportunityId, doc=opportunity)
     # continue
 
     # ====================================================
@@ -338,7 +344,8 @@ def processHit(hit):
             if customerFirstMsgDict.get('salesAlreadyContact', False):
                 opportunity['isActive'] = False
                 opportunity['checkedDict']['is_sales_contacted'] = True
-                esClient.update(index="opportunities", id=opportunityId, doc=opportunity)
+                if not OFFLINE_MODE:
+                    esClient.update(index="opportunities", id=opportunityId, doc=opportunity)
 
                 wJson(opportunity, f"jsons/process/{opportunityId}.json")
 
@@ -448,9 +455,10 @@ def processHit(hit):
         opportunity['checkedDict']['patti_already_contacted'] = True
         # TODO: fix in which line
         opportunity['checkedDict']['last_msg_by'] = "patti"
-        opportunity['followUP_date'] = currDate
+        opportunity['followUP_date'] = currDate.isoformat()
         opportunity['followUP_count'] = 0
-        esClient.update(index="opportunities", id=opportunityId, doc=opportunity)
+        if not OFFLINE_MODE:
+            esClient.update(index="opportunities", id=opportunityId, doc=opportunity)
     else:
         # handle follow-ups messages
         checkActivities(opportunity, currDate, rooftop_name)
@@ -461,7 +469,8 @@ def processHit(hit):
 
     if followUP_date <= currDate and followUP_count > 3:
         opportunity['isActive'] = False
-        esClient.update(index="opportunities", id=opportunityId, doc=opportunity)        
+        if not OFFLINE_MODE:
+            esClient.update(index="opportunities", id=opportunityId, doc=opportunity)      
         wJson(opportunity, f"jsons/process/{opportunityId}.json")
         return
     elif followUP_date <= currDate:
@@ -499,9 +508,10 @@ def processHit(hit):
         # TODO: fix in which line
         opportunity['checkedDict']['last_msg_by'] = "patti"
 
-        opportunity['followUP_date'] = currDate
+        opportunity['followUP_date'] = currDate.isoformat()
         opportunity['followUP_count'] += 1
-        esClient.update(index="opportunities", id=opportunityId, doc=opportunity)
+        if not OFFLINE_MODE:
+            esClient.update(index="opportunities", id=opportunityId, doc=opportunity)
 
     
     
