@@ -18,6 +18,9 @@ from fortellis import get_vehicle_inventory_xml  # we’ll add this helper next
 from inventory_matcher import recommend_from_xml
 
 from datetime import datetime
+import os
+OFFLINE_MODE = os.getenv("OFFLINE_MODE", "1") == "1"   # default ON for playground
+
 
 # TODO:
 # add all actions to crm
@@ -205,7 +208,14 @@ def processHit(hit):
     # print("opportunityId:", opportunityId)
 
     token = get_token(subscription_id)
-    activities = get_activities(opportunityId, customerId, token, subscription_id)
+    
+    if not OFFLINE_MODE:
+        # live CRM pull
+        activities = get_activities(opportunityId, customerId, token, subscription_id)
+    else:
+        # offline: read from our test JSON file
+        activities = opportunity.get("completedActivitiesTesting", [])
+
     currDate = datetime.now()
     docToUpdate = {
         "scheduledActivities": activities.get("scheduledActivities", []),
