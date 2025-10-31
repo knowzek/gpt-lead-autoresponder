@@ -133,39 +133,43 @@ def ensure_min_schema(state: dict | None) -> dict:
     from datetime import datetime
 
     state = state or {}
+    if not isinstance(state, dict):
+        state = {}
 
     # Required identifiers
     state.setdefault("opportunityId", f"TEST-{uuid.uuid4().hex[:8]}")
     state.setdefault("_subscription_id", os.environ.get("TEST_SUB_ID", "bb4a4f18-1693-4450-a08e-40d8df30c139"))
 
     # Core arrays/flags used by processHit
-    state.setdefault("messages", [])
-    state.setdefault("completedActivitiesTesting", [])
-    state.setdefault("alreadyProcessedActivities", [])
+    for k, default in (
+        ("messages", []),
+        ("conversation", []),     # ← add
+        ("thread", []),           # ← add
+        ("completedActivitiesTesting", []),
+        ("alreadyProcessedActivities", []),
+    ):
+        v = state.get(k)
+        state[k] = v if isinstance(v, list) else (list(v) if isinstance(v, tuple) else default)
+
     state.setdefault("patti_already_contacted", False)
     state.setdefault("last_msg_by", None)
 
-    # Normalize followUP_count and followUP_date
+    # Normalize followUP_count (int)
     fu_count = state.get("followUP_count")
-    if not isinstance(fu_count, int):
-        try:
-            fu_count = int(fu_count or 0)
-        except Exception:
-            fu_count = 0
+    try:
+        fu_count = int(fu_count) if fu_count is not None else 0
+    except Exception:
+        fu_count = 0
     state["followUP_count"] = fu_count
 
+    # Normalize followUP_date (str | None)
     fu_date = state.get("followUP_date")
-    # Accept None or str; if it's a datetime/other, coerce to ISO or clear it
     if fu_date is None:
         fu_date_str = None
     elif isinstance(fu_date, str):
         fu_date_str = fu_date
     else:
-        try:
-            # datetime -> ISO
-            fu_date_str = fu_date.isoformat() if hasattr(fu_date, "isoformat") else None
-        except Exception:
-            fu_date_str = None
+        fu_date_str = fu_date.isoformat() if hasattr(fu_date, "isoformat") else None
     state["followUP_date"] = fu_date_str
 
     # Mirror into checkedDict (processHit writes here)
@@ -177,7 +181,31 @@ def ensure_min_schema(state: dict | None) -> dict:
     cd.setdefault("alreadyProcessedActivities", state["alreadyProcessedActivities"])
     state["checkedDict"] = cd
 
+    # --- NEW: coalesce/align message arrays for the UI ---
+    pool = []
+    for key in ("messages", "conversation", "thread"):
+        arr = state.get(key) or []
+        if isinstance(arr, list):
+            pool.extend(arr)
+
+    # de-dupe by (id, text/body/content)
+    seen, deduped = set(), []
+    for m in pool:
+        if not isinstance(m, dict):
+            continue
+        t = (m.get("content") or m.get("body") or m.get("text") or "")
+        k = (m.get("id"), t)
+        if k not in seen:
+            seen.add(k)
+            deduped.append(m)
+
+    state["messages"] = deduped
+    state["conversation"] = deduped
+    state["thread"] = deduped
+    # --- end NEW ---
+
     return state
+
 
 
 def safe_process(state):
