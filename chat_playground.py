@@ -98,23 +98,31 @@ HTML = """
 </form>
 """
 
-def coalesce_messages(state: dict) -> dict:
+def coalesce_messages(state: dict | None) -> dict:
+    # Be defensive: accept None or non-dict and normalize
+    if not isinstance(state, dict):
+        state = {}
     pool = []
     for key in ("messages", "conversation", "thread"):
         arr = state.get(key) or []
         if isinstance(arr, list):
             pool.extend(arr)
-    # de-dupe by (id,text/body/content)
+
+    # de-dupe by (id, text/body/content)
     seen = set()
     deduped = []
     for m in pool:
+        if not isinstance(m, dict):
+            continue
         t = (m.get("content") or m.get("body") or m.get("text") or "")
         k = (m.get("id"), t)
         if k not in seen:
             seen.add(k)
             deduped.append(m)
+
     state["messages"] = deduped
     return state
+
 
 
 def ensure_dir():
@@ -335,10 +343,21 @@ def seed():
     )
     state = ensure_min_schema(state)
     wJson(state, TEST_PATH)
-    state, err = safe_process(state)  # immediate first run
-    state = coalesce_messages(state)  # ← add
-    wJson(state, TEST_PATH)
+
+    # Run your processing
+    processed, err = safe_process(state)
+    # If the processor returned None, try to recover from the file it likely wrote
+    if not isinstance(processed, dict) or processed is None:
+        try:
+            processed = rJson(TEST_PATH)
+        except Exception:
+            processed = {}
+
+    processed = ensure_min_schema(processed)
+    processed = coalesce_messages(processed)
+    wJson(processed, TEST_PATH)
     return redirect(url_for("home"))
+
 
 
 
