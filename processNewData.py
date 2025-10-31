@@ -13,6 +13,8 @@ from constants import *
 from gpt import run_gpt, getCustomerMsgDict
 import re
 
+from uuid import uuid4
+
 from fortellis import get_activities, get_token, get_activity_by_id_v1
 from fortellis import get_vehicle_inventory_xml  # we’ll add this helper next
 from inventory_matcher import recommend_from_xml
@@ -377,13 +379,32 @@ def processHit(hit):
     
             customerFirstMsgDict: dict = getCustomerMsgDict(inquiry_text_body)
             opportunity['customerFirstMsgDict'] = customerFirstMsgDict
-    
-            # Record this activity as processed (use the same key regardless of mode)
-            act_id = firstActivity.get('activityId') or (firstActivityFull and firstActivityFull.get('activityId'))
-            if act_id:
-                if "alreadyProcessedActivities" not in opportunity:
-                    opportunity["alreadyProcessedActivities"] = {}
-                opportunity["alreadyProcessedActivities"][act_id] = firstActivityFull
+
+            
+            # Record this activity as processed (safe handling for list/dict types)
+            apa = opportunity.get("alreadyProcessedActivities")
+            if isinstance(apa, list):
+                # Convert list of activities to dict keyed by activityId/id/index
+                apa = {
+                    str((a or {}).get("activityId") or (a or {}).get("id") or i): (a or {})
+                    for i, a in enumerate(apa)
+                    if isinstance(a, dict)
+                }
+            elif not isinstance(apa, dict) or apa is None:
+                apa = {}
+            opportunity["alreadyProcessedActivities"] = apa
+            
+            # Build a reliable key for this activity
+            act_id = str(
+                (firstActivity or {}).get("activityId")
+                or (firstActivityFull or {}).get("activityId")
+                or (firstActivity or {}).get("id")
+                or (firstActivityFull or {}).get("id")
+                or f"unknown-{uuid4().hex}"
+            )
+            
+            # Save this activity under that key
+            opportunity["alreadyProcessedActivities"][act_id] = firstActivityFull or firstActivity or {}
    
 
             try:
