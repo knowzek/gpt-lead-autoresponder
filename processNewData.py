@@ -27,8 +27,8 @@ DEBUGMODE = True
 
 def checkActivities(opportunity, currDate, rooftop_name):
     # TODO: change this later to online one
-    activities = opportunity.get('completedActivities', [])
-    # activities = opportunity.get('completedActivitiesTesting', [])
+    # activities = opportunity.get('completedActivities', [])
+    activities = opportunity.get('completedActivitiesTesting', [])
     activities = sortActivities(activities)
     
     alreadyProcessedActivities =opportunity.get('alreadyProcessedActivities', {})
