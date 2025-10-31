@@ -4,4 +4,4 @@ python-dotenv
 gspread
 google-auth
 imapclient
-
+elasticsearch>=8.0.0
