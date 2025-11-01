@@ -7,6 +7,8 @@ from helpers import (
     get_names_in_dir,
     sortActivities
 )
+from kbb_ico import process_kbb_ico_lead  # ADD
+
 from esQuerys import getNewData, esClient, getNewDataByDate
 from rooftops import get_rooftop_info
 from constants import *
@@ -29,6 +31,19 @@ OFFLINE_MODE = os.getenv("OFFLINE_MODE", "1") == "1"   # default ON for playgrou
 
 already_processed = get_names_in_dir("jsons/process")
 DEBUGMODE = os.getenv("DEBUGMODE", "1") == "1"
+
+def _is_assigned_to_kristin(doc: dict) -> bool:
+    sales = (doc.get("salesTeam") or [])
+    for m in sales:
+        fn = (m.get("firstName") or "").strip().lower()
+        ln = (m.get("lastName") or "").strip().lower()
+        em = (m.get("email") or "").strip().lower()
+        if (fn == "kristin" and ln == "nowzek") or em in {
+            "knowzek@pattersonautos.com", "knowzek@gmail.com"
+        }:
+            return True
+    return False
+
 
 def checkActivities(opportunity, currDate, rooftop_name):
     # TODO: change this later to online one
@@ -112,9 +127,6 @@ def checkActivities(opportunity, currDate, rooftop_name):
             opportunity['followUP_date'] = currDate.isoformat()
             opportunity['followUP_count'] = 0
             opportunity['alreadyProcessedActivities'][activityId] = fullAct
-
-   
-
 
 
 
@@ -228,6 +240,53 @@ def processHit(hit):
         or DEALERSHIP_MAP.get(sub_source)
         or rooftop_name
     )
+
+        # === Persona routing: treat Kristin's opps as KBB ICO =======================
+    # TEMP test gate: only flip to KBB mode for opps assigned to Kristin
+    if _is_assigned_to_kristin(opportunity):
+        # Lead age (7-day window logic can use this inside kbb_ico)
+        from datetime import datetime, timezone
+        lead_age_days = 0
+        created_raw = (
+            opportunity.get("createdDate")
+            or opportunity.get("created_at")               # ES-stamped when ingested
+            or (opportunity.get("firstActivity", {}) or {}).get("completedDate")
+        )
+        try:
+            if created_raw:
+                created_dt = datetime.fromisoformat(str(created_raw).replace("Z", "+00:00"))
+                lead_age_days = (datetime.now(timezone.utc) - created_dt).days
+        except Exception:
+            pass
+
+        # For logs/visibility
+        src_join = f"{source} {sub_source}".strip().lower()
+        log.info("Persona route: mode=%s lead_age_days=%s src=%s",
+                 "kbb_ico", lead_age_days, (src_join[:120] if src_join else "<none>"))
+
+        # Try to surface any inquiry text we may already have; safe default to ""
+        inquiry_text_safe = (opportunity.get("inquiry_text_body") or "").strip()
+
+        # Hand off to the KBB ICO flow (templates + stop-on-reply convo)
+        try:
+            process_kbb_ico_lead(
+                opportunity=opportunity,
+                lead_age_days=lead_age_days,
+                rooftop_name=rooftop_name,
+                inquiry_text=inquiry_text_safe,
+                token=None,  # let the helper fetch its own if needed
+                subscription_id=subscription_id,
+                SAFE_MODE=os.getenv("SAFE_MODE", "1") in ("1","true","True"),
+            )
+        except Exception as e:
+            log.error("KBB ICO handler failed for opp %s: %s", opportunityId, e)
+
+        # Persist any updates (messages/state) and exit this hit
+        if not OFFLINE_MODE:
+            esClient.update(index="opportunities", id=opportunityId, doc=opportunity)
+        wJson(opportunity, f"jsons/process/{opportunityId}.json")
+        return
+    # ===========================================================================
 
 
 
