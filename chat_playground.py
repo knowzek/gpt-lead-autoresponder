@@ -4,6 +4,7 @@ from helpers import rJson, wJson
 from processNewData import processHit
 import traceback, sys
 from datetime import datetime
+from uuid import uuid4
 
 
 app = Flask(__name__)
