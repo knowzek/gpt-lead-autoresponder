@@ -3,6 +3,8 @@ from flask import Flask, request, redirect, url_for, render_template_string
 from helpers import rJson, wJson
 from processNewData import processHit
 import traceback, sys
+from datetime import datetime
+
 
 app = Flask(__name__)
 TEST_PATH = os.environ.get("TEST_HIT_PATH", "jsons/process/TEST-LEAD.json")
