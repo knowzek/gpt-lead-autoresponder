@@ -358,33 +358,62 @@ def send():
 @app.route("/seed", methods=["POST"])
 def seed():
     ensure_dir()
-    state = seed_state(
-        request.form.get("firstName"),
-        request.form.get("lastName"),
-        request.form.get("email"),
-        request.form.get("phone"),
-        request.form.get("make"),
-        request.form.get("model"),
-        request.form.get("year"),
-        request.form.get("source"),
-        request.form.get("notes"),
-    )
+    # 1) Build baseline state from form
+    first = request.form.get("firstName")
+    last  = request.form.get("lastName")
+    email = request.form.get("email")
+    phone = request.form.get("phone")
+    make  = request.form.get("make")
+    model = request.form.get("model")
+    year  = request.form.get("year")
+    source= request.form.get("source")
+    notes = (request.form.get("notes") or "").strip()  # first customer message
+
+    state = seed_state(first, last, email, phone, make, model, year, source, notes)
     state = ensure_min_schema(state)
+
+    # 2) Seed a synthetic *customer activity* so processHit will respond
+    #    (processHit triggers on activityType==20 or activityName=="Read Email")
+    act_id = f"lead-{uuid.uuid4().hex[:8]}"
+    synthetic_activity = {
+        "activityId": act_id,
+        "activityType": 20,               # ← Customer Email
+        "activityName": "Read Email",
+        "completedDate": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "comments": "",                   # no sentinel -> allows first reply
+        "message": {
+            "subject": f"New inquiry about {year} {make} {model}".strip(),
+            "body": notes or "Hi! I'm interested and have a few questions."
+        }
+    }
+    acts = state.get("completedActivitiesTesting", [])
+    acts.append(synthetic_activity)
+    state["completedActivitiesTesting"] = acts
+
+    # Make sure flags don’t block the first reply
+    state["patti_already_contacted"] = False
+    state["checkedDict"] = state.get("checkedDict") or {}
+    state["checkedDict"]["patti_already_contacted"] = False
+    state["checkedDict"]["last_msg_by"] = "customer"
+
     wJson(state, TEST_PATH)
 
-    # Run your processing
+    # 3) Run your processor
     processed, err = safe_process(state)
-    # If the processor returned None, try to recover from the file it likely wrote
+
+    # 4) Defensive recovery if processor returned None/invalid
     if not isinstance(processed, dict) or processed is None:
         try:
             processed = rJson(TEST_PATH)
         except Exception:
             processed = {}
 
+    # 5) Normalize & persist
     processed = ensure_min_schema(processed)
-    processed = coalesce_messages(processed)
     wJson(processed, TEST_PATH)
+
     return redirect(url_for("home"))
+
 
 
 
