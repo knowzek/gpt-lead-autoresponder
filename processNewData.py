@@ -16,7 +16,7 @@ import re
 from uuid import uuid4
 
 from fortellis import get_activities, get_token, get_activity_by_id_v1
-from fortellis import get_vehicle_inventory_xml  # we’ll add this helper next
+#from fortellis import get_vehicle_inventory_xml  # we’ll add this helper next
 from inventory_matcher import recommend_from_xml
 
 from datetime import datetime, timedelta
