@@ -97,6 +97,28 @@ HTML = """
   </div>
 </form>
 """
+
+def _playground_force_assistant_reply(state: dict, text: str) -> dict:
+    msgs = state.get("messages") or []
+    if not isinstance(msgs, list):
+        msgs = []
+    msgs.append({
+        "role": "assistant",
+        "content": text,
+        "msgFrom": "patti",
+        "subject": "Re: your inquiry",
+        "body": text,
+        "date": datetime.utcnow().isoformat() + "Z",
+    })
+    state["messages"] = msgs
+    state["conversation"] = msgs
+    state["thread"] = msgs
+    cd = state.get("checkedDict") or {}
+    cd["patti_already_contacted"] = True
+    cd["last_msg_by"] = "patti"
+    state["checkedDict"] = cd
+    return state
+
 def playground_inject_patti_reply(state: dict) -> dict:
     """Playground-only: if there is a new user message and no assistant reply yet, call GPT and append one."""
     try:
@@ -498,7 +520,13 @@ def seed():
     
     # 5) Normalize, inject reply (playground only), and persist
     processed = ensure_min_schema(processed)
-    processed = playground_inject_patti_reply(processed)  # OFFLINE_MODE=1 guard inside
+ 
+    # TEMP: force a visible reply to confirm rendering works
+    processed = _playground_force_assistant_reply(processed, "(playground) Thanks for reaching out — yes, I can help!")
+    wJson(processed, TEST_PATH)
+    return redirect(url_for("home"))
+
+    #processed = playground_inject_patti_reply(processed)  # OFFLINE_MODE=1 guard inside
     wJson(processed, TEST_PATH)
     
     return redirect(url_for("home"))
