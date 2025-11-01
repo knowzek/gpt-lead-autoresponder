@@ -127,39 +127,82 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     if expired and lead_age_days < 8:
         effective_day = 8  # or 9 based on your PDF plan
 
+    # Compute plan for this day
     plan = events_for_day(effective_day)
     if not plan:  # nothing to send today
         return
-
-    # Render template
-    html = TEMPLATES[plan["email_template_day"]]
+    
+    # --- Load template safely -------------------------------------------------
+    tpl_key = plan.get("email_template_day")  # e.g., 0 / 1 / 2 (match your TEMPLATES keys)
+    html = TEMPLATES.get(tpl_key)
+    if not html:
+        log.warning("KBB ICO: missing template for day key=%r", tpl_key)
+        return
+    
+    # --- Rooftop address ------------------------------------------------------
     from rooftops import ROOFTOP_INFO
-    rooftop_addr = (ROOFTOP_INFO.get(rooftop_name, {}) or {}).get("address", "")
+    rooftop_addr = ((ROOFTOP_INFO.get(rooftop_name, {}) or {}).get("address") or "")
+    
+    # --- Salesperson (primary) ------------------------------------------------
+    sales_team = (opportunity.get("salesTeam") or [])
+    sp = next((m for m in sales_team if m.get("isPrimary")), (sales_team[0] if sales_team else {}))
+    salesperson_name  = " ".join(filter(None, [sp.get("firstName", ""), sp.get("lastName", "")])).strip()
+    salesperson_phone = (sp.get("phone") or sp.get("mobile") or "")
+    salesperson_email = (sp.get("email") or "")
+    
+    # --- Customer basics ------------------------------------------------------
+    cust = (opportunity.get("customer") or {})
+    cust_first = (cust.get("firstName") or opportunity.get("customer_first") or "there")
+    
+    # --- Trade info (first trade only) ---------------------------------------
+    ti = (opportunity.get("tradeIns") or [{}])[0] if (opportunity.get("tradeIns") or []) else {}
+    trade_year  = str(ti.get("year") or "")
+    trade_make  = str(ti.get("make") or "")
+    trade_model = str(ti.get("model") or "")
+    
+    # --- Merge fields for template -------------------------------------------
     ctx = {
         "DealershipName": rooftop_name,
-        "SalesPersonName": "",
-        "SalespersonPhone": "",
-        "SalespersonEmailAddress": "",
-        "CustFirstName": (opportunity.get("customer",{}) or {}).get("firstName") or "there",
-        "TradeYear": str((opportunity.get("tradeIns") or [{}])[0].get("year","")),
-        "TradeModel": (opportunity.get("tradeIns") or [{}])[0].get("model",""),
+        "SalesPersonName": salesperson_name,
+        "SalespersonPhone": salesperson_phone,
+        "SalespersonEmailAddress": salesperson_email,
+        "CustFirstName": cust_first,
+        "TradeYear": trade_year,
+        "TradeMake": trade_make,
+        "TradeModel": trade_model,
         "DealershipAddress": rooftop_addr,
     }
     body_html = fill_merge_fields(html, ctx)
-    subject = plan["subject"]
-
-    # Log + send
-    add_opportunity_comment(token, subscription_id, opp_id, f"KBB ICO Day {effective_day}: queued email.")
-    recipients = [ (opportunity.get("customer",{}) or {}).get("emailAddress") ]
-    if SAFE_MODE: recipients = [TEST_TO]
+    
+    # --- Subject --------------------------------------------------------------
+    subject = plan.get("subject") or f"{rooftop_name} — Your Instant Cash Offer"
+    
+    # --- Recipient resolution (SAFE_MODE honored) -----------------------------
+    # Prefer customer.emails[] primary/preferred; fallback to single emailAddress if present
+    email_addr = ""
+    emails = cust.get("emails") or []
+    if emails:
+        prim = next((e for e in emails if e.get("isPrimary") or e.get("isPreferred")), None)
+        email_addr = (prim or emails[0]).get("address") or ""
+    if not email_addr:
+        email_addr = cust.get("emailAddress") or ""
+    
+    recipients = [email_addr] if (email_addr and not SAFE_MODE) else [TEST_TO]
+    
+    # --- Log + send -----------------------------------------------------------
+    add_opportunity_comment(
+        token, subscription_id, opp_id,
+        f"KBB ICO Day {effective_day}: sending template {tpl_key} to "
+        f"{('TEST_TO' if SAFE_MODE else email_addr)}."
+    )
     send_opportunity_email_activity(
         token, subscription_id, opp_id,
-        sender=None, recipients=recipients, carbon_copies=[],
+        sender=rooftop_sender,  # if you have this resolved earlier; else None
+        recipients=recipients, carbon_copies=[],
         subject=subject, body_html=body_html, rooftop_name=rooftop_name
     )
-
-
-    # Phone/Text tasks (TCPA guard)
+    
+    # --- Phone/Text tasks (TCPA guard) ---------------------------------------
     if ALLOW_TEXTING and plan.get("create_text_task", False) and _customer_has_text_consent(opportunity):
         schedule_activity(
             token, subscription_id, opp_id,
@@ -167,6 +210,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             activity_name="KBB ICO: Text Task", activity_type=15,
             comments=f"Auto-scheduled per ICO Day {effective_day}."
         )
+    
     if plan.get("create_phone_task", True):
         schedule_activity(
             token, subscription_id, opp_id,
@@ -174,6 +218,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             activity_name="KBB ICO: Phone Task", activity_type=14,
             comments=f"Auto-scheduled per ICO Day {effective_day}."
         )
+
 
 def _customer_has_text_consent(opportunity) -> bool:
     # TODO: look at your CRM/TCPA field once available
