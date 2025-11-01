@@ -64,109 +64,55 @@ def checkActivities(opportunity, currDate, rooftop_name):
             # break
 
         if activityName.lower() == "read email" or activityType == 20:
-            fullAct = act
-            if not DEBUGMODE and not OFFLINE_MODE:
-                fullAct = get_activity_by_id_v1(activityId, token, subscription_id)
-            customerMsg = (fullAct.get('message') or {})
-            customerMsgDict = {
-                "msgFrom": "customer",
-                "customerName": customerInfo.get('firstName'),
-                "subject": customerMsg.get('subject'),
-                "body": customerMsg.get('body'),
-                "date": fullAct.get('completedDate')
-            }
-            opportunity['messages'].append(customerMsgDict)
-            messages = opportunity['messages']
+        fullAct = act
+        if not DEBUGMODE and not OFFLINE_MODE:
+            fullAct = get_activity_by_id_v1(activityId, token, subscription_id)
+    
+        customerMsg = (fullAct.get('message') or {})
+        customerMsgDict = {
+            "msgFrom": "customer",
+            "customerName": customerInfo.get('firstName'),
+            "subject": customerMsg.get('subject'),
+            "body": customerMsg.get('body'),
+            "date": fullAct.get('completedDate')
+        }
+        opportunity['messages'].append(customerMsgDict)
+        messages = opportunity['messages']
+    
+        prompt = f"""
+        generate next patti reply, here is the current messages between patti and the customer (python list of dicts):
+        {messages}
+        """
+        response = run_gpt(
+            prompt,
+            customerInfo.get('firstName'),
+            rooftop_name,
+            prevMessages=True
+        )
+    
+        subject = response["subject"]
+        body_html = response["body"]
+    
+        body_html = re.sub(
+            r"(?is)(?:\n\s*)?patti\s*(?:\r?\n)+virtual assistant.*?$",
+            "",
+            body_html
+        )
+    
+        opportunity['messages'].append({
+            "msgFrom": "patti",
+            "subject": subject,
+            "body": body_html,
+            "date": currDate,
+            "action": response.get("action"),
+            "notes": response.get("notes"),
+        })
+    
+        opportunity['checkedDict']['last_msg_by'] = "patti"
+        opportunity['followUP_date'] = currDate.isoformat()
+        opportunity['followUP_count'] = 0
+        opportunity['alreadyProcessedActivities'][activityId] = fullAct
 
-                prompt = f"""
-                generate next patti reply, here is the current messages between patti and the customer (python list of dicts):
-                {messages}
-                """
-                response = run_gpt(
-                            prompt,
-                            customerInfo.get('firstName'),
-                            rooftop_name,
-                            prevMessages= True)
-
-                subject   = response["subject"]
-                body_html = response["body"]
-
-                body_html = re.sub(
-                    r"(?is)(?:\n\s*)?patti\s*(?:\r?\n)+virtual assistant.*?$",
-                    "",
-                    body_html
-                )
-
-                opportunity['messages'].append(
-                    {
-                        "msgFrom": "patti",
-                        "subject": subject,
-                        "body": body_html,
-                        "date": currDate,
-                        "action": response.get("action"),
-                        "notes": response.get("notes")
-
-                    }
-                )
-
-                # TODO: fix in which line
-                opportunity['checkedDict']['last_msg_by'] = "patti"
-
-                opportunity['followUP_date'] = currDate.isoformat()
-                opportunity['followUP_count'] = 0
-                opportunity['alreadyProcessedActivities'][activityId] = fullAct
-
-            else:
-                # testing...
-                fullAct = act
-                customerMsg = fullAct.get('message', {})
-                customerMsgDict = {
-                    "msgFrom": "customer",
-                    "customerName": customerInfo.get('firstName'),
-                    "subject": customerMsg.get('subject'),
-                    "body": customerMsg.get('body'),
-                    "date": fullAct.get('completedDate')
-                }
-
-                opportunity['messages'].append(customerMsgDict)
-                messages = opportunity['messages']
-
-                prompt = f"""
-                generate next patti reply, here is the current messages between patti and the customer (python list of dicts):
-                {messages}
-                """
-                response = run_gpt(
-                            prompt,
-                            customerInfo.get('firstName'),
-                            rooftop_name,
-                            prevMessages= True)
-
-                subject   = response["subject"]
-                body_html = response["body"]
-
-                body_html = re.sub(
-                    r"(?is)(?:\n\s*)?patti\s*(?:\r?\n)+virtual assistant.*?$",
-                    "",
-                    body_html
-                )
-
-                opportunity['messages'].append(
-                    {
-                        "msgFrom": "patti",
-                        "subject": subject,
-                        "body": body_html,
-                        "date": currDate,
-                        "action": response.get("action"),
-                        "notes": response.get("notes")
-                    }
-                )
-
-                # TODO: fix in which line
-                opportunity['checkedDict']['last_msg_by'] = "patti"
-
-                opportunity['followUP_date'] = currDate.isoformat()
-                opportunity['followUP_count'] = 0
-                opportunity['alreadyProcessedActivities'][activityId] = fullAct
    
 
 
