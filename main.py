@@ -9,8 +9,8 @@ import requests
 from inventory_matcher import recommend_from_xml
 from fortellis import get_vehicle_inventory_xml  # we’ll add this helper next
 import re, html as _html
-from kbb_templates import TEMPLATES, fill_merge_fields
-from kbb_cadence import events_for_day
+from kbb_ico import process_kbb_ico_lead
+
 log = logging.getLogger(__name__)
 
 DRY_RUN = int(os.getenv("DRY_RUN", "1"))  # 1 = DO NOT write to CRM, 0 = allow writes
@@ -508,6 +508,7 @@ trade_in = (trade_ins[0].get("make") if trade_ins else "") or ""
 
 customer_name = lead.get("customer_first") or "there"
 
+# --- KBB ICO short-circuit -------------------------------------------
 if opportunity.get("mode") == "kbb_ico":
     process_kbb_ico_lead(
         opportunity=opportunity,
@@ -518,16 +519,26 @@ if opportunity.get("mode") == "kbb_ico":
         subscription_id=subscription_id,
         SAFE_MODE=SAFE_MODE,
     )
+    # use 'continue' if iterating many opps; otherwise 'return'
     continue
+# ---------------------------------------------------------------------
 
+# === Compose & send first reply (general persona) =====================
 prompt = build_first_reply_prompt(opportunity, inquiry_text, rooftop_name, ...)
-reply  = run_gpt(prompt, customer_name=lead.get("customer_first"), rooftop_name=rooftop_name)
+reply  = run_gpt(
+    prompt,
+    customer_name=lead.get("customer_first"),
+    rooftop_name=rooftop_name,
+    # persona defaults to "sales"
+)
+
 send_opportunity_email_activity(
     token, subscription_id, opportunity_id,
     sender=rooftop_sender, recipients=[lead.get("email_address")],
     carbon_copies=[], subject=reply["subject"], body_html=reply["body"],
     rooftop_name=rooftop_name
 )
+
 
 # === Compose with GPT ===============================================
 fallback_mode = not inquiry_text or inquiry_text.strip().lower() in ["", "request a quote", "interested", "info", "information", "looking"]
