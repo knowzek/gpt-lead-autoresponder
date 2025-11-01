@@ -110,7 +110,87 @@ def chat_complete_with_fallback(messages, want_json: bool = True, temperature: f
                 break
     raise last_err or RuntimeError("OpenAI chat completion failed with all models")
 
+def _kbb_ico_rules_system(kbb_ctx: dict | None, rooftop_name: str | None):
+    days = (kbb_ctx or {}).get("offer_valid_days", 7)
+    excl_sun = (kbb_ctx or {}).get("exclude_sunday", True)
+    rn = rooftop_name or "the dealership"
+    return (
+        f"You are Patti, a friendly virtual acquisition assistant for {rn}. "
+        "You manage Kelley Blue Book® Instant Cash Offer (ICO) leads.\n\n"
+        "KBB ICO Conversation Rules:\n"
+        "- You reply after Day 00/01/02 templates; sound like a real internet manager.\n"
+        "- Acknowledge the customer’s exact question first, then answer directly.\n"
+        "- Offer two concrete inspection windows and what to bring (title, ID, keys).\n"
+        f"- ICO offer validity: {days} days" + (" (excluding Sunday)" if excl_sun else "") + ". "
+        "If expired, propose re-issuing politely.\n"
+        "- Never include a signature block, phone numbers, or URLs; the system appends them.\n"
+        "- Keep 60–130 words unless the customer asked for detail.\n"
+        "- Stay truthful; if info is missing, ask one precise question to move forward."
+    )
+
+def _build_system_stack(persona: str, customer_first: str, rooftop_name: str | None, kbb_ctx: dict | None, include_followup_rules: bool = True):
+    """
+    Returns a list of system messages tailored to persona.
+    For convo (prevMessages=True), we still keep JSON/format + convo brain.
+    """
+    base = []
+    if persona == "kbb_ico":
+        base = [
+            {"role": "system", "content": _patti_persona_system()},
+            {"role": "system", "content": _patterson_why_buys_system()},
+            {"role": "system", "content": _kbb_ico_rules_system(kbb_ctx, rooftop_name)},
+            {"role": "system", "content": _personalization_rules_system()},
+            {"role": "system", "content": _appointment_cta_system()},
+            {"role": "system", "content": _compliance_system()},
+            {"role": "system", "content": f"Current month: {CURRENT_MONTH}. Only reference charity campaigns if this month is listed; otherwise do not mention charity at all."},
+            {"role": "system", "content": _links_and_boundaries_system()},
+            {"role": "system", "content": _objection_handling_system()},
+            {"role": "system", "content": _format_system()},
+            {"role": "system", "content": _getCustomerMessagePrompts()},
+        ]
+        # KBB cadence follow-ups are handled by your template scheduler, so we usually
+        # do NOT include the generic follow-up generator here. Keep it optional:
+        if include_followup_rules:
+            base.append({"role": "system", "content": _getFollowUPRules()})
+        return base
+
+    # default "sales" persona (your current stack)
+    base = [
+        {"role": "system", "content": _patti_persona_system()},
+        {"role": "system", "content": _patti_rules_system(customer_first)},
+        {"role": "system", "content": _patterson_why_buys_system()},
+        {"role": "system", "content": _first_message_rules_system()},
+        {"role": "system", "content": _personalization_rules_system()},
+        {"role": "system", "content": _appointment_cta_system()},
+        {"role": "system", "content": _compliance_system()},
+        {"role": "system", "content": f"Current month: {CURRENT_MONTH}. Only reference charity campaigns if this month is listed; otherwise do not mention charity at all."},
+        {"role": "system", "content": _links_and_boundaries_system()},
+        {"role": "system", "content": _objection_handling_system()},
+        {"role": "system", "content": _format_system()},
+        {"role": "system", "content": _getCustomerMessagePrompts()},
+    ]
+    if include_followup_rules:
+        base.append({"role": "system", "content": _getFollowUPRules()})
+    return base
+
+
 # --- Patti system instruction builders --------------------------------
+
+def _kbb_ico_system():
+    return (
+        "You are Patti, a friendly virtual acquisition assistant for {rooftop_name}. "
+        "You manage Kelley Blue Book® Instant Cash Offer (ICO) leads.\n\n"
+        "Rules:\n"
+        "- Until the customer replies, follow the day-by-day plan (email/text/phone) exactly as scheduled.\n"
+        "- Use the dealer’s provided HTML templates for Day 00, Day 01, Day 02, etc. Insert merge fields.\n"
+        "- The KBB ICO offer is valid for 7 days (excluding Sunday); encourage inspection scheduling before expiry.\n"
+        "- When the customer replies (any message from the lead after Day 00), STOP the drip and continue as a real person:\n"
+        "  • Acknowledge what they said first.\n"
+        "  • Answer directly.\n"
+        "  • Offer times, options, next steps.\n"
+        "  • Keep it warm, succinct, and human.\n\n"
+        "Never invent policy; if unsure, ask for a time or offer a call."
+    )
 
 def _patti_persona_system():
     return (
@@ -310,26 +390,22 @@ def run_gpt(prompt: str,
             customer_name: str,
             rooftop_name: str = None,
             max_retries: int = MAX_RETRIES,
-            prevMessages = False):
+            prevMessages: bool = False,
+            persona: str = "sales",
+            kbb_ctx: dict | None = None):
 
     rooftop_addr = _get_rooftop_address(rooftop_name)
                 
-    # Build system stack
-    system_msgs = [
-        {"role": "system", "content": _patti_persona_system()},
-        {"role": "system", "content": _patti_rules_system(customer_name)},
-        {"role": "system", "content": _patterson_why_buys_system()},
-        {"role": "system", "content": _first_message_rules_system()},
-        {"role": "system", "content": _personalization_rules_system()},
-        {"role": "system", "content": _appointment_cta_system()},
-        {"role": "system", "content": _compliance_system()},
-        {"role": "system", "content": f"Current month: {CURRENT_MONTH}. Only reference charity campaigns if this month is listed; otherwise do not mention charity at all."},
-        {"role": "system", "content": _links_and_boundaries_system()},
-        {"role": "system", "content": _objection_handling_system()},
-        {"role": "system", "content": _format_system()},
-        {"role": "system", "content": _getCustomerMessagePrompts()},
-        {"role": "system", "content": _getFollowUPRules()}
-    ]
+    # Build system stack (persona-aware)
+    # For KBB ICO, we typically exclude generic follow-up rules because cadence uses templates.
+    system_msgs = _build_system_stack(
+        persona=persona,
+        customer_first=customer_name,
+        rooftop_name=rooftop_name,
+        kbb_ctx=kbb_ctx,
+        include_followup_rules=(persona != "kbb_ico")
+    )
+
 
     if prevMessages:
         messages = system_msgs + [
