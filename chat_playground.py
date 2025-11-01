@@ -122,6 +122,7 @@ def _playground_force_assistant_reply(state: dict, text: str) -> dict:
     return state
 
 def playground_inject_patti_reply(state: dict) -> dict:
+    print(f"[PLAY] injector start OFFLINE_MODE={os.getenv('OFFLINE_MODE')}")
     """Playground-only: if there is a new user message and no assistant reply yet, call GPT and append one."""
     try:
         if os.getenv("OFFLINE_MODE", "1") != "1":
@@ -181,6 +182,7 @@ Rules:
             "role": "assistant",
             "content": body,
         }
+        print(f"[PLAY] appending assistant; len_before={len(msgs)}")
 
         msgs.append(patti_msg)
         # mirror to all keys the UI might read
@@ -438,37 +440,60 @@ def kickoff():
 def send():
     ensure_dir()
     text = (request.form.get("text") or "").strip()
-    if text:
-        state = rJson(TEST_PATH) if os.path.exists(TEST_PATH) else seed_state("Alex","Rivera","alex@example.com","","Mazda","MX-5 Miata","2025","Website","")
-        state = ensure_min_schema(state)
-        acts = state.get("completedActivitiesTesting", [])
-        acts.append({
-            "id": f"web-{uuid.uuid4().hex[:8]}",
-            "typeId": 20,
-            "title": "Customer Email",
-            "notes": text,
-            "completedDate": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        })
-        state["completedActivitiesTesting"] = acts
-        state, err = safe_process(state)
-        state = coalesce_messages(state)  
-        processed = playground_inject_patti_reply(processed)
-        wJson(state, TEST_PATH)
+    if not text:
+        return redirect(url_for("home"))
+
+    # Load or seed baseline state
+    state = rJson(TEST_PATH) if os.path.exists(TEST_PATH) else seed_state(
+        "Alex", "Rivera", "alex@example.com", "", "Mazda", "MX-5 Miata", "2025", "Website", ""
+    )
+    state = ensure_min_schema(state)
+
+    # Append a synthetic *customer email* activity that processHit/checkActivities understand
+    acts = state.get("completedActivitiesTesting", [])
+    acts.append({
+        "activityId": f"web-{uuid.uuid4().hex[:8]}",
+        "activityType": 20,
+        "activityName": "Read Email",
+        "completedDate": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "message": {
+            "subject": "Customer reply via playground",
+            "body": text
+        },
+        "comments": ""
+    })
+    state["completedActivitiesTesting"] = acts
+    wJson(state, TEST_PATH)
+
+    # Run processor (may return None)
+    processed, err = safe_process(state)
+    if not isinstance(processed, dict) or processed is None:
+        try:
+            processed = rJson(TEST_PATH)  # recover last written
+        except Exception:
+            processed = {}
+
+    # Normalize, inject Patti (OFFLINE playground only), persist
+    processed = ensure_min_schema(processed)
+    processed = playground_inject_patti_reply(processed)
+    wJson(processed, TEST_PATH)
+
     return redirect(url_for("home"))
+
 
 @app.route("/seed", methods=["POST"])
 def seed():
     ensure_dir()
     # 1) Build baseline state from form
-    first = request.form.get("firstName")
-    last  = request.form.get("lastName")
-    email = request.form.get("email")
-    phone = request.form.get("phone")
-    make  = request.form.get("make")
-    model = request.form.get("model")
-    year  = request.form.get("year")
-    source= request.form.get("source")
-    notes = (request.form.get("notes") or "").strip()  # first customer message
+    first  = request.form.get("firstName")
+    last   = request.form.get("lastName")
+    email  = request.form.get("email")
+    phone  = request.form.get("phone")
+    make   = request.form.get("make")
+    model  = request.form.get("model")
+    year   = request.form.get("year")
+    source = request.form.get("source")
+    notes  = (request.form.get("notes") or "").strip()
 
     state = seed_state(first, last, email, phone, make, model, year, source, notes)
     state = ensure_min_schema(state)
@@ -486,15 +511,17 @@ def seed():
 
     # 2) Seed a synthetic *customer activity* so processHit will respond
     #    (processHit triggers on activityType==20 or activityName=="Read Email")
-    act_id = f"lead-{uuid.uuid4().hex[:8]}"
+    act_id = f"lead-{uuid4().hex[:8]}"  # if you used: from uuid import uuid4
+    subject_bits = [year or "", make or "", model or ""]
+    subject_text = " ".join([b for b in subject_bits if b]).strip() or "your vehicle"
     synthetic_activity = {
         "activityId": act_id,
-        "activityType": 20,               # ← Customer Email
+        "activityType": 20,               # Customer Email
         "activityName": "Read Email",
         "completedDate": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "comments": "",                   # no sentinel -> allows first reply
         "message": {
-            "subject": f"New inquiry about {year} {make} {model}".strip(),
+            "subject": f"New inquiry about {subject_text}",
             "body": notes or "Hi! I'm interested and have a few questions."
         }
     }
@@ -502,40 +529,24 @@ def seed():
     acts.append(synthetic_activity)
     state["completedActivitiesTesting"] = acts
 
-    # Make sure flags don’t block the first reply
-    state["patti_already_contacted"] = False
-    state["checkedDict"] = state.get("checkedDict") or {}
-    state["checkedDict"]["patti_already_contacted"] = False
-    state["checkedDict"]["last_msg_by"] = "customer"
-
     wJson(state, TEST_PATH)
 
     # 3) Run your processor
     processed, err = safe_process(state)
 
     # 4) Defensive recovery if processor returned None/invalid
-    if not isinstance(processed, dict) or processed is None:
+    if not isinstance(processed, dict):
         try:
             processed = rJson(TEST_PATH)
         except Exception:
             processed = {}
-    
+
     # 5) Normalize, inject reply (playground only), and persist
     processed = ensure_min_schema(processed)
- 
-    # TEMP: force a visible reply to confirm rendering works
-    processed = _playground_force_assistant_reply(processed, "(playground) Thanks for reaching out — yes, I can help!")
+    processed = playground_inject_patti_reply(processed)  # OFFLINE-only guard is inside
     wJson(processed, TEST_PATH)
+
     return redirect(url_for("home"))
-
-    #processed = playground_inject_patti_reply(processed)  # OFFLINE_MODE=1 guard inside
-    wJson(processed, TEST_PATH)
-    
-    return redirect(url_for("home"))
-
-
-
-
 
 if __name__ == "__main__":
     # safety defaults
