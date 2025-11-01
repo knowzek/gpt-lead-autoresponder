@@ -315,17 +315,25 @@ def safe_process(state):
         return state, str(e)
      
 
+from datetime import datetime, timezone
+
 def _parse_dt(s: str | None):
     if not s:
         return None
     s = s.strip()
     if not s:
         return None
-    # support "....Z"
+    # Normalize trailing Z to +00:00
     if s.endswith("Z"):
-        s = s.replace("Z", "+00:00")
+        s = s[:-1] + "+00:00"
     try:
-        return datetime.fromisoformat(s)
+        dt = datetime.fromisoformat(s)
+        # Make naive datetimes UTC-aware
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            dt = dt.astimezone(timezone.utc)
+        return dt
     except Exception:
         return None
 
@@ -334,7 +342,6 @@ def norm_msgs(state):
     if not isinstance(raw, list):
         raw = []
 
-    # build an enriched list with parsed timestamps + original index
     enriched = []
     for idx, m in enumerate(raw):
         if not isinstance(m, dict):
@@ -352,11 +359,12 @@ def norm_msgs(state):
         raw_text = (m.get("content") or m.get("body") or m.get("text") or m.get("message"))
         if not raw_text:
             import json as _json
-            raw_text = _json.dumps({k: v for k, v in m.items() if k in ("subject","body","notes","date","action")}, ensure_ascii=False)
+            raw_text = _json.dumps(
+                {k: v for k, v in m.items() if k in ("subject","body","notes","date","action")},
+                ensure_ascii=False
+            )
 
-        # parse a timestamp if present
         ts = _parse_dt(m.get("date") or m.get("createdAt"))
-
         enriched.append({
             "role": role,
             "content": str(raw_text),
@@ -364,11 +372,11 @@ def norm_msgs(state):
             "_idx": idx,
         })
 
-    # sort: oldest → newest using timestamp, then original index
-    enriched.sort(key=lambda x: (x["_ts"] or datetime.min, x["_idx"]))
+    # Oldest → newest; ensure the fallback is also UTC-aware
+    enriched.sort(key=lambda x: (x["_ts"] or datetime.min.replace(tzinfo=timezone.utc), x["_idx"]))
 
-    # convert to the simple objects your template expects
     return [type("M", (), {"role": e["role"], "content": e["content"]}) for e in enriched]
+
 
 
 
