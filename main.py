@@ -397,19 +397,21 @@ is_kbb_ico = (
     or "kelley blue book" in src
 )
 
-from datetime import datetime, timezone
 lead_age_days = 0
 created_raw = opportunity.get("createdDate") or lead.get("createdDate")
 try:
     if created_raw:
-        created_dt = datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
-        lead_age_days = (datetime.now(timezone.utc) - created_dt).days
+        created_dt = _dt.fromisoformat(created_raw.replace("Z", "+00:00"))
+        lead_age_days = (_dt.now(_tz.utc) - created_dt).days
 except Exception:
     pass
+
 
 mode = "kbb_ico" if is_kbb_ico else "general"
 opportunity["mode"] = mode
 opportunity["lead_age_days"] = lead_age_days
+
+log.info("Persona route: mode=%s lead_age_days=%s src=%s", mode, lead_age_days, src[:120])
 
 
 # --- Rooftop resolution (from Subscription-Id) ---
