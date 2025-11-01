@@ -7,13 +7,15 @@ from fortellis import (
     send_opportunity_email_activity,
     schedule_activity,
 )
-from config import TEST_TO 
+
 from fortellis import search_activities_by_opportunity
 
 import json, re
 STATE_TAG = "[PATTI_KBB_STATE]"  # marker to find the state comment quickly
 
 import os
+TEST_TO = os.getenv("TEST_TO", "pattiautoresponder@gmail.com")
+
 ALLOW_TEXTING = os.getenv("ALLOW_TEXTING","0").lower() in ("1","true","yes")
 
 def _ico_offer_expired(created_iso: str, exclude_sunday: bool = True) -> bool:
