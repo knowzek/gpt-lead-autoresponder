@@ -123,43 +123,59 @@ def _playground_force_assistant_reply(state: dict, text: str) -> dict:
     return state
 
 def playground_inject_patti_reply(state: dict) -> dict:
-    print(f"[PLAY] injector start OFFLINE_MODE={os.getenv('OFFLINE_MODE')}")
-    """Playground-only: if there is a new user message and no assistant reply yet, call GPT and append one."""
     try:
         if os.getenv("OFFLINE_MODE", "1") != "1":
-            return state  # only for the playground
+            return state  # playground only
 
         msgs = state.get("messages") or state.get("conversation") or state.get("thread") or []
         if not isinstance(msgs, list):
-            return state
+            msgs = []
 
-        # do we already have an assistant message?
-        has_assistant = any(isinstance(m, dict) and (m.get("role") == "assistant" or m.get("msgFrom") == "patti") for m in msgs)
+        # bail if an assistant message already exists
+        has_assistant = any(
+            isinstance(m, dict) and ((m.get("role") or "").lower() == "assistant" or (m.get("msgFrom") or "").lower() == "patti")
+            for m in msgs
+        )
         if has_assistant:
+            print("[PLAY] injector: assistant already present; skipping")
             return state
 
-        # find latest user/customer text to reply to
+        # Prefer the most recent user/customer message from the chat
         last_user = None
         for m in reversed(msgs):
             if not isinstance(m, dict):
                 continue
             role = (m.get("role") or "").lower()
             msgfrom = (m.get("msgFrom") or "").lower()
-            if role == "user" or msgfrom in ("customer", "user"):
+            if role in ("user", "customer") or msgfrom in ("customer", "user"):
                 last_user = (m.get("content") or m.get("body") or m.get("text") or "").strip()
                 if last_user:
                     break
 
+        # Fallback: pull from latest activity if chat didn’t have one
         if not last_user:
-            return state  # nothing to reply to
+            acts = state.get("completedActivitiesTesting") or []
+            if isinstance(acts, list):
+                for a in reversed(acts):
+                    if not isinstance(a, dict):
+                        continue
+                    m = (a.get("message") or {})
+                    t = (m.get("body") or a.get("notes") or "").strip()
+                    if t:
+                        last_user = t
+                        break
 
-        # build a lightweight prompt
-        customer_name = (state.get("customer") or {}).get("firstName") or "there"
-        rooftop_name  = (state.get("rooftop") or {}).get("name") or "Patterson Auto Group"
+        if not last_user:
+            print("[PLAY] injector: no user text found; skipping")
+            return state
+
+        customer_name = ((state.get("customer") or {}).get("firstName") or "there")
+        rooftop_name  = ((state.get("rooftop")  or {}).get("name")      or "Patterson Auto Group")
+
         prompt = f"""
 Generate Patti's next reply to this customer message:
 
-Customer: \"{last_user}\"
+Customer: "{last_user}"
 
 Rules:
 - Start exactly with: Hi {customer_name},
@@ -167,9 +183,7 @@ Rules:
 - No signatures/phone/address/URLs.
 """
 
-        # import safely (same module you use in prod)
         from gpt import run_gpt
-
         resp = run_gpt(prompt, customer_name, rooftop_name)
         subject = resp.get("subject", "Re: your inquiry")
         body    = resp.get("body", "Happy to help!")
@@ -179,27 +193,25 @@ Rules:
             "subject": subject,
             "body": body,
             "date": datetime.utcnow().isoformat() + "Z",
-            # UI-friendly mirrors
             "role": "assistant",
             "content": body,
         }
-        print(f"[PLAY] appending assistant; len_before={len(msgs)}")
-
+        print(f"[PLAY] injector: appending assistant; len_before={len(msgs)}")
         msgs.append(patti_msg)
-        # mirror to all keys the UI might read
         state["messages"] = msgs
         state["conversation"] = msgs
         state["thread"] = msgs
 
-        # set basic flags the UI may display
         cd = state.get("checkedDict") or {}
         cd["patti_already_contacted"] = True
         cd["last_msg_by"] = "patti"
         state["checkedDict"] = cd
 
         return state
-    except Exception:
+    except Exception as e:
+        print(f"[PLAY] injector error: {e}")
         return state
+
 
 def coalesce_messages(state: dict | None) -> dict:
     # Be defensive: accept None or non-dict and normalize
@@ -476,9 +488,26 @@ def send():
 
     # Normalize, inject Patti (OFFLINE playground only), persist
     processed = ensure_min_schema(processed)
+    # 💬 Mirror the user’s typed message into the visible chat
+    if text:
+        msgs = processed.get("messages") or []
+        if not isinstance(msgs, list):
+            msgs = []
+        user_msg = {
+            "role": "user",
+            "content": text,
+            "msgFrom": "customer",
+            "body": text,
+            "date": datetime.utcnow().isoformat() + "Z",
+        }
+        msgs.append(user_msg)
+        processed["messages"] = msgs
+        processed["conversation"] = msgs
+        processed["thread"] = msgs
+    
+    # 🤖 Playground-only: generate Patti’s reply
     processed = playground_inject_patti_reply(processed)
     wJson(processed, TEST_PATH)
-
     return redirect(url_for("home"))
 
 
