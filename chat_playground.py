@@ -3,7 +3,7 @@ from flask import Flask, request, redirect, url_for, render_template_string
 from helpers import rJson, wJson
 from processNewData import processHit
 import traceback, sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 
@@ -122,6 +122,8 @@ def _playground_force_assistant_reply(state: dict, text: str) -> dict:
     state["checkedDict"] = cd
     return state
 
+from datetime import datetime, timedelta
+
 def playground_inject_patti_reply(state: dict) -> dict:
     try:
         if os.getenv("OFFLINE_MODE", "1") != "1":
@@ -131,42 +133,17 @@ def playground_inject_patti_reply(state: dict) -> dict:
         if not isinstance(msgs, list):
             msgs = []
 
-        # bail if an assistant message already exists
-        has_assistant = any(
-            isinstance(m, dict) and ((m.get("role") or "").lower() == "assistant" or (m.get("msgFrom") or "").lower() == "patti")
-            for m in msgs
-        )
-        if has_assistant:
-            print("[PLAY] injector: assistant already present; skipping")
-            return state
+        # look at last message only
+        last = msgs[-1] if msgs else None
+        last_text = ""
+        last_role = ""
+        if isinstance(last, dict):
+            last_role = (last.get("role") or last.get("msgFrom") or "").lower()
+            last_text = (last.get("content") or last.get("body") or last.get("text") or "").strip()
 
-        # Prefer the most recent user/customer message from the chat
-        last_user = None
-        for m in reversed(msgs):
-            if not isinstance(m, dict):
-                continue
-            role = (m.get("role") or "").lower()
-            msgfrom = (m.get("msgFrom") or "").lower()
-            if role in ("user", "customer") or msgfrom in ("customer", "user"):
-                last_user = (m.get("content") or m.get("body") or m.get("text") or "").strip()
-                if last_user:
-                    break
-
-        # Fallback: pull from latest activity if chat didn’t have one
-        if not last_user:
-            acts = state.get("completedActivitiesTesting") or []
-            if isinstance(acts, list):
-                for a in reversed(acts):
-                    if not isinstance(a, dict):
-                        continue
-                    m = (a.get("message") or {})
-                    t = (m.get("body") or a.get("notes") or "").strip()
-                    if t:
-                        last_user = t
-                        break
-
-        if not last_user:
-            print("[PLAY] injector: no user text found; skipping")
+        # only reply if the last message is from the user/customer
+        if last_role not in ("user", "customer") or not last_text:
+            print("[PLAY] injector: last msg not from user; skip")
             return state
 
         customer_name = ((state.get("customer") or {}).get("firstName") or "there")
@@ -175,42 +152,47 @@ def playground_inject_patti_reply(state: dict) -> dict:
         prompt = f"""
 Generate Patti's next reply to this customer message:
 
-Customer: "{last_user}"
+Customer: "{last_text}"
 
 Rules:
 - Start exactly with: Hi {customer_name},
 - Be helpful and human. One short paragraph is fine.
 - No signatures/phone/address/URLs.
 """
-
         from gpt import run_gpt
         resp = run_gpt(prompt, customer_name, rooftop_name)
         subject = resp.get("subject", "Re: your inquiry")
         body    = resp.get("body", "Happy to help!")
 
+        now = datetime.utcnow()
+        assistant_time = (now + timedelta(seconds=1)).isoformat() + "Z"
+
         patti_msg = {
             "msgFrom": "patti",
             "subject": subject,
             "body": body,
-            "date": datetime.utcnow().isoformat() + "Z",
+            "date": assistant_time,
             "role": "assistant",
             "content": body,
         }
-        print(f"[PLAY] injector: appending assistant; len_before={len(msgs)}")
         msgs.append(patti_msg)
         state["messages"] = msgs
         state["conversation"] = msgs
         state["thread"] = msgs
 
+        # mark contact + push follow-up into the future (avoid nudges)
         cd = state.get("checkedDict") or {}
         cd["patti_already_contacted"] = True
         cd["last_msg_by"] = "patti"
         state["checkedDict"] = cd
+        state["followUP_date"] = (now + timedelta(days=2)).isoformat() + "Z"
+        state["followUP_count"] = 0
 
         return state
     except Exception as e:
         print(f"[PLAY] injector error: {e}")
         return state
+
 
 
 def coalesce_messages(state: dict | None) -> dict:
@@ -332,39 +314,61 @@ def safe_process(state):
         return state, str(e)
      
 
-def norm_msgs(state):
-    out = []
-    for m in state.get("messages", []):
-        # accept multiple schema variants
-        raw_role = (
-            m.get("role") or
-            m.get("msgFrom") or
-            m.get("from") or
-            m.get("author") or
-            "system"
-        )
-        raw_text = (
-            m.get("content") or
-            m.get("body") or
-            m.get("text") or
-            m.get("message")
-        )
+def _parse_dt(s: str | None):
+    if not s:
+        return None
+    s = s.strip()
+    if not s:
+        return None
+    # support "....Z"
+    if s.endswith("Z"):
+        s = s.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(s)
+    except Exception:
+        return None
 
+def norm_msgs(state):
+    raw = state.get("messages") or []
+    if not isinstance(raw, list):
+        raw = []
+
+    # build an enriched list with parsed timestamps + original index
+    enriched = []
+    for idx, m in enumerate(raw):
+        if not isinstance(m, dict):
+            continue
+
+        raw_role = (m.get("role") or m.get("msgFrom") or m.get("from") or m.get("author") or "system")
         role_l = str(raw_role).lower()
-        if role_l in ("assistant","patti"):
+        if role_l in ("assistant", "patti"):
             role = "assistant"
-        elif role_l in ("user","customer"):
+        elif role_l in ("user", "customer"):
             role = "user"
         else:
             role = "system"
 
+        raw_text = (m.get("content") or m.get("body") or m.get("text") or m.get("message"))
         if not raw_text:
-            # last resort: show a compact JSON preview instead of the whole dict
             import json as _json
             raw_text = _json.dumps({k: v for k, v in m.items() if k in ("subject","body","notes","date","action")}, ensure_ascii=False)
 
-        out.append(type("M", (), {"role": role, "content": raw_text}))
-    return out
+        # parse a timestamp if present
+        ts = _parse_dt(m.get("date") or m.get("createdAt"))
+
+        enriched.append({
+            "role": role,
+            "content": str(raw_text),
+            "_ts": ts,
+            "_idx": idx,
+        })
+
+    # sort: oldest → newest using timestamp, then original index
+    enriched.sort(key=lambda x: (x["_ts"] or datetime.min, x["_idx"]))
+
+    # convert to the simple objects your template expects
+    return [type("M", (), {"role": e["role"], "content": e["content"]}) for e in enriched]
+
 
 
 def add_customer_activity(state, text: str):
@@ -427,7 +431,8 @@ def home():
     ensure_dir()
     state = rJson(TEST_PATH) if os.path.exists(TEST_PATH) else {}
     state = ensure_min_schema(state)
-    state = coalesce_messages(state)  # ← add
+    state = coalesce_messages(state)  
+    msgs = norm_msgs(state) 
     # Fallback: if still empty, synthesize a visible customer message from the latest activity
     if not state["messages"] and state.get("completedActivitiesTesting"):
         last = state["completedActivitiesTesting"][-1]
