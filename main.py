@@ -9,6 +9,8 @@ import requests
 from inventory_matcher import recommend_from_xml
 from fortellis import get_vehicle_inventory_xml  # we’ll add this helper next
 import re, html as _html
+from kbb_templates import TEMPLATES, fill_merge_fields
+from kbb_cadence import events_for_day
 log = logging.getLogger(__name__)
 
 DRY_RUN = int(os.getenv("DRY_RUN", "1"))  # 1 = DO NOT write to CRM, 0 = allow writes
