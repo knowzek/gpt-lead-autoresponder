@@ -124,26 +124,38 @@ def _playground_force_assistant_reply(state: dict, text: str) -> dict:
 
 from datetime import datetime, timedelta
 
+from datetime import datetime, timedelta
+
 def playground_inject_patti_reply(state: dict) -> dict:
     try:
         if os.getenv("OFFLINE_MODE", "1") != "1":
             return state  # playground only
 
-        msgs = state.get("messages") or state.get("conversation") or state.get("thread") or []
+        msgs = state.get("messages") or []
         if not isinstance(msgs, list):
             msgs = []
 
-        # look at last message only
-        last = msgs[-1] if msgs else None
-        last_text = ""
-        last_role = ""
-        if isinstance(last, dict):
-            last_role = (last.get("role") or last.get("msgFrom") or "").lower()
-            last_text = (last.get("content") or last.get("body") or last.get("text") or "").strip()
+        # find last user and last assistant positions
+        last_user_idx = -1
+        last_asst_idx = -1
+        for i, m in enumerate(msgs):
+            if not isinstance(m, dict):
+                continue
+            role = (m.get("role") or m.get("msgFrom") or "").lower()
+            if role in ("assistant", "patti"):
+                last_asst_idx = i
+            elif role in ("user", "customer"):
+                last_user_idx = i
 
-        # only reply if the last message is from the user/customer
-        if last_role not in ("user", "customer") or not last_text:
-            print("[PLAY] injector: last msg not from user; skip")
+        # only reply if a user message exists after the last assistant
+        if last_user_idx == -1 or last_user_idx <= last_asst_idx:
+            print("[PLAY] injector: no new user message; skip")
+            return state
+
+        last = msgs[last_user_idx]
+        last_text = (last.get("content") or last.get("body") or last.get("text") or "").strip()
+        if not last_text:
+            print("[PLAY] injector: user text empty; skip")
             return state
 
         customer_name = ((state.get("customer") or {}).get("firstName") or "there")
@@ -158,7 +170,6 @@ Rules:
 - Start exactly with: Hi {customer_name},
 - Be helpful and human. One short paragraph is fine.
 - No signatures/phone/address/URLs.
-- Do not mention scheduling, booking, or test-drive links; I will add that line automatically.
 """
         from gpt import run_gpt
         resp = run_gpt(prompt, customer_name, rooftop_name)
@@ -176,12 +187,12 @@ Rules:
             "role": "assistant",
             "content": body,
         }
+        print(f"[PLAY] injector: appending assistant; after user idx={last_user_idx}")
         msgs.append(patti_msg)
         state["messages"] = msgs
         state["conversation"] = msgs
         state["thread"] = msgs
 
-        # mark contact + push follow-up into the future (avoid nudges)
         cd = state.get("checkedDict") or {}
         cd["patti_already_contacted"] = True
         cd["last_msg_by"] = "patti"
@@ -193,6 +204,7 @@ Rules:
     except Exception as e:
         print(f"[PLAY] injector error: {e}")
         return state
+
 
 
 
@@ -573,6 +585,24 @@ def seed():
     acts.append(synthetic_activity)
     state["completedActivitiesTesting"] = acts
 
+    # Mirror the seeded note into the visible chat
+    seed_text = (notes or synthetic_activity["message"]["body"] or "").strip()
+    if seed_text:
+        msgs = state.get("messages") or []
+        if not isinstance(msgs, list):
+            msgs = []
+        msgs.append({
+            "role": "user",
+            "content": seed_text,
+            "msgFrom": "customer",
+            "body": seed_text,
+            "date": datetime.utcnow().isoformat() + "Z",
+        })
+        state["messages"] = msgs
+        state["conversation"] = msgs
+        state["thread"] = msgs
+
+ 
     wJson(state, TEST_PATH)
 
     # 3) Run your processor
