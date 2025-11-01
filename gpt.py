@@ -417,7 +417,8 @@ def run_gpt(prompt: str,
         if not text:
             log.warning("OpenAI returned empty content (model=%s). Using fallback template.", model_used)
         
-        dictResult = getDictRes(text)
+        dictResult = getDictRes(text) or {"subject": "Re: your offer", "body": "Thanks for the note—happy to help."}
+
 
         return dictResult
 
