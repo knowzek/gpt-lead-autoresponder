@@ -519,25 +519,8 @@ if opportunity.get("mode") == "kbb_ico":
         subscription_id=subscription_id,
         SAFE_MODE=SAFE_MODE,
     )
-    # use 'continue' if iterating many opps; otherwise 'return'
-    continue
-# ---------------------------------------------------------------------
 
-# === Compose & send first reply (general persona) =====================
-prompt = build_first_reply_prompt(opportunity, inquiry_text, rooftop_name, ...)
-reply  = run_gpt(
-    prompt,
-    customer_name=lead.get("customer_first"),
-    rooftop_name=rooftop_name,
-    # persona defaults to "sales"
-)
-
-send_opportunity_email_activity(
-    token, subscription_id, opportunity_id,
-    sender=rooftop_sender, recipients=[lead.get("email_address")],
-    carbon_copies=[], subject=reply["subject"], body_html=reply["body"],
-    rooftop_name=rooftop_name
-)
+    raise SystemExit(0)
 
 
 # === Compose with GPT ===============================================
