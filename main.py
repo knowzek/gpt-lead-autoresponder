@@ -389,13 +389,30 @@ else:
         log.warning("Failed to fetch activity: %s", e)
         inquiry_text = ""
 
+def _is_assigned_to_kristin(opportunity: dict) -> bool:
+    """Return True if Kristin Nowzek is on the sales team."""
+    sales_team = opportunity.get("salesTeam") or []
+    for m in sales_team:
+        fn = (m.get("firstName") or "").strip().lower()
+        ln = (m.get("lastName") or "").strip().lower()
+        em = (m.get("email") or "").strip().lower()
+        if (fn == "kristin" and ln == "nowzek") or em in {
+            "knowzek@pattersonautos.com",
+            "knowzek@gmail.com",
+        }:
+            return True
+    return False
+
+
 # === Persona routing: KBB ICO vs General ==============================
 src = (opportunity.get("source") or lead.get("source") or "").lower()
 is_kbb_ico = (
     src.startswith("kbb ico")
     or "kbb instant cash offer" in src
     or "kelley blue book" in src
+    or _is_assigned_to_kristin(opportunity)  # 👈 treat Kristin’s opps as ICOs
 )
+
 
 lead_age_days = 0
 created_raw = opportunity.get("createdDate") or lead.get("createdDate")
