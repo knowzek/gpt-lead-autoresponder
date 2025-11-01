@@ -28,7 +28,7 @@ OFFLINE_MODE = os.getenv("OFFLINE_MODE", "1") == "1"   # default ON for playgrou
 # add all actions to crm
 
 already_processed = get_names_in_dir("jsons/process")
-DEBUGMODE = True
+DEBUGMODE = os.getenv("DEBUGMODE", "1") == "1"
 
 def checkActivities(opportunity, currDate, rooftop_name):
     # TODO: change this later to online one
@@ -63,20 +63,20 @@ def checkActivities(opportunity, currDate, rooftop_name):
             continue
             # break
 
-        if activityName == "Read Email" or activityType == 20:
-            if not DEBUGMODE:
+        if activityName.lower() == "read email" or activityType == 20:
+            fullAct = act
+            if not DEBUGMODE and not OFFLINE_MODE:
                 fullAct = get_activity_by_id_v1(activityId, token, subscription_id)
-                customerMsg = fullAct.get('message', {})
-                customerMsgDict = {
-                    "msgFrom": "customer",
-                    "customerName": customerInfo.get('firstName'),
-                    "subject": customerMsg.get('subject'),
-                    "body": customerMsg.get('body'),
-                    "date": fullAct.get('completedDate')
-                }
-
-                opportunity['messages'].append(customerMsgDict)
-                messages = opportunity['messages']
+            customerMsg = (fullAct.get('message') or {})
+            customerMsgDict = {
+                "msgFrom": "customer",
+                "customerName": customerInfo.get('firstName'),
+                "subject": customerMsg.get('subject'),
+                "body": customerMsg.get('body'),
+                "date": fullAct.get('completedDate')
+            }
+            opportunity['messages'].append(customerMsgDict)
+            messages = opportunity['messages']
 
                 prompt = f"""
                 generate next patti reply, here is the current messages between patti and the customer (python list of dicts):
