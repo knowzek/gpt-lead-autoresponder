@@ -19,7 +19,7 @@ from fortellis import get_activities, get_token, get_activity_by_id_v1
 from fortellis import get_vehicle_inventory_xml  # we’ll add this helper next
 from inventory_matcher import recommend_from_xml
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 OFFLINE_MODE = os.getenv("OFFLINE_MODE", "1") == "1"   # default ON for playground
 
@@ -622,7 +622,8 @@ def processHit(hit):
         # TODO: fix in which line
         opportunity['checkedDict']['last_msg_by'] = "patti"
 
-        opportunity['followUP_date'] = currDate.isoformat()
+        nextDate = currDate + timedelta(days=1)
+        opportunity['followUP_date'] = nextDate.isoformat()
         opportunity['followUP_count'] += 1
         if not OFFLINE_MODE:
             esClient.update(index="opportunities", id=opportunityId, doc=opportunity)
