@@ -97,6 +97,82 @@ HTML = """
   </div>
 </form>
 """
+def playground_inject_patti_reply(state: dict) -> dict:
+    """Playground-only: if there is a new user message and no assistant reply yet, call GPT and append one."""
+    try:
+        if os.getenv("OFFLINE_MODE", "1") != "1":
+            return state  # only for the playground
+
+        msgs = state.get("messages") or state.get("conversation") or state.get("thread") or []
+        if not isinstance(msgs, list):
+            return state
+
+        # do we already have an assistant message?
+        has_assistant = any(isinstance(m, dict) and (m.get("role") == "assistant" or m.get("msgFrom") == "patti") for m in msgs)
+        if has_assistant:
+            return state
+
+        # find latest user/customer text to reply to
+        last_user = None
+        for m in reversed(msgs):
+            if not isinstance(m, dict):
+                continue
+            role = (m.get("role") or "").lower()
+            msgfrom = (m.get("msgFrom") or "").lower()
+            if role == "user" or msgfrom in ("customer", "user"):
+                last_user = (m.get("content") or m.get("body") or m.get("text") or "").strip()
+                if last_user:
+                    break
+
+        if not last_user:
+            return state  # nothing to reply to
+
+        # build a lightweight prompt
+        customer_name = (state.get("customer") or {}).get("firstName") or "there"
+        rooftop_name  = (state.get("rooftop") or {}).get("name") or "Patterson Auto Group"
+        prompt = f"""
+Generate Patti's next reply to this customer message:
+
+Customer: \"{last_user}\"
+
+Rules:
+- Start exactly with: Hi {customer_name},
+- Be helpful and human. One short paragraph is fine.
+- No signatures/phone/address/URLs.
+"""
+
+        # import safely (same module you use in prod)
+        from gpt import run_gpt
+
+        resp = run_gpt(prompt, customer_name, rooftop_name)
+        subject = resp.get("subject", "Re: your inquiry")
+        body    = resp.get("body", "Happy to help!")
+
+        patti_msg = {
+            "msgFrom": "patti",
+            "subject": subject,
+            "body": body,
+            "date": datetime.utcnow().isoformat() + "Z",
+            # UI-friendly mirrors
+            "role": "assistant",
+            "content": body,
+        }
+
+        msgs.append(patti_msg)
+        # mirror to all keys the UI might read
+        state["messages"] = msgs
+        state["conversation"] = msgs
+        state["thread"] = msgs
+
+        # set basic flags the UI may display
+        cd = state.get("checkedDict") or {}
+        cd["patti_already_contacted"] = True
+        cd["last_msg_by"] = "patti"
+        state["checkedDict"] = cd
+
+        return state
+    except Exception:
+        return state
 
 def coalesce_messages(state: dict | None) -> dict:
     # Be defensive: accept None or non-dict and normalize
@@ -351,7 +427,8 @@ def send():
         })
         state["completedActivitiesTesting"] = acts
         state, err = safe_process(state)
-        state = coalesce_messages(state)  # ← add
+        state = coalesce_messages(state)  
+        processed = playground_inject_patti_reply(processed)
         wJson(state, TEST_PATH)
     return redirect(url_for("home"))
 
@@ -371,6 +448,17 @@ def seed():
 
     state = seed_state(first, last, email, phone, make, model, year, source, notes)
     state = ensure_min_schema(state)
+
+    # ✅ make sure this lead is processable
+    state["isActive"] = True
+    state["patti_already_contacted"] = False
+    state["checkedDict"] = {
+        "patti_already_contacted": False,
+        "last_msg_by": "customer",
+        "followUP_count": 0,
+        "followUP_date": None,
+        "alreadyProcessedActivities": {}
+    }
 
     # 2) Seed a synthetic *customer activity* so processHit will respond
     #    (processHit triggers on activityType==20 or activityName=="Read Email")
@@ -407,11 +495,12 @@ def seed():
             processed = rJson(TEST_PATH)
         except Exception:
             processed = {}
-
-    # 5) Normalize & persist
+    
+    # 5) Normalize, inject reply (playground only), and persist
     processed = ensure_min_schema(processed)
+    processed = playground_inject_patti_reply(processed)  # OFFLINE_MODE=1 guard inside
     wJson(processed, TEST_PATH)
-
+    
     return redirect(url_for("home"))
 
 
