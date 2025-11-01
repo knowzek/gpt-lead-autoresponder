@@ -158,6 +158,7 @@ Rules:
 - Start exactly with: Hi {customer_name},
 - Be helpful and human. One short paragraph is fine.
 - No signatures/phone/address/URLs.
+- Do not mention scheduling, booking, or test-drive links; I will add that line automatically.
 """
         from gpt import run_gpt
         resp = run_gpt(prompt, customer_name, rooftop_name)
