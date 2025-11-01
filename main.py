@@ -382,9 +382,32 @@ else:
         inquiry_text = (activity_data.get("notes", "") or "")
         if not inquiry_text and "message" in activity_data:
             inquiry_text = extract_adf_comment(activity_data["message"].get("body", ""))
+
     except Exception as e:
         log.warning("Failed to fetch activity: %s", e)
         inquiry_text = ""
+
+# === Persona routing: KBB ICO vs General ==============================
+src = (opportunity.get("source") or lead.get("source") or "").lower()
+is_kbb_ico = (
+    src.startswith("kbb ico")
+    or "kbb instant cash offer" in src
+    or "kelley blue book" in src
+)
+
+from datetime import datetime, timezone
+lead_age_days = 0
+created_raw = opportunity.get("createdDate") or lead.get("createdDate")
+try:
+    if created_raw:
+        created_dt = datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
+        lead_age_days = (datetime.now(timezone.utc) - created_dt).days
+except Exception:
+    pass
+
+mode = "kbb_ico" if is_kbb_ico else "general"
+opportunity["mode"] = mode
+opportunity["lead_age_days"] = lead_age_days
 
 
 # --- Rooftop resolution (from Subscription-Id) ---
@@ -482,6 +505,27 @@ trade_ins = opportunity.get("tradeIns", [])
 trade_in = (trade_ins[0].get("make") if trade_ins else "") or ""
 
 customer_name = lead.get("customer_first") or "there"
+
+if opportunity.get("mode") == "kbb_ico":
+    process_kbb_ico_lead(
+        opportunity=opportunity,
+        lead_age_days=opportunity.get("lead_age_days", 0),
+        rooftop_name=rooftop_name,
+        inquiry_text=inquiry_text,
+        token=token,
+        subscription_id=subscription_id,
+        SAFE_MODE=SAFE_MODE,
+    )
+    continue
+
+prompt = build_first_reply_prompt(opportunity, inquiry_text, rooftop_name, ...)
+reply  = run_gpt(prompt, customer_name=lead.get("customer_first"), rooftop_name=rooftop_name)
+send_opportunity_email_activity(
+    token, subscription_id, opportunity_id,
+    sender=rooftop_sender, recipients=[lead.get("email_address")],
+    carbon_copies=[], subject=reply["subject"], body_html=reply["body"],
+    rooftop_name=rooftop_name
+)
 
 # === Compose with GPT ===============================================
 fallback_mode = not inquiry_text or inquiry_text.strip().lower() in ["", "request a quote", "interested", "info", "information", "looking"]
