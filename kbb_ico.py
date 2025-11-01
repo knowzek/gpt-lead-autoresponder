@@ -1,5 +1,5 @@
 # kbb_ico.py
-from datetime import datetime as _dt, timezone as _tz
+from datetime import datetime as _dt, timezone as _tz, timedelta as _td
 from kbb_templates import TEMPLATES, fill_merge_fields
 from kbb_cadence import events_for_day
 from fortellis import (
@@ -7,7 +7,7 @@ from fortellis import (
     send_opportunity_email_activity,
     schedule_activity,
 )
-from config import SAFE_MODE, TEST_TO  # or wherever these live
+from config import TEST_TO 
 from fortellis import search_activities_by_opportunity
 
 import json, re
@@ -15,8 +15,6 @@ STATE_TAG = "[PATTI_KBB_STATE]"  # marker to find the state comment quickly
 
 import os
 ALLOW_TEXTING = os.getenv("ALLOW_TEXTING","0").lower() in ("1","true","yes")
-
-from datetime import datetime as _dt, timezone as _tz, timedelta as _td
 
 def _ico_offer_expired(created_iso: str, exclude_sunday: bool = True) -> bool:
     if not created_iso:
@@ -98,8 +96,17 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         )
 
         # Send reply
-        recipients = [ (opportunity.get("customer",{}) or {}).get("emailAddress") ]
-        if SAFE_MODE: recipients = [TEST_TO]
+        # --- Determine recipient safely --------------------------------------
+        cust = (opportunity.get("customer", {}) or {})
+        email = cust.get("emailAddress")
+        if not email:
+            emails = cust.get("emails") or []
+            email = (emails[0] or {}).get("address") if emails else None
+        if not email:
+            email = (opportunity.get("_lead", {}) or {}).get("email_address")  # if you stash it
+        recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
+        # ---------------------------------------------------------------------
+
         send_opportunity_email_activity(
             token, subscription_id, opp_id,
             sender=None, recipients=recipients, carbon_copies=[],
@@ -150,6 +157,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         sender=None, recipients=recipients, carbon_copies=[],
         subject=subject, body_html=body_html, rooftop_name=rooftop_name
     )
+
 
     # Phone/Text tasks (TCPA guard)
     if ALLOW_TEXTING and plan.get("create_text_task", False) and _customer_has_text_consent(opportunity):
