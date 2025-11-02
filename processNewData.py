@@ -579,7 +579,8 @@ def processHit(hit):
             "",
             body_html
         )
-
+        from kbb_ico import _PREFS_RE
+        body_html = _PREFS_RE.sub("", body_html).strip()
         opportunity["body_html"] = body_html
 
         if "messages" in opportunity:
