@@ -252,25 +252,29 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     opp_id = opportunity.get("opportunityId") or opportunity.get("id")
     created_iso = opportunity.get("createdDate") or opportunity.get("created_on")
 
-    # Load state and see if customer replied
+    # Load state (from tagged comments) and normalize defaults
     state = _load_state_from_comments(opportunity)
     state.setdefault("mode", "cadence")
     state.setdefault("last_template_day_sent", None)
     state.setdefault("last_template_sent_at", None)
+    state.setdefault("last_customer_msg_at", None)
+    state.setdefault("last_agent_msg_at", None)
+    state.setdefault("nudge_count", 0)
+
+    # Detect any NEW inbound since last run
     has_reply, last_cust_ts = customer_has_replied(opportunity, token, subscription_id)
 
-
+    # ===== If customer replied (first time or again) → Convo mode =====
     if has_reply:
-        # flip to convo mode & persist
         state["mode"] = "convo"
         state["last_customer_msg_at"] = last_cust_ts
         _save_state_comment(token, subscription_id, opp_id, state)
-    
-        # === Compose natural reply with GPT (ICO persona) using cleaner tone ===
+
+        # Compose natural reply with GPT (ICO persona)
         from gpt import run_gpt
-        cust_first = (opportunity.get('customer',{}) or {}).get('firstName') or "there"
+        cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
         prompt = compose_kbb_convo_body(rooftop_name, cust_first, inquiry_text)
-        
+
         reply = run_gpt(
             prompt,
             customer_name=cust_first,
@@ -279,114 +283,168 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             persona="kbb_ico",
             kbb_ctx={"offer_valid_days": 7, "exclude_sunday": True},
         )
-        
-        # Normalize run_gpt output (dict vs string)
-        if isinstance(reply, dict):
-            subject   = reply.get("subject") or f"Re: Your {rooftop_name} Instant Cash Offer"
-            body_html = reply.get("body") or ""
-        else:
-            subject   = f"Re: Your {rooftop_name} Instant Cash Offer"
-            body_html = str(reply)
-        
-        # Clean body + ensure single CTA
+
+        subject   = (reply.get("subject") or f"Re: Your {rooftop_name} Instant Cash Offer")
+        body_html = (reply.get("body") or "")
         body_html = normalize_patti_body(body_html)
         body_html = enforce_standard_schedule_sentence(body_html)
-        
-        # De-dupe any existing preferences line...
         body_html = _PREFS_RE.sub("", body_html).strip()
-        
-        # Append Patti’s footer
         body_html = body_html + build_patti_footer(rooftop_name)
-        
-        # Ensure subject has one "Re:" prefix max
+
         if not subject.lower().startswith("re:"):
             subject = "Re: " + subject
 
-        # ------------------------------------------------------------------------
-
-    
-        # Determine recipient safely
-        cust = (opportunity.get("customer", {}) or {})
+        # Resolve recipient
+        cust = (opportunity.get("customer") or {})
         email = cust.get("emailAddress")
         if not email:
             emails = cust.get("emails") or []
             email = (emails[0] or {}).get("address") if emails else None
         if not email:
-            email = (opportunity.get("_lead", {}) or {}).get("email_address")  # if you stash it
+            email = (opportunity.get("_lead", {}) or {}).get("email_address")
         recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
-        if not recipients or (not SAFE_MODE and recipients == [TEST_TO]):
-            log.warning("No recipient email found; skipping send for opp=%s", opp_id)
+        if not recipients:
+            log.warning("No recipient; skip send for opp=%s", opp_id)
             return
-    
-        # Optional breadcrumb comment
+
         add_opportunity_comment(
             token, subscription_id, opp_id,
             f"[Patti] Replying to customer (convo mode) → to {(email or 'TEST_TO')}"
         )
-    
-        # Send reply
         send_opportunity_email_activity(
             token, subscription_id, opp_id,
             sender=rooftop_sender,
             recipients=recipients, carbon_copies=[],
             subject=subject, body_html=body_html, rooftop_name=rooftop_name
         )
-    
-        # update agent timestamp and persist state
+
         state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
         _save_state_comment(token, subscription_id, opp_id, state)
         return
 
+    # ===== NUDGE LOGIC (customer went dark AFTER a reply) =====
+    # If we are already in convo mode, no new inbound detected now, and enough time has passed → send a nudge
+    if state.get("mode") == "convo":
+        last_agent_ts = state.get("last_agent_msg_at")
+        nudge_count   = int(state.get("nudge_count") or 0)
 
-    # Still in cadence mode (no reply)
+        if last_agent_ts:
+            try:
+                last_agent_dt = _dt.fromisoformat(str(last_agent_ts).replace("Z", "+00:00"))
+            except Exception:
+                last_agent_dt = None
+
+            if last_agent_dt:
+                silence_days = (_dt.now(_tz.utc) - last_agent_dt).days
+                # TUNABLES: interval & max nudges
+                if silence_days >= 2 and nudge_count < 3:
+                    log.info("KBB ICO: sending nudge #%s after %s days of silence", nudge_count + 1, silence_days)
+
+                    from gpt import run_gpt
+                    cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
+                    # Reuse prevMessages=True path (same JSON/format rules as processNewData follow-ups)
+                    prompt = f"""
+                    generate next Patti follow-up message for a Kelley Blue Book® Instant Cash Offer lead.
+                    The customer previously replied once but has since gone silent.
+                    Keep it short, warm, and helpful—remind about the ICO and next steps.
+                    messages history (python list of dicts):
+                    {opportunity.get('messages', [])}
+                    """
+
+                    reply = run_gpt(
+                        prompt,
+                        customer_name=cust_first,
+                        rooftop_name=rooftop_name,
+                        prevMessages=True,
+                        persona="kbb_ico",
+                        kbb_ctx={"offer_valid_days": 7, "exclude_sunday": True},
+                    )
+
+                    subject   = reply.get("subject") or "Still interested in your Instant Cash Offer?"
+                    body_html = reply.get("body") or ""
+                    body_html = normalize_patti_body(body_html)
+                    body_html = enforce_standard_schedule_sentence(body_html)
+                    body_html = _PREFS_RE.sub("", body_html).strip()
+                    body_html = body_html + build_patti_footer(rooftop_name)
+
+                    # Recipient
+                    cust = (opportunity.get("customer") or {})
+                    email = cust.get("emailAddress")
+                    if not email:
+                        emails = cust.get("emails") or []
+                        email = (emails[0] or {}).get("address") if emails else None
+                    if not email:
+                        email = (opportunity.get("_lead", {}) or {}).get("email_address")
+                    recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
+                    if recipients:
+                        add_opportunity_comment(
+                            token, subscription_id, opp_id,
+                            f"[Patti] Sending Nudge #{nudge_count + 1} after silence → to {(email or 'TEST_TO')}"
+                        )
+                        send_opportunity_email_activity(
+                            token, subscription_id, opp_id,
+                            sender=rooftop_sender,
+                            recipients=recipients, carbon_copies=[],
+                            subject=subject, body_html=body_html, rooftop_name=rooftop_name
+                        )
+                        state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
+                        state["nudge_count"] = nudge_count + 1
+                        _save_state_comment(token, subscription_id, opp_id, state)
+                    else:
+                        log.warning("No recipient for nudge; opp=%s", opp_id)
+                    return
+
+        # In convo mode but not time for a nudge yet → do nothing this cycle
+        log.info("KBB ICO: convo mode, no nudge due. Skipping send.")
+        return
+
+    # ===== Still in cadence (never replied) =====
     state["mode"] = "cadence"
     _save_state_comment(token, subscription_id, opp_id, state)
-    
-    # Offer-window override (if expired jump to Day 08/09 track)
+
+    # Offer-window override (if expired, jump to Day 08/09 track)
     expired = _ico_offer_expired(created_iso, exclude_sunday=True)
     effective_day = lead_age_days
     if expired and lead_age_days < 8:
-        effective_day = 8  # or 9 based on your PDF plan
-    
-    # Compute plan for this day
+        effective_day = 8
+
     plan = events_for_day(effective_day)
     if not plan:
         return
-    
-    # 🚫 Skip if we already sent this day
+
     if state.get("last_template_day_sent") == effective_day:
         log.info("KBB ICO: skipping Day %s (already sent)", effective_day)
         return
-    
-    # --- Load template safely -------------------------------------------------
-    tpl_key = plan.get("email_template_day")  # e.g., 0 / 1 / 2 (match your TEMPLATES keys)
+
+    # Load email template
+    tpl_key = plan.get("email_template_day")
     html = TEMPLATES.get(tpl_key)
     if not html:
         log.warning("KBB ICO: missing template for day key=%r", tpl_key)
         return
-    
-    # --- Rooftop address ------------------------------------------------------
+
+    # Rooftop info
     from rooftops import ROOFTOP_INFO
     rooftop_addr = ((ROOFTOP_INFO.get(rooftop_name, {}) or {}).get("address") or "")
-    
-    # --- Salesperson (primary) ------------------------------------------------
+
+    # Salesperson (primary)
     sales_team = (opportunity.get("salesTeam") or [])
     sp = next((m for m in sales_team if m.get("isPrimary")), (sales_team[0] if sales_team else {}))
     salesperson_name  = " ".join(filter(None, [sp.get("firstName", ""), sp.get("lastName", "")])).strip()
     salesperson_phone = (sp.get("phone") or sp.get("mobile") or "")
     salesperson_email = (sp.get("email") or "")
-    
-    # --- Customer basics ------------------------------------------------------
+
+    # Customer basics
     cust = (opportunity.get("customer") or {})
     cust_first = (cust.get("firstName") or opportunity.get("customer_first") or "there")
-    
-    # --- Trade info (first trade only) ---------------------------------------
+
+    # Trade info
     ti = (opportunity.get("tradeIns") or [{}])[0] if (opportunity.get("tradeIns") or []) else {}
     trade_year  = str(ti.get("year") or "")
     trade_make  = str(ti.get("make") or "")
     trade_model = str(ti.get("model") or "")
-    
-    # --- Merge fields for template -------------------------------------------
+
+    # Merge fields
     ctx = {
         "DealershipName": rooftop_name,
         "SalesPersonName": salesperson_name,
@@ -400,19 +458,16 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     }
     body_html = fill_merge_fields(html, ctx)
 
-    # Ensure exactly one booking CTA (replace token or append CTA)
+    # Ensure exactly one booking CTA
     body_html = replace_or_append_booking_cta(body_html, rooftop_name)
-
-    # Harmonize style with general Patti; de-dupe any existing prefs line
     body_html = normalize_patti_body(body_html)
-                             
     body_html = _PREFS_RE.sub("", body_html).strip()
     body_html = body_html + build_patti_footer(rooftop_name)
 
-    # Subject: from cadence plan (no "Re:")
+    # Subject from cadence plan
     subject = plan.get("subject") or f"{rooftop_name} — Your Instant Cash Offer"
 
-    # --- Recipient resolution (SAFE_MODE honored) -----------------------------
+    # Recipient resolution (SAFE_MODE honored)
     email_addr = ""
     emails = cust.get("emails") or []
     if emails:
@@ -422,7 +477,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         email_addr = cust.get("emailAddress") or ""
     recipients = [email_addr] if (email_addr and not SAFE_MODE) else [TEST_TO]
 
-    # --- Log + send -----------------------------------------------------------
+    # Log + send
     add_opportunity_comment(
         token, subscription_id, opp_id,
         f"KBB ICO Day {effective_day}: sending template {tpl_key} to "
@@ -435,13 +490,12 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         subject=subject, body_html=body_html, rooftop_name=rooftop_name
     )
 
-    # ✅ Persist idempotency state AFTER a successful send
+    # Persist idempotency for cadence sends
     state["last_template_day_sent"] = effective_day
     state["last_template_sent_at"]  = _dt.now(_tz.utc).isoformat()
     _save_state_comment(token, subscription_id, opp_id, state)
 
-    
-    # --- Phone/Text tasks (TCPA guard) ---------------------------------------
+    # Phone/Text tasks (unchanged)
     if ALLOW_TEXTING and plan.get("create_text_task", False) and _customer_has_text_consent(opportunity):
         schedule_activity(
             token, subscription_id, opp_id,
@@ -449,7 +503,6 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             activity_name="KBB ICO: Text Task", activity_type=15,
             comments=f"Auto-scheduled per ICO Day {effective_day}."
         )
-    
     if plan.get("create_phone_task", True):
         schedule_activity(
             token, subscription_id, opp_id,
@@ -457,6 +510,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             activity_name="KBB ICO: Phone Task", activity_type=14,
             comments=f"Auto-scheduled per ICO Day {effective_day}."
         )
+
 
 
 def _customer_has_text_consent(opportunity) -> bool:
