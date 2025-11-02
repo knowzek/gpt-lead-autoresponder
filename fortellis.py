@@ -382,7 +382,7 @@ def search_activities_by_opportunity(opportunity_id, token, dealer_key, page=1, 
     return resp.json().get("items", [])
 
 def get_activities(opportunity_id, customer_Id, token, dealer_key):
-    url = f"{BASE_URL}/{ACTIVITIES_SEARCH}?customerId={customer_Id}&opportunityId={opportunity_id}"
+    url = f"{BASE_URL}{ACTIVITIES_SEARCH}?customerId={customer_Id}&opportunityId={opportunity_id}"
     payload = {}
     resp = requests.get(url, headers=_headers(dealer_key, token), json=payload)
     resp.raise_for_status()
