@@ -371,22 +371,45 @@ def complete_activity(
 
 def search_activities_by_opportunity(opportunity_id, token, dealer_key, page=1, page_size=10, customer_id=None):
     url = f"{BASE_URL}{ACTIVITIES_SEARCH}/search"
-    params = {"opportunityId": opportunity_id, "pageNumber": page, "pageSize": page_size}
-    if customer_id: params["customerId"] = customer_id
+    params = {
+        "opportunityId": opportunity_id,
+        "pageNumber": page,
+        "pageSize": page_size,
+    }
+    if customer_id:
+        params["customerId"] = customer_id
+
+    # TEMP debug to prove what’s on the wire
+    try:
+        log.info("ActivityHistory GET %s params=%s", url, params)
+    except Exception:
+        pass
+
     resp = requests.get(url, headers=_headers(dealer_key, token), params=params, timeout=30)
     resp.raise_for_status()
     data = resp.json()
     return data.get("items") or data.get("activities") or []
 
-def get_activities(opportunity_id, customer_Id, token, dealer_key):
+
+def get_activities(opportunity_id, customer_id, token, dealer_key):
     url = f"{BASE_URL}{ACTIVITIES_SEARCH}/search"
-    params = {"opportunityId": opportunity_id, "customerId": customer_Id, "pageNumber": 1, "pageSize": 100}
+    params = {
+        "opportunityId": opportunity_id,
+        "customerId":   customer_id,   # your tenant requires this
+        "pageNumber":   1,
+        "pageSize":     100,
+    }
+
+    # TEMP debug
+    try:
+        log.info("ActivityHistory GET %s params=%s", url, params)
+    except Exception:
+        pass
+
     resp = requests.get(url, headers=_headers(dealer_key, token), params=params, timeout=30)
     resp.raise_for_status()
     return resp.json()
-    resp = requests.get(url, headers=_headers(dealer_key, token), params=params, timeout=30)
-    resp.raise_for_status()
-    return resp.json()
+
 
 
 
