@@ -48,8 +48,12 @@ def _load_state_from_comments(opportunity) -> dict:
     return {"mode": "cadence", "last_customer_msg_at": None, "last_agent_msg_at": None}
 
 def _save_state_comment(token, subscription_id, opportunity_id, state: dict):
+    if not opportunity_id:
+        log.warning("skip state comment: missing opportunity_id")
+        return
     payload = f"{STATE_TAG} {json.dumps(state, ensure_ascii=False)}"
     add_opportunity_comment(token, subscription_id, opportunity_id, payload)
+
 
 def customer_has_replied(opportunity: dict, token: str, subscription_id: str) -> tuple[bool, str | None]:
     """Returns (has_replied, last_customer_ts_iso)."""
@@ -93,8 +97,8 @@ def customer_has_replied(opportunity: dict, token: str, subscription_id: str) ->
 
 
 def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
-                         token, subscription_id, SAFE_MODE=False):
-    opp_id = opportunity.get("id")
+                         token, subscription_id, SAFE_MODE=False, rooftop_sender=None):
+    opp_id = opportunity.get("opportunityId") or opportunity.get("id")
     created_iso = opportunity.get("createdDate") or opportunity.get("created_on")
 
     # Load state and see if customer replied
@@ -141,8 +145,9 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
         send_opportunity_email_activity(
             token, subscription_id, opp_id,
-            sender=None, recipients=recipients, carbon_copies=[],
-            subject=reply["subject"], body_html=reply["body"], rooftop_name=rooftop_name
+            sender=rooftop_sender,  # now defined
+            recipients=recipients, carbon_copies=[],
+            subject=subject, body_html=body_html, rooftop_name=rooftop_name
         )
         # update agent timestamp
         state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
