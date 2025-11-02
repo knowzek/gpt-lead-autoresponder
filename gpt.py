@@ -419,6 +419,20 @@ def run_gpt(prompt: str,
         
         dictResult = getDictRes(text) or {"subject": "Re: your offer", "body": "Thanks for the note—happy to help."}
 
+        placeholder_re = re.compile(r"(?i)\bthe subject (of|from)\b.*(patti|customer)")
+        subj = (dictResult.get("subject") or "").strip()
+        
+        if not subj or placeholder_re.search(subj):
+            # Use a strong default, especially for KBB persona
+            fallback_rooftop = rooftop_name or "Patterson Auto Group"
+            if persona == "kbb_ico":
+                dictResult["subject"] = f"Kelley Blue Book® Instant Cash Offer | {fallback_rooftop}"
+            else:
+                dictResult["subject"] = f"Your vehicle inquiry with {fallback_rooftop}"
+        
+        # If we're replying, keep a single "Re:" prefix
+        if not dictResult["subject"].lower().startswith("re:"):
+            dictResult["subject"] = "Re: " + dictResult["subject"]
 
         return dictResult
 
