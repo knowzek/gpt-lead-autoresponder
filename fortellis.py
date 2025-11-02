@@ -370,7 +370,7 @@ def complete_activity(
 
 
 def search_activities_by_opportunity(opportunity_id, token, dealer_key, page=1, page_size=10):
-    url = f"{BASE_URL}{ACTIVITIES_BASE}/search"
+    url = f"{BASE_URL}{ACTIVITIES_SEARCH}/search"
     payload = {
         "filters": [{"field": "opportunityId", "operator": "eq", "value": opportunity_id}],
         "sort": [{"field": "createdDate", "direction": "desc"}],
