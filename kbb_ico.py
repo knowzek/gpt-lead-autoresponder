@@ -57,9 +57,8 @@ def compose_kbb_convo_body(rooftop_name: str, cust_first: str, customer_message:
     - Begin with: "Hi {cust_first}," (exactly).
     - Acknowledge the customer's note in one concise sentence.
     - State clearly that you're helping with their Kelley Blue Book® Instant Cash Offer.
-    - Offer two inspection windows (e.g., weekday afternoon and Saturday morning) without inventing exact times unless given.
     - Remind them to bring title, ID, and keys.
-    - Include ONE booking line using the provided booking CTA (we will inject it).
+    - Do NOT propose appointment times; the system will add the standard scheduling sentence.
     - No extra signatures; we will append yours.
     - Keep to 2–4 short paragraphs max.
 
@@ -68,6 +67,31 @@ def compose_kbb_convo_body(rooftop_name: str, cust_first: str, customer_message:
 
     Produce only the HTML body (no subject).
     """).strip()
+_CTA_ANCHOR_RE = _re.compile(r'(?is)<a[^>]*>\s*Schedule\s+Your\s+Visit\s*</a>')
+_RAW_TOKEN_RE  = _re.compile(r'(?i)<\{LegacySalesApptSchLink\}>')
+_ANY_SCHED_LINE_RE = _re.compile(r'(?i)(reserve your time|schedule (an )?appointment|schedule your visit)[:\s]*', _re.I)
+
+def enforce_standard_schedule_sentence(body_html: str) -> str:
+    """Remove any existing CTA/token lines and append the standard token sentence as one <p>."""
+    if not body_html:
+        body_html = ""
+
+    # 1) Remove anchors like <a ...>Schedule Your Visit</a>
+    body_html = _CTA_ANCHOR_RE.sub('Schedule Your Visit', body_html)
+
+    # 2) Remove raw tokens sprinkled in text
+    body_html = _RAW_TOKEN_RE.sub('', body_html)
+
+    # 3) Remove stray 'reserve your time / schedule...' lines the model might have added
+    body_html = _ANY_SCHED_LINE_RE.sub('', body_html)
+
+    # 4) Append your exact standard line as HTML with the raw token
+    standard = (
+        '<p>Please let us know a convenient time for you, or you can instantly reserve your time here: '
+        '<{LegacySalesApptSchLink}></p>'
+    )
+    return body_html.rstrip() + standard
+
 
 
 _LEGACY_TOKEN_RE = _re.compile(r"(?i)<\{LegacySalesApptSchLink\}>")
@@ -244,9 +268,9 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         
         # Clean body + ensure single CTA
         body_html = normalize_patti_body(body_html)
-        body_html = replace_or_append_booking_cta(body_html, rooftop_name)
+        body_html = enforce_standard_schedule_sentence(body_html)
         
-        # De-dupe any existing preferences line that templates/CRM might have added
+        # De-dupe any existing preferences line...
         body_html = _PREFS_RE.sub("", body_html).strip()
         
         # Append Patti’s footer
