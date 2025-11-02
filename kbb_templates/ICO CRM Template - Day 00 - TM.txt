@@ -241,9 +241,9 @@ font-size: 17px !important;
 <h1 style="margin: 0 0 10px; font-size: 25px; line-height: 30px; color: #000000; font-weight: normal;">We've Received Your Offer!</h1>
 <p style="margin: 0 0 10px;">Hello <{CustFirstName}>,<br>
 <br>
-We've received the details regarding the Kelley Blue Book&#174; Instant Cash Offer for your <{TradeYear}> <{TradeModel}>. Our Vehicle Acquisition Team will be in contact shortly to coordinate an in-person inspection that works with your availability.<br>
+We've received the details regarding the Kelley Blue Book&#174; Instant Cash Offer for your <{TradeYear}> <{TradeModel}>. <br>
 <br>
-To suit your preference, would you rather we communicate with you via text messages or emails?<br>
+Please let us know a convenient time for you, or you can instantly reserve your time here: <{LegacySalesApptSchLink}>
 <br>
 <{SalesPersonName:S}><br>
 <{DealershipName}><br>
