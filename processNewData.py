@@ -250,7 +250,6 @@ def processHit(hit):
     # TEMP test gate: only flip to KBB mode for opps assigned to Kristin
     if _is_assigned_to_kristin(opportunity):
         # Lead age (7-day window logic can use this inside kbb_ico)
-        from datetime import datetime, timezone
         lead_age_days = 0
         created_raw = (
             opportunity.get("createdDate")
