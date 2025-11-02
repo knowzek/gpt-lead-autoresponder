@@ -33,20 +33,13 @@ def build_patti_footer(rooftop_name: str) -> str:
     dealer_site  = rt.get("website") or "https://pattersonautos.com"
 
     sig = _tw.dedent(f"""
-    <p>— Patti<br/>
+    <p>Patti<br/>
     {rooftop_name}<br/>
     {dealer_addr}<br/>
     {dealer_phone}</p>
     """).strip()
 
-    prefs = _tw.dedent(f"""
-    <p style="margin-top:12px;">
-    To stop receiving these messages, visit
-    <a href="{dealer_site}/preferences">Communication Preferences</a>.
-    </p>
-    """).strip()
-
-    return sig + prefs
+    return sig
 
 def normalize_patti_body(body_html: str) -> str:
     """Tidy GPT output: strip stray Patti signatures and collapse whitespace."""
@@ -77,8 +70,6 @@ def compose_kbb_convo_body(rooftop_name: str, cust_first: str, customer_message:
     """).strip()
 
 
-
-# kbb_ico.py
 _LEGACY_TOKEN_RE = _re.compile(r"(?i)<\{LegacySalesApptSchLink\}>")
 
 def render_booking_cta(rooftop_name: str, link_text: str = "Schedule Your Visit") -> str:
