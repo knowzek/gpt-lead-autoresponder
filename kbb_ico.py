@@ -190,17 +190,21 @@ def _save_state_comment(token, subscription_id, opportunity_id, state: dict):
     add_opportunity_comment(token, subscription_id, opportunity_id, payload)
 
 
-def customer_has_replied(opportunity: dict, token: str, subscription_id: str) -> tuple[bool, str | None]:
-    """Returns (has_replied, last_customer_ts_iso)."""
+def customer_has_replied(opportunity: dict, token: str, subscription_id: str, state: dict | None = None):
+    """
+    Returns (has_replied, last_customer_ts_iso, last_inbound_activity_id)
+    Only returns True for a *new* inbound since the state's last seen inbound id/timestamp.
+    """
+    state = state or {}
+    last_seen_ts = state.get("last_customer_msg_at") or ""
+    last_seen_id = state.get("last_inbound_activity_id") or ""
+
     opportunity_id = opportunity.get("opportunityId") or opportunity.get("id")
     customer = (opportunity.get("customer") or {})
     customer_id = customer.get("id")
-
     if not opportunity_id:
         log.error("customer_has_replied: missing opportunity_id")
-        return False, None
-
-    log.info("KBB ICO: activity search opp=%s cust=%s sub=%s", opportunity_id, customer_id, subscription_id)
+        return False, None, None
 
     acts = search_activities_by_opportunity(
         opportunity_id=opportunity_id,
@@ -210,41 +214,42 @@ def customer_has_replied(opportunity: dict, token: str, subscription_id: str) ->
         customer_id=customer_id,
     ) or []
 
-    # DEBUG: surface a few activities to tune predicates
-    for a in acts[:10]:
-        log.info("ACT id=%s type=%r name=%r dir=%r by=%r subj=%r",
-                 a.get("activityId") or a.get("id"),
-                 a.get("activityType"),
-                 a.get("activityName"),
-                 a.get("direction"),
-                 a.get("createdBy"),
-                 ((a.get("message") or {}).get("subject") or a.get("subject")))
-
     def _is_inbound(a: dict) -> bool:
-        t  = a.get("activityType")
         nm = (a.get("activityName") or "").strip().lower()
-        dr = (a.get("direction") or "").strip().lower()
-        cb = (a.get("createdBy") or "").strip().lower()
+        # Your CRM logs *customer email replies* as "Read Email"
+        if nm == "read email":
+            return True
+        # Never treat sends as inbound
+        if "send email" in nm or "send email/letter" in nm or nm.startswith("send "):
+            return False
+        return False  # keep strict
 
-        # Treat "Read Email" (v1) and message/email-ish types as inbound
-        read_email_name = (nm == "read email")
-        message_like = (
-            t in (3, 20, 21) or
-            str(t) in {"3", "20", "21"} or
-            "message" in nm or "email" in nm or "reply" in nm
-        )
-        inbound_flag = dr in {"inbound", "incoming", "from customer", "received"} or dr == ""
+    def _ts(a: dict) -> str:
+        return (a.get("createdDate") or a.get("createdOn") or a.get("modifiedDate") or "").strip()
 
-        # consider it inbound if it's read-email OR message-like and looks inbound
-        return read_email_name or (message_like and inbound_flag and cb not in {"patti","system"})
-
-    last_ts = None
+    # Walk newest→oldest. Return only if it's *newer* than we’ve seen.
     for a in acts:
-        if _is_inbound(a):
-            last_ts = a.get("createdDate") or a.get("createdOn") or a.get("modifiedDate")
-            return True, last_ts
+        if not _is_inbound(a):
+            continue
+        aid = str(a.get("activityId") or a.get("id") or "")
+        ats = _ts(a)
+        if last_seen_id and aid == last_seen_id:
+            # already processed
+            continue
+        if last_seen_ts:
+            try:
+                ats_dt = _dt.fromisoformat(ats.replace("Z","+00:00"))
+                lst_dt = _dt.fromisoformat(str(last_seen_ts).replace("Z","+00:00"))
+                if ats_dt <= lst_dt:
+                    continue
+            except Exception:
+                # if we can't parse, be conservative: require id mismatch as signal
+                if aid == last_seen_id:
+                    continue
+        return True, ats or None, aid or None
 
-    return False, last_ts
+    return False, None, None
+
 
 
 def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
@@ -260,14 +265,23 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     state.setdefault("last_customer_msg_at", None)
     state.setdefault("last_agent_msg_at", None)
     state.setdefault("nudge_count", 0)
+    state.setdefault("last_inbound_activity_id", None)                          
 
-    # Detect any NEW inbound since last run
-    has_reply, last_cust_ts = customer_has_replied(opportunity, token, subscription_id)
+    ## NOTE: pass state into the detector so it can ignore already-seen inbounds
+    has_reply, last_cust_ts, last_inbound_id = customer_has_replied(
+        opportunity, token, subscription_id, state
+    )
 
-    # ===== If customer replied (first time or again) → Convo mode =====
-    if has_reply:
+    # Only flip to convo when we truly have a new inbound with a timestamp
+    if has_reply and last_cust_ts:
         state["mode"] = "convo"
         state["last_customer_msg_at"] = last_cust_ts
+        if last_inbound_id:
+            state["last_inbound_activity_id"] = last_inbound_id
+    
+        # 3) Reset nudge counter on real inbound (so a fresh silence starts clean)
+        state["nudge_count"] = 0
+    
         _save_state_comment(token, subscription_id, opp_id, state)
 
         # Compose natural reply with GPT (ICO persona)
