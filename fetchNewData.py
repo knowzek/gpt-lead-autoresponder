@@ -30,7 +30,14 @@ from fortellis import (
     get_activities
 )
 
-
+def _is_assigned_to_kristin_doc(doc: dict) -> bool:
+    for m in (doc.get("salesTeam") or []):
+        fn = (m.get("firstName") or "").strip().lower()
+        ln = (m.get("lastName") or "").strip().lower()
+        em = (m.get("email") or "").strip().lower()
+        if (fn == "kristin" and ln == "nowzek") or em in {"knowzek@pattersonautos.com","knowzek@gmail.com"}:
+            return True
+    return False
 
 # ── Logging (compact) ────────────────────────────────────────────────
 LOG_LEVEL = os.getenv("APP_LOG_LEVEL", "INFO").upper()
@@ -142,6 +149,9 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
         up_type = (op.get("upType") or "").lower()
         if up_type not in ELIGIBLE_UPTYPES:
             continue  # skip showroom/phone/etc.
+
+        if not _is_assigned_to_kristin_doc(op):
+            continue  # ✅ indent this line
 
         isExist = False
         if isIdExist(op.get("id")):
