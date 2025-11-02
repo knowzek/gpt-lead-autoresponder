@@ -42,7 +42,21 @@ def _headers_get(subscription_id: str, token: str) -> dict:
         "Request-Id": str(uuid.uuid4()),
     }
 
+def _clean_token(tok: str) -> str:
+    tok = (tok or "").strip()
+    if tok.lower().startswith("bearer "):
+        tok = tok.split(None, 1)[1]
+    return tok
 
+def _headers_post(subscription_id: str, token: str) -> dict:
+    t = _clean_token(token)
+    return {
+        "Authorization": f"Bearer {t}",
+        "Subscription-Id": subscription_id,
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Request-Id": str(uuid.uuid4()),
+    }
 
 BASE_URL = os.getenv("FORTELLIS_BASE_URL", "https://api.fortellis.io")  # prod default
 LEADS_BASE = "/cdk/sales/elead/v1/leads"
@@ -269,15 +283,40 @@ def send_opportunity_email_activity(token,
     return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
 
 
-
-
-def add_opportunity_comment(token, dealer_key, opportunity_id, comment_text):
-    url = f"{BASE_URL}{OPPS_BASE}/comment"
-    payload = {
+def add_opportunity_comment(token: str, subscription_id: str, opportunity_id: str, comment_html: str):
+    """
+    POST /sales/v2/elead/opportunities/comment
+    Auto-refreshes token once on 401 and logs correlation id on failure.
+    """
+    url = f"{BASE_URL}/sales/v2/elead/opportunities/comment"
+    body = {
         "opportunityId": opportunity_id,
-        "comment": comment_text
+        "comment": comment_html
     }
-    return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
+
+    # 1st attempt
+    resp = requests.post(url, headers=_headers_post(subscription_id, token), json=body, timeout=30)
+
+    # Retry once on 401 with a fresh token for this sub-id
+    if resp.status_code == 401:
+        try:
+            from fortellis import get_token
+            try:
+                fresh = get_token(subscription_id, force_refresh=True)
+            except TypeError:
+                fresh = get_token(subscription_id)
+            resp = requests.post(url, headers=_headers_post(subscription_id, fresh), json=body, timeout=30)
+        except Exception as e:
+            log.error("Token refresh failed (comment) for sub %s: %s", subscription_id, e)
+
+    if resp.status_code >= 400:
+        corr = resp.headers.get("x-correlation-id")
+        log.error(
+            "POST %s status=%s corr=%s sub=%s body_preview=%s",
+            url, resp.status_code, corr, subscription_id, (resp.text or "")[:200]
+        )
+    resp.raise_for_status()
+    return resp.json() if resp.text else {}
 
 
 def add_vehicle_sought(token, dealer_key, opportunity_id,
