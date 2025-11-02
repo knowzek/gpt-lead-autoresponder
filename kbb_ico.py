@@ -111,7 +111,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         state["mode"] = "convo"
         state["last_customer_msg_at"] = last_cust_ts
         _save_state_comment(token, subscription_id, opp_id, state)
-
+    
         # Compose a natural reply with GPT (ICO persona)
         from gpt import run_gpt  # local import to avoid circulars
         prompt = (
@@ -128,11 +128,22 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             rooftop_name=rooftop_name,
             prevMessages=True,
             persona="kbb_ico",
-            kbb_ctx={"offer_valid_days":7, "exclude_sunday":True},
+            kbb_ctx={"offer_valid_days": 7, "exclude_sunday": True},
         )
-
-        # Send reply
-        # --- Determine recipient safely --------------------------------------
+    
+        # Normalize run_gpt output (dict vs string)
+        if isinstance(reply, dict):
+            subject   = reply.get("subject") or f"Re: Your {rooftop_name} Instant Cash Offer"
+            body_html = reply.get("body") or ""
+        else:
+            subject   = f"Re: Your {rooftop_name} Instant Cash Offer"
+            body_html = str(reply)
+    
+        # Strip any auto-signature
+        import re as _re
+        body_html = _re.sub(r"(?is)(?:\n\s*)?patti\s*(?:\r?\n)+virtual assistant.*?$", "", body_html)
+    
+        # Determine recipient safely
         cust = (opportunity.get("customer", {}) or {})
         email = cust.get("emailAddress")
         if not email:
@@ -141,18 +152,26 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         if not email:
             email = (opportunity.get("_lead", {}) or {}).get("email_address")  # if you stash it
         recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
-        # ---------------------------------------------------------------------
-
+    
+        # Optional breadcrumb comment
+        add_opportunity_comment(
+            token, subscription_id, opp_id,
+            f"[Patti] Replying to customer (convo mode) → to {(email or 'TEST_TO')}"
+        )
+    
+        # Send reply
         send_opportunity_email_activity(
             token, subscription_id, opp_id,
-            sender=rooftop_sender,  # now defined
+            sender=rooftop_sender,
             recipients=recipients, carbon_copies=[],
             subject=subject, body_html=body_html, rooftop_name=rooftop_name
         )
-        # update agent timestamp
+    
+        # update agent timestamp and persist state
         state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
         _save_state_comment(token, subscription_id, opp_id, state)
         return
+
 
     # Still in cadence mode (no reply)
     state["mode"] = "cadence"
