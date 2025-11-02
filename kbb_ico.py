@@ -72,25 +72,35 @@ _RAW_TOKEN_RE  = _re.compile(r'(?i)<\{LegacySalesApptSchLink\}>')
 _ANY_SCHED_LINE_RE = _re.compile(r'(?i)(reserve your time|schedule (an )?appointment|schedule your visit)[:\s]*', _re.I)
 
 def enforce_standard_schedule_sentence(body_html: str) -> str:
-    """Remove any existing CTA/token lines and append the standard token sentence as one <p>."""
+    """Ensure the standard CTA appears above visit/closing lines and only once."""
     if not body_html:
         body_html = ""
 
-    # 1) Remove anchors like <a ...>Schedule Your Visit</a>
-    body_html = _CTA_ANCHOR_RE.sub('Schedule Your Visit', body_html)
+    # Remove any legacy anchor or token artifacts
+    body_html = _CTA_ANCHOR_RE.sub("Schedule Your Visit", body_html)
+    body_html = _RAW_TOKEN_RE.sub("", body_html)
+    body_html = _ANY_SCHED_LINE_RE.sub("", body_html)
 
-    # 2) Remove raw tokens sprinkled in text
-    body_html = _RAW_TOKEN_RE.sub('', body_html)
-
-    # 3) Remove stray 'reserve your time / schedule...' lines the model might have added
-    body_html = _ANY_SCHED_LINE_RE.sub('', body_html)
-
-    # 4) Append your exact standard line as HTML with the raw token
-    standard = (
+    standard_html = (
         '<p>Please let us know a convenient time for you, or you can instantly reserve your time here: '
         '<{LegacySalesApptSchLink}></p>'
     )
-    return body_html.rstrip() + standard
+
+    # Split into paragraphs to position CTA above "ready to visit" or "looking forward"
+    parts = re.split(r"(?i)(?=<p[^>]*>)", body_html)
+    for i, p in enumerate(parts):
+        if re.search(r"(ready to visit|bring|looking forward)", p, re.I):
+            parts.insert(i, standard_html)
+            break
+    else:
+        # if no clear place, just prepend
+        parts.insert(0, standard_html)
+
+    # Remove duplicates if the model inserted any stray CTA
+    combined = "".join(parts)
+    combined = re.sub(r"(?is)(<p>.*LegacySalesApptSchLink.*?</p>)(.*)\1", r"\1\2", combined)
+    return combined.strip()
+
 
 
 
@@ -383,6 +393,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
     # Harmonize style with general Patti; de-dupe any existing prefs line
     body_html = normalize_patti_body(body_html)
+                             
     body_html = _PREFS_RE.sub("", body_html).strip()
     body_html = body_html + build_patti_footer(rooftop_name)
 
