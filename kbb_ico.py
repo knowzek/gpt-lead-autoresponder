@@ -26,6 +26,43 @@ import textwrap as _tw
 
 _PREFS_RE = _re.compile(r'(?is)\s*to stop receiving these messages.*?(?:</p>|$)')
 
+# === Live activity helpers (Fortellis) =========================================
+def _fetch_activities_live(opp_id: str, customer_id: str | None, token: str, subscription_id: str, page_size: int = 100) -> list[dict]:
+    try:
+        return search_activities_by_opportunity(
+            opportunity_id=opp_id,
+            token=token,
+            dealer_key=subscription_id,
+            page=1,
+            page_size=page_size,
+            customer_id=customer_id,
+        ) or []
+    except Exception as e:
+        log.warning("Fortellis activities fetch failed: %s", e)
+        return []
+
+def _is_read_email(act: dict) -> bool:
+    nm = (act.get("activityName") or "").strip().lower()
+    return nm == "read email"  # keep strict as requested
+
+def _activity_dt(act: dict):
+    # try created/modified timestamps; default to None if absent
+    ts = act.get("createdDate") or act.get("modifiedDate") or ""
+    try:
+        return _dt.fromisoformat(ts.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+def _has_new_read_email_since(acts: list[dict], since_dt) -> bool:
+    for a in acts:
+        if not _is_read_email(a):
+            continue
+        adt = _activity_dt(a)
+        if adt and (since_dt is None or adt > since_dt):
+            return True
+    return False
+
+
 def build_patti_footer(rooftop_name: str) -> str:
     rt = (ROOFTOP_INFO.get(rooftop_name) or {})
     dealer_phone = rt.get("phone") or ""
@@ -265,7 +302,25 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     state.setdefault("last_customer_msg_at", None)
     state.setdefault("last_agent_msg_at", None)
     state.setdefault("nudge_count", 0)
-    state.setdefault("last_inbound_activity_id", None)                          
+    state.setdefault("last_inbound_activity_id", None)
+
+    # Before you compute mode/cadence, pull LIVE activities
+    opp_id = opportunity.get("opportunityId") or opportunity.get("id")
+    customer_id = (opportunity.get("customer") or {}).get("id")
+    acts_live = _fetch_activities_live(opp_id, customer_id, token, subscription_id)
+    
+    # Try to hydrate state from a saved state comment found among live acts (MERGE, don’t replace)
+    for a in acts_live:
+        txt = (a.get("comments") or a.get("notes") or "") or ""
+        if STATE_TAG in txt:
+            try:
+                loaded = json.loads(_re.sub(r".*?\[PATTI_KBB_STATE\]\s*", "", txt, flags=_re.S))
+                state.update(loaded or {})
+            except Exception:
+                pass
+            break
+
+
 
     ## NOTE: pass state into the detector so it can ignore already-seen inbounds
     has_reply, last_cust_ts, last_inbound_id = customer_has_replied(
@@ -273,22 +328,29 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     )
 
     # Only flip to convo when we truly have a new inbound with a timestamp
-    if has_reply and last_cust_ts:
+    # Compute the last agent send time from state (if present)
+    last_agent_dt = None
+    if state.get("last_agent_msg_at"):
+        try:
+            last_agent_dt = _dt.fromisoformat(str(state["last_agent_msg_at"]).replace("Z","+00:00"))
+        except Exception:
+            pass
+    
+    # Convo mode if and only if there is a READ EMAIL newer than Patti's send
+    if _has_new_read_email_since(acts_live, last_agent_dt):
         state["mode"] = "convo"
-        state["last_customer_msg_at"] = last_cust_ts
+        state["nudge_count"] = 0
+        if has_reply and last_cust_ts:
+            state["last_customer_msg_at"] = last_cust_ts
         if last_inbound_id:
             state["last_inbound_activity_id"] = last_inbound_id
-    
-        # 3) Reset nudge counter on real inbound (so a fresh silence starts clean)
-        state["nudge_count"] = 0
-    
         _save_state_comment(token, subscription_id, opp_id, state)
-
+    
         # Compose natural reply with GPT (ICO persona)
         from gpt import run_gpt
         cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
         prompt = compose_kbb_convo_body(rooftop_name, cust_first, inquiry_text)
-
+    
         reply = run_gpt(
             prompt,
             customer_name=cust_first,
@@ -297,14 +359,14 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             persona="kbb_ico",
             kbb_ctx={"offer_valid_days": 7, "exclude_sunday": True},
         )
-
+    
         subject   = (reply.get("subject") or f"Re: Your {rooftop_name} Instant Cash Offer")
         body_html = (reply.get("body") or "")
         body_html = normalize_patti_body(body_html)
-        body_html = enforce_standard_schedule_sentence(body_html)
+        body_html = enforce_standard_schedule_sentence(body_html)  # keeps one standard CTA
         body_html = _PREFS_RE.sub("", body_html).strip()
         body_html = body_html + build_patti_footer(rooftop_name)
-
+    
         if not subject.lower().startswith("re:"):
             subject = "Re: " + subject
 
@@ -335,6 +397,10 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
         _save_state_comment(token, subscription_id, opp_id, state)
         return
+
+    else:
+        # no new customer reply → remain in (or reset to) cadence
+        state["mode"] = state.get("mode") or "cadence"
 
     # ===== NUDGE LOGIC (customer went dark AFTER a reply) =====
     # If we are already in convo mode, no new inbound detected now, and enough time has passed → send a nudge
@@ -412,6 +478,9 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         log.info("KBB ICO: convo mode, no nudge due. Skipping send.")
         return
 
+    if state.get("mode") == "convo":
+        log.info("KBB ICO: persisted convo mode — skip cadence.")
+        return
     # ===== Still in cadence (never replied) =====
     state["mode"] = "cadence"
     _save_state_comment(token, subscription_id, opp_id, state)
