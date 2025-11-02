@@ -425,7 +425,7 @@ def search_activities_by_opportunity(opportunity_id, token, dealer_key, page=1, 
 
 
 def get_activities(opportunity_id, customer_id, token, dealer_key):
-    url = f"{BASE_URL}{ACTIVITIES_SEARCH}/search"
+    url = f"{BASE_URL}{ACTIVITIES_SEARCH}"
     params = {
         "opportunityId": opportunity_id,
         "customerId":   customer_id,   # your tenant requires this
