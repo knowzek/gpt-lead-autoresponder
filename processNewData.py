@@ -290,15 +290,19 @@ def processHit(hit):
 
         # Hand off to the KBB ICO flow (templates + stop-on-reply convo)
         try:
+            tok = None
+            if not OFFLINE_MODE:
+                tok = get_token(subscription_id)
+            
             process_kbb_ico_lead(
                 opportunity=opportunity,
                 lead_age_days=lead_age_days,
                 rooftop_name=rooftop_name,
                 inquiry_text=inquiry_text_safe,
-                token=None,
+                token=tok,                               # ✅ pass a live token
                 subscription_id=subscription_id,
                 SAFE_MODE=os.getenv("SAFE_MODE", "1") in ("1","true","True"),
-                rooftop_sender=rooftop_sender,   # <— add this
+                rooftop_sender=rooftop_sender,
             )
         except Exception as e:
             log.error("KBB ICO handler failed for opp %s: %s", opportunityId, e)
