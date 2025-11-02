@@ -484,7 +484,8 @@ def run_gpt(prompt: str,
             body = re.sub(r"(?i)<\{LegacySalesApptSchLink\}>", "", body)
             # If you still want to suppress duplicate 'looking forward...' sentences, keep the next line.
             # It removes extra "Looking forward to ..." lines but leaves other closers intact.
-            body = re.sub(r"(?im)^\s*looking forward to[^\n]*\n?", "", body)
+            if persona != "kbb_ico":
+                body = re.sub(r"(?im)^\s*looking forward to[^\n]*\n?", "", body)
         
             # ✅ Your exact sentence (token renders as the 'Schedule Appointment' link text)
             schedule_sentence = (
