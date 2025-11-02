@@ -22,6 +22,60 @@ import re as _re
 from textwrap import dedent as _dd
 from rooftops import ROOFTOP_INFO
 
+import textwrap as _tw
+
+_PREFS_RE = _re.compile(r'(?is)\s*to stop receiving these messages.*?(?:</p>|$)')
+
+def build_patti_footer(rooftop_name: str) -> str:
+    rt = (ROOFTOP_INFO.get(rooftop_name) or {})
+    dealer_phone = rt.get("phone") or ""
+    dealer_addr  = rt.get("address") or ""
+    dealer_site  = rt.get("website") or "https://pattersonautos.com"
+
+    sig = _tw.dedent(f"""
+    <p>— Patti<br/>
+    {rooftop_name}<br/>
+    {dealer_addr}<br/>
+    {dealer_phone}</p>
+    """).strip()
+
+    prefs = _tw.dedent(f"""
+    <p style="margin-top:12px;">
+    To stop receiving these messages, visit
+    <a href="{dealer_site}/preferences">Communication Preferences</a>.
+    </p>
+    """).strip()
+
+    return sig + prefs
+
+def normalize_patti_body(body_html: str) -> str:
+    """Tidy GPT output: strip stray Patti signatures and collapse whitespace."""
+    body_html = _re.sub(r'(?is)(?:\n\s*)?patti\s*(?:<br/?>|\r?\n)+.*?$', '', body_html.strip())
+    # collapse double spaces around <p> boundaries
+    body_html = _re.sub(r'\n{2,}', '\n', body_html)
+    return body_html
+
+def compose_kbb_convo_body(rooftop_name: str, cust_first: str, customer_message: str, booking_link_text="Schedule Your Visit"):
+    """
+    Build the *prompt string* Patti should use for KBB replies (clean, friendly, short).
+    Mirrors your “general Patti” tone: greeting, value, CTA, clean spacing.
+    """
+    return _tw.dedent(f"""
+    You are Patti, the virtual assistant for {rooftop_name}. Keep replies short, warm, and human—no corporate tone.
+    Write HTML with simple <p> paragraphs (no lists). Always:
+    - Begin with: "Hi {cust_first}," (exactly).
+    - Acknowledge the customer's note in one concise sentence.
+    - Offer help and next step without hard-scheduling times. Do NOT invent specific time slots.
+    - Include ONE booking line using the provided booking CTA (we will inject it).
+    - No extra signatures; we will append yours.
+    - Keep to 2–4 short paragraphs max.
+
+    Customer said:
+    \"\"\"{customer_message}\"\"\"
+
+    Produce only the HTML body (no subject).
+    """).strip()
+
 _LEGACY_TOKEN_RE = _re.compile(r"(?i)<\{LegacySalesApptSchLink\}>")
 
 def render_booking_cta(rooftop_name: str, link_text: str = "Schedule Your Visit") -> str:
@@ -167,25 +221,20 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         state["last_customer_msg_at"] = last_cust_ts
         _save_state_comment(token, subscription_id, opp_id, state)
     
-        # Compose a natural reply with GPT (ICO persona)
-        from gpt import run_gpt  # local import to avoid circulars
-        prompt = (
-            f"Lead context:\n"
-            f"- Rooftop: {rooftop_name}\n"
-            f"- Offer valid window: 7 days excluding Sunday.\n\n"
-            f"Customer message:\n\"\"\"{inquiry_text}\"\"\"\n\n"
-            "Write a short, natural reply that first acknowledges what they asked, then proposes "
-            "2 appointment windows and what to bring (title, ID, keys). No signature block."
-        )
+        # === Compose natural reply with GPT (ICO persona) using cleaner tone ===
+        from gpt import run_gpt
+        cust_first = (opportunity.get('customer',{}) or {}).get('firstName') or "there"
+        prompt = compose_kbb_convo_body(rooftop_name, cust_first, inquiry_text)
+        
         reply = run_gpt(
             prompt,
-            customer_name=(opportunity.get('customer',{}) or {}).get('firstName') or "there",
+            customer_name=cust_first,
             rooftop_name=rooftop_name,
             prevMessages=True,
             persona="kbb_ico",
             kbb_ctx={"offer_valid_days": 7, "exclude_sunday": True},
         )
-    
+        
         # Normalize run_gpt output (dict vs string)
         if isinstance(reply, dict):
             subject   = reply.get("subject") or f"Re: Your {rooftop_name} Instant Cash Offer"
@@ -193,36 +242,21 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         else:
             subject   = f"Re: Your {rooftop_name} Instant Cash Offer"
             body_html = str(reply)
-    
-        # Strip any auto-signature
-        import re as _re
-        body_html = _re.sub(r"(?is)(?:\n\s*)?patti\s*(?:\r?\n)+virtual assistant.*?$", "", body_html)
+        
+        # Clean body + ensure single CTA
+        body_html = normalize_patti_body(body_html)
         body_html = replace_or_append_booking_cta(body_html, rooftop_name)
-        # --- Append standardized CTA + signature + communication preferences ----
-        from rooftops import ROOFTOP_INFO
         
-        rt = (ROOFTOP_INFO.get(rooftop_name) or {})
-        booking_link = rt.get("booking_link") or rt.get("scheduler_url") or ""
-        dealer_phone = rt.get("phone") or ""
-        dealer_addr  = rt.get("address") or ""
-        dealer_site  = rt.get("website") or "https://pattersonautos.com"
+        # De-dupe any existing preferences line that templates/CRM might have added
+        body_html = _PREFS_RE.sub("", body_html).strip()
         
-        import textwrap as _tw
-        signature_block = _tw.dedent(f"""
-        <p>— Patti<br/>
-        {rooftop_name}<br/>
-        {dealer_addr}<br/>
-        {dealer_phone}</p>
-        """).strip()
+        # Append Patti’s footer
+        body_html = body_html + build_patti_footer(rooftop_name)
         
-        prefs_line = _tw.dedent(f"""
-        <p style="margin-top:12px;">
-        To stop receiving these messages, visit
-        <a href="{dealer_site}/preferences">Communication Preferences</a>.
-        </p>
-        """).strip()
-        
-        body_html = body_html.strip() + signature_block + prefs_line
+        # Ensure subject has one "Re:" prefix max
+        if not subject.lower().startswith("re:"):
+            subject = "Re: " + subject
+
         # ------------------------------------------------------------------------
 
     
@@ -320,41 +354,19 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         "DealershipAddress": rooftop_addr,
     }
     body_html = fill_merge_fields(html, ctx)
+
+    # Ensure exactly one booking CTA (replace token or append CTA)
     body_html = replace_or_append_booking_cta(body_html, rooftop_name)
 
-    # === Append same CTA + signature + prefs to cadence emails ===
-    from textwrap import dedent as _dd
-    
-    rt = (ROOFTOP_INFO.get(rooftop_name) or {})
-    booking_link = rt.get("booking_link") or rt.get("scheduler_url") or ""
-    dealer_phone = rt.get("phone") or ""
-    dealer_addr  = rt.get("address") or ""
-    dealer_site  = rt.get("website") or "https://pattersonautos.com"
-    
-    signature_block = _dd(f"""
-    <p>— Patti<br/>
-    {rooftop_name}<br/>
-    {dealer_addr}<br/>
-    {dealer_phone}</p>
-    """).strip()
-    
-    prefs_line = _dd(f"""
-    <p style="margin-top:12px;">
-    To stop receiving these messages, visit
-    <a href="{dealer_site}/preferences">Communication Preferences</a>.
-    </p>
-    """).strip()
-    
-    body_html = body_html.strip() + cta_block + signature_block + prefs_line
-    # =============================================================
+    # Harmonize style with general Patti; de-dupe any existing prefs line
+    body_html = normalize_patti_body(body_html)
+    body_html = _PREFS_RE.sub("", body_html).strip()
+    body_html = body_html + build_patti_footer(rooftop_name)
 
-    
-    # --- Subject --------------------------------------------------------------
+    # Subject: from cadence plan (no "Re:")
     subject = plan.get("subject") or f"{rooftop_name} — Your Instant Cash Offer"
 
-    
     # --- Recipient resolution (SAFE_MODE honored) -----------------------------
-    # Prefer customer.emails[] primary/preferred; fallback to single emailAddress if present
     email_addr = ""
     emails = cust.get("emails") or []
     if emails:
@@ -362,9 +374,8 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         email_addr = (prim or emails[0]).get("address") or ""
     if not email_addr:
         email_addr = cust.get("emailAddress") or ""
-    
     recipients = [email_addr] if (email_addr and not SAFE_MODE) else [TEST_TO]
-    
+
     # --- Log + send -----------------------------------------------------------
     add_opportunity_comment(
         token, subscription_id, opp_id,
@@ -373,15 +384,33 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     )
     send_opportunity_email_activity(
         token, subscription_id, opp_id,
-        sender=rooftop_sender,  # if you have this resolved earlier; else None
+        sender=rooftop_sender,
         recipients=recipients, carbon_copies=[],
         subject=subject, body_html=body_html, rooftop_name=rooftop_name
     )
 
-    # ✅ Now that we've successfully sent, update and persist state
+    # ✅ Persist idempotency state AFTER a successful send
     state["last_template_day_sent"] = effective_day
     state["last_template_sent_at"]  = _dt.now(_tz.utc).isoformat()
     _save_state_comment(token, subscription_id, opp_id, state)
+
+    # --- Phone/Text tasks (TCPA guard) ---------------------------------------
+    if ALLOW_TEXTING and plan.get("create_text_task", False) and _customer_has_text_consent(opportunity):
+        schedule_activity(
+            token, subscription_id, opp_id,
+            due_dt_iso_utc=_dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            activity_name="KBB ICO: Text Task", activity_type=15,
+            comments=f"Auto-scheduled per ICO Day {effective_day}."
+        )
+
+    if plan.get("create_phone_task", True):
+        schedule_activity(
+            token, subscription_id, opp_id,
+            due_dt_iso_utc=_dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            activity_name="KBB ICO: Phone Task", activity_type=14,
+            comments=f"Auto-scheduled per ICO Day {effective_day}."
+        )
+
     
     # --- Phone/Text tasks (TCPA guard) ---------------------------------------
     if ALLOW_TEXTING and plan.get("create_text_task", False) and _customer_has_text_consent(opportunity):
