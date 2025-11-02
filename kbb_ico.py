@@ -207,12 +207,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         dealer_addr  = rt.get("address") or ""
         dealer_site  = rt.get("website") or "https://pattersonautos.com"
         
-        cta_block = ""
-        if booking_link:
-            cta_block = f'<p><a href="{booking_link}">Schedule Your Visit</a></p>'
-        
         import textwrap as _tw
-
         signature_block = _tw.dedent(f"""
         <p>— Patti<br/>
         {rooftop_name}<br/>
@@ -227,7 +222,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         </p>
         """).strip()
         
-        body_html = body_html.strip() + cta_block + signature_block + prefs_line
+        body_html = body_html.strip() + signature_block + prefs_line
         # ------------------------------------------------------------------------
 
     
@@ -336,8 +331,6 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     dealer_addr  = rt.get("address") or ""
     dealer_site  = rt.get("website") or "https://pattersonautos.com"
     
-    cta_block = f'<p><a href="{booking_link}">Schedule Your Visit</a></p>' if booking_link else ""
-    
     signature_block = _dd(f"""
     <p>— Patti<br/>
     {rooftop_name}<br/>
@@ -357,13 +350,8 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
     
     # --- Subject --------------------------------------------------------------
-    if isinstance(reply, dict):
-        subject = reply.get("subject") or f"Re: Your {rooftop_name} Instant Cash Offer"
-    else:
-        subject = f"Re: Your {rooftop_name} Instant Cash Offer"
-    
-    if not subject.lower().startswith("re:"):
-        subject = "Re: " + subject
+    subject = plan.get("subject") or f"{rooftop_name} — Your Instant Cash Offer"
+
     
     # --- Recipient resolution (SAFE_MODE honored) -----------------------------
     # Prefer customer.emails[] primary/preferred; fallback to single emailAddress if present
