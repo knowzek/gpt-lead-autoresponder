@@ -148,6 +148,13 @@ def processHit(hit):
         opportunity : dict = hit['_source']
     except:
         opportunity : dict = hit
+        
+    # ✅ Only run on Kristin-assigned opps
+    if not _is_assigned_to_kristin(opportunity):
+        # optional log to verify the filter is working
+        log.info("Skip opp %s (not assigned to Kristin)",
+                 opportunity.get('opportunityId'))
+        return
 
     if not opportunity.get('isActive', True):
         print("pass...")
@@ -646,16 +653,22 @@ def processHit(hit):
     wJson(opportunity, f"jsons/process/{opportunityId}.json")
 
 
-
+# ---- Rolling ES lookback window (default 6 days) ----
+LOOKBACK_DAYS = int(os.getenv("ES_LOOKBACK_DAYS", "6"))
 
 if __name__ == "__main__":
     if not OFFLINE_MODE:
-        data = getNewDataByDate("2025-10-31")
-        for i, hit in enumerate(data):
+        # Start date = now - LOOKBACK_DAYS (UTC), formatted YYYY-MM-DD
+        start_date = (datetime.utcnow() - timedelta(days=LOOKBACK_DAYS)).date().isoformat()
+        log.info("ES lookback start_date=%s (last %s days)", start_date, LOOKBACK_DAYS)
+
+        data = getNewDataByDate(start_date)
+
+        # Process ALL hits (no early exit)
+        for hit in data:
             processHit(hit)
-            if i == 0:
-                exit()
     # playground drives processHit() via Flask; nothing to run here when OFFLINE_MODE=1
+
     
 
     
