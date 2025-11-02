@@ -51,9 +51,10 @@ def _is_assigned_to_kristin(doc: dict) -> bool:
 
 
 def checkActivities(opportunity, currDate, rooftop_name):
-    # TODO: change this later to online one
-    # activities = opportunity.get('completedActivities', [])
-    activities = opportunity.get('completedActivitiesTesting', [])
+    if OFFLINE_MODE:
+        activities = opportunity.get('completedActivitiesTesting', [])
+    else:
+        activities = opportunity.get('completedActivities', [])
     activities = sortActivities(activities)
     
     alreadyProcessedActivities =opportunity.get('alreadyProcessedActivities', {})
