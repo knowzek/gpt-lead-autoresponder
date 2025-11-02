@@ -43,7 +43,18 @@ esClient = _make_es_client()
 def getNewDataByDate(date="2025-10-30"):
     """
     Return active docs updated or created on/after YYYY-MM-DD.
+    Keeps the original structure (date + isActive) and adds a
+    salesperson filter WITHOUT using nested(), so it works with
+    your current mapping.
     """
+    # Optional: edit these or drive them by env vars if you prefer
+    salesperson_emails = [
+        "knowzek@pattersonautos.com",
+        "knowzek@gmail.com",
+    ]
+    salesperson_first = "Kristin"
+    salesperson_last  = "Nowzek"
+
     query = {
         "bool": {
             "should": [
@@ -53,28 +64,27 @@ def getNewDataByDate(date="2025-10-30"):
             "minimum_should_match": 1,
             "filter": [
                 {"term": {"isActive": True}},
+
+                # ⬇️ Replaces the old nested(...) block
                 {
-                    "nested": {
-                        "path": "salesTeam",
-                        "query": {
-                            "bool": {
-                                "should": [
-                                    {"term": {"salesTeam.email.keyword": "knowzek@pattersonautos.com"}},
-                                    {"term": {"salesTeam.email.keyword": "knowzek@gmail.com"}},
-                                    {
-                                        "bool": {
-                                            "must": [
-                                                {"term": {"salesTeam.firstName.keyword": "Kristin"}},
-                                                {"term": {"salesTeam.lastName.keyword": "Nowzek"}}
-                                            ]
-                                        }
-                                    }
-                                ],
-                                "minimum_should_match": 1
-                            }
-                        }
+                    "bool": {
+                        "should": [
+                            # match any of your emails on ANY object in salesTeam
+                            {"terms": {"salesTeam.email.keyword": salesperson_emails}},
+
+                            # OR (first AND last) — non-nested; acceptable for now
+                            {
+                                "bool": {
+                                    "must": [
+                                        {"term": {"salesTeam.firstName.keyword": salesperson_first}},
+                                        {"term": {"salesTeam.lastName.keyword":  salesperson_last}},
+                                    ]
+                                }
+                            },
+                        ],
+                        "minimum_should_match": 1,
                     }
-                }
+                },
             ],
         }
     }
@@ -89,6 +99,7 @@ def getNewDataByDate(date="2025-10-30"):
     except TransportError as e:
         print(f"❌ ES transport error: {e}")
         return []
+
 
 def getNewData():
     query = {"bool": {"filter": [{"term": {"isActive": True}}]}}
