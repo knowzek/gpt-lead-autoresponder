@@ -57,41 +57,57 @@ def _save_state_comment(token, subscription_id, opportunity_id, state: dict):
 
 def customer_has_replied(opportunity: dict, token: str, subscription_id: str) -> tuple[bool, str | None]:
     """Returns (has_replied, last_customer_ts_iso)."""
-
-    # Derive IDs from the opportunity dict (don’t use any external 'hit' var)
     opportunity_id = opportunity.get("opportunityId") or opportunity.get("id")
     customer = (opportunity.get("customer") or {})
     customer_id = customer.get("id")
 
-    # Loud guard: if we somehow lack IDs, fail fast so we don’t send bad requests
     if not opportunity_id:
         log.error("customer_has_replied: missing opportunity_id")
         return False, None
-    if not customer_id:
-        log.warning("customer_has_replied: missing customer_id (some tenants require it)")
 
     log.info("KBB ICO: activity search opp=%s cust=%s sub=%s", opportunity_id, customer_id, subscription_id)
 
-    # Fetch recent activities (your tenant requires customerId)
     acts = search_activities_by_opportunity(
         opportunity_id=opportunity_id,
         token=token,
         dealer_key=subscription_id,
-        page=1,
-        page_size=50,
+        page=1, page_size=50,
         customer_id=customer_id,
-    )
+    ) or []
+
+    # DEBUG: surface a few activities to tune predicates
+    for a in acts[:10]:
+        log.info("ACT id=%s type=%r name=%r dir=%r by=%r subj=%r",
+                 a.get("activityId") or a.get("id"),
+                 a.get("activityType"),
+                 a.get("activityName"),
+                 a.get("direction"),
+                 a.get("createdBy"),
+                 ((a.get("message") or {}).get("subject") or a.get("subject")))
+
+    def _is_inbound(a: dict) -> bool:
+        t  = a.get("activityType")
+        nm = (a.get("activityName") or "").strip().lower()
+        dr = (a.get("direction") or "").strip().lower()
+        cb = (a.get("createdBy") or "").strip().lower()
+
+        # Treat "Read Email" (v1) and message/email-ish types as inbound
+        read_email_name = (nm == "read email")
+        message_like = (
+            t in (3, 20, 21) or
+            str(t) in {"3", "20", "21"} or
+            "message" in nm or "email" in nm or "reply" in nm
+        )
+        inbound_flag = dr in {"inbound", "incoming", "from customer", "received"} or dr == ""
+
+        # consider it inbound if it's read-email OR message-like and looks inbound
+        return read_email_name or (message_like and inbound_flag and cb not in {"patti","system"})
 
     last_ts = None
     for a in acts:
-        name = (a.get("activityName") or "").lower()
-        # treat messages/inbound as customer replies
-        if (a.get("activityType") in (3, "message") or "message" in name):
-            direction = (a.get("direction") or "").lower()
-            created_by = (a.get("createdBy") or "").lower()
-            if direction in ("inbound", "from customer") or created_by not in ("patti", "dealer", "sales", "system"):
-                last_ts = a.get("createdDate") or a.get("createdOn") or a.get("modifiedDate")
-                return True, last_ts
+        if _is_inbound(a):
+            last_ts = a.get("createdDate") or a.get("createdOn") or a.get("modifiedDate")
+            return True, last_ts
 
     return False, last_ts
 
@@ -103,6 +119,9 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
     # Load state and see if customer replied
     state = _load_state_from_comments(opportunity)
+    state.setdefault("mode", "cadence")
+    state.setdefault("last_template_day_sent", None)
+    state.setdefault("last_template_sent_at", None)
     has_reply, last_cust_ts = customer_has_replied(opportunity, token, subscription_id)
 
 
@@ -176,16 +195,21 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     # Still in cadence mode (no reply)
     state["mode"] = "cadence"
     _save_state_comment(token, subscription_id, opp_id, state)
-
+    
     # Offer-window override (if expired jump to Day 08/09 track)
     expired = _ico_offer_expired(created_iso, exclude_sunday=True)
     effective_day = lead_age_days
     if expired and lead_age_days < 8:
         effective_day = 8  # or 9 based on your PDF plan
-
+    
     # Compute plan for this day
     plan = events_for_day(effective_day)
-    if not plan:  # nothing to send today
+    if not plan:
+        return
+    
+    # 🚫 Skip if we already sent this day
+    if state.get("last_template_day_sent") == effective_day:
+        log.info("KBB ICO: skipping Day %s (already sent)", effective_day)
         return
     
     # --- Load template safely -------------------------------------------------
@@ -257,6 +281,11 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         recipients=recipients, carbon_copies=[],
         subject=subject, body_html=body_html, rooftop_name=rooftop_name
     )
+
+    # ✅ Now that we've successfully sent, update and persist state
+    state["last_template_day_sent"] = effective_day
+    state["last_template_sent_at"]  = _dt.now(_tz.utc).isoformat()
+    _save_state_comment(token, subscription_id, opp_id, state)
     
     # --- Phone/Text tasks (TCPA guard) ---------------------------------------
     if ALLOW_TEXTING and plan.get("create_text_task", False) and _customer_has_text_consent(opportunity):
