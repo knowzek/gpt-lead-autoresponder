@@ -72,35 +72,47 @@ _RAW_TOKEN_RE  = _re.compile(r'(?i)<\{LegacySalesApptSchLink\}>')
 _ANY_SCHED_LINE_RE = _re.compile(r'(?i)(reserve your time|schedule (an )?appointment|schedule your visit)[:\s]*', _re.I)
 
 def enforce_standard_schedule_sentence(body_html: str) -> str:
-    """Ensure the standard CTA appears above visit/closing lines and only once."""
+    """Ensure exactly one standard CTA appears above visit/closing lines."""
     if not body_html:
         body_html = ""
 
-    # Remove any legacy anchor or token artifacts
-    body_html = _CTA_ANCHOR_RE.sub("Schedule Your Visit", body_html)
-    body_html = _RAW_TOKEN_RE.sub("", body_html)
-    body_html = _ANY_SCHED_LINE_RE.sub("", body_html)
+    # 0) Normalize whitespace a bit so paragraph regex works better
+    body_html = re.sub(r'\s+', ' ', body_html).strip()
 
     standard_html = (
         '<p>Please let us know a convenient time for you, or you can instantly reserve your time here: '
         '<{LegacySalesApptSchLink}></p>'
     )
 
-    # Split into paragraphs to position CTA above "ready to visit" or "looking forward"
-    parts = re.split(r"(?i)(?=<p[^>]*>)", body_html)
+    # 1) Remove any <p> paragraphs that already contain scheduling verbiage or the CRM token
+    #    (so we don't leave behind "instantly here: ." fragments)
+    PARA = r'(?is)<p[^>]*>.*?</p>'
+    SCHED_PAT = r'(?i)(LegacySalesApptSchLink|reserve your time|schedule (an )?appointment|schedule your visit)'
+    def _kill_sched_paras(m):
+        para = m.group(0)
+        return '' if re.search(SCHED_PAT, para) else para
+
+    body_html = re.sub(PARA, _kill_sched_paras, body_html).strip()
+
+    # 2) Split into paragraphs to position the CTA
+    parts = re.findall(PARA, body_html)  # list of <p>…</p>
+    if not parts:
+        parts = [f"<p>{body_html}</p>"]  # fallback if model didn't use <p> tags
+
+    # Insert CTA before the first visit/closing paragraph; else prepend
+    insert_at = None
     for i, p in enumerate(parts):
-        if re.search(r"(ready to visit|bring|looking forward)", p, re.I):
-            parts.insert(i, standard_html)
+        if re.search(r'(?i)(ready to visit|bring|looking forward)', p):
+            insert_at = i
             break
-    else:
-        # if no clear place, just prepend
-        parts.insert(0, standard_html)
+    if insert_at is None:
+        insert_at = 0
+    parts.insert(insert_at, standard_html)
 
-    # Remove duplicates if the model inserted any stray CTA
-    combined = "".join(parts)
-    combined = re.sub(r"(?is)(<p>.*LegacySalesApptSchLink.*?</p>)(.*)\1", r"\1\2", combined)
-    return combined.strip()
-
+    # 3) Join and ensure we don't have duplicate CTAs
+    combined = ''.join(parts)
+    combined = re.sub(r'(?is)(<p>[^<]*LegacySalesApptSchLink[^<]*</p>)(.*?)\1', r'\1\2', combined).strip()
+    return combined
 
 
 
