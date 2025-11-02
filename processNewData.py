@@ -139,9 +139,9 @@ def checkActivities(opportunity, currDate, rooftop_name):
             })
         
             opportunity['checkedDict']['last_msg_by'] = "patti"
-            opportunity['followUP_date'] = currDate.isoformat()
+            nextDate = currDate + timedelta(hours=24)   # or use a constant
+            opportunity['followUP_date'] = nextDate.isoformat()
             opportunity['followUP_count'] = 0
-            opportunity['alreadyProcessedActivities'][activityId] = fullAct
 
 
 
@@ -602,9 +602,9 @@ def processHit(hit):
                 }
             ]
         opportunity['checkedDict']['patti_already_contacted'] = True
-        # TODO: fix in which line
         opportunity['checkedDict']['last_msg_by'] = "patti"
-        opportunity['followUP_date'] = currDate.isoformat()
+        nextDate = currDate + timedelta(hours=24)   # or use your cadence
+        opportunity['followUP_date'] = nextDate.isoformat()
         opportunity['followUP_count'] = 0
         if not OFFLINE_MODE:
             esClient.update(index="opportunities", id=opportunityId, doc=opportunity)
@@ -616,6 +616,7 @@ def processHit(hit):
     followUP_date = datetime.fromisoformat(fud) if isinstance(fud, str) else (fud if isinstance(fud, datetime) else currDate)
     followUP_count = opportunity['followUP_count']
 
+    last_by = (opportunity.get('checkedDict') or {}).get('last_msg_by', '')
     if followUP_date <= currDate and followUP_count > 3:
         opportunity['isActive'] = False
         if not OFFLINE_MODE:
