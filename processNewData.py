@@ -38,7 +38,15 @@ already_processed = get_names_in_dir("jsons/process")
 DEBUGMODE = os.getenv("DEBUGMODE", "1") == "1"
 
 def _is_assigned_to_kristin(doc: dict) -> bool:
+    """
+    Return True if Kristin Nowzek appears on the sales team by name or email.
+    """
     sales = (doc.get("salesTeam") or [])
+    log.debug(
+        "Assign check: %s",
+        [{"fn": (m.get("firstName") or ""), "ln": (m.get("lastName") or ""), "em": (m.get("email") or "")}
+         for m in sales]
+    )
     for m in sales:
         fn = (m.get("firstName") or "").strip().lower()
         ln = (m.get("lastName") or "").strip().lower()
@@ -48,6 +56,7 @@ def _is_assigned_to_kristin(doc: dict) -> bool:
         }:
             return True
     return False
+
 
 
 def checkActivities(opportunity, currDate, rooftop_name):
