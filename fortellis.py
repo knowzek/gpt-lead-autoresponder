@@ -369,30 +369,21 @@ def complete_activity(
     return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
 
 
-def search_activities_by_opportunity(opportunity_id, token, dealer_key, page=1, page_size=10):
-    # ACTIVITIES_SEARCH must be "/cdk/sales/elead/v1/activity-history/search"
+def search_activities_by_opportunity(opportunity_id, token, dealer_key, page=1, page_size=10, customer_id=None):
     url = f"{BASE_URL}{ACTIVITIES_SEARCH}/search"
-    params = {
-        "opportunityId": opportunity_id,
-        "pageNumber": page,
-        "pageSize": page_size,
-    }
+    params = {"opportunityId": opportunity_id, "pageNumber": page, "pageSize": page_size}
+    if customer_id: params["customerId"] = customer_id
     resp = requests.get(url, headers=_headers(dealer_key, token), params=params, timeout=30)
     resp.raise_for_status()
     data = resp.json()
-    # Some orgs return {"items":[...]}; others may use {"activities":[...]} — be resilient
     return data.get("items") or data.get("activities") or []
 
-
 def get_activities(opportunity_id, customer_Id, token, dealer_key):
-    # Same endpoint; include customerId if you want, but it's optional
     url = f"{BASE_URL}{ACTIVITIES_SEARCH}/search"
-    params = {
-        "opportunityId": opportunity_id,
-        "pageNumber": 1,
-        "pageSize": 100,
-        # "customerId": customer_Id,  # uncomment if you need to filter by customer too
-    }
+    params = {"opportunityId": opportunity_id, "customerId": customer_Id, "pageNumber": 1, "pageSize": 100}
+    resp = requests.get(url, headers=_headers(dealer_key, token), params=params, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
     resp = requests.get(url, headers=_headers(dealer_key, token), params=params, timeout=30)
     resp.raise_for_status()
     return resp.json()
