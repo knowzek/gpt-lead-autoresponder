@@ -32,6 +32,16 @@ def _log_txn_compact(level, *, method, url, headers, status, duration_ms, reques
         msg += f" note={note}"
     log.log(level, msg)
 
+import uuid
+
+def _headers_get(subscription_id: str, token: str) -> dict:
+    return {
+        "Authorization": f"Bearer {token}",       # ensure token is raw (no 'Bearer ' prefix in var)
+        "Subscription-Id": subscription_id,
+        "Accept": "application/json",
+        "Request-Id": str(uuid.uuid4()),
+    }
+
 
 
 BASE_URL = os.getenv("FORTELLIS_BASE_URL", "https://api.fortellis.io")  # prod default
@@ -370,7 +380,10 @@ def complete_activity(
 
 
 def search_activities_by_opportunity(opportunity_id, token, dealer_key, page=1, page_size=10, customer_id=None):
-    url = f"{BASE_URL}{ACTIVITIES_SEARCH}/search"
+    if not opportunity_id:
+        raise ValueError("opportunity_id is required")
+
+    url = f"{BASE_URL}{ACTIVITIES_SEARCH}"  # "/cdk/sales/elead/v1/activity-history/search"
     params = {
         "opportunityId": opportunity_id,
         "pageNumber": page,
@@ -379,16 +392,36 @@ def search_activities_by_opportunity(opportunity_id, token, dealer_key, page=1, 
     if customer_id:
         params["customerId"] = customer_id
 
-    # TEMP debug to prove what’s on the wire
-    try:
-        log.info("ActivityHistory GET %s params=%s", url, params)
-    except Exception:
-        pass
+    # First attempt (GET; no Content-Type)
+    resp = requests.get(url, headers=_headers_get(dealer_key, token), params=params, timeout=30)
 
-    resp = requests.get(url, headers=_headers(dealer_key, token), params=params, timeout=30)
+    # If the token is stale or wrong for this rooftop, refresh once and retry
+    if resp.status_code == 401:
+        try:
+            from fortellis import get_token
+            try:
+                fresh = get_token(dealer_key, force_refresh=True)
+            except TypeError:
+                fresh = get_token(dealer_key)
+            resp = requests.get(url, headers=_headers_get(dealer_key, fresh), params=params, timeout=30)
+        except Exception as e:
+            # don't hide the original 401; just log it if you have a logger
+            pass
+
+    # Helpful diagnostics on failure (corr id mirrors Postman)
+    if resp.status_code >= 400:
+        corr = resp.headers.get("x-correlation-id")
+        try:
+            log.error("ActivityHistory search failed: %s corr=%s body=%s",
+                      resp.status_code, corr, (resp.text or "")[:400])
+        except Exception:
+            pass
     resp.raise_for_status()
+
     data = resp.json()
-    return data.get("items") or data.get("activities") or []
+    # Some tenants return a flat object with arrays; others wrap items—be tolerant:
+    return data.get("items") or data.get("activities") or data.get("completedActivities") or []
+
 
 
 def get_activities(opportunity_id, customer_id, token, dealer_key):
