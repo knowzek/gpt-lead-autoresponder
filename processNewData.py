@@ -22,7 +22,7 @@ from fortellis import get_activities, get_token, get_activity_by_id_v1
 #from fortellis import get_vehicle_inventory_xml  # we’ll add this helper next
 from inventory_matcher import recommend_from_xml
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 from dotenv import load_dotenv
 load_dotenv()
@@ -668,7 +668,8 @@ LOOKBACK_DAYS = int(os.getenv("ES_LOOKBACK_DAYS", "6"))
 if __name__ == "__main__":
     if not OFFLINE_MODE:
         # Start date = now - LOOKBACK_DAYS (UTC), formatted YYYY-MM-DD
-        start_date = (datetime.utcnow() - timedelta(days=LOOKBACK_DAYS)).date().isoformat()
+        
+        start_date = (datetime.now(timezone.utc) - timedelta(days=LOOKBACK_DAYS)).date().isoformat()
         log.info("ES lookback start_date=%s (last %s days)", start_date, LOOKBACK_DAYS)
 
         data = getNewDataByDate(start_date)
