@@ -28,7 +28,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 log = logging.getLogger(__name__)
-OFFLINE_MODE = os.getenv("OFFLINE_MODE", "1") == "1"   # default ON for playground
+OFFLINE_MODE = os.getenv("OFFLINE_MODE", "0").lower() in ("1", "true", "yes")
 
 
 # TODO:
@@ -172,6 +172,16 @@ def processHit(hit):
     subscription_id = opportunity['_subscription_id']
     opportunityId = opportunity['opportunityId']
 
+    # --- Normalize testing arrays so live runs never use them for logic ---
+    if OFFLINE_MODE:
+        opp_messages = (opportunity.get("completedActivitiesTesting")
+                        or opportunity.get("messages") or [])
+    else:
+        opportunity.pop("completedActivitiesTesting", None)
+        # keep messages only for display/logs; don't base behavior on it
+        opp_messages = []
+
+
     checkedDict = opportunity.get("checkedDict", {})
 
     # remove it later
@@ -208,8 +218,12 @@ def processHit(hit):
         "updated_at": currDate
     }
     opportunity.update(docToUpdate)
+
+    # Ensure test arrays never land in ES in live mode
     if not OFFLINE_MODE:
+        opportunity.pop("completedActivitiesTesting", None)
         esClient.update(index="opportunities", id=opportunityId, doc=opportunity)
+
     # continue
 
     # ====================================================
