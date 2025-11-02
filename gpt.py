@@ -118,15 +118,15 @@ def _kbb_ico_rules_system(kbb_ctx: dict | None, rooftop_name: str | None):
         f"You are Patti, a friendly virtual acquisition assistant for {rn}. "
         "You manage Kelley Blue Book® Instant Cash Offer (ICO) leads.\n\n"
         "KBB ICO Conversation Rules:\n"
-        "- You reply after Day 00/01/02 templates; sound like a real internet manager.\n"
         "- Acknowledge the customer’s exact question first, then answer directly.\n"
-        "- Offer two concrete inspection windows and what to bring (title, ID, keys).\n"
+        "- Do NOT propose appointment times. Invite the guest to choose a time; the system will add the standard scheduling sentence.\n"
         f"- ICO offer validity: {days} days" + (" (excluding Sunday)" if excl_sun else "") + ". "
         "If expired, propose re-issuing politely.\n"
         "- Never include a signature block, phone numbers, or URLs; the system appends them.\n"
         "- Keep 60–130 words unless the customer asked for detail.\n"
         "- Stay truthful; if info is missing, ask one precise question to move forward."
     )
+
 
 def _build_system_stack(persona: str, customer_first: str, rooftop_name: str | None, kbb_ctx: dict | None, include_followup_rules: bool = True):
     """
@@ -241,10 +241,8 @@ def _personalization_rules_system():
 def _appointment_cta_system():
     return (
         "Scheduling CTA:\n"
-        "- When inviting a guest to book, include this phrasing verbatim (without a URL):\n"
-        "  You can also reserve your time instantly here: Schedule Your Visit\n"
-        "- Place it after proposed times or as an alternative. "
-        "The system will append the actual scheduling link token later."
+        "- Do NOT include a scheduling line. The system will append this exact sentence later:\n"
+        "  Please let us know a convenient time for you, or you can instantly reserve your time here: <{LegacySalesApptSchLink}>\n"
     )
 
 def _compliance_system():
