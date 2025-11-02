@@ -243,7 +243,7 @@ font-size: 17px !important;
 <br>
 We've received the details regarding the Kelley Blue Book&#174; Instant Cash Offer for your <{TradeYear}> <{TradeModel}>. <br>
 <br>
-Please let us know a convenient time for you, or you can instantly reserve your time here: <{LegacySalesApptSchLink}>
+Please let us know a convenient time for you, or you can instantly reserve your time here: <a href="<{LegacySalesApptSchLink}>">Schedule Your Visit</a>
 <br>
 <{SalesPersonName:S}><br>
 <{DealershipName}><br>
