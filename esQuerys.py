@@ -2,6 +2,8 @@
 import os
 from elasticsearch import Elasticsearch
 from elasticsearch import AuthenticationException, TransportError
+from dotenv import load_dotenv
+load_dotenv()
 
 ELASTIC_INDEX = os.getenv("ELASTIC_INDEX", "opportunities")
 

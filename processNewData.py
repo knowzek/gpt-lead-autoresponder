@@ -14,6 +14,7 @@ from rooftops import get_rooftop_info
 from constants import *
 from gpt import run_gpt, getCustomerMsgDict
 import re
+import logging
 
 from uuid import uuid4
 
@@ -23,6 +24,10 @@ from inventory_matcher import recommend_from_xml
 
 from datetime import datetime, timedelta
 import os
+from dotenv import load_dotenv
+load_dotenv()
+
+log = logging.getLogger(__name__)
 OFFLINE_MODE = os.getenv("OFFLINE_MODE", "1") == "1"   # default ON for playground
 
 
@@ -515,11 +520,12 @@ def processHit(hit):
         # === Inventory recommendations =====================================
 
         # Get live inventory XML
-        try:
-            inventory_xml = get_vehicle_inventory_xml("Patterson2", "FjX^PGwk63", "ZE", "ZE7")
-        except Exception as e:
-            # log.warning(f"❌ Could not retrieve inventory XML: {e}")
-            inventory_xml = None
+        # NOTE: when you need to use just uncomment and uncomment in import section also
+        # try:
+        #     inventory_xml = get_vehicle_inventory_xml("Patterson2", "FjX^PGwk63", "ZE", "ZE7")
+        # except Exception as e:
+        #     # log.warning(f"❌ Could not retrieve inventory XML: {e}")
+        #     inventory_xml = None
 
         # 🔁 Use the same inquiry text you already computed.
         # If it's empty (fallback mode), feed a lightweight hint from the parsed vehicle fields.
@@ -531,15 +537,17 @@ def processHit(hit):
             customer_email_text = " ".join([b for b in hint_bits if b]) or "SUV car"
         
         recommendation_text = ""
-        if inventory_xml:
-            try:
-                recommendation_text = recommend_from_xml(inventory_xml, customer_email_text).strip()
-                if recommendation_text:
-                    prompt += f"\n\nInventory suggestions to include:\n{recommendation_text}\n"
-                    # log.info("✅ Added inventory suggestions to prompt.")
-            except Exception as e:
-                pass
-                # log.warning(f"Recommendation failed: {e}")
+
+        # NOTE: (cont with line: 523)when you need to use just uncomment and uncomment in import section also
+        # if inventory_xml:
+        #     try:
+        #         recommendation_text = recommend_from_xml(inventory_xml, customer_email_text).strip()
+        #         if recommendation_text:
+        #             prompt += f"\n\nInventory suggestions to include:\n{recommendation_text}\n"
+        #             # log.info("✅ Added inventory suggestions to prompt.")
+        #     except Exception as e:
+        #         pass
+        #         # log.warning(f"Recommendation failed: {e}")
             
         response  = run_gpt(prompt, customer_name, rooftop_name)
         subject   = response["subject"]
