@@ -161,6 +161,39 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         # Strip any auto-signature
         import re as _re
         body_html = _re.sub(r"(?is)(?:\n\s*)?patti\s*(?:\r?\n)+virtual assistant.*?$", "", body_html)
+
+        # --- Append standardized CTA + signature + communication preferences ----
+        from rooftops import ROOFTOP_INFO
+        
+        rt = (ROOFTOP_INFO.get(rooftop_name) or {})
+        booking_link = rt.get("booking_link") or rt.get("scheduler_url") or ""
+        dealer_phone = rt.get("phone") or ""
+        dealer_addr  = rt.get("address") or ""
+        dealer_site  = rt.get("website") or "https://pattersonautos.com"
+        
+        cta_block = ""
+        if booking_link:
+            cta_block = f'<p><a href="{booking_link}">Schedule Your Visit</a></p>'
+        
+        import textwrap as _tw
+
+        signature_block = _tw.dedent(f"""
+        <p>— Patti<br/>
+        {rooftop_name}<br/>
+        {dealer_addr}<br/>
+        {dealer_phone}</p>
+        """).strip()
+        
+        prefs_line = _tw.dedent(f"""
+        <p style="margin-top:12px;">
+        To stop receiving these messages, visit
+        <a href="{dealer_site}/preferences">Communication Preferences</a>.
+        </p>
+        """).strip()
+        
+        body_html = body_html.strip() + cta_block + signature_block + prefs_line
+        # ------------------------------------------------------------------------
+
     
         # Determine recipient safely
         cust = (opportunity.get("customer", {}) or {})
@@ -171,6 +204,9 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         if not email:
             email = (opportunity.get("_lead", {}) or {}).get("email_address")  # if you stash it
         recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
+        if not recipients or (not SAFE_MODE and recipients == [TEST_TO]):
+            log.warning("No recipient email found; skipping send for opp=%s", opp_id)
+            return
     
         # Optional breadcrumb comment
         add_opportunity_comment(
@@ -253,9 +289,44 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         "DealershipAddress": rooftop_addr,
     }
     body_html = fill_merge_fields(html, ctx)
+
+    # === Append same CTA + signature + prefs to cadence emails ===
+    from textwrap import dedent as _dd
+    
+    rt = (ROOFTOP_INFO.get(rooftop_name) or {})
+    booking_link = rt.get("booking_link") or rt.get("scheduler_url") or ""
+    dealer_phone = rt.get("phone") or ""
+    dealer_addr  = rt.get("address") or ""
+    dealer_site  = rt.get("website") or "https://pattersonautos.com"
+    
+    cta_block = f'<p><a href="{booking_link}">Schedule Your Visit</a></p>' if booking_link else ""
+    
+    signature_block = _dd(f"""
+    <p>— Patti<br/>
+    {rooftop_name}<br/>
+    {dealer_addr}<br/>
+    {dealer_phone}</p>
+    """).strip()
+    
+    prefs_line = _dd(f"""
+    <p style="margin-top:12px;">
+    To stop receiving these messages, visit
+    <a href="{dealer_site}/preferences">Communication Preferences</a>.
+    </p>
+    """).strip()
+    
+    body_html = body_html.strip() + cta_block + signature_block + prefs_line
+    # =============================================================
+
     
     # --- Subject --------------------------------------------------------------
-    subject = plan.get("subject") or f"{rooftop_name} — Your Instant Cash Offer"
+    if isinstance(reply, dict):
+        subject = reply.get("subject") or f"Re: Your {rooftop_name} Instant Cash Offer"
+    else:
+        subject = f"Re: Your {rooftop_name} Instant Cash Offer"
+    
+    if not subject.lower().startswith("re:"):
+        subject = "Re: " + subject
     
     # --- Recipient resolution (SAFE_MODE honored) -----------------------------
     # Prefer customer.emails[] primary/preferred; fallback to single emailAddress if present
