@@ -49,19 +49,46 @@ def _save_state_comment(token, subscription_id, opportunity_id, state: dict):
     payload = f"{STATE_TAG} {json.dumps(state, ensure_ascii=False)}"
     add_opportunity_comment(token, subscription_id, opportunity_id, payload)
 
-def customer_has_replied(opportunity_id, token, subscription_id) -> tuple[bool, str]:
+def customer_has_replied(opportunity: dict, token: str, subscription_id: str) -> tuple[bool, str | None]:
     """Returns (has_replied, last_customer_ts_iso)."""
-    acts = search_activities_by_opportunity(opportunity_id, token, subscription_id, page=1, page_size=50)
+
+    # Derive IDs from the opportunity dict (don’t use any external 'hit' var)
+    opportunity_id = opportunity.get("opportunityId") or opportunity.get("id")
+    customer = (opportunity.get("customer") or {})
+    customer_id = customer.get("id")
+
+    # Loud guard: if we somehow lack IDs, fail fast so we don’t send bad requests
+    if not opportunity_id:
+        log.error("customer_has_replied: missing opportunity_id")
+        return False, None
+    if not customer_id:
+        log.warning("customer_has_replied: missing customer_id (some tenants require it)")
+
+    log.info("KBB ICO: activity search opp=%s cust=%s sub=%s", opportunity_id, customer_id, subscription_id)
+
+    # Fetch recent activities (your tenant requires customerId)
+    acts = search_activities_by_opportunity(
+        opportunity_id=opportunity_id,
+        token=token,
+        dealer_key=subscription_id,
+        page=1,
+        page_size=50,
+        customer_id=customer_id,
+    )
+
     last_ts = None
     for a in acts:
         name = (a.get("activityName") or "").lower()
+        # treat messages/inbound as customer replies
         if (a.get("activityType") in (3, "message") or "message" in name):
             direction = (a.get("direction") or "").lower()
             created_by = (a.get("createdBy") or "").lower()
-            if direction in ("inbound", "from customer") or created_by not in ("patti","dealer","sales","system"):
+            if direction in ("inbound", "from customer") or created_by not in ("patti", "dealer", "sales", "system"):
                 last_ts = a.get("createdDate") or a.get("createdOn") or a.get("modifiedDate")
                 return True, last_ts
+
     return False, last_ts
+
 
 def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                          token, subscription_id, SAFE_MODE=False):
@@ -70,7 +97,8 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
     # Load state and see if customer replied
     state = _load_state_from_comments(opportunity)
-    has_reply, last_cust_ts = customer_has_replied(opp_id, token, subscription_id)
+    has_reply, last_cust_ts = customer_has_replied(opportunity, token, subscription_id)
+
 
     if has_reply:
         # flip to convo mode & persist
