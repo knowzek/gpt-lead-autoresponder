@@ -15,6 +15,8 @@ STATE_TAG = "[PATTI_KBB_STATE]"  # marker to find the state comment quickly
 
 import os
 TEST_TO = os.getenv("TEST_TO", "pattiautoresponder@gmail.com")
+import logging
+log = logging.getLogger(__name__)
 
 ALLOW_TEXTING = os.getenv("ALLOW_TEXTING","0").lower() in ("1","true","yes")
 
