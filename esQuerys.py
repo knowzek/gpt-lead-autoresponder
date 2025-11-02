@@ -51,9 +51,34 @@ def getNewDataByDate(date="2025-10-30"):
                 {"range": {"created_at": {"gte": date, "format": "yyyy-MM-dd"}}},
             ],
             "minimum_should_match": 1,
-            "filter": [{"term": {"isActive": True}}],
+            "filter": [
+                {"term": {"isActive": True}},
+                {
+                    "nested": {
+                        "path": "salesTeam",
+                        "query": {
+                            "bool": {
+                                "should": [
+                                    {"term": {"salesTeam.email.keyword": "knowzek@pattersonautos.com"}},
+                                    {"term": {"salesTeam.email.keyword": "knowzek@gmail.com"}},
+                                    {
+                                        "bool": {
+                                            "must": [
+                                                {"term": {"salesTeam.firstName.keyword": "Kristin"}},
+                                                {"term": {"salesTeam.lastName.keyword": "Nowzek"}}
+                                            ]
+                                        }
+                                    }
+                                ],
+                                "minimum_should_match": 1
+                            }
+                        }
+                    }
+                }
+            ],
         }
     }
+
     try:
         res = esClient.search(index=ELASTIC_INDEX, query=query, size=1000)
         return res.get("hits", {}).get("hits", [])
