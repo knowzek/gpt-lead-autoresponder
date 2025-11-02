@@ -79,16 +79,13 @@ def compose_kbb_convo_body(rooftop_name: str, cust_first: str, customer_message:
 _LEGACY_TOKEN_RE = _re.compile(r"(?i)<\{LegacySalesApptSchLink\}>")
 
 def render_booking_cta(rooftop_name: str, link_text: str = "Schedule Your Visit") -> str:
-    """Return a CTA <p> with either a hard booking_link or the CRM's dynamic token."""
     rt = (ROOFTOP_INFO.get(rooftop_name) or {})
     booking_link = rt.get("booking_link") or rt.get("scheduler_url") or ""
     if booking_link:
         return f'<p><a href="{booking_link}">{link_text}</a></p>'
-    else:
-        # leave the CRM token so eLeads can expand it
-        return f'<p><a href="<{ { } }>">{link_text}</a></p>'.replace("{ { } }","LegacySalesApptSchLink")  # keeps <{LegacySalesApptSchLink}>
-        # Alternative without the hacky replace:
-        # return f'<p><a href="<{LegacySalesApptSchLink}>">{link_text}</a></p>'
+    # Leave the CRM token so eLeads can expand it
+    return f'<p><a href="<{{LegacySalesApptSchLink}}>">{link_text}</a></p>'
+
 
 def replace_or_append_booking_cta(body_html: str, rooftop_name: str) -> str:
     rt = (ROOFTOP_INFO.get(rooftop_name) or {})
@@ -399,23 +396,6 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     state["last_template_day_sent"] = effective_day
     state["last_template_sent_at"]  = _dt.now(_tz.utc).isoformat()
     _save_state_comment(token, subscription_id, opp_id, state)
-
-    # --- Phone/Text tasks (TCPA guard) ---------------------------------------
-    if ALLOW_TEXTING and plan.get("create_text_task", False) and _customer_has_text_consent(opportunity):
-        schedule_activity(
-            token, subscription_id, opp_id,
-            due_dt_iso_utc=_dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            activity_name="KBB ICO: Text Task", activity_type=15,
-            comments=f"Auto-scheduled per ICO Day {effective_day}."
-        )
-
-    if plan.get("create_phone_task", True):
-        schedule_activity(
-            token, subscription_id, opp_id,
-            due_dt_iso_utc=_dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            activity_name="KBB ICO: Phone Task", activity_type=14,
-            comments=f"Auto-scheduled per ICO Day {effective_day}."
-        )
 
     
     # --- Phone/Text tasks (TCPA guard) ---------------------------------------
