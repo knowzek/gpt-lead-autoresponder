@@ -55,17 +55,17 @@ def normalize_patti_body(body_html: str) -> str:
     body_html = _re.sub(r'\n{2,}', '\n', body_html)
     return body_html
 
+
 def compose_kbb_convo_body(rooftop_name: str, cust_first: str, customer_message: str, booking_link_text="Schedule Your Visit"):
-    """
-    Build the *prompt string* Patti should use for KBB replies (clean, friendly, short).
-    Mirrors your “general Patti” tone: greeting, value, CTA, clean spacing.
-    """
     return _tw.dedent(f"""
-    You are Patti, the virtual assistant for {rooftop_name}. Keep replies short, warm, and human—no corporate tone.
+    You are Patti, the virtual assistant for {rooftop_name}. This thread is about a Kelley Blue Book® Instant Cash Offer (ICO).
+    Keep replies short, warm, and human—no corporate tone.
     Write HTML with simple <p> paragraphs (no lists). Always:
     - Begin with: "Hi {cust_first}," (exactly).
     - Acknowledge the customer's note in one concise sentence.
-    - Offer help and next step without hard-scheduling times. Do NOT invent specific time slots.
+    - State clearly that you're helping with their Kelley Blue Book® Instant Cash Offer.
+    - Offer two inspection windows (e.g., weekday afternoon and Saturday morning) without inventing exact times unless given.
+    - Remind them to bring title, ID, and keys.
     - Include ONE booking line using the provided booking CTA (we will inject it).
     - No extra signatures; we will append yours.
     - Keep to 2–4 short paragraphs max.
@@ -77,16 +77,18 @@ def compose_kbb_convo_body(rooftop_name: str, cust_first: str, customer_message:
     """).strip()
 
 
+
+# kbb_ico.py
 _LEGACY_TOKEN_RE = _re.compile(r"(?i)<\{LegacySalesApptSchLink\}>")
 
 def render_booking_cta(rooftop_name: str, link_text: str = "Schedule Your Visit") -> str:
-    """Return a CTA <p> with either a hard booking_link or the CRM's dynamic token."""
     rt = (ROOFTOP_INFO.get(rooftop_name) or {})
     booking_link = rt.get("booking_link") or rt.get("scheduler_url") or ""
     if booking_link:
         return f'<p><a href="{booking_link}">{link_text}</a></p>'
-    # leave the CRM token so eLeads can expand it (note the escaped braces)
+    # leave the CRM token so eLeads can expand it
     return f'<p><a href="<{{LegacySalesApptSchLink}}>">{link_text}</a></p>'
+
 
 
 
