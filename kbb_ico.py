@@ -18,6 +18,42 @@ TEST_TO = os.getenv("TEST_TO", "pattiautoresponder@gmail.com")
 import logging
 log = logging.getLogger(__name__)
 
+import re as _re
+from textwrap import dedent as _dd
+from rooftops import ROOFTOP_INFO
+
+_LEGACY_TOKEN_RE = _re.compile(r"(?i)<\{LegacySalesApptSchLink\}>")
+
+def render_booking_cta(rooftop_name: str, link_text: str = "Schedule Your Visit") -> str:
+    """Return a CTA <p> with either a hard booking_link or the CRM's dynamic token."""
+    rt = (ROOFTOP_INFO.get(rooftop_name) or {})
+    booking_link = rt.get("booking_link") or rt.get("scheduler_url") or ""
+    if booking_link:
+        return f'<p><a href="{booking_link}">{link_text}</a></p>'
+    else:
+        # leave the CRM token so eLeads can expand it
+        return f'<p><a href="<{ { } }>">{link_text}</a></p>'.replace("{ { } }","LegacySalesApptSchLink")  # keeps <{LegacySalesApptSchLink}>
+        # Alternative without the hacky replace:
+        # return f'<p><a href="<{LegacySalesApptSchLink}>">{link_text}</a></p>'
+
+def replace_or_append_booking_cta(body_html: str, rooftop_name: str) -> str:
+    """If the token appears, turn it into a clickable link. Otherwise append the CTA block."""
+    rt = (ROOFTOP_INFO.get(rooftop_name) or {})
+    booking_link = rt.get("booking_link") or rt.get("scheduler_url") or ""
+    if _LEGACY_TOKEN_RE.search(body_html):
+        if booking_link:
+            # Replace token with the real link
+            return _LEGACY_TOKEN_RE.sub(booking_link, body_html)
+        else:
+            # Replace token with a clickable token anchor that CRM will expand
+            return _LEGACY_TOKEN_RE.sub('<{LegacySalesApptSchLink}>', body_html) \
+                   .replace('<{LegacySalesApptSchLink}>',
+                            '<a href="<{LegacySalesApptSchLink}>">Schedule Your Visit</a>')
+    else:
+        # No token present — append our CTA block
+        return body_html.rstrip() + render_booking_cta(rooftop_name)
+
+
 ALLOW_TEXTING = os.getenv("ALLOW_TEXTING","0").lower() in ("1","true","yes")
 
 def _ico_offer_expired(created_iso: str, exclude_sunday: bool = True) -> bool:
@@ -161,7 +197,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         # Strip any auto-signature
         import re as _re
         body_html = _re.sub(r"(?is)(?:\n\s*)?patti\s*(?:\r?\n)+virtual assistant.*?$", "", body_html)
-
+        body_html = replace_or_append_booking_cta(body_html, rooftop_name)
         # --- Append standardized CTA + signature + communication preferences ----
         from rooftops import ROOFTOP_INFO
         
@@ -289,6 +325,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         "DealershipAddress": rooftop_addr,
     }
     body_html = fill_merge_fields(html, ctx)
+    body_html = replace_or_append_booking_cta(body_html, rooftop_name)
 
     # === Append same CTA + signature + prefs to cadence emails ===
     from textwrap import dedent as _dd
