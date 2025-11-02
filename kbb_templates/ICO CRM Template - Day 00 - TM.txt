@@ -245,6 +245,7 @@ We've received the details regarding the Kelley Blue Book&#174; Instant Cash Off
 <br>
 Please let us know a convenient time for you, or you can instantly reserve your time here: <a href="<{LegacySalesApptSchLink}>">Schedule Your Visit</a>
 <br>
+<p>
 <{SalesPersonName:S}><br>
 <{DealershipName}><br>
 <{SalespersonPhone:S}><br>
