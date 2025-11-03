@@ -906,7 +906,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
             # Normalize + add CTA only for this path
             body_html = normalize_patti_body(body_html)
-            body_html = enforce_standard_schedule_sentence(body_html)
+            #body_html = enforce_standard_schedule_sentence(body_html)
             body_html = _PREFS_RE.sub("", body_html).strip()
             body_html = body_html + build_patti_footer(rooftop_name)
             if not subject.lower().startswith("re:"):
