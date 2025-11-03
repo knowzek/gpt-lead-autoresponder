@@ -8,7 +8,7 @@ from helpers import (
     sortActivities
 )
 from kbb_ico import process_kbb_ico_lead  # ADD
-
+from es_resilient import es_update_with_retry
 from esQuerys import getNewData, esClient, getNewDataByDate
 from rooftops import get_rooftop_info
 from constants import *
@@ -188,7 +188,7 @@ def checkActivities(opportunity, currDate, rooftop_name):
                             except Exception as e:
                                 log.warning("Emailer failed: %s", e)
             
-                    esClient.update(index="opportunities", id=opportunity['opportunityId'], doc=opportunity)
+                    es_update_with_retry(esClient, index="opportunities", id=opportunity['opportunityId'], doc=opportunity)
             
                 wJson(opportunity, f"jsons/process/{opportunity['opportunityId']}.json")
                 return
@@ -313,7 +313,7 @@ def processHit(hit):
     # Ensure test arrays never land in ES in live mode
     if not OFFLINE_MODE:
         opportunity.pop("completedActivitiesTesting", None)
-        esClient.update(index="opportunities", id=opportunityId, doc=opportunity)
+        es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
 
     # continue
 
@@ -377,7 +377,7 @@ def processHit(hit):
         log.warning("Skipping opp %s (get_opportunity failed): %s", opportunityId, str(e)[:200])
         # Optional: mark in ES so we don’t keep retrying
         if not OFFLINE_MODE:
-            esClient.update(index="opportunities", id=opportunityId, doc={
+            es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc={
                 "patti": {"skip": True, "skip_reason": "get_opportunity_failed"}
             })
         return
@@ -386,7 +386,7 @@ def processHit(hit):
         log.info("Skipping opp %s (inactive from Fortellis).", opportunityId)
         # Mark in ES so future runs don’t retry
         if not OFFLINE_MODE:
-            esClient.update(index="opportunities", id=opportunityId, doc={
+            es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc={
                 "patti": {"skip": True, "skip_reason": "inactive_opportunity"}
             })
         return
@@ -437,7 +437,7 @@ def processHit(hit):
 
         # Persist any updates (messages/state) and exit this hit
         if not OFFLINE_MODE:
-            esClient.update(index="opportunities", id=opportunityId, doc=opportunity)
+            es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
         wJson(opportunity, f"jsons/process/{opportunityId}.json")
         return
     # ===========================================================================
@@ -618,7 +618,7 @@ def processHit(hit):
                 opportunity['isActive'] = False
                 opportunity['checkedDict']['is_sales_contacted'] = True
                 if not OFFLINE_MODE:
-                    esClient.update(index="opportunities", id=opportunityId, doc=opportunity)
+                    es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
 
                 wJson(opportunity, f"jsons/process/{opportunityId}.json")
 
@@ -735,7 +735,7 @@ def processHit(hit):
         opportunity['followUP_date'] = nextDate.isoformat()
         opportunity['followUP_count'] = 0
         if not OFFLINE_MODE:
-            esClient.update(index="opportunities", id=opportunityId, doc=opportunity)
+            es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
     else:
         # handle follow-ups messages
         checkActivities(opportunity, currDate, rooftop_name)
@@ -748,7 +748,7 @@ def processHit(hit):
     if followUP_date <= currDate and followUP_count > 3:
         opportunity['isActive'] = False
         if not OFFLINE_MODE:
-            esClient.update(index="opportunities", id=opportunityId, doc=opportunity)      
+            es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity) 
         wJson(opportunity, f"jsons/process/{opportunityId}.json")
         return
     elif followUP_date <= currDate:
@@ -790,7 +790,7 @@ def processHit(hit):
         opportunity['followUP_date'] = nextDate.isoformat()
         opportunity['followUP_count'] += 1
         if not OFFLINE_MODE:
-            esClient.update(index="opportunities", id=opportunityId, doc=opportunity)
+            es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
 
     
     
