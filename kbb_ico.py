@@ -463,6 +463,18 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     inquiry_text = latest_body
                     log.info("KBB ICO: using inbound top-reply (len=%d): %r",
                              len(latest_body), latest_body[:120])
+                    
+                    # Keep the thread subject to avoid subject churn
+                    thread_subject = ((full.get("message") or {}).get("subject") or "").strip()
+                    
+                    def _clean_subject(s: str) -> str:
+                        # strip RE:/FWD: prefixes and banners like [CAUTION]
+                        s = _re.sub(r'^\s*\[.*?\]\s*', '', s or '', flags=_re.I)       # e.g., [CAUTION]
+                        s = _re.sub(r'^\s*(re|fwd)\s*:\s*', '', s, flags=_re.I)        # leading RE:/FWD:
+                        return s.strip()
+                    
+                    reply_subject = f"Re: {_clean_subject(thread_subject)}" if thread_subject else "Re:"
+
 
             except Exception as e:
                 log.warning("Could not load inbound activity %s: %s", last_inbound_id, e)
@@ -520,7 +532,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
 
         if declined:
-            subject = "Re: Understood — we’ll pause your Instant Cash Offer"
+            subject = reply_subject
             body_html = f"""
                 <p>Hi {cust_first},</p>
                 <p>Thanks for letting me know — I’ve marked your Kelley Blue Book® Instant Cash Offer as not interested. We won’t send further emails.</p>
