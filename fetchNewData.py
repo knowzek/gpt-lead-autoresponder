@@ -154,9 +154,9 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
         if not _is_assigned_to_kristin_doc(op):
             continue  # ✅ indent this line
 
-        isExist = False
-        isExist = es_head_exists_with_retry(esClient, index="opportunities", id=op.get("id"), default=False)
-            isExist = True
+        isExist = es_head_exists_with_retry(
+            esClient, index="opportunities", id=opp_id, default=False
+        )
 
         customerID = op.get("customer", {}).get("id", None)
         if customerID and not isExist:
