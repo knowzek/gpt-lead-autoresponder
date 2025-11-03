@@ -74,6 +74,42 @@ TOKEN_URL = os.getenv(
     f"https://identity.fortellis.io/oauth2/{AUTH_SERVER_ID}/v1/token"
 )
 
+def set_opportunity_inactive(token: str, subscription_id: str, opportunity_id: str,
+                             sub_status: str = "Not In Market", comments: str = "Marked inactive by Patti"):
+    """
+    Mark an eLead opportunity as inactive using Fortellis Sales V2 API.
+    sub_status examples: "Not In Market", "Purchased Elsewhere", etc.
+    """
+    url = f"https://api.fortellis.io/sales/v2/elead/opportunities/{opportunity_id}/set-inactive"
+    payload = {
+        "opportunityId": opportunity_id,
+        "inactiveSubStatus": sub_status,
+        "comments": comments,
+    }
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Subscription-Id": subscription_id,
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+    try:
+        t0 = _dt.now()
+        resp = requests.post(url, headers=headers, json=payload, timeout=10)
+        dur_ms = int((_dt.now() - t0).total_seconds() * 1000)
+        _log_txn_compact(
+            logging.INFO,
+            method="POST", url=url, headers=headers,
+            status=resp.status_code, duration_ms=dur_ms,
+            request_id=headers.get("Request-Id", "auto"),
+            note="set inactive"
+        )
+        if resp.status_code not in (200, 204):
+            log.warning("set_opportunity_inactive failed: %s %s", resp.status_code, resp.text)
+        return resp
+    except Exception as e:
+        log.warning("Fortellis set_opportunity_inactive error: %s", e)
+        return None
+
 
 def get_token(dealer_key: str):
     # Note: Subscription-Id is NOT required on the token call; it’s used on API calls.
