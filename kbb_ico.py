@@ -528,25 +528,26 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     log.warning("KBB ICO: failed to auto-schedule proposed time: %s", e)
 
 
-        # === COMPOSE + SEND =================================================
+        # === COMPOSE + SEND ================================================
         cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
 
+        # ---------- DECLINED ----------
         if declined:
-            subject = reply_subject
+            subject = reply_subject  # keep thread subject
             body_html = f"""
                 <p>Hi {cust_first},</p>
                 <p>Thanks for letting me know — I’ve marked your Kelley Blue Book® Instant Cash Offer as not interested. We won’t send further emails.</p>
                 <p>If you change your mind later, just reply here and I can pick it back up.</p>
             """.strip()
 
-            # Normalize (NO CTA for declines) + footer + subject guard
+            # Normalize (NO CTA) + footer + subject guard
             body_html = normalize_patti_body(body_html)
             body_html = _PREFS_RE.sub("", body_html).strip()
             body_html = body_html + build_patti_footer(rooftop_name)
             if not subject.lower().startswith("re:"):
                 subject = "Re: " + subject
 
-            # 1) Add a visible note BEFORE we inactivate
+            # 1) Note BEFORE inactivating
             try:
                 add_opportunity_comment(
                     token, subscription_id, opp_id,
@@ -555,7 +556,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             except Exception as e:
                 log.warning("Decline note failed (pre-inactive): %s", e)
 
-            # 2) Resolve recipient + send the email now
+            # 2) Resolve recipient + send
             cust = (opportunity.get("customer") or {})
             email = cust.get("emailAddress") or ((cust.get("emails") or [{}])[0].get("address"))
             if not email:
@@ -572,7 +573,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 subject=subject, body_html=body_html, rooftop_name=rooftop_name
             )
 
-            # 3) Save Patti state (posts a comment) BEFORE we inactivate
+            # 3) Save state BEFORE inactive
             state["mode"] = "closed_declined"
             state["nudge_count"] = 0
             state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
@@ -581,7 +582,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             except Exception as e:
                 log.warning("save_state_comment failed (pre-inactive): %s", e)
 
-            # 4) Flip Fortellis → Inactive LAST
+            # 4) Inactivate LAST
             try:
                 from fortellis import set_opportunity_inactive
                 resp = set_opportunity_inactive(
@@ -593,9 +594,9 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             except Exception as e:
                 log.warning("set_opportunity_inactive failed: %s", e)
 
-            # 5) IMPORTANT: exit so no further state/comment is posted post-inactive
-            return
+            return  # important: stop here
 
+        # ---------- APPOINTMENT CONFIRMATION ----------
         elif created_appt_ok and appt_human:
             subject = f"Re: Your visit on {appt_human}"
             body_html = f"""
@@ -604,6 +605,49 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 <p>Please bring your title, ID, and keys. If you need to change your time, use this link: <{{LegacySalesApptSchLink}}></p>
             """.strip()
 
+            # Normalize + footer + subject guard (no extra CTA here)
+            body_html = normalize_patti_body(body_html)
+            body_html = _PREFS_RE.sub("", body_html).strip()
+            body_html = body_html + build_patti_footer(rooftop_name)
+            if not subject.lower().startswith("re:"):
+                subject = "Re: " + subject
+
+            # Resolve recipient
+            cust = (opportunity.get("customer") or {})
+            email = cust.get("emailAddress") or ((cust.get("emails") or [{}])[0].get("address"))
+            if not email:
+                email = (opportunity.get("_lead", {}) or {}).get("email_address")
+            recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
+            if not recipients:
+                log.warning("No recipient; skip send for opp=%s", opp_id)
+                return
+
+            send_opportunity_email_activity(
+                token, subscription_id, opp_id,
+                sender=rooftop_sender,
+                recipients=recipients, carbon_copies=[],
+                subject=subject, body_html=body_html, rooftop_name=rooftop_name
+            )
+
+            # Persist scheduled state so future runs short-circuit
+            state["mode"] = "scheduled"
+            state["appt_due_utc"]   = due_dt_iso_utc
+            state["appt_due_local"] = appt_human
+            state["nudge_count"]    = 0
+            state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
+            _save_state_comment(token, subscription_id, opp_id, state)
+
+            # Flip CRM subStatus → Appointment Set
+            try:
+                from fortellis import set_opportunity_substatus
+                resp = set_opportunity_substatus(token, subscription_id, opp_id, sub_status="Appointment Set")
+                log.info("SubStatus update response: %s", getattr(resp, "status_code", "n/a"))
+            except Exception as e:
+                log.warning("set_opportunity_substatus failed: %s", e)
+
+            return
+
+        # ---------- NORMAL GPT CONVO ----------
         else:
             from gpt import run_gpt
             prompt = compose_kbb_convo_body(rooftop_name, cust_first, inquiry_text)
@@ -615,64 +659,47 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 persona="kbb_ico",
                 kbb_ctx={"offer_valid_days": 7, "exclude_sunday": True},
             )
-            subject   = (reply.get("subject") or f"Re: Your {rooftop_name} Instant Cash Offer")
+            subject   = reply_subject  # keep thread subject; ignore GPT subject
             body_html = (reply.get("body") or "")
 
-        # Normalize + conditionally add CTA (only for non-decline, non-booked)
-        body_html = normalize_patti_body(body_html)
-        if not declined and not created_appt_ok:
+            # Normalize + add CTA only for this path
+            body_html = normalize_patti_body(body_html)
             body_html = enforce_standard_schedule_sentence(body_html)
-        body_html = _PREFS_RE.sub("", body_html).strip()
-        body_html = body_html + build_patti_footer(rooftop_name)
-        if not subject.lower().startswith("re:"):
-            subject = "Re: " + subject
+            body_html = _PREFS_RE.sub("", body_html).strip()
+            body_html = body_html + build_patti_footer(rooftop_name)
+            if not subject.lower().startswith("re:"):
+                subject = "Re: " + subject
 
-        # Resolve recipient
-        cust = (opportunity.get("customer") or {})
-        email = cust.get("emailAddress")
-        if not email:
-            emails = cust.get("emails") or []
-            email = (emails[0] or {}).get("address") if emails else None
-        if not email:
-            email = (opportunity.get("_lead", {}) or {}).get("email_address")
-        recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
-        if not recipients:
-            log.warning("No recipient; skip send for opp=%s", opp_id)
+            # Resolve recipient and send
+            cust = (opportunity.get("customer") or {})
+            email = cust.get("emailAddress") or ((cust.get("emails") or [{}])[0].get("address"))
+            if not email:
+                email = (opportunity.get("_lead", {}) or {}).get("email_address")
+            recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
+            if not recipients:
+                log.warning("No recipient; skip send for opp=%s", opp_id)
+                return
+
+            add_opportunity_comment(
+                token, subscription_id, opp_id,
+                f"[Patti] Replying to customer (convo mode) → to {(email or 'TEST_TO')}"
+            )
+
+            import re as _re2
+            m = _re2.search(r".{0,80}<\{LegacySalesApptSchLink.*?\}.{0,80}", body_html, flags=_re2.S)
+            log.info("Scheduler token snippet: %r", m.group(0) if m else "none")
+
+            send_opportunity_email_activity(
+                token, subscription_id, opp_id,
+                sender=rooftop_sender,
+                recipients=recipients, carbon_copies=[],
+                subject=subject, body_html=body_html, rooftop_name=rooftop_name
+            )
+
+            # Save convo state (NOT scheduled)
+            state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
+            _save_state_comment(token, subscription_id, opp_id, state)
             return
-
-        add_opportunity_comment(
-            token, subscription_id, opp_id,
-            f"[Patti] Replying to customer ({'confirmation' if created_appt_ok else 'convo'} mode) → to {(email or 'TEST_TO')}"
-        )
-
-        import re
-        m = re.search(r".{0,80}<\{LegacySalesApptSchLink.*?\}.{0,80}", body_html, flags=re.S)
-        log.info("Scheduler token snippet: %r", m.group(0) if m else "none")
-
-        send_opportunity_email_activity(
-            token, subscription_id, opp_id,
-            sender=rooftop_sender,
-            recipients=recipients, carbon_copies=[],
-            subject=subject, body_html=body_html, rooftop_name=rooftop_name
-        )
-
-        # Persist scheduled state so future runs short-circuit
-        state["mode"] = "scheduled"
-        state["appt_due_utc"]   = due_dt_iso_utc
-        state["appt_due_local"] = appt_human
-        state["nudge_count"]    = 0
-        state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
-        _save_state_comment(token, subscription_id, opp_id, state)
-    
-        # NEW: flip CRM subStatus → Appointment Set (after email & state save)
-        try:
-            from fortellis import set_opportunity_substatus
-            resp = set_opportunity_substatus(token, subscription_id, opp_id, sub_status="Appointment Set")
-            log.info("SubStatus update response: %s", getattr(resp, "status_code", "n/a"))
-        except Exception as e:
-            log.warning("set_opportunity_substatus failed: %s", e)
-    
-        return
 
     # ===== NUDGE LOGIC (customer went dark AFTER a reply) =====
     # If we are already in convo mode, no new inbound detected now, and enough time has passed → send a nudge
