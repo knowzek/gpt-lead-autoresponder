@@ -6,6 +6,7 @@ from rooftops import get_rooftop_info
 from gpt import run_gpt
 from emailer import send_email
 import requests
+from es_resilient import es_index_with_retry, es_update_with_retry, es_head_exists_with_retry
 
 import re, html as _html
 
@@ -154,7 +155,7 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
             continue  # ✅ indent this line
 
         isExist = False
-        if isIdExist(op.get("id")):
+        isExist = es_head_exists_with_retry(esClient, index="opportunities", id=op.get("id"), default=False)
             isExist = True
 
         customerID = op.get("customer", {}).get("id", None)
@@ -203,9 +204,9 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
                 "patti_already_contacted": False,
                 "last_msg_by": None
             }
-            esClient.index(index="opportunities", id=op.get("id"), document=docToIndex)
+            es_index_with_retry(esClient, index="opportunities", id=op.get("id"), document=docToIndex)
         else:
-            esClient.update(index="opportunities", id=op.get("id"), doc=docToIndex)
+            es_update_with_retry(esClient, index="opportunities", id=op.get("id"), doc=docToIndex)
 
 
         items.append(docToIndex)
