@@ -18,7 +18,8 @@ import logging
 
 from uuid import uuid4
 
-from fortellis import get_activities, get_token, get_activity_by_id_v1
+from fortellis import get_activities, get_token, get_activity_by_id_v1, get_opportunity
+
 #from fortellis import get_vehicle_inventory_xml  
 from inventory_matcher import recommend_from_xml
 
@@ -291,8 +292,31 @@ def processHit(hit):
         or DEALERSHIP_MAP.get(sub_source)
         or rooftop_name
     )
+    
+    # 🔒 Fresh active-check from Fortellis (ES can be stale)
+    try:
+        tok_for_check = get_token(subscription_id) if not OFFLINE_MODE else None
+        fresh_opp = get_opportunity(opportunityId, tok_for_check, subscription_id) if not OFFLINE_MODE else opportunity
+    except Exception as e:
+        # If we can’t fetch the opp, skip gracefully and don’t risk writes
+        log.warning("Skipping opp %s (get_opportunity failed): %s", opportunityId, str(e)[:200])
+        # Optional: mark in ES so we don’t keep retrying
+        if not OFFLINE_MODE:
+            esClient.update(index="opportunities", id=opportunityId, doc={
+                "patti": {"skip": True, "skip_reason": "get_opportunity_failed"}
+            })
+        return
 
-        # === Persona routing: treat Kristin's opps as KBB ICO =======================
+    if not is_active_opp(fresh_opp):
+        log.info("Skipping opp %s (inactive from Fortellis).", opportunityId)
+        # Mark in ES so future runs don’t retry
+        if not OFFLINE_MODE:
+            esClient.update(index="opportunities", id=opportunityId, doc={
+                "patti": {"skip": True, "skip_reason": "inactive_opportunity"}
+            })
+        return
+
+    # === Persona routing: treat Kristin's opps as KBB ICO =======================
     # TEMP test gate: only flip to KBB mode for opps assigned to Kristin
     if _is_assigned_to_kristin(opportunity):
         # Lead age (7-day window logic can use this inside kbb_ico)
