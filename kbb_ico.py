@@ -843,7 +843,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             subject = f"Re: Your visit on {appt_human}"
             body_html = f"""
                 <p>Hi {cust_first},</p>
-                <p>Great — I penciled you in for <strong>{appt_human}</strong> at {rooftop_name}.</p>
+                <p>Your appointment is confirmed for <strong>{appt_human}</strong> at {rooftop_name}.</p>
                 <p>Please bring your title, ID, and keys. If you need to change your time, use this link: <{{LegacySalesApptSchLink}}></p>
             """.strip()
 
