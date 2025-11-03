@@ -27,6 +27,19 @@ import zoneinfo as _zi
 
 from html import unescape as _unesc
 
+# === Decline detection ==========================================================
+
+_DECLINE_RE = _re.compile(
+    r'(?i)\b('
+    r'not\s+interested|no\s+longer\s+interested|not\s+going\s+to\s+sell|'
+    r'stop\s+email|do\s+not\s+contact|please\s+stop|unsubscribe|'
+    r'take\s+me\s+off|remove\s+me|leave me alone|bought elsewhere|already purchased'
+    r')\b'
+)
+def _is_decline(text: str) -> bool:
+    return bool(_DECLINE_RE.search(text or ""))
+
+
 _GMAIL_QUOTE_RE = _re.compile(r'(?is)<div[^>]*class="gmail_quote[^"]*"[^>]*>.*$', _re.M)
 _BLOCKQUOTE_RE  = _re.compile(r'(?is)<blockquote[^>]*>.*$', _re.M)
 _TAGS_RE        = _re.compile(r'(?is)<[^>]+>')
@@ -388,7 +401,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     opp_id = opportunity.get("opportunityId") or opportunity.get("id")
     customer_id = (opportunity.get("customer") or {}).get("id")
     acts_live = _fetch_activities_live(opp_id, customer_id, token, subscription_id)
-    
+
     # Try to hydrate state from a saved state comment found among live acts (MERGE, don’t replace)
     for a in acts_live:
         txt = (a.get("comments") or a.get("notes") or "") or ""
@@ -399,6 +412,12 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             except Exception:
                 pass
             break
+
+    # === If customer already declined earlier, stop everything ==============
+    if state.get("mode") == "closed_declined":
+        log.info("KBB ICO: declined → skip all outreach (opp=%s)", opp_id)
+        return
+    
     # === If an appointment is booked/upcoming, stop all outreach =====
     if state.get("mode") == "scheduled" or _has_upcoming_appt(acts_live, state):
         log.info("KBB ICO: upcoming appointment detected → skip nudges & cadence (opp=%s)", opp_id)
@@ -433,7 +452,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             state["last_inbound_activity_id"] = last_inbound_id
         _save_state_comment(token, subscription_id, opp_id, state)
 
-                # ✅ NEW: Fetch the latest inbound activity and use its top reply as inquiry_text
+        # ✅ NEW: Fetch the latest inbound activity and use its top reply as inquiry_text
         if last_inbound_id:
             try:
                 from fortellis import get_activity_by_id_v1
@@ -444,71 +463,96 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     inquiry_text = latest_body
                     log.info("KBB ICO: using inbound top-reply (len=%d): %r",
                              len(latest_body), latest_body[:120])
+
             except Exception as e:
                 log.warning("Could not load inbound activity %s: %s", last_inbound_id, e)
 
-        # === Attempt to auto-schedule if customer proposed a time ===
-        from gpt import extract_appt_time
-        proposed = extract_appt_time(inquiry_text or "", tz="America/Los_Angeles")
-
-        appt_iso = (proposed.get("iso") or "").strip()
-        conf = float(proposed.get("confidence") or 0)
+        # Detect decline from customer's top reply
+        declined = _is_decline(inquiry_text)
+        if declined:
+            log.info("KBB ICO: decline detected in inbound: %r", inquiry_text[:120])
 
         created_appt_ok = False
         appt_human = None
         dt_local = None
 
-        if appt_iso and conf >= 0.60:
-            try:
+        if not declined:
+            # === Attempt to auto-schedule if customer proposed a time ===
+            from gpt import extract_appt_time
+            proposed = extract_appt_time(inquiry_text or "", tz="America/Los_Angeles")
+
+            appt_iso = (proposed.get("iso") or "").strip()
+            conf = float(proposed.get("confidence") or 0)
+
+            if appt_iso and conf >= 0.60:
                 try:
-                    dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
-                except Exception:
-                    dt_local = None
+                    try:
+                        dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
+                    except Exception:
+                        dt_local = None
 
-                if dt_local and dt_local.tzinfo:
-                    due_dt_iso_utc = dt_local.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-                else:
-                    # Fallback: assume now (you can improve by re-parsing with local TZ)
-                    due_dt_iso_utc = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-                    dt_local = _dt.fromisoformat(due_dt_iso_utc.replace("Z","+00:00")).astimezone(_tz.utc)
+                    if dt_local and dt_local.tzinfo:
+                        due_dt_iso_utc = dt_local.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                    else:
+                        # Fallback: assume now (you can improve by re-parsing with local TZ)
+                        due_dt_iso_utc = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                        dt_local = _dt.fromisoformat(due_dt_iso_utc.replace("Z","+00:00")).astimezone(_tz.utc)
 
-                # Create the appointment activity
-                schedule_activity(
-                    token, subscription_id, opp_id,
-                    due_dt_iso_utc=due_dt_iso_utc,
-                    activity_name="KBB ICO Appointment",
-                    activity_type="Appointment",
-                    comments=f"Auto-scheduled from customer email: {inquiry_text[:180]}"
-                )
-                created_appt_ok = True
-                appt_human = _fmt_local_human(dt_local, tz_name="America/Los_Angeles")
-                add_opportunity_comment(
-                    token, subscription_id, opp_id,
-                    f"[Patti] Auto-scheduled appointment for {appt_human} (local)."
-                )
-                state["mode"] = "scheduled"
-                state["appt_due_utc"]   = due_dt_iso_utc
-                state["appt_due_local"] = appt_human
-                state["nudge_count"]    = 0
-                _save_state_comment(token, subscription_id, opp_id, state)
-                
-            except Exception as e:
-                log.warning("KBB ICO: failed to auto-schedule proposed time: %s", e)
+                    # Create the appointment activity
+                    schedule_activity(
+                        token, subscription_id, opp_id,
+                        due_dt_iso_utc=due_dt_iso_utc,
+                        activity_name="KBB ICO Appointment",
+                        activity_type="Appointment",
+                        comments=f"Auto-scheduled from customer email: {inquiry_text[:180]}"
+                    )
+                    created_appt_ok = True
+                    appt_human = _fmt_local_human(dt_local, tz_name="America/Los_Angeles")
+                    add_opportunity_comment(
+                        token, subscription_id, opp_id,
+                        f"[Patti] Auto-scheduled appointment for {appt_human} (local)."
+                    )
+                except Exception as e:
+                    log.warning("KBB ICO: failed to auto-schedule proposed time: %s", e)
 
-        # === COMPOSE + SEND ================================================
+
+        # === COMPOSE + SEND =================================================
         cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
 
-        if created_appt_ok and appt_human:
-            # Deterministic confirmation email (no GPT)
+        if declined:
+            subject = "Re: Understood — we’ll pause your Instant Cash Offer"
+            body_html = f"""
+                <p>Hi {cust_first},</p>
+                <p>Thanks for letting me know — I’ve marked your Kelley Blue Book® Instant Cash Offer as not interested. We won’t send further emails.</p>
+                <p>If you change your mind later, just reply here and I can pick it back up.</p>
+            """.strip()
+
+            # Mark inactive in CRM + persist state
+            add_opportunity_comment(token, subscription_id, opp_id,
+                                    "[Patti] Customer declined the KBB ICO — marking inactive.")
+            from fortellis import set_opportunity_inactive
+            try:
+                resp = set_opportunity_inactive(
+                    token, subscription_id, opp_id,
+                    sub_status="Not In Market",
+                    comments="Customer declined — set inactive by Patti"
+                )
+                log.info("Set inactive response: %s", getattr(resp, "status_code", "n/a"))
+            except Exception as e:
+                log.warning("set_opportunity_inactive failed: %s", e)
+            state["mode"] = "closed_declined"
+            state["nudge_count"] = 0
+            _save_state_comment(token, subscription_id, opp_id, state)
+
+        elif created_appt_ok and appt_human:
             subject = f"Re: Your visit on {appt_human}"
             body_html = f"""
                 <p>Hi {cust_first},</p>
                 <p>Great — I penciled you in for <strong>{appt_human}</strong> at {rooftop_name}.</p>
-                <p>Please bring your title, ID, and keys. If you need to change your time, use this link:
-                <{{LegacySalesApptSchLink}}></p>
+                <p>Please bring your title, ID, and keys. If you need to change your time, use this link: <{{LegacySalesApptSchLink}}></p>
             """.strip()
+
         else:
-            # GPT convo path (no appointment was created)
             from gpt import run_gpt
             prompt = compose_kbb_convo_body(rooftop_name, cust_first, inquiry_text)
             reply = run_gpt(
@@ -522,18 +566,16 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             subject   = (reply.get("subject") or f"Re: Your {rooftop_name} Instant Cash Offer")
             body_html = (reply.get("body") or "")
 
-        # Normalize + CTA handling
+        # Normalize + conditionally add CTA
         body_html = normalize_patti_body(body_html)
-
-        if not created_appt_ok:
-            # Only for non-booked replies, add the standard one-liner CTA
+        if not declined and not created_appt_ok:
             body_html = enforce_standard_schedule_sentence(body_html)
-
         body_html = _PREFS_RE.sub("", body_html).strip()
         body_html = body_html + build_patti_footer(rooftop_name)
 
         if not subject.lower().startswith("re:"):
             subject = "Re: " + subject
+
 
         # Resolve recipient
         cust = (opportunity.get("customer") or {})
