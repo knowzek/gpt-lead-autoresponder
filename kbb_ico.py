@@ -720,9 +720,15 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             last_agent_dt = _dt.fromisoformat(str(state["last_agent_msg_at"]).replace("Z","+00:00"))
         except Exception:
             pass
-    
-    # Convo mode if and only if there is a READ EMAIL newer than Patti's send
-    if _has_new_read_email_since(acts_live, last_agent_dt):
+            
+    log.info(
+        "ICO inbound gate: has_reply=%s last_inbound_id=%s last_agent_dt=%s",
+        has_reply, last_inbound_id,
+        (last_agent_dt.isoformat() if last_agent_dt else None)
+    )
+                             
+    # Prefer explicit inbound detection via IDs; fall back to timestamp check
+    if has_reply or _has_new_read_email_since(acts_live, last_agent_dt):
         state["mode"] = "convo"
         state["nudge_count"] = 0
         if has_reply and last_cust_ts:
