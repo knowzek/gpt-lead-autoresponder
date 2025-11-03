@@ -23,6 +23,20 @@ from textwrap import dedent as _dd
 from rooftops import ROOFTOP_INFO
 
 import textwrap as _tw
+import zoneinfo as _zi
+
+def _fmt_local_human(dt: _dt, tz_name="America/Los_Angeles") -> str:
+    """
+    Return 'Friday, Nov 14 at 12:00 PM' in the rooftop's local timezone.
+    """
+    try:
+        z = _zi.ZoneInfo(tz_name)
+        local = dt.astimezone(z)
+    except Exception:
+        local = dt
+    time_str = local.strftime("%I:%M %p").lstrip("0")
+    return f"{local.strftime('%A')}, {local.strftime('%b')} {local.day} at {time_str}"
+
 
 _PREFS_RE = _re.compile(r'(?is)\s*to stop receiving these messages.*?(?:</p>|$)')
 
@@ -407,19 +421,23 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     activity_type="Appointment",
                     comments=f"Auto-scheduled from customer email: {inquiry_text[:180]}"
                 )
+                
                 created_appt_ok = True
-    
-                # Tell the timeline/state
+
+                # Human-readable time for Patti's email
+                appt_human = _fmt_local_human(dt_local, tz_name="America/Los_Angeles")
+
+                # Log and save for clarity
                 add_opportunity_comment(
                     token, subscription_id, opp_id,
-                    f"[Patti] Auto-scheduled appointment for {appt_iso} (local)."
+                    f"[Patti] Auto-scheduled appointment for {appt_human} (local)."
                 )
-    
-                # Build a short confirmation line to add into the email
-                # (HTML paragraph; keep it simple)
+
+                # Build a friendly confirmation paragraph
                 scheduled_block = (
-                    f'<p>I penciled you in for <strong>{appt_iso}</strong>. '
-                    f'If that time isn’t perfect, no problem — use the link below to pick another slot.</p>'
+                    f"<p>I penciled you in for <strong>{appt_human}</strong>. "
+                    f"If you need to change your time, use this link: "
+                    f"<{{LegacySalesApptSchLink}}></p>"
                 )
     
             except Exception as e:
