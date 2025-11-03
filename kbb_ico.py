@@ -175,6 +175,17 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
 
     return True
 
+def _latest_read_email_id(acts: list[dict]) -> str | None:
+    newest = None
+    newest_dt = None
+    for a in acts or []:
+        if not _is_read_email(a):
+            continue
+        dt = _activity_dt(a)
+        if dt and (newest_dt is None or dt > newest_dt):
+            newest_dt = dt
+            newest = str(a.get("activityId") or a.get("id") or "")
+    return newest
 
 def _top_reply_only(html: str) -> str:
     """Strip quoted thread and return the customer's fresh reply (first paragraph)."""
@@ -499,67 +510,47 @@ def _save_state_comment(token, subscription_id, opportunity_id, state: dict):
 
 
 def customer_has_replied(opportunity: dict, token: str, subscription_id: str, state: dict | None = None):
-    """
-    Returns (has_replied, last_customer_ts_iso, last_inbound_activity_id)
-    Only returns True for a *new* inbound since the state's last seen inbound id/timestamp.
-    """
-    state = state or {}
-    last_seen_ts = state.get("last_customer_msg_at") or ""
-    last_seen_id = state.get("last_inbound_activity_id") or ""
-
-    opportunity_id = opportunity.get("opportunityId") or opportunity.get("id")
-    customer = (opportunity.get("customer") or {})
-    customer_id = customer.get("id")
-    if not opportunity_id:
-        log.error("customer_has_replied: missing opportunity_id")
-        return False, None, None
-
+    ...
     acts = search_activities_by_opportunity(
         opportunity_id=opportunity_id,
         token=token,
         dealer_key=subscription_id,
-        page=1, page_size=50,
+        page=1, page_size=200,
         customer_id=customer_id,
     ) or []
 
+    # newest → oldest
+    acts = sorted(acts, key=lambda a: (
+        a.get("completedDate") or a.get("createdDate") or a.get("createdOn") or a.get("modifiedDate") or ""
+    ), reverse=True)
+
     def _is_inbound(a: dict) -> bool:
-        nm = (a.get("activityName") or "").strip().lower()
-        # Your CRM logs *customer email replies* as "Read Email"
-        if nm == "read email":
-            return True
-        # Never treat sends as inbound
-        if "send email" in nm or "send email/letter" in nm or nm.startswith("send "):
-            return False
-        return False  # keep strict
+        return _is_read_email(a)
 
     def _ts(a: dict) -> str:
-        # Prefer completedDate first
-        return (a.get("completedDate")
-                or a.get("createdDate")
-                or a.get("createdOn")
-                or a.get("modifiedDate")
-                or "").strip()
+        return (a.get("completedDate") or a.get("createdDate") or a.get("createdOn") or a.get("modifiedDate") or "").strip()
 
-    # Walk newest→oldest. Return only if it's *newer* than we’ve seen.
     for a in acts:
         if not _is_inbound(a):
             continue
         aid = str(a.get("activityId") or a.get("id") or "")
         ats = _ts(a)
-        if last_seen_id and aid == last_seen_id:
-            # already processed
+
+        if (state.get("last_inbound_activity_id") or "") == aid:
             continue
-        if last_seen_ts:
+
+        lst = (state.get("last_customer_msg_at") or "").strip()
+        if lst:
             try:
                 ats_dt = _dt.fromisoformat(ats.replace("Z","+00:00"))
-                lst_dt = _dt.fromisoformat(str(last_seen_ts).replace("Z","+00:00"))
+                lst_dt = _dt.fromisoformat(lst.replace("Z","+00:00"))
                 if ats_dt <= lst_dt:
                     continue
             except Exception:
-                # if we can't parse, be conservative: require id mismatch as signal
-                if aid == last_seen_id:
+                if aid == (state.get("last_inbound_activity_id") or ""):
                     continue
-        return True, ats or None, aid or None
+
+        return True, (ats or None), (aid or None)
 
     return False, None, None
 
@@ -752,31 +743,32 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         _save_state_comment(token, subscription_id, opp_id, state)
 
         # ✅ NEW: Fetch the latest inbound activity and use its top reply as inquiry_text
-        if last_inbound_id:
+        # Prefer the explicit ID from the detector; otherwise fall back to the newest Read Email we can see.
+        selected_inbound_id = last_inbound_id if (has_reply and last_inbound_id) else _latest_read_email_id(acts_live)
+        
+        if selected_inbound_id:
             try:
                 from fortellis import get_activity_by_id_v1
-                full = get_activity_by_id_v1(last_inbound_id, token, subscription_id)
+                full = get_activity_by_id_v1(selected_inbound_id, token, subscription_id)
                 latest_body_raw = ((full.get("message") or {}).get("body") or "").strip()
                 latest_body = _top_reply_only(latest_body_raw)
                 if latest_body:
                     inquiry_text = latest_body
-                    log.info("KBB ICO: using inbound top-reply (len=%d): %r",
-                             len(latest_body), latest_body[:120])
-                    
+                    log.info("KBB ICO: using inbound top-reply from %s (len=%d): %r",
+                             selected_inbound_id, len(latest_body), latest_body[:120])
+        
                     # Keep the thread subject to avoid subject churn
                     thread_subject = ((full.get("message") or {}).get("subject") or "").strip()
-                    
+        
                     def _clean_subject(s: str) -> str:
-                        # strip RE:/FWD: prefixes and banners like [CAUTION]
-                        s = _re.sub(r'^\s*\[.*?\]\s*', '', s or '', flags=_re.I)       # e.g., [CAUTION]
-                        s = _re.sub(r'^\s*(re|fwd)\s*:\s*', '', s, flags=_re.I)        # leading RE:/FWD:
+                        s = _re.sub(r'^\s*\[.*?\]\s*', '', s or '', flags=_re.I)  # [CAUTION], etc.
+                        s = _re.sub(r'^\s*(re|fwd)\s*:\s*', '', s, flags=_re.I)
                         return s.strip()
-                    
+        
                     reply_subject = f"Re: {_clean_subject(thread_subject)}" if thread_subject else "Re:"
-
-
             except Exception as e:
-                log.warning("Could not load inbound activity %s: %s", last_inbound_id, e)
+                log.warning("Could not load inbound activity %s: %s", selected_inbound_id, e)
+
 
         # Detect decline from customer's top reply
         declined = _is_decline(inquiry_text)
