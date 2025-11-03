@@ -25,6 +25,28 @@ from rooftops import ROOFTOP_INFO
 import textwrap as _tw
 import zoneinfo as _zi
 
+from html import unescape as _unesc
+
+_GMAIL_QUOTE_RE = _re.compile(r'(?is)<div[^>]*class="gmail_quote[^"]*"[^>]*>.*$', _re.M)
+_BLOCKQUOTE_RE  = _re.compile(r'(?is)<blockquote[^>]*>.*$', _re.M)
+_TAGS_RE        = _re.compile(r'(?is)<[^>]+>')
+
+def _top_reply_only(html: str) -> str:
+    """Strip quoted thread and return the customer's fresh reply (first paragraph)."""
+    if not html:
+        return ""
+    s = html
+    s = _GMAIL_QUOTE_RE.sub("", s)   # remove Gmail quoted thread
+    s = _BLOCKQUOTE_RE.sub("", s)    # remove generic blockquotes
+    # keep just the first <div>/<p>…</div></p> or line before a double break
+    s = s.split("<br><br>", 1)[0]
+    # fallback: remove tags and trim
+    s = _TAGS_RE.sub(" ", s)
+    s = _re.sub(r'\s+', ' ', _unesc(s)).strip()
+    # be conservative: cap length
+    return s[:500]
+
+
 def _fmt_local_human(dt: _dt, tz_name="America/Los_Angeles") -> str:
     """
     Return 'Friday, Nov 14 at 12:00 PM' in the rooftop's local timezone.
@@ -369,51 +391,46 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             state["last_inbound_activity_id"] = last_inbound_id
         _save_state_comment(token, subscription_id, opp_id, state)
 
-        # ✅ NEW: Fetch the latest inbound activity and use its email body
+                # ✅ NEW: Fetch the latest inbound activity and use its top reply as inquiry_text
         if last_inbound_id:
             try:
                 from fortellis import get_activity_by_id_v1
                 full = get_activity_by_id_v1(last_inbound_id, token, subscription_id)
-                latest_body = ((full.get("message") or {}).get("body") or "").strip()
+                latest_body_raw = ((full.get("message") or {}).get("body") or "").strip()
+                latest_body = _top_reply_only(latest_body_raw)
                 if latest_body:
                     inquiry_text = latest_body
-                    log.info("KBB ICO: using inbound body for reply (len=%d)", len(latest_body))
+                    log.info("KBB ICO: using inbound top-reply (len=%d): %r",
+                             len(latest_body), latest_body[:120])
             except Exception as e:
                 log.warning("Could not load inbound activity %s: %s", last_inbound_id, e)
-
-        # Compose natural reply with GPT (ICO persona)
-        from gpt import run_gpt
-        cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
-        prompt = compose_kbb_convo_body(rooftop_name, cust_first, inquiry_text)
-
 
         # === Attempt to auto-schedule if customer proposed a time ===
         from gpt import extract_appt_time
         proposed = extract_appt_time(inquiry_text or "", tz="America/Los_Angeles")
-    
+
         appt_iso = (proposed.get("iso") or "").strip()
         conf = float(proposed.get("confidence") or 0)
-    
-        scheduled_block = ""   # text we’ll optionally prepend to Patti’s reply body
+
         created_appt_ok = False
-    
-        if appt_iso and conf >= 0.60:  # tune threshold as you like
+        appt_human = None
+        dt_local = None
+
+        if appt_iso and conf >= 0.60:
             try:
-                # Normalize to UTC for Fortellis API
-                
                 try:
-                    # If appt_iso contains offset, parse and convert to UTC Z
-                    dt_local = _dt.fromisoformat(appt_iso.replace("Z","+00:00"))
+                    dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
                 except Exception:
                     dt_local = None
-    
+
                 if dt_local and dt_local.tzinfo:
                     due_dt_iso_utc = dt_local.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
                 else:
-                    # Fallback: treat as local PT and convert (simple – safe default)
+                    # Fallback: assume now (you can improve by re-parsing with local TZ)
                     due_dt_iso_utc = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    
-                # Create the appointment activity (type "Appointment" → 2)
+                    dt_local = _dt.fromisoformat(due_dt_iso_utc.replace("Z","+00:00")).astimezone(_tz.utc)
+
+                # Create the appointment activity
                 schedule_activity(
                     token, subscription_id, opp_id,
                     due_dt_iso_utc=due_dt_iso_utc,
@@ -421,51 +438,52 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     activity_type="Appointment",
                     comments=f"Auto-scheduled from customer email: {inquiry_text[:180]}"
                 )
-                
                 created_appt_ok = True
-
-                # Human-readable time for Patti's email
                 appt_human = _fmt_local_human(dt_local, tz_name="America/Los_Angeles")
-
-                # Log and save for clarity
                 add_opportunity_comment(
                     token, subscription_id, opp_id,
                     f"[Patti] Auto-scheduled appointment for {appt_human} (local)."
                 )
-
-                # Build a friendly confirmation paragraph
-                scheduled_block = (
-                    f"<p>I penciled you in for <strong>{appt_human}</strong>. "
-                    f"If you need to change your time, use this link: "
-                    f"<{{LegacySalesApptSchLink}}></p>"
-                )
-    
             except Exception as e:
                 log.warning("KBB ICO: failed to auto-schedule proposed time: %s", e)
 
-        reply = run_gpt(
-            prompt,
-            customer_name=cust_first,
-            rooftop_name=rooftop_name,
-            prevMessages=True,
-            persona="kbb_ico",
-            kbb_ctx={"offer_valid_days": 7, "exclude_sunday": True},
-        )
-    
-        subject   = (reply.get("subject") or f"Re: Your {rooftop_name} Instant Cash Offer")
-        body_html = (reply.get("body") or "")
+        # === COMPOSE + SEND ================================================
+        cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
+
+        if created_appt_ok and appt_human:
+            # Deterministic confirmation email (no GPT)
+            subject = f"Re: Your visit on {appt_human}"
+            body_html = f"""
+                <p>Hi {cust_first},</p>
+                <p>Great — I penciled you in for <strong>{appt_human}</strong> at {rooftop_name}.</p>
+                <p>Please bring your title, ID, and keys. If you need to change your time, use this link:
+                <{{LegacySalesApptSchLink}}></p>
+            """.strip()
+        else:
+            # GPT convo path (no appointment was created)
+            from gpt import run_gpt
+            prompt = compose_kbb_convo_body(rooftop_name, cust_first, inquiry_text)
+            reply = run_gpt(
+                prompt,
+                customer_name=cust_first,
+                rooftop_name=rooftop_name,
+                prevMessages=True,
+                persona="kbb_ico",
+                kbb_ctx={"offer_valid_days": 7, "exclude_sunday": True},
+            )
+            subject   = (reply.get("subject") or f"Re: Your {rooftop_name} Instant Cash Offer")
+            body_html = (reply.get("body") or "")
+
+        # Normalize + CTA handling
         body_html = normalize_patti_body(body_html)
 
-        # If we scheduled something, show a one-line confirmation before the CTA
-        if scheduled_block:
-            # Insert near the top (after the greeting paragraph)
-            body_html = body_html.replace("</p>", "</p>" + scheduled_block, 1)
-        
-        body_html = enforce_standard_schedule_sentence(body_html)  # keeps one standard CTA
+        if not created_appt_ok:
+            # Only for non-booked replies, add the standard one-liner CTA
+            body_html = enforce_standard_schedule_sentence(body_html)
+
         body_html = _PREFS_RE.sub("", body_html).strip()
         body_html = body_html + build_patti_footer(rooftop_name)
 
-    
         if not subject.lower().startswith("re:"):
             subject = "Re: " + subject
 
@@ -484,12 +502,13 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
         add_opportunity_comment(
             token, subscription_id, opp_id,
-            f"[Patti] Replying to customer (convo mode) → to {(email or 'TEST_TO')}"
+            f"[Patti] Replying to customer ({'confirmation' if created_appt_ok else 'convo'} mode) → to {(email or 'TEST_TO')}"
         )
-        
+
         import re
         m = re.search(r".{0,80}<\{LegacySalesApptSchLink.*?\}.{0,80}", body_html, flags=re.S)
         log.info("Scheduler token snippet: %r", m.group(0) if m else "none")
+
         send_opportunity_email_activity(
             token, subscription_id, opp_id,
             sender=rooftop_sender,
@@ -500,6 +519,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
         _save_state_comment(token, subscription_id, opp_id, state)
         return
+
 
     else:
         # No new customer reply this cycle → preserve current mode.
