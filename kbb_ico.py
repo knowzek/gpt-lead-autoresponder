@@ -42,18 +42,23 @@ def _fetch_activities_live(opp_id: str, customer_id: str | None, token: str, sub
         return []
 
 def _is_read_email(act: dict) -> bool:
-    nm = (act.get("activityName") or "").strip().lower()
-    return nm == "read email"  # keep strict as requested
+    nm = (act.get("activityName") or act.get("name") or "").strip().lower()
+    at = act.get("activityType")
+    return (nm == "read email") or (at == 20)
 
 def _activity_dt(act: dict):
-    # try created/modified timestamps; default to None if absent
-    ts = act.get("createdDate") or act.get("modifiedDate") or ""
+    ts = (act.get("completedDate")
+          or act.get("activityDate")
+          or act.get("createdDate")
+          or act.get("modifiedDate")
+          or "")
     try:
-        return _dt.fromisoformat(ts.replace("Z", "+00:00"))
+        return _dt.fromisoformat(str(ts).replace("Z", "+00:00"))
     except Exception:
         return None
 
-def _has_new_read_email_since(acts: list[dict], since_dt) -> bool:
+def _has_new_read_email_since(acts: list[dict], since_dt):
+    # If we've never sent anything yet (since_dt is None), the first inbound counts.
     for a in acts:
         if not _is_read_email(a):
             continue
@@ -61,6 +66,7 @@ def _has_new_read_email_since(acts: list[dict], since_dt) -> bool:
         if adt and (since_dt is None or adt > since_dt):
             return True
     return False
+
 
 
 def build_patti_footer(rooftop_name: str) -> str:
@@ -348,11 +354,24 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         if last_inbound_id:
             state["last_inbound_activity_id"] = last_inbound_id
         _save_state_comment(token, subscription_id, opp_id, state)
-    
+
+        # ✅ NEW: Fetch the latest inbound activity and use its email body
+        if last_inbound_id:
+            try:
+                from fortellis import get_activity_by_id_v1
+                full = get_activity_by_id_v1(last_inbound_id, token, subscription_id)
+                latest_body = ((full.get("message") or {}).get("body") or "").strip()
+                if latest_body:
+                    inquiry_text = latest_body
+                    log.info("KBB ICO: using inbound body for reply (len=%d)", len(latest_body))
+            except Exception as e:
+                log.warning("Could not load inbound activity %s: %s", last_inbound_id, e)
+
         # Compose natural reply with GPT (ICO persona)
         from gpt import run_gpt
         cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
         prompt = compose_kbb_convo_body(rooftop_name, cust_first, inquiry_text)
+
 
         # === Attempt to auto-schedule if customer proposed a time ===
         from gpt import extract_appt_time
@@ -465,8 +484,10 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         return
 
     else:
-        # no new customer reply → remain in (or reset to) cadence
-        state["mode"] = state.get("mode") or "cadence"
+        # No new customer reply this cycle → preserve current mode.
+        # Do NOT force cadence here; we want to stay in 'convo' so nudges can run.
+        # If we truly never entered convo, state['mode'] was already defaulted to 'cadence' above.
+        pass
 
     # ===== NUDGE LOGIC (customer went dark AFTER a reply) =====
     # If we are already in convo mode, no new inbound detected now, and enough time has passed → send a nudge
