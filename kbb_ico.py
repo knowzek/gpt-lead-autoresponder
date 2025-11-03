@@ -809,6 +809,10 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             selected_inbound_id = last_inbound_id
         else:
             selected_inbound_id = _latest_read_email_id(acts_now)  # use fresh not stale
+
+        log.info("KBB ICO: replying to inbound id=%s; snippet=%r",
+            selected_inbound_id, (inquiry_text or "")[:120])
+
         
         # Initialize a safe default subject for all paths
         reply_subject = "Re:"
@@ -831,14 +835,22 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 # Body (only overwrite inquiry_text if we actually extracted something)
                 latest_body_raw = ((full.get("message") or {}).get("body") or "").strip()
                 latest_body = _top_reply_only(latest_body_raw)
+                
+                if not latest_body:
+                    # Fallback: do a lighter clean so we don’t lose the new message entirely
+                    import re as _re2
+                    _TAGS = _re2.compile(r"<[^>]+>")
+                    _WS   = _re2.compile(r"\s+")
+                    light = _WS.sub(" ", _TAGS.sub(" ", latest_body_raw)).strip()
+                    if light:
+                        latest_body = light
+                
                 if latest_body:
                     inquiry_text = latest_body
-                    log.info(
-                        "KBB ICO: using inbound top-reply from %s (len=%d): %r",
-                        selected_inbound_id, len(latest_body), latest_body[:120]
-                    )
+                    log.info("KBB ICO: using inbound body (len=%d): %r", len(latest_body), latest_body[:120])
                 else:
-                    log.info("KBB ICO: inbound has no usable top-reply body; keeping prior inquiry_text.")
+                    log.info("KBB ICO: inbound had no usable body; keeping prior inquiry_text.")
+
             except Exception as e:
                 log.warning("Could not load inbound activity %s: %s", selected_inbound_id, e)
         else:
@@ -1024,14 +1036,22 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             from gpt import run_gpt
             # Include full conversation thread for context
             msgs = opportunity.get("messages", [])
+            if isinstance(msgs, list) and inquiry_text:
+                msgs = msgs + [{
+                    "msgFrom": "customer",
+                    "subject": reply_subject.replace("Re: ",""),
+                    "body": inquiry_text,
+                    "date": _dt.now(_tz.utc).isoformat()
+                }]
+            # also persist for future cycles
+            opportunity["messages"] = msgs
+            
             prompt = f"""
             generate next Patti reply for a Kelley Blue Book® Instant Cash Offer conversation.
             Here is the full conversation so far (as a python list of dicts):
             {msgs}
-            
-            Most recent customer message:
-            \"\"\"{inquiry_text}\"\"\"
             """
+
             reply = run_gpt(
                 prompt,
                 customer_name=cust_first,
