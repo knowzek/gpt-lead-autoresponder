@@ -387,6 +387,10 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             token, subscription_id, opp_id,
             f"[Patti] Replying to customer (convo mode) → to {(email or 'TEST_TO')}"
         )
+        
+        import re
+        m = re.search(r".{0,80}<\{LegacySalesApptSchLink.*?\}.{0,80}", body_html, flags=re.S)
+        log.info("Scheduler token snippet: %r", m.group(0) if m else "none")
         send_opportunity_email_activity(
             token, subscription_id, opp_id,
             sender=rooftop_sender,
