@@ -19,7 +19,7 @@ import logging
 from uuid import uuid4
 
 from fortellis import get_activities, get_token, get_activity_by_id_v1
-#from fortellis import get_vehicle_inventory_xml  # we’ll add this helper next
+#from fortellis import get_vehicle_inventory_xml  
 from inventory_matcher import recommend_from_xml
 
 from datetime import datetime, timedelta, timezone
@@ -36,6 +36,21 @@ OFFLINE_MODE = os.getenv("OFFLINE_MODE", "0").lower() in ("1", "true", "yes")
 
 already_processed = get_names_in_dir("jsons/process")
 DEBUGMODE = os.getenv("DEBUGMODE", "1") == "1"
+
+def is_active_opp(opportunity: dict) -> bool:
+    # Fortellis opp payloads typically include a status or flags you can check.
+    status = (opportunity.get("status") or "").strip().lower()
+    # Some payloads have booleans like "isActive" or "isClosed"
+    is_active_flag = opportunity.get("isActive")
+    is_closed_flag = opportunity.get("isClosed")
+
+    if isinstance(is_active_flag, bool):
+        return is_active_flag
+    if isinstance(is_closed_flag, bool):
+        return not is_closed_flag
+
+    # Fallback on status text
+    return status in {"open", "active", "in progress"}
 
 def _is_assigned_to_kristin(doc: dict) -> bool:
     """
