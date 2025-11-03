@@ -20,9 +20,20 @@ def _load_template(filename: str) -> str:
 
 # Map day numbers to their corresponding files
 TEMPLATES = {
-    1: _load_template("ICO CRM Template - Day 01 - TM.txt"),
-    2: _load_template("ICO CRM Template - Day 02 - TM.txt"),
-    # add more days here later
+    1:  _load_template("ICO CRM Template - Day 01 - TM.txt"),  # It's Time to Finalize Your Instant Cash Offer
+    2:  _load_template("ICO CRM Template - Day 02 - TM.txt"),  # We'll Come to You to Finalize Your Instant Cash Offer
+    5:  _load_template("ICO CRM Template - Day 05 - TM.txt"),  # Hurry! Your Instant Cash Offer Expires Soon
+    6:  _load_template("ICO CRM Template - Day 06 - TM.txt"),  # There's Still Time to Finalize Your Instant Cash Offer
+    7:  _load_template("ICO CRM Template - Day 07 - TM.txt"),  # Last Day to Finalize Your Instant Cash Offer
+    8:  _load_template("ICO CRM Template - Day 08 - TM.txt"),  # Your Offer Expired, but We Still Want Your Vehicle!
+    9:  _load_template("ICO CRM Template - Day 09 - TM.txt"),  # Get an Up-to-Date Instant Cash Offer Today
+    12: _load_template("ICO CRM Template - Day 12 - TM.txt"),  # We'd Love to Have Your Feedback
+    16: _load_template("ICO CRM Template - Day 16 - TM.txt"),  # Increased Demand is Driving Up Trade-In Values
+    20: _load_template("ICO CRM Template - Day 20 - TM.txt"),  # Now is a Great Time to Trade-In or Sell Your Vehicle
+    30: _load_template("ICO CRM Template - Day 30 - TM.txt"),  # Trade-In Values are Up!
+    45: _load_template("ICO CRM Template - Day 45 - TM.txt"),  # We Need Quality Pre-Owned Vehicles Like Yours
+    60: _load_template("ICO CRM Template - Day 60 - TM.txt"),  # You're Invited! Join Us for Our Vehicle BuyBack Event
+    90: _load_template("ICO CRM Template - Day 90 - TM.txt"),  # Still Considering Trading-In or Selling Your Vehicle?
 }
 
 def fill_merge_fields(html: str, ctx: dict) -> str:
