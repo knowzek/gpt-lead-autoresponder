@@ -46,6 +46,41 @@ def _top_reply_only(html: str) -> str:
     # be conservative: cap length
     return s[:500]
 
+def _has_upcoming_appt(acts_live: list[dict], state: dict) -> bool:
+    """
+    Returns True if there is an Appointment activity due in the future (not completed),
+    or if state['mode']=='scheduled' and appt_due_utc is still in the future.
+    """
+    now_utc = _dt.now(_tz.utc)
+
+    # A) Use live activities (most reliable)
+    for a in acts_live or []:
+        nm = (a.get("activityName") or a.get("name") or "").strip().lower()
+        t  = str(a.get("activityType") or "").strip()
+        cat = (a.get("category") or "").strip().lower()
+        due = a.get("dueDate") or a.get("completedDate") or a.get("activityDate")
+        try:
+            due_dt = _dt.fromisoformat(str(due).replace("Z", "+00:00"))
+        except Exception:
+            due_dt = None
+
+        is_appt = (nm == "appointment") or (t == "2") or (t == 2)
+        not_completed = cat != "completed"
+
+        if is_appt and due_dt and due_dt > now_utc and not_completed:
+            return True
+
+    # B) Fall back to state
+    appt_due_utc = state.get("appt_due_utc")
+    if appt_due_utc:
+        try:
+            d = _dt.fromisoformat(str(appt_due_utc).replace("Z","+00:00"))
+            if d > now_utc:
+                return True
+        except Exception:
+            pass
+
+    return False
 
 def _fmt_local_human(dt: _dt, tz_name="America/Los_Angeles") -> str:
     """
@@ -364,6 +399,13 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             except Exception:
                 pass
             break
+    # === If an appointment is booked/upcoming, stop all outreach =====
+    if state.get("mode") == "scheduled" or _has_upcoming_appt(acts_live, state):
+        log.info("KBB ICO: upcoming appointment detected → skip nudges & cadence (opp=%s)", opp_id)
+        # (Optional) keep state normalized to 'scheduled'
+        state["mode"] = "scheduled"
+        _save_state_comment(token, subscription_id, opp_id, state)
+        return
 
 
 
@@ -444,6 +486,12 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     token, subscription_id, opp_id,
                     f"[Patti] Auto-scheduled appointment for {appt_human} (local)."
                 )
+                state["mode"] = "scheduled"
+                state["appt_due_utc"]   = due_dt_iso_utc
+                state["appt_due_local"] = appt_human
+                state["nudge_count"]    = 0
+                _save_state_comment(token, subscription_id, opp_id, state)
+                
             except Exception as e:
                 log.warning("KBB ICO: failed to auto-schedule proposed time: %s", e)
 
