@@ -164,30 +164,33 @@ def render_booking_cta(rooftop_name: str, link_text: str = "Schedule Your Visit"
     return f'<p><a href="<{{LegacySalesApptSchLink}}>">{link_text}</a></p>'
 
 
-
-
-def replace_or_append_booking_cta(body_html: str, rooftop_name: str) -> str:
+def replace_or_append_booking_cta(body_html: str, rooftop_name: str, channel: str = "fortellis") -> str:
     rt = (ROOFTOP_INFO.get(rooftop_name) or {})
     booking_link = rt.get("booking_link") or rt.get("scheduler_url") or ""
 
-    # 1) Token already present? Replace it with real link or clickable token.
+    # If Fortellis is the sender, do NOT expand the token yourself.
+    if channel.lower() == "fortellis":
+        return body_html  # leave <{LegacySalesApptSchLink}> intact
+
+    # 1) Token present? Replace with a proper anchor if we’re sending directly.
     if _LEGACY_TOKEN_RE.search(body_html):
         if booking_link:
-            return _LEGACY_TOKEN_RE.sub(booking_link, body_html)
-        return (_LEGACY_TOKEN_RE.sub('<{LegacySalesApptSchLink}>', body_html)
-                .replace('<{LegacySalesApptSchLink}>',
-                         '<a href="<{LegacySalesApptSchLink}>">Schedule Your Visit</a>'))
+            return _LEGACY_TOKEN_RE.sub(
+                f'<a href="{booking_link}">Schedule Your Visit</a>', body_html
+            )
+        return _LEGACY_TOKEN_RE.sub(
+            '<a href="<{LegacySalesApptSchLink}>">Schedule Your Visit</a>', body_html
+        )
 
-    # 2) No token. If plaintext "Schedule Your Visit" exists but isn't a link, wrap the FIRST one.
-    if ("Schedule Your Visit" in body_html 
-        and not re.search(r'(?i)<a[^>]*>\s*Schedule Your Visit\s*</a>', body_html)):
+    # 2) First plain "Schedule Your Visit" → wrap
+    if ("Schedule Your Visit" in body_html and
+        not re.search(r'(?i)<a[^>]*>\s*Schedule Your Visit\s*</a>', body_html)):
         href = booking_link or '<{LegacySalesApptSchLink}>'
-        return re.sub(r"Schedule Your Visit",
-                      f'<a href="{href}">Schedule Your Visit</a>',
-                      body_html, count=1)
+        return re.sub(r"Schedule Your Visit", f'<a href="{href}">Schedule Your Visit</a>', body_html, count=1)
 
-    # 3) Otherwise, append a proper linked CTA block.
+    # 3) Append a proper linked CTA block.
     return body_html.rstrip() + render_booking_cta(rooftop_name)
+
 
 
 ALLOW_TEXTING = os.getenv("ALLOW_TEXTING","0").lower() in ("1","true","yes")
