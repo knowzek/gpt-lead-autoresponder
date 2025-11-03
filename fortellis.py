@@ -93,9 +93,9 @@ def set_opportunity_inactive(token: str, subscription_id: str, opportunity_id: s
         "Content-Type": "application/json",
     }
     try:
-        t0 = _dt.now()
+        t0 = datetime.now(timezone.utc)
         resp = requests.post(url, headers=headers, json=payload, timeout=10)
-        dur_ms = int((_dt.now() - t0).total_seconds() * 1000)
+        dur_ms = int((datetime.now(timezone.utc) - t0).total_seconds() * 1000)
         _log_txn_compact(
             logging.INFO,
             method="POST", url=url, headers=headers,
