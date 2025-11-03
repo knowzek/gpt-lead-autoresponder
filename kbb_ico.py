@@ -312,9 +312,9 @@ def compose_kbb_convo_body(rooftop_name: str, cust_first: str, customer_message:
     Write HTML with simple <p> paragraphs (no lists). Always:
     - Begin with: "Hi {cust_first}," (exactly).
     - Acknowledge the customer's note in one concise sentence.
-    - State clearly that you're helping with their Kelley Blue Book® Instant Cash Offer.
-    - Remind them to bring title, ID, and keys.
-    - Do NOT propose appointment times; the system will add the standard scheduling sentence.
+    - If relevant, mention their Kelley Blue Book® Instant Cash Offer naturally in your reply.
+    - You may remind them to bring title, ID, and keys if appropriate.
+    - Do NOT insert or repeat scheduling lines unless contextually needed.
     - No extra signatures; we will append yours.
     - Keep to 2–4 short paragraphs max.
 
@@ -984,7 +984,6 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     subject   = reply.get("subject") or "Still interested in your Instant Cash Offer?"
                     body_html = reply.get("body") or ""
                     body_html = normalize_patti_body(body_html)
-                    body_html = enforce_standard_schedule_sentence(body_html)
                     body_html = _PREFS_RE.sub("", body_html).strip()
                     body_html = body_html + build_patti_footer(rooftop_name)
 
