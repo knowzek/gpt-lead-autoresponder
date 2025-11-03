@@ -20,7 +20,6 @@ def _load_template(filename: str) -> str:
 
 # Map day numbers to their corresponding files
 TEMPLATES = {
-    0: _load_template("ICO CRM Template - Day 00 - TM.txt"),
     1: _load_template("ICO CRM Template - Day 01 - TM.txt"),
     2: _load_template("ICO CRM Template - Day 02 - TM.txt"),
     # add more days here later
