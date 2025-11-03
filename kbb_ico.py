@@ -461,7 +461,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
     # === Detect customer-booked appointment via booking link (pre-convo) ===
     appt_id, appt_due_iso = _find_new_customer_scheduled_appt(acts_live, state)
-    log.info("KBB ICO: booked-appt scan → id=%s due=%s", appt_id, appt_due_iso
+    log.info("KBB ICO: booked-appt scan → id=%s due=%s", appt_id, appt_due_iso)
     if appt_id and appt_due_iso:
         try:
             # Human time in local tz
