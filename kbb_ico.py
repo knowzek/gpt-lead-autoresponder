@@ -385,6 +385,7 @@ def compose_kbb_convo_body(rooftop_name: str, cust_first: str, customer_message:
     - Begin with: "Hi {cust_first}," (exactly).
     - Acknowledge the customer's note in 1-2 concise sentences.
     - If relevant, mention their Kelley Blue Book® Instant Cash Offer naturally in your reply.
+    - Avoid re-explaining topics you already covered earlier in this thread unless the customer explicitly asks again; if they do, confirm briefly in one short sentence and move on.
     - If the customer has not already specified or booked the meeting, close with a friendly nudge to pick a day/time (no links) — a short booking line with the link will be appended automatically.
     - You may remind them to bring title, ID, and keys if appropriate, and if you haven't already done it in an earlier message
     - No extra signatures; we will append yours.
@@ -1099,6 +1100,24 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 subject=subject, body_html=body_html, rooftop_name=rooftop_name
             )
 
+            now_iso = _dt.now(_tz.utc).isoformat()
+
+            # store a compact version of Patti’s reply in the thread (no footer/CTA)
+            _thread_body = re.sub(r"<[^>]+>", " ", body_html)          # strip tags
+            _thread_body = re.sub(r"\s+", " ", _thread_body).strip()   # collapse whitespace
+            _thread_body = _thread_body.split("Please let us know a convenient time", 1)[0].strip()
+            
+            msgs = opportunity.get("messages", [])
+            if not isinstance(msgs, list):
+                msgs = []
+            msgs.append({
+                "msgFrom": "patti",
+                "subject": subject.replace("Re: ", ""),
+                "body": _thread_body,
+                "date": now_iso
+            })
+            opportunity["messages"] = msgs
+
             # Save convo state (NOT scheduled)
             state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
             _save_state_comment(token, subscription_id, opp_id, state)
@@ -1168,6 +1187,23 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                             recipients=recipients, carbon_copies=[],
                             subject=subject, body_html=body_html, rooftop_name=rooftop_name
                         )
+
+                        # store a compact version of Patti’s reply in the thread (no footer/CTA)
+                        _thread_body = re.sub(r"<[^>]+>", " ", body_html)          # strip tags
+                        _thread_body = re.sub(r"\s+", " ", _thread_body).strip()   # collapse whitespace
+                        _thread_body = _thread_body.split("Please let us know a convenient time", 1)[0].strip()
+                        
+                        msgs = opportunity.get("messages", [])
+                        if not isinstance(msgs, list):
+                            msgs = []
+                        msgs.append({
+                            "msgFrom": "patti",
+                            "subject": subject.replace("Re: ", ""),
+                            "body": _thread_body,
+                            "date": now_iso
+                        })
+                        opportunity["messages"] = msgs
+
                         state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
                         state["nudge_count"] = nudge_count + 1
                         _save_state_comment(token, subscription_id, opp_id, state)
