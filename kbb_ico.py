@@ -44,6 +44,38 @@ _GMAIL_QUOTE_RE = _re.compile(r'(?is)<div[^>]*class="gmail_quote[^"]*"[^>]*>.*$'
 _BLOCKQUOTE_RE  = _re.compile(r'(?is)<blockquote[^>]*>.*$', _re.M)
 _TAGS_RE        = _re.compile(r'(?is)<[^>]+>')
 
+import re as _re2
+
+# Detect any existing booking token/link so we don't double insert
+_SCHED_ANY_RE = _re2.compile(r'(?is)(LegacySalesApptSchLink|Schedule\s+Your\s+Visit</a>)')
+
+def append_soft_schedule_sentence(body_html: str, rooftop_name: str) -> str:
+    """
+    Ensures we add exactly one polite schedule sentence with a real link or Legacy token.
+    Will not add if a booking token/link already exists.
+    """
+    body_html = body_html or ""
+
+    # If they already have a token or a Schedule Your Visit link, skip
+    if _SCHED_ANY_RE.search(body_html):
+        return body_html
+
+    # Resolve the href (real scheduler if configured; else Legacy token so CRM swaps it)
+    from rooftops import ROOFTOP_INFO
+    rt = (ROOFTOP_INFO.get(rooftop_name) or {})
+    href = rt.get("booking_link") or rt.get("scheduler_url") or "<{LegacySalesApptSchLink}>"
+
+    soft_line = (
+        f'<p>Let me know a time that works for you, or schedule directly here: '
+        f'<a href="{href}">Schedule Your Visit</a>.</p>'
+    )
+
+    # If body has paragraphs, append after them; else wrap
+    if _re2.search(r'(?is)<p[^>]*>.*?</p>', body_html):
+        return body_html.rstrip() + soft_line
+    return f"<p>{body_html.strip()}</p>{soft_line}" if body_html.strip() else soft_line
+
+
 def _short_circuit_if_booked(opportunity, acts_live, state,
                              *, token, subscription_id, rooftop_name, SAFE_MODE, rooftop_sender):
     """
@@ -311,10 +343,10 @@ def compose_kbb_convo_body(rooftop_name: str, cust_first: str, customer_message:
     Keep replies short, warm, and human—no corporate tone.
     Write HTML with simple <p> paragraphs (no lists). Always:
     - Begin with: "Hi {cust_first}," (exactly).
-    - Acknowledge the customer's note in one concise sentence.
+    - Acknowledge the customer's note in 1-2 concise sentences.
     - If relevant, mention their Kelley Blue Book® Instant Cash Offer naturally in your reply.
+    - If the customer has not already specified or booked the meeting, close with a friendly nudge to pick a day/time (no links) — a short booking line with the link will be appended automatically.
     - You may remind them to bring title, ID, and keys if appropriate.
-    - Do NOT insert or repeat scheduling lines unless contextually needed.
     - No extra signatures; we will append yours.
     - Keep to 2–4 short paragraphs max.
 
@@ -907,6 +939,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             # Normalize + add CTA only for this path
             body_html = normalize_patti_body(body_html)
             #body_html = enforce_standard_schedule_sentence(body_html)
+            body_html = append_soft_schedule_sentence(body_html, rooftop_name)
             body_html = _PREFS_RE.sub("", body_html).strip()
             body_html = body_html + build_patti_footer(rooftop_name)
             if not subject.lower().startswith("re:"):
