@@ -49,6 +49,23 @@ import re as _re2
 # Detect any existing booking token/link so we don't double insert
 _SCHED_ANY_RE = _re2.compile(r'(?is)(LegacySalesApptSchLink|Schedule\s+Your\s+Visit</a>)')
 
+def _is_agent_send(act: dict) -> bool:
+    nm = (act.get("activityName") or act.get("name") or "").strip().lower()
+    at = str(act.get("activityType") or "").strip().lower()
+    # Fortellis - Send Email is activityType 14
+    return ("send email" in nm) or (at == "14" or act.get("activityType") == 14)
+
+def _last_agent_send_dt(acts: list[dict]):
+    latest = None
+    for a in acts or []:
+        if not _is_agent_send(a):
+            continue
+        dt = _activity_dt(a)  # your existing completedDate→dt converter
+        if dt and (latest is None or dt > latest):
+            latest = dt
+    return latest
+
+
 def append_soft_schedule_sentence(body_html: str, rooftop_name: str) -> str:
     """
     Ensures we add exactly one polite schedule sentence with a real link or Legacy token.
@@ -67,7 +84,7 @@ def append_soft_schedule_sentence(body_html: str, rooftop_name: str) -> str:
 
     soft_line = (
         f'<p>You can schedule your appointment directly here: '
-        f'<{LegacySalesApptSchLink}></p>'
+        + <{LegacySalesApptSchLink}></p>
     )
 
     # If body has paragraphs, append after them; else wrap
@@ -714,21 +731,18 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
     # Only flip to convo when we truly have a new inbound with a timestamp
     # Compute the last agent send time from state (if present)
-    last_agent_dt = None
-    if state.get("last_agent_msg_at"):
+    # Prefer real Fortellis send time; fall back to state if missing
+    last_agent_dt_live = _last_agent_send_dt(acts_live)
+    last_agent_dt = last_agent_dt_live
+    if (last_agent_dt is None) and state.get("last_agent_msg_at"):
         try:
             last_agent_dt = _dt.fromisoformat(str(state["last_agent_msg_at"]).replace("Z","+00:00"))
         except Exception:
-            pass
-            
-    log.info(
-        "ICO inbound gate: has_reply=%s last_inbound_id=%s last_agent_dt=%s",
-        has_reply, last_inbound_id,
-        (last_agent_dt.isoformat() if last_agent_dt else None)
-    )
-                             
-    # Prefer explicit inbound detection via IDs; fall back to timestamp check
+            last_agent_dt = None
+
+    # ✅ Convo mode if and only if there is a READ EMAIL newer than Patti's send
     if has_reply or _has_new_read_email_since(acts_live, last_agent_dt):
+        
         state["mode"] = "convo"
         state["nudge_count"] = 0
         if has_reply and last_cust_ts:
