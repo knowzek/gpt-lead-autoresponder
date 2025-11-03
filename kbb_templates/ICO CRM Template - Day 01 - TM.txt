@@ -247,9 +247,8 @@ To complete the Kelley Blue Book&#174; Instant Cash Offer for your <{TradeModel}
   so our next step is to coordinate an in-person 15-20 minute inspection during that window 
   that works with your availability so that we can finish it up and get you your payment.
 </p>
-
 <p>Please let us know a convenient time for you, or you can instantly reserve your time here:</p>
-<p><a href="<{LegacySalesApptSchLink}>">Schedule Your Visit</a></p>
+<p><{LegacySalesApptSchLink}></p>
 
 <p>
   <{SalesPersonName:S}><br>
