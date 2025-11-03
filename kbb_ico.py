@@ -627,8 +627,6 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         if not subject.lower().startswith("re:"):
             subject = "Re: " + subject
 
-
-
         # Resolve recipient
         cust = (opportunity.get("customer") or {})
         email = cust.get("emailAddress")
@@ -658,16 +656,23 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             subject=subject, body_html=body_html, rooftop_name=rooftop_name
         )
 
+        # Persist scheduled state so future runs short-circuit
+        state["mode"] = "scheduled"
+        state["appt_due_utc"]   = due_dt_iso_utc
+        state["appt_due_local"] = appt_human
+        state["nudge_count"]    = 0
         state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
         _save_state_comment(token, subscription_id, opp_id, state)
+    
+        # NEW: flip CRM subStatus → Appointment Set (after email & state save)
+        try:
+            from fortellis import set_opportunity_substatus
+            resp = set_opportunity_substatus(token, subscription_id, opp_id, sub_status="Appointment Set")
+            log.info("SubStatus update response: %s", getattr(resp, "status_code", "n/a"))
+        except Exception as e:
+            log.warning("set_opportunity_substatus failed: %s", e)
+    
         return
-
-
-    else:
-        # No new customer reply this cycle → preserve current mode.
-        # Do NOT force cadence here; we want to stay in 'convo' so nudges can run.
-        # If we truly never entered convo, state['mode'] was already defaulted to 'cadence' above.
-        pass
 
     # ===== NUDGE LOGIC (customer went dark AFTER a reply) =====
     # If we are already in convo mode, no new inbound detected now, and enough time has passed → send a nudge
