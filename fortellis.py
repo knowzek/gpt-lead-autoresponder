@@ -110,6 +110,32 @@ def set_opportunity_inactive(token: str, subscription_id: str, opportunity_id: s
         log.warning("Fortellis set_opportunity_inactive error: %s", e)
         return None
 
+def set_opportunity_substatus(token: str, subscription_id: str, opportunity_id: str,
+                              sub_status: str = "Appointment Set"):
+    """
+    Update eLead opportunity subStatus (e.g., 'Appointment Set').
+    POST /sales/v2/elead/opportunities/{opportunityId}/subStatus/update
+    """
+    url = f"https://api.fortellis.io/sales/v2/elead/opportunities/{opportunity_id}/subStatus/update"
+    payload = {"subStatus": sub_status}
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Subscription-Id": subscription_id,
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+    t0 = datetime.now(timezone.utc)
+    resp = requests.post(url, headers=headers, json=payload, timeout=10)
+    dur_ms = int((datetime.now(timezone.utc) - t0).total_seconds() * 1000)
+    _log_txn_compact(logging.INFO, method="POST", url=url, headers=headers,
+                     status=resp.status_code, duration_ms=dur_ms,
+                     request_id=headers.get("Request-Id", "auto"),
+                     note=f"subStatus→{sub_status}")
+    if resp.status_code not in (200, 204):
+        log.warning("set_opportunity_substatus failed: %s %s", resp.status_code, getattr(resp, "text", ""))
+    return resp
+
 
 def get_token(dealer_key: str):
     # Note: Subscription-Id is NOT required on the token call; it’s used on API calls.
