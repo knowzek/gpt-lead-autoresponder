@@ -487,7 +487,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
     # Offer-window override (if expired, jump to Day 08/09 track)
     expired = _ico_offer_expired(created_iso, exclude_sunday=True)
-    effective_day = lead_age_days
+    effective_day = max(1, (lead_age_days or 0) + 1)
     if expired and lead_age_days < 8:
         effective_day = 8
 
