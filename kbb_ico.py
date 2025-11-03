@@ -52,7 +52,6 @@ _SCHED_ANY_RE = _re2.compile(r'(?is)(LegacySalesApptSchLink|Schedule\s+Your\s+Vi
 def _is_agent_send(act: dict) -> bool:
     nm = (act.get("activityName") or act.get("name") or "").strip().lower()
     at = str(act.get("activityType") or "").strip().lower()
-    # Fortellis - Send Email is activityType 14
     return ("send email" in nm) or (at == "14" or act.get("activityType") == 14)
 
 def _last_agent_send_dt(acts: list[dict]):
@@ -60,10 +59,23 @@ def _last_agent_send_dt(acts: list[dict]):
     for a in acts or []:
         if not _is_agent_send(a):
             continue
-        dt = _activity_dt(a)  # your existing completedDate→dt converter
+        dt = _activity_dt(a)
         if dt and (latest is None or dt > latest):
             latest = dt
     return latest
+
+def _latest_read_email_id(acts: list[dict]) -> str | None:
+    newest = None
+    newest_dt = None
+    for a in acts or []:
+        if not _is_read_email(a):
+            continue
+        dt = _activity_dt(a)
+        if dt and (newest_dt is None or dt > newest_dt):
+            newest_dt = dt
+            newest = str(a.get("activityId") or a.get("id") or "")
+    return newest
+
 
 
 def append_soft_schedule_sentence(body_html: str, rooftop_name: str) -> str:
@@ -723,6 +735,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     # Only flip to convo when we truly have a new inbound with a timestamp
     # Compute the last agent send time from state (if present)
     # Prefer real Fortellis send time; fall back to state if missing
+    # === Compute last agent send time (prefer live Fortellis data) ===
     last_agent_dt_live = _last_agent_send_dt(acts_live)
     last_agent_dt = last_agent_dt_live
     if (last_agent_dt is None) and state.get("last_agent_msg_at"):
@@ -730,10 +743,9 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             last_agent_dt = _dt.fromisoformat(str(state["last_agent_msg_at"]).replace("Z","+00:00"))
         except Exception:
             last_agent_dt = None
-
+    
     # ✅ Convo mode if and only if there is a READ EMAIL newer than Patti's send
     if has_reply or _has_new_read_email_since(acts_live, last_agent_dt):
-        
         state["mode"] = "convo"
         state["nudge_count"] = 0
         if has_reply and last_cust_ts:
@@ -741,11 +753,10 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         if last_inbound_id:
             state["last_inbound_activity_id"] = last_inbound_id
         _save_state_comment(token, subscription_id, opp_id, state)
-
-        # ✅ NEW: Fetch the latest inbound activity and use its top reply as inquiry_text
-        # Prefer the explicit ID from the detector; otherwise fall back to the newest Read Email we can see.
+    
+        # ✅ Always fetch the LATEST inbound body we can see
         selected_inbound_id = last_inbound_id if (has_reply and last_inbound_id) else _latest_read_email_id(acts_live)
-        
+    
         if selected_inbound_id:
             try:
                 from fortellis import get_activity_by_id_v1
@@ -756,18 +767,16 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     inquiry_text = latest_body
                     log.info("KBB ICO: using inbound top-reply from %s (len=%d): %r",
                              selected_inbound_id, len(latest_body), latest_body[:120])
-        
-                    # Keep the thread subject to avoid subject churn
+    
                     thread_subject = ((full.get("message") or {}).get("subject") or "").strip()
-        
                     def _clean_subject(s: str) -> str:
                         s = _re.sub(r'^\s*\[.*?\]\s*', '', s or '', flags=_re.I)  # [CAUTION], etc.
                         s = _re.sub(r'^\s*(re|fwd)\s*:\s*', '', s, flags=_re.I)
                         return s.strip()
-        
                     reply_subject = f"Re: {_clean_subject(thread_subject)}" if thread_subject else "Re:"
             except Exception as e:
                 log.warning("Could not load inbound activity %s: %s", selected_inbound_id, e)
+
 
 
         # Detect decline from customer's top reply
