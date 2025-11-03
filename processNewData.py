@@ -19,6 +19,8 @@ import logging
 from uuid import uuid4
 
 from fortellis import get_activities, get_token, get_activity_by_id_v1, get_opportunity
+from fortellis import get_activities, get_token, get_activity_by_id_v1, get_opportunity, add_opportunity_comment
+
 
 #from fortellis import get_vehicle_inventory_xml  
 from inventory_matcher import recommend_from_xml
@@ -30,6 +32,19 @@ load_dotenv()
 
 log = logging.getLogger(__name__)
 OFFLINE_MODE = os.getenv("OFFLINE_MODE", "0").lower() in ("1", "true", "yes")
+
+EXIT_KEYWORDS = [
+    "not interested", "no longer interested", "bought elsewhere",
+    "already purchased", "stop emailing", "unsubscribe",
+    "please stop", "no thanks", "do not contact",
+    "leave me alone", "sold my car", "found another dealer"
+]
+
+def is_exit_message(msg: str) -> bool:
+    if not msg:
+        return False
+    msg_low = msg.lower()
+    return any(k in msg_low for k in EXIT_KEYWORDS)
 
 
 # TODO:
@@ -94,26 +109,24 @@ def checkActivities(opportunity, currDate, rooftop_name):
         activityId = act.get("activityId")
         if activityId in alreadyProcessedActivities:
             continue
-
+    
         if not token and not DEBUGMODE and not OFFLINE_MODE:
             token = get_token(subscription_id)
         
         comments = (act.get("comments") or "")
         activityName = (act.get("activityName") or "").strip().lower()
-        activityType   = act.get("activityType")
-        
-
+        activityType = act.get("activityType")
+    
         # 1) Our sentinel in any prior comment?
         if PATTI_FIRST_REPLY_SENTINEL in comments:
             checkedDict["patti_already_contacted"] = True
             continue
-            # break
-
-        if activityName.lower() == "read email" or activityType == 20:
+    
+        if activityName == "read email" or activityType == 20:
             fullAct = act
             if not DEBUGMODE and not OFFLINE_MODE:
                 fullAct = get_activity_by_id_v1(activityId, token, subscription_id)
-        
+    
             customerMsg = (fullAct.get('message') or {})
             customerMsgDict = {
                 "msgFrom": "customer",
@@ -122,9 +135,52 @@ def checkActivities(opportunity, currDate, rooftop_name):
                 "body": customerMsg.get('body'),
                 "date": fullAct.get('completedDate')
             }
-            opportunity['messages'].append(customerMsgDict)
+            
+            # append the customer's message to the thread
+            opportunity.setdefault('messages', []).append(customerMsgDict)
             messages = opportunity['messages']
-        
+            checkedDict["last_msg_by"] = "customer"
+            opportunity['checkedDict'] = checkedDict  # ensure persisted even if it was missing
+            
+            # 🚫 Early-exit check — stop if customer declined
+            customer_body = (customerMsg.get('body') or '').strip()
+            if is_exit_message(customer_body):
+                log.info("Customer opted out or declined interest. Marking opportunity inactive.")
+                opportunity['isActive'] = False
+                checkedDict['exit_reason'] = customer_body[:120]
+                checkedDict['exit_type'] = "customer_declined"
+                opportunity['checkedDict'] = checkedDict
+            
+                # mark this activity as processed so we don't re-handle it next run
+                opportunity.setdefault('alreadyProcessedActivities', {})[activityId] = fullAct
+            
+                if not OFFLINE_MODE:
+                    add_opportunity_comment(
+                        token, subscription_id, opportunity['opportunityId'],
+                        f"[Patti Exit] Customer indicated no interest: “{customer_body[:200]}”"
+                    )
+                    # Optional: notify salesperson
+                    sales_team = opportunity.get('salesTeam', [])
+                    if sales_team:
+                        first_sales = sales_team[0]
+                        salesperson_email = (first_sales.get('email') or "").strip()
+                        if salesperson_email:
+                            try:
+                                from emailer import send_email
+                                send_email(
+                                    to=salesperson_email,
+                                    subject="Patti stopped follow-up — customer declined",
+                                    body=f"The customer replied:\n\n{customer_body}\n\nPatti stopped follow-ups for this lead."
+                                )
+                            except Exception as e:
+                                log.warning("Emailer failed: %s", e)
+            
+                    esClient.update(index="opportunities", id=opportunity['opportunityId'], doc=opportunity)
+            
+                wJson(opportunity, f"jsons/process/{opportunity['opportunityId']}.json")
+                return
+            
+            # ✅ continue with GPT reply generation
             prompt = f"""
             generate next patti reply, here is the current messages between patti and the customer (python list of dicts):
             {messages}
@@ -135,16 +191,16 @@ def checkActivities(opportunity, currDate, rooftop_name):
                 rooftop_name,
                 prevMessages=True
             )
-        
+            
             subject = response["subject"]
             body_html = response["body"]
-        
+            
             body_html = re.sub(
                 r"(?is)(?:\n\s*)?patti\s*(?:\r?\n)+virtual assistant.*?$",
                 "",
                 body_html
             )
-        
+            
             opportunity['messages'].append({
                 "msgFrom": "patti",
                 "subject": subject,
@@ -153,11 +209,17 @@ def checkActivities(opportunity, currDate, rooftop_name):
                 "action": response.get("action"),
                 "notes": response.get("notes"),
             })
-        
-            opportunity['checkedDict']['last_msg_by'] = "patti"
+            
+            checkedDict['last_msg_by'] = "patti"
+            opportunity['checkedDict'] = checkedDict
+            
+            # mark processed to avoid repeat handling
+            opportunity.setdefault('alreadyProcessedActivities', {})[activityId] = fullAct
+            
             nextDate = currDate + timedelta(hours=24)   # or use a constant
             opportunity['followUP_date'] = nextDate.isoformat()
             opportunity['followUP_count'] = 0
+
 
 
 
