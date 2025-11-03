@@ -527,11 +527,51 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 <p>If you change your mind later, just reply here and I can pick it back up.</p>
             """.strip()
 
-            # Mark inactive in CRM + persist state
-            add_opportunity_comment(token, subscription_id, opp_id,
-                                    "[Patti] Customer declined the KBB ICO — marking inactive.")
-            from fortellis import set_opportunity_inactive
+            # Normalize (NO CTA for declines) + footer + subject guard
+            body_html = normalize_patti_body(body_html)
+            body_html = _PREFS_RE.sub("", body_html).strip()
+            body_html = body_html + build_patti_footer(rooftop_name)
+            if not subject.lower().startswith("re:"):
+                subject = "Re: " + subject
+
+            # 1) Add a visible note BEFORE we inactivate
             try:
+                add_opportunity_comment(
+                    token, subscription_id, opp_id,
+                    "[Patti] Customer declined the KBB ICO — marking inactive."
+                )
+            except Exception as e:
+                log.warning("Decline note failed (pre-inactive): %s", e)
+
+            # 2) Resolve recipient + send the email now
+            cust = (opportunity.get("customer") or {})
+            email = cust.get("emailAddress") or ((cust.get("emails") or [{}])[0].get("address"))
+            if not email:
+                email = (opportunity.get("_lead", {}) or {}).get("email_address")
+            recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
+            if not recipients:
+                log.warning("No recipient; skip send for opp=%s", opp_id)
+                return
+
+            send_opportunity_email_activity(
+                token, subscription_id, opp_id,
+                sender=rooftop_sender,
+                recipients=recipients, carbon_copies=[],
+                subject=subject, body_html=body_html, rooftop_name=rooftop_name
+            )
+
+            # 3) Save Patti state (posts a comment) BEFORE we inactivate
+            state["mode"] = "closed_declined"
+            state["nudge_count"] = 0
+            state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
+            try:
+                _save_state_comment(token, subscription_id, opp_id, state)
+            except Exception as e:
+                log.warning("save_state_comment failed (pre-inactive): %s", e)
+
+            # 4) Flip Fortellis → Inactive LAST
+            try:
+                from fortellis import set_opportunity_inactive
                 resp = set_opportunity_inactive(
                     token, subscription_id, opp_id,
                     sub_status="Not In Market",
@@ -540,9 +580,9 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 log.info("Set inactive response: %s", getattr(resp, "status_code", "n/a"))
             except Exception as e:
                 log.warning("set_opportunity_inactive failed: %s", e)
-            state["mode"] = "closed_declined"
-            state["nudge_count"] = 0
-            _save_state_comment(token, subscription_id, opp_id, state)
+
+            # 5) IMPORTANT: exit so no further state/comment is posted post-inactive
+            return
 
         elif created_appt_ok and appt_human:
             subject = f"Re: Your visit on {appt_human}"
@@ -566,15 +606,15 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             subject   = (reply.get("subject") or f"Re: Your {rooftop_name} Instant Cash Offer")
             body_html = (reply.get("body") or "")
 
-        # Normalize + conditionally add CTA
+        # Normalize + conditionally add CTA (only for non-decline, non-booked)
         body_html = normalize_patti_body(body_html)
         if not declined and not created_appt_ok:
             body_html = enforce_standard_schedule_sentence(body_html)
         body_html = _PREFS_RE.sub("", body_html).strip()
         body_html = body_html + build_patti_footer(rooftop_name)
-
         if not subject.lower().startswith("re:"):
             subject = "Re: " + subject
+
 
 
         # Resolve recipient
