@@ -545,7 +545,6 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     body_html = replace_or_append_booking_cta(body_html, rooftop_name)
     body_html = normalize_patti_body(body_html)
     body_html = _PREFS_RE.sub("", body_html).strip()
-    body_html = body_html + build_patti_footer(rooftop_name)
 
     # Subject from cadence plan
     subject = plan.get("subject") or f"{rooftop_name} — Your Instant Cash Offer"
