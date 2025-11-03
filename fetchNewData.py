@@ -6,10 +6,9 @@ from rooftops import get_rooftop_info
 from gpt import run_gpt
 from emailer import send_email
 import requests
-from es_resilient import es_index_with_retry, es_update_with_retry, es_head_exists_with_retry
 from es_resilient import es_upsert_with_retry
 
-import re, html as _html
+import html as _html
 
 from helpers import rJson, wJson, _html_to_text
 from dotenv import load_dotenv
@@ -17,10 +16,6 @@ load_dotenv()
 
 from constants import *
 from esQuerys import esClient, isIdExist
-
-
-
-log = logging.getLogger(__name__)
 
 DRY_RUN = int(os.getenv("DRY_RUN", "1"))  # 1 = DO NOT write to CRM, 0 = allow writes
 
@@ -47,9 +42,7 @@ logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO),
                     format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("patti")
 
-
 inquiry_text = None  # ensure defined
-
 
 # === Email fetcher & parsers (quiet logging) =========================
 def fetch_adf_xml_from_gmail(email_address, app_password, sender_filters=None):
