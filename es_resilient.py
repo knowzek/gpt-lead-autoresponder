@@ -1,8 +1,9 @@
 from elasticsearch import ApiError
+import os, json, time, logging
 log = logging.getLogger("es.resilient")
 
 RETRYABLE = {429, 500, 502, 503, 504}
-import os, json, time, logging
+
 
 log = logging.getLogger("es.resilient")
 RETRYABLE = {429, 500, 502, 503, 504}
