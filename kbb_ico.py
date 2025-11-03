@@ -97,25 +97,48 @@ def _has_upcoming_appt(acts_live: list[dict], state: dict) -> bool:
 
 def _find_new_customer_scheduled_appt(acts_live, state):
     """
-    Look for a newly created 'Customer Scheduled Appointment' in scheduled activities.
-    Returns (appt_activity_id, due_iso) if found and not yet processed; else (None, None).
+    Look for a *new* 'Customer Scheduled Appointment' in the *scheduled* bucket,
+    with a fallback to scan everything if needed.
+    Returns (activity_id, due_iso) or (None, None).
     """
     last_seen = (state or {}).get("last_appt_activity_id")
-    newest_id, newest_due = None, None
+    items = []
 
-    for a in (acts_live or []):
+    # acts_live might be a dict with separate buckets, or already a list
+    if isinstance(acts_live, dict):
+        sched = acts_live.get("scheduledActivities") or []
+        comp  = acts_live.get("completedActivities") or []
+        # Prefer scheduled; we only fall back to all if nothing matched
+        items_sched = sched
+        items_all   = sched + comp
+    else:
+        items_sched = acts_live or []
+        items_all   = items_sched
+
+    def _match(a):
         name = (a.get("activityName") or a.get("name") or "").strip().lower()
         cat  = (a.get("category") or "").strip().lower()
-        typ  = (a.get("activityType") or a.get("type") or "")
-        # Heuristics: scheduled category OR contains 'scheduled', plus the specific label from CRM
-        if ("customer scheduled appointment" in name) or (cat == "scheduled" and "scheduled appointment" in name):
+        # Primary label from CRM + fallback heuristics
+        return ("customer scheduled appointment" in name) or (("appointment" in name) and (cat in ("scheduled","open","")))
+
+    # 1) Scan scheduled bucket first
+    for a in items_sched:
+        if _match(a):
             aid = str(a.get("activityId") or a.get("id") or "")
             if aid and aid != last_seen:
-                newest_id  = aid
-                newest_due = a.get("dueDate") or a.get("completedDate") or a.get("activityDate")
-                break
+                due = a.get("dueDate") or a.get("completedDate") or a.get("activityDate")
+                return aid, due
 
-    return newest_id, newest_due
+    # 2) Fallback: scan all if nothing found in scheduled
+    for a in items_all:
+        if _match(a):
+            aid = str(a.get("activityId") or a.get("id") or "")
+            if aid and aid != last_seen:
+                due = a.get("dueDate") or a.get("completedDate") or a.get("activityDate")
+                return aid, due
+
+    return None, None
+
 
 
 def _fmt_local_human(dt: _dt, tz_name="America/Los_Angeles") -> str:
@@ -438,6 +461,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
     # === Detect customer-booked appointment via booking link (pre-convo) ===
     appt_id, appt_due_iso = _find_new_customer_scheduled_appt(acts_live, state)
+    log.info("KBB ICO: booked-appt scan → id=%s due=%s", appt_id, appt_due_iso
     if appt_id and appt_due_iso:
         try:
             # Human time in local tz
