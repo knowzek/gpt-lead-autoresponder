@@ -247,8 +247,28 @@ def _since_iso(minutes: int | None = 30) -> str:
     dt = datetime.now(timezone.utc) - timedelta(minutes=minutes or 30)
     return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
-# make sure at top of fortellis.py:
-# import requests
+def get_activity_history_v1(token, subscription_id, opportunity_id, customer_id, page=1, size=100):
+    url = "https://api.fortellis.io/cdk/sales/elead/v1/activity-history/search"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Subscription-Id": subscription_id,
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+    params = {
+        "opportunityId": opportunity_id,
+        "customerId": customer_id,
+        "pageNumber": page,
+        "pageSize": size,
+    }
+    t0 = datetime.now(timezone.utc)
+    resp = requests.get(url, headers=headers, params=params, timeout=10)
+    dur_ms = int((datetime.now(timezone.utc) - t0).total_seconds() * 1000)
+    _log_txn_compact(logging.INFO, method="ActivityHistory GET", url=url, headers=headers,
+                     status=resp.status_code, duration_ms=dur_ms, request_id=headers.get("Request-Id", "auto"))
+    resp.raise_for_status()
+    return resp.json()
+
 
 def get_recent_opportunities(token, dealer_key, since_minutes=360, page=1, page_size=100):
     url = f"{BASE_URL}{OPPS_BASE}/searchDelta"  # OPPS_BASE == "/sales/v2/elead/opportunities"
