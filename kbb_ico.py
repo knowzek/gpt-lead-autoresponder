@@ -292,13 +292,13 @@ def _is_read_email(act: dict) -> bool:
     return (nm == "read email") or (at == 20)
 
 def _activity_dt(act: dict):
+    # Prefer completedDate; fall back to created/modified
     ts = (act.get("completedDate")
-          or act.get("activityDate")
           or act.get("createdDate")
           or act.get("modifiedDate")
           or "")
     try:
-        return _dt.fromisoformat(str(ts).replace("Z", "+00:00"))
+        return _dt.fromisoformat(ts.replace("Z", "+00:00"))
     except Exception:
         return None
 
@@ -516,7 +516,12 @@ def customer_has_replied(opportunity: dict, token: str, subscription_id: str, st
         return False  # keep strict
 
     def _ts(a: dict) -> str:
-        return (a.get("createdDate") or a.get("createdOn") or a.get("modifiedDate") or "").strip()
+        # Prefer completedDate first
+        return (a.get("completedDate")
+                or a.get("createdDate")
+                or a.get("createdOn")
+                or a.get("modifiedDate")
+                or "").strip()
 
     # Walk newest→oldest. Return only if it's *newer* than we’ve seen.
     for a in acts:
