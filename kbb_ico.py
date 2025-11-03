@@ -522,49 +522,74 @@ def _save_state_comment(token, subscription_id, opportunity_id, state: dict):
 
 
 def customer_has_replied(opportunity: dict, token: str, subscription_id: str, state: dict | None = None):
-    ...
+    """
+    Returns (has_replied, last_customer_ts_iso, last_inbound_activity_id)
+    Only returns True for a *new* inbound since the state's last seen inbound id/timestamp.
+    """
+    state = state or {}
+    last_seen_ts = (state.get("last_customer_msg_at") or "").strip()
+    last_seen_id = (state.get("last_inbound_activity_id") or "").strip()
+
+    opportunity_id = opportunity.get("opportunityId") or opportunity.get("id")
+    customer = (opportunity.get("customer") or {})
+    customer_id = (customer.get("id") or "").strip()
+    if not opportunity_id:
+        log.error("customer_has_replied: missing opportunity_id")
+        return False, None, None
+
     acts = search_activities_by_opportunity(
         opportunity_id=opportunity_id,
         token=token,
         dealer_key=subscription_id,
         page=1, page_size=200,
-        customer_id=customer_id,
+        customer_id=customer_id or None,
     ) or []
 
-    # newest → oldest
-    acts = sorted(acts, key=lambda a: (
-        a.get("completedDate") or a.get("createdDate") or a.get("createdOn") or a.get("modifiedDate") or ""
-    ), reverse=True)
+    # Some orgs return dict shapes; normalize to list if so
+    if isinstance(acts, dict):
+        # prefer completedActivities if present
+        acts = (acts.get("completedActivities") or acts.get("items") or [])
+
+    # newest → oldest by best available timestamp
+    def _ts_str(a: dict) -> str:
+        return (a.get("completedDate") or a.get("createdDate") or
+                a.get("createdOn") or a.get("modifiedDate") or "").strip()
+
+    acts = sorted(acts, key=_ts_str, reverse=True)
 
     def _is_inbound(a: dict) -> bool:
+        # Fortellis logs customer email replies as "Read Email" (activityType 20)
         return _is_read_email(a)
 
-    def _ts(a: dict) -> str:
-        return (a.get("completedDate") or a.get("createdDate") or a.get("createdOn") or a.get("modifiedDate") or "").strip()
-
+    # Walk newest→oldest and pick the first inbound that is *newer* than what we've seen
     for a in acts:
         if not _is_inbound(a):
             continue
-        aid = str(a.get("activityId") or a.get("id") or "")
-        ats = _ts(a)
 
-        if (state.get("last_inbound_activity_id") or "") == aid:
+        aid = str(a.get("activityId") or a.get("id") or "")
+        ats = _ts_str(a)
+
+        # skip exact same inbound we've already processed
+        if last_seen_id and aid == last_seen_id:
             continue
 
-        lst = (state.get("last_customer_msg_at") or "").strip()
-        if lst:
+        # if we have a last_seen_ts, require strictly newer
+        if last_seen_ts:
             try:
-                ats_dt = _dt.fromisoformat(ats.replace("Z","+00:00"))
-                lst_dt = _dt.fromisoformat(lst.replace("Z","+00:00"))
+                ats_dt = _dt.fromisoformat(ats.replace("Z", "+00:00"))
+                lst_dt = _dt.fromisoformat(last_seen_ts.replace("Z", "+00:00"))
                 if ats_dt <= lst_dt:
                     continue
             except Exception:
-                if aid == (state.get("last_inbound_activity_id") or ""):
+                # if timestamp parsing fails, fall back to id mismatch only
+                if last_seen_id and aid == last_seen_id:
                     continue
 
+        # Found a new inbound
         return True, (ats or None), (aid or None)
 
     return False, None, None
+
 
 
 
