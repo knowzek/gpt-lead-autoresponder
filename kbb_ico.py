@@ -95,49 +95,49 @@ def _has_upcoming_appt(acts_live: list[dict], state: dict) -> bool:
 
     return False
 
-def _find_new_customer_scheduled_appt(acts_live, state):
+def _find_new_customer_scheduled_appt(acts_live, state, *, token=None, subscription_id=None,
+                                      opp_id=None, customer_id=None):
     """
-    Look for a *new* 'Customer Scheduled Appointment' in the *scheduled* bucket,
-    with a fallback to scan everything if needed.
-    Returns (activity_id, due_iso) or (None, None).
+    Return (activity_id, due_iso) for a new 'Customer Scheduled Appointment'.
+    Falls back to fetching activity-history directly if the provided object
+    doesn't expose the scheduled bucket.
     """
     last_seen = (state or {}).get("last_appt_activity_id")
-    items = []
 
-    # acts_live might be a dict with separate buckets, or already a list
+    def _scan(items):
+        for a in items or []:
+            name = (a.get("activityName") or a.get("name") or "").strip().lower()
+            if "customer scheduled appointment" in name:
+                aid = str(a.get("activityId") or a.get("id") or "")
+                if aid and aid != last_seen:
+                    due = a.get("dueDate") or a.get("completedDate") or a.get("activityDate")
+                    return aid, due
+        return None, None
+
+    # 1) If dict with scheduledActivities
     if isinstance(acts_live, dict):
-        sched = acts_live.get("scheduledActivities") or []
-        comp  = acts_live.get("completedActivities") or []
-        # Prefer scheduled; we only fall back to all if nothing matched
-        items_sched = sched
-        items_all   = sched + comp
-    else:
-        items_sched = acts_live or []
-        items_all   = items_sched
+        appt_id, due = _scan(acts_live.get("scheduledActivities") or [])
+        if appt_id:
+            return appt_id, due
 
-    def _match(a):
-        name = (a.get("activityName") or a.get("name") or "").strip().lower()
-        cat  = (a.get("category") or "").strip().lower()
-        # Primary label from CRM + fallback heuristics
-        return ("customer scheduled appointment" in name) or (("appointment" in name) and (cat in ("scheduled","open","")))
+    # 2) If list (flat), just scan it
+    if isinstance(acts_live, list):
+        appt_id, due = _scan(acts_live)
+        if appt_id:
+            return appt_id, due
 
-    # 1) Scan scheduled bucket first
-    for a in items_sched:
-        if _match(a):
-            aid = str(a.get("activityId") or a.get("id") or "")
-            if aid and aid != last_seen:
-                due = a.get("dueDate") or a.get("completedDate") or a.get("activityDate")
-                return aid, due
-
-    # 2) Fallback: scan all if nothing found in scheduled
-    for a in items_all:
-        if _match(a):
-            aid = str(a.get("activityId") or a.get("id") or "")
-            if aid and aid != last_seen:
-                due = a.get("dueDate") or a.get("completedDate") or a.get("activityDate")
-                return aid, due
+    # 3) Fallback: pull a fresh activity-history so we can see scheduledActivities for sure
+    try:
+        from fortellis import get_activity_history_v1  # you'll add this small wrapper if not present
+        fresh = get_activity_history_v1(token, subscription_id, opp_id, customer_id)
+        appt_id, due = _scan((fresh or {}).get("scheduledActivities") or [])
+        if appt_id:
+            return appt_id, due
+    except Exception as e:
+        log.warning("KBB ICO: fallback activity-history fetch failed: %s", e)
 
     return None, None
+
 
 
 
@@ -448,6 +448,25 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     customer_id = (opportunity.get("customer") or {}).get("id")
     acts_live = _fetch_activities_live(opp_id, customer_id, token, subscription_id)
 
+    # After: acts_live = _fetch_activities_live(...)
+    try:
+        if isinstance(acts_live, dict):
+            sa = acts_live.get("scheduledActivities") or []
+            ca = acts_live.get("completedActivities") or []
+            log.info("KBB ICO: acts_live shape=dict sched=%d completed=%d", len(sa), len(ca))
+            if sa[:1]:
+                log.info("KBB ICO: first scheduled activity name=%r type=%r",
+                         (sa[0].get("activityName")), (sa[0].get("activityType")))
+        elif isinstance(acts_live, list):
+            log.info("KBB ICO: acts_live shape=list total=%d", len(acts_live))
+            if acts_live[:1]:
+                log.info("KBB ICO: first item keys=%s", list(acts_live[0].keys()))
+        else:
+            log.info("KBB ICO: acts_live shape=%s", type(acts_live).__name__)
+    except Exception as _e:
+        log.warning("KBB ICO: acts_live logging failed: %s", _e)
+
+
     # Try to hydrate state from a saved state comment found among live acts (MERGE, don’t replace)
     for a in acts_live:
         txt = (a.get("comments") or a.get("notes") or "") or ""
@@ -460,7 +479,11 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             break
 
     # === Detect customer-booked appointment via booking link (pre-convo) ===
-    appt_id, appt_due_iso = _find_new_customer_scheduled_appt(acts_live, state)
+    appt_id, appt_due_iso = _find_new_customer_scheduled_appt(
+        acts_live, state,
+        token=token, subscription_id=subscription_id,
+        opp_id=opp_id, customer_id=customer_id
+    )
     log.info("KBB ICO: booked-appt scan → id=%s due=%s", appt_id, appt_due_iso)
     if appt_id and appt_due_iso:
         try:
