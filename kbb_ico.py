@@ -83,8 +83,8 @@ def append_soft_schedule_sentence(body_html: str, rooftop_name: str) -> str:
     href = rt.get("booking_link") or rt.get("scheduler_url") or "<{LegacySalesApptSchLink}>"
 
     soft_line = (
-        f'<p>You can schedule your appointment directly here: '
-        + <{LegacySalesApptSchLink}></p>
+        '<p>Let me know a time that works for you, or schedule directly here: '
+        '<{LegacySalesApptSchLink}></p>'
     )
 
     # If body has paragraphs, append after them; else wrap
