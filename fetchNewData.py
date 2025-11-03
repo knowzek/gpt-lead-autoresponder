@@ -175,7 +175,7 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
                 log.warning("get_activities failed for opp_id=%s: %s", opp_id, e)
     
         # timestamps → ISO 8601 strings (ES-friendly)
-        curr_iso = _dt.now(timezone.utc).isoformat()
+        curr_iso = _dt.now(_tz.utc).isoformat()
     
         docToIndex = {
             "_subscription_id": subscription_id,
