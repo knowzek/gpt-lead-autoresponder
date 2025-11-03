@@ -133,60 +133,74 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
     token = get_token(subscription_id) 
 
     # Opportunities delta (the base you confirmed in Postman)
-    opp_data  = get_recent_opportunities(token, subscription_id,
-                                         since_minutes=WINDOW_MIN,
-                                         page_size=PAGE_SIZE)
-
+    opp_data = get_recent_opportunities(token, subscription_id,
+                                        since_minutes=WINDOW_MIN,
+                                        page_size=PAGE_SIZE)
+    
     opp_items = (opp_data or {}).get("items", []) or []
     log.info("API reported opportunity totalItems for %s: %s",
              subscription_id, (opp_data or {}).get("totalItems", "N/A"))
-
-    # Normalize opportunities → your downstream “lead-like” shape
-    raw_count = len(opp_items)
-    items = []
     
     for op in opp_items:
-
         up_type = (op.get("upType") or "").lower()
         if up_type not in ELIGIBLE_UPTYPES:
             continue  # skip showroom/phone/etc.
-
+    
         if not _is_assigned_to_kristin_doc(op):
-            continue  # ✅ indent this line
-
+            continue
+    
+        # one canonical id everywhere
+        opp_id = op.get("opportunityId") or op.get("id")
+        if not opp_id:
+            continue
+    
         isExist = es_head_exists_with_retry(
             esClient, index="opportunities", id=opp_id, default=False
         )
-
-        customerID = op.get("customer", {}).get("id", None)
+    
+        # if new, enrich customer from Fortellis; otherwise keep the embedded one
+        customerID = (op.get("customer") or {}).get("id")
         if customerID and not isExist:
-            customerData = get_customer_by_url(f"{CUSTOMER_URL}/{customerID}", token, subscription_id)
+            customerData = get_customer_by_url(f"{CUSTOMER_URL}/{customerID}", token, subscription_id) or {}
         else:
-            customerData = op.get("customer", {})
-
+            customerData = (op.get("customer") or {}) or {}
+    
+        # if new, pull first page of activities to seed the doc
+        completedActivities = []
         if not isExist:
             try:
-                activities = get_activities(op.get("id"), customerID, token, subscription_id)
-            except:
-                activities = {}
-        
-        currDate = _dt.now()
-        nextDate = currDate + _td(days=1)
-
+                acts = get_activities(opp_id, customerID, token, subscription_id) or {}
+                completedActivities = acts.get("items") or acts.get("activities") or []
+            except Exception as e:
+                log.warning("get_activities failed for opp_id=%s: %s", opp_id, e)
+    
+        # timestamps → ISO 8601 strings (ES-friendly)
+        curr_iso = _dt.now(timezone.utc).isoformat()
+    
         docToIndex = {
             "_subscription_id": subscription_id,
-            "opportunityId": op.get("id"),
-            "activityId": None,                   # may be None
+            "id": opp_id,                         # keep an explicit id field
+            "opportunityId": opp_id,              # some code reads this name
             "links": op.get("links", []),
             "source": op.get("source"),
-            "upType": op.get("upType"),           # <-- keep for later logs/debug
-            # carry common fields you already read later:
+            "upType": op.get("upType"),
             "soughtVehicles": op.get("soughtVehicles"),
             "salesTeam": op.get("salesTeam"),
             "tradeIns": op.get("tradeIns"),
             "createdBy": op.get("createdBy"),
-            "updated_at": currDate
+            "customer": customerData,
+            "completedActivities": completedActivities,  # seeded for new docs
+            "updated_at": curr_iso,
+            # (optional) carry through Fortellis dates if present, normalized
+            "createdDate": (op.get("createdDate") or op.get("created_on")),
+            "updatedDate": op.get("updatedDate"),
         }
+    
+        # write to ES (resilient)
+        if not isExist:
+            es_index_with_retry(esClient, index="opportunities", id=opp_id, document=docToIndex)
+        else:
+            es_update_with_retry(esClient, index="opportunities", id=opp_id, doc=docToIndex)
 
         if not isExist:
             docToIndex['customer'] = customerData
