@@ -159,6 +159,19 @@ def checkActivities(opportunity, currDate, rooftop_name):
                         token, subscription_id, opportunity['opportunityId'],
                         f"[Patti Exit] Customer indicated no interest: “{customer_body[:200]}”"
                     )
+
+                    try:
+                        from fortellis import set_opportunity_inactive
+                        set_opportunity_inactive(
+                            token,
+                            subscription_id,
+                            opportunity['opportunityId'],
+                            sub_status="Not In Market",
+                            comments="Customer declined — set inactive by Patti"
+                        )
+                    except Exception as e:
+                        log.warning("set_opportunity_inactive failed: %s", e)
+        
                     # Optional: notify salesperson
                     sales_team = opportunity.get('salesTeam', [])
                     if sales_team:
