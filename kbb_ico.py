@@ -66,7 +66,7 @@ def append_soft_schedule_sentence(body_html: str, rooftop_name: str) -> str:
     href = rt.get("booking_link") or rt.get("scheduler_url") or "<{LegacySalesApptSchLink}>"
 
     soft_line = (
-        f'<p>Let me know a time that works for you, or schedule directly here: '
+        f'<p>You can schedule your appointment directly here: '
         f'<{LegacySalesApptSchLink}></p>'
     )
 
@@ -346,7 +346,7 @@ def compose_kbb_convo_body(rooftop_name: str, cust_first: str, customer_message:
     - Acknowledge the customer's note in 1-2 concise sentences.
     - If relevant, mention their Kelley Blue Book® Instant Cash Offer naturally in your reply.
     - If the customer has not already specified or booked the meeting, close with a friendly nudge to pick a day/time (no links) — a short booking line with the link will be appended automatically.
-    - You may remind them to bring title, ID, and keys if appropriate.
+    - You may remind them to bring title, ID, and keys if appropriate, and if you haven't already done it in an earlier message
     - No extra signatures; we will append yours.
     - Keep to 2–4 short paragraphs max.
 
@@ -924,7 +924,16 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         # ---------- NORMAL GPT CONVO ----------
         else:
             from gpt import run_gpt
-            prompt = compose_kbb_convo_body(rooftop_name, cust_first, inquiry_text)
+            # Include full conversation thread for context
+            msgs = opportunity.get("messages", [])
+            prompt = f"""
+            generate next Patti reply for a Kelley Blue Book® Instant Cash Offer conversation.
+            Here is the full conversation so far (as a python list of dicts):
+            {msgs}
+            
+            Most recent customer message:
+            \"\"\"{inquiry_text}\"\"\"
+            """
             reply = run_gpt(
                 prompt,
                 customer_name=cust_first,
@@ -933,6 +942,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 persona="kbb_ico",
                 kbb_ctx={"offer_valid_days": 7, "exclude_sunday": True},
             )
+
             subject   = reply_subject  # keep thread subject; ignore GPT subject
             body_html = (reply.get("body") or "")
 
