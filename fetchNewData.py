@@ -7,6 +7,7 @@ from gpt import run_gpt
 from emailer import send_email
 import requests
 from es_resilient import es_index_with_retry, es_update_with_retry, es_head_exists_with_retry
+from es_resilient import es_upsert_with_retry
 
 import re, html as _html
 
@@ -141,6 +142,10 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
     log.info("API reported opportunity totalItems for %s: %s",
              subscription_id, (opp_data or {}).get("totalItems", "N/A"))
     
+    # before the for-loop (keep these)
+    raw_count = len(opp_items)
+    items = []
+    
     for op in opp_items:
         up_type = (op.get("upType") or "").lower()
         if up_type not in ELIGIBLE_UPTYPES:
@@ -154,33 +159,15 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
         if not opp_id:
             continue
     
-        isExist = es_head_exists_with_retry(
-            esClient, index="opportunities", id=opp_id, default=False
-        )
-    
-        # if new, enrich customer from Fortellis; otherwise keep the embedded one
-        customerID = (op.get("customer") or {}).get("id")
-        if customerID and not isExist:
-            customerData = get_customer_by_url(f"{CUSTOMER_URL}/{customerID}", token, subscription_id) or {}
-        else:
-            customerData = (op.get("customer") or {}) or {}
-    
-        # if new, pull first page of activities to seed the doc
-        completedActivities = []
-        if not isExist:
-            try:
-                acts = get_activities(opp_id, customerID, token, subscription_id) or {}
-                completedActivities = acts.get("items") or acts.get("activities") or []
-            except Exception as e:
-                log.warning("get_activities failed for opp_id=%s: %s", opp_id, e)
-    
-        # timestamps → ISO 8601 strings (ES-friendly)
+        # build base doc (ISO timestamps)
         curr_iso = _dt.now(_tz.utc).isoformat()
+        customerID = (op.get("customer") or {}).get("id")
+        customerData = (op.get("customer") or {}) or {}
     
         docToIndex = {
             "_subscription_id": subscription_id,
-            "id": opp_id,                         # keep an explicit id field
-            "opportunityId": opp_id,              # some code reads this name
+            "id": opp_id,
+            "opportunityId": opp_id,
             "links": op.get("links", []),
             "source": op.get("source"),
             "upType": op.get("upType"),
@@ -189,41 +176,56 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
             "tradeIns": op.get("tradeIns"),
             "createdBy": op.get("createdBy"),
             "customer": customerData,
-            "completedActivities": completedActivities,  # seeded for new docs
             "updated_at": curr_iso,
-            # (optional) carry through Fortellis dates if present, normalized
             "createdDate": (op.get("createdDate") or op.get("created_on")),
             "updatedDate": op.get("updatedDate"),
         }
     
-        # write to ES (resilient)
-        if not isExist:
-            es_index_with_retry(esClient, index="opportunities", id=opp_id, document=docToIndex)
-        else:
-            es_update_with_retry(esClient, index="opportunities", id=opp_id, doc=docToIndex)
-
-        if not isExist:
-            docToIndex['customer'] = customerData
-            docToIndex['created_at'] = currDate
-            docToIndex['isActive'] = True
-            # TODO: need to check activities if it will update here
-            docToIndex['scheduledActivities'] = activities.get("scheduledActivities", [])
-            docToIndex['completedActivities'] = activities.get("completedActivities", [])
-            docToIndex['followUP_date'] = nextDate
-            docToIndex['followUP_count'] = 0
-            docToIndex['messages'] = []
-            docToIndex['alreadyProcessedActivities'] = {}
-            docToIndex['checkedDict'] = {
-                "is_sales_contacted": False,
-                "patti_already_contacted": False,
-                "last_msg_by": None
+        # Single, safe upsert (no HEAD)
+        resp = es_upsert_with_retry(
+            esClient, index="opportunities", id=opp_id, document=docToIndex
+        )
+    
+        # If created now, optionally hydrate with activities and init state, then upsert again
+        if resp and resp.get("result") == "created":
+            # fetch richer customer only on create (optional)
+            if customerID:
+                try:
+                    richer = get_customer_by_url(f"{CUSTOMER_URL}/{customerID}", token, subscription_id) or {}
+                    if richer:
+                        docToIndex["customer"] = richer
+                except Exception as e:
+                    log.warning("customer hydrate failed opp_id=%s err=%s", opp_id, e)
+    
+            completedActivities = []
+            try:
+                acts = get_activities(opp_id, customerID, token, subscription_id) or {}
+                completedActivities = acts.get("items") or acts.get("activities") or []
+            except Exception as e:
+                log.warning("get_activities failed opp_id=%s err=%s", opp_id, e)
+    
+            init_doc = {
+                "customer": docToIndex["customer"],
+                "completedActivities": completedActivities,
+                "scheduledActivities": [],            # seed empty if you don’t have these yet
+                "messages": [],
+                "alreadyProcessedActivities": {},
+                "checkedDict": {
+                    "is_sales_contacted": False,
+                    "patti_already_contacted": False,
+                    "last_msg_by": None,
+                },
+                "isActive": True,
+                "followUP_count": 0,
+                "followUP_date": (_dt.now(_tz.utc) + _td(days=1)).isoformat(),
+                "created_at": curr_iso,               # keep ISO, not datetime object
+                "updated_at": _dt.now(_tz.utc).isoformat(),
             }
-            es_index_with_retry(esClient, index="opportunities", id=op.get("id"), document=docToIndex)
-        else:
-            es_update_with_retry(esClient, index="opportunities", id=op.get("id"), doc=docToIndex)
-
-
+            es_upsert_with_retry(esClient, index="opportunities", id=opp_id, document=init_doc)
+    
+        # keep what we’re sending for logging/return
         items.append(docToIndex)
+
 
         # exit()
 
