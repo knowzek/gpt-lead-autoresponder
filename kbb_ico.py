@@ -67,7 +67,7 @@ def append_soft_schedule_sentence(body_html: str, rooftop_name: str) -> str:
 
     soft_line = (
         f'<p>Let me know a time that works for you, or schedule directly here: '
-        f'<a href="{href}">Schedule Your Visit</a>.</p>'
+        f'<{LegacySalesApptSchLink}></p>'
     )
 
     # If body has paragraphs, append after them; else wrap
