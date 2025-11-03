@@ -367,7 +367,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         if appt_iso and conf >= 0.60:  # tune threshold as you like
             try:
                 # Normalize to UTC for Fortellis API
-                from datetime import datetime as _dt, timezone as _tz
+                
                 try:
                     # If appt_iso contains offset, parse and convert to UTC Z
                     dt_local = _dt.fromisoformat(appt_iso.replace("Z","+00:00"))
