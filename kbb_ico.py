@@ -350,7 +350,59 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         from gpt import run_gpt
         cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
         prompt = compose_kbb_convo_body(rooftop_name, cust_first, inquiry_text)
+
+        # === Attempt to auto-schedule if customer proposed a time ===
+        from gpt import extract_appt_time
+        proposed = extract_appt_time(inquiry_text or "", tz="America/Los_Angeles")
     
+        appt_iso = (proposed.get("iso") or "").strip()
+        conf = float(proposed.get("confidence") or 0)
+    
+        scheduled_block = ""   # text we’ll optionally prepend to Patti’s reply body
+        created_appt_ok = False
+    
+        if appt_iso and conf >= 0.60:  # tune threshold as you like
+            try:
+                # Normalize to UTC for Fortellis API
+                from datetime import datetime as _dt, timezone as _tz
+                try:
+                    # If appt_iso contains offset, parse and convert to UTC Z
+                    dt_local = _dt.fromisoformat(appt_iso.replace("Z","+00:00"))
+                except Exception:
+                    dt_local = None
+    
+                if dt_local and dt_local.tzinfo:
+                    due_dt_iso_utc = dt_local.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                else:
+                    # Fallback: treat as local PT and convert (simple – safe default)
+                    due_dt_iso_utc = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+                # Create the appointment activity (type "Appointment" → 2)
+                schedule_activity(
+                    token, subscription_id, opp_id,
+                    due_dt_iso_utc=due_dt_iso_utc,
+                    activity_name="KBB ICO Appointment",
+                    activity_type="Appointment",
+                    comments=f"Auto-scheduled from customer email: {inquiry_text[:180]}"
+                )
+                created_appt_ok = True
+    
+                # Tell the timeline/state
+                add_opportunity_comment(
+                    token, subscription_id, opp_id,
+                    f"[Patti] Auto-scheduled appointment for {appt_iso} (local)."
+                )
+    
+                # Build a short confirmation line to add into the email
+                # (HTML paragraph; keep it simple)
+                scheduled_block = (
+                    f'<p>I penciled you in for <strong>{appt_iso}</strong>. '
+                    f'If that time isn’t perfect, no problem — use the link below to pick another slot.</p>'
+                )
+    
+            except Exception as e:
+                log.warning("KBB ICO: failed to auto-schedule proposed time: %s", e)
+
         reply = run_gpt(
             prompt,
             customer_name=cust_first,
@@ -363,9 +415,16 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         subject   = (reply.get("subject") or f"Re: Your {rooftop_name} Instant Cash Offer")
         body_html = (reply.get("body") or "")
         body_html = normalize_patti_body(body_html)
+
+        # If we scheduled something, show a one-line confirmation before the CTA
+        if scheduled_block:
+            # Insert near the top (after the greeting paragraph)
+            body_html = body_html.replace("</p>", "</p>" + scheduled_block, 1)
+        
         body_html = enforce_standard_schedule_sentence(body_html)  # keeps one standard CTA
         body_html = _PREFS_RE.sub("", body_html).strip()
         body_html = body_html + build_patti_footer(rooftop_name)
+
     
         if not subject.lower().startswith("re:"):
             subject = "Re: " + subject
