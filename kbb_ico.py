@@ -778,30 +778,78 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         if last_inbound_id:
             state["last_inbound_activity_id"] = last_inbound_id
         _save_state_comment(token, subscription_id, opp_id, state)
+
+        # --- REFRESH activities so we don't use a stale snapshot ---
+        acts_now = _fetch_activities_live(opp_id, customer_id, token, subscription_id)
     
-        # ✅ Always fetch the LATEST inbound body we can see
-        selected_inbound_id = last_inbound_id if (has_reply and last_inbound_id) else _latest_read_email_id(acts_live)
+        def _newest_read_after(acts, floor_dt):
+            newest = None
+            newest_dt = None
+            for a in acts or []:
+                if not _is_read_email(a):
+                    continue
+                adt = _activity_dt(a)
+                if not adt:
+                    continue
+                # only consider reads newer than Patti's last send (or any if floor_dt is None)
+                if (floor_dt is None) or (adt > floor_dt):
+                    if (newest_dt is None) or (adt > newest_dt):
+                        newest_dt = adt
+                        newest = a
+            return newest, newest_dt
     
+        # Prefer the truly newest read AFTER Patti’s last send
+        newest_read, newest_dt = _newest_read_after(acts_now, last_agent_dt)
+    
+        # Fallback order: newest fresh read → detector id → prior snapshot newest
+        selected_inbound_id = None
+        if newest_read:
+            selected_inbound_id = str(newest_read.get("activityId") or newest_read.get("id") or "")
+        elif last_inbound_id:
+            selected_inbound_id = last_inbound_id
+        else:
+            selected_inbound_id = _latest_read_email_id(acts_now)  # use fresh not stale
+        
+        # Initialize a safe default subject for all paths
+        reply_subject = "Re:"
+        
         if selected_inbound_id:
             try:
                 from fortellis import get_activity_by_id_v1
                 full = get_activity_by_id_v1(selected_inbound_id, token, subscription_id)
+        
+                # Subject (even if body extraction fails)
+                thread_subject = ((full.get("message") or {}).get("subject") or "").strip()
+                def _clean_subject(s: str) -> str:
+                    s = _re.sub(r'^\s*\[.*?\]\s*', '', s or '', flags=_re.I)
+                    s = _re.sub(r'^\s*(re|fwd)\s*:\s*', '', s, flags=_re.I)
+                    return s.strip()
+                reply_subject = f"Re: {_clean_subject(thread_subject)}" if thread_subject else "Re:"
+        
+                # Body (only overwrite inquiry_text if we actually extracted something)
                 latest_body_raw = ((full.get("message") or {}).get("body") or "").strip()
                 latest_body = _top_reply_only(latest_body_raw)
                 if latest_body:
                     inquiry_text = latest_body
                     log.info("KBB ICO: using inbound top-reply from %s (len=%d): %r",
                              selected_inbound_id, len(latest_body), latest_body[:120])
+                else:
+                    log.info("KBB ICO: inbound has no usable top-reply body; keeping prior inquiry_text.")
+            except Exception as e:
+                log.warning("Could not load inbound activity %s: %s", selected_inbound_id, e)
+        else:
+            log.info("KBB ICO: no selected inbound id; keeping prior inquiry_text and default subject.")
     
                     thread_subject = ((full.get("message") or {}).get("subject") or "").strip()
-                    def _clean_subject(s: str) -> str:
-                        s = _re.sub(r'^\s*\[.*?\]\s*', '', s or '', flags=_re.I)  # [CAUTION], etc.
-                        s = _re.sub(r'^\s*(re|fwd)\s*:\s*', '', s, flags=_re.I)
-                        return s.strip()
-                    reply_subject = f"Re: {_clean_subject(thread_subject)}" if thread_subject else "Re:"
+
             except Exception as e:
                 log.warning("Could not load inbound activity %s: %s", selected_inbound_id, e)
 
+        # If we picked a concrete newest read, persist it so we won't re-answer older ones
+        if newest_read and newest_dt:
+            state["last_inbound_activity_id"] = selected_inbound_id
+            state["last_customer_msg_at"] = newest_dt.astimezone(_tz.utc).isoformat()
+            _save_state_comment(token, subscription_id, opp_id, state)
 
 
         # Detect decline from customer's top reply
