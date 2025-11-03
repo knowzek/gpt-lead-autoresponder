@@ -592,6 +592,47 @@ def getCustomerMsgDict(inqueryTextBody):
 
     return dictResult
 
+def extract_appt_time(text: str, tz: str = "America/Los_Angeles") -> dict:
+    """
+    Use GPT to extract one proposed appointment datetime from customer text.
+    Returns: {"iso": "2025-11-06T15:00:00-08:00", "confidence": 0.0-1.0, "window": "exact|morning|afternoon|evening"}
+    If nothing found, returns {"iso":"", "confidence":0, "window":""}
+    """
+    if not (text or "").strip():
+        return {"iso": "", "confidence": 0, "window": ""}
+
+    system = {
+        "role": "system",
+        "content": (
+            "You extract one proposed meeting time from natural language. "
+            "Assume the user and dealership are in the same time zone. "
+            "Return JSON only: {\"iso\":\"<ISO8601 with timezone>\",\"confidence\":0-1,\"window\":\"exact|morning|afternoon|evening\"}. "
+            "Use the given timezone. If vague like 'Wednesday morning', choose 10:00 in that timezone and set window accordingly. "
+            "If 'next Wednesday', interpret as the next occurrence after today. "
+            "If no date is present, return empty values."
+        )
+    }
+    now_local = datetime.now().astimezone()  # used so model has 'today' concept implicitly
+    user = {
+        "role": "user",
+        "content": f"Timezone: {tz}\nNow Local ISO: {now_local.isoformat()}\nText: {text}"
+    }
+    model_used, resp = chat_complete_with_fallback(
+        [system, user],
+        want_json=True,
+        temperature=0.2
+    )
+    text_out = _safe_extract_text(resp)
+    try:
+        data = json.loads(text_out)
+        iso = (data.get("iso") or "").strip()
+        conf = float(data.get("confidence") or 0)
+        window = (data.get("window") or "").strip()
+        return {"iso": iso, "confidence": conf, "window": window}
+    except Exception:
+        return {"iso": "", "confidence": 0, "window": ""}
+
+
 if __name__ == "__main__":
     # inqueryTextBody = "Finance For $361 Per month for 72 months + tax, $2,358.00 Downpayment , Comments:would love to test drive and hear more about it, IP Address: 75.80.117.116"
     # inqueryTextBody = "Motivated Buyer: increased probability to purchase vehicle. <br /> *** DEALER PORTAL *** <br /> https://dealerportal.truecar.com/dfe/prospects/J5NT6RDXP8?_xt=1&utm_source=crm&utm_medium=deeplink&utm_campaign=5113"
