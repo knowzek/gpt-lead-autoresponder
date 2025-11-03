@@ -820,10 +820,12 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         
                 # Subject (even if body extraction fails)
                 thread_subject = ((full.get("message") or {}).get("subject") or "").strip()
+        
                 def _clean_subject(s: str) -> str:
-                    s = _re.sub(r'^\s*\[.*?\]\s*', '', s or '', flags=_re.I)
-                    s = _re.sub(r'^\s*(re|fwd)\s*:\s*', '', s, flags=_re.I)
+                    s = _re.sub(r'^\s*\[.*?\]\s*', '', s or '', flags=_re.I)  # strip [CAUTION], etc.
+                    s = _re.sub(r'^\s*(re|fwd)\s*:\s*', '', s, flags=_re.I)   # strip leading RE:/FWD:
                     return s.strip()
+        
                 reply_subject = f"Re: {_clean_subject(thread_subject)}" if thread_subject else "Re:"
         
                 # Body (only overwrite inquiry_text if we actually extracted something)
@@ -831,20 +833,17 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 latest_body = _top_reply_only(latest_body_raw)
                 if latest_body:
                     inquiry_text = latest_body
-                    log.info("KBB ICO: using inbound top-reply from %s (len=%d): %r",
-                             selected_inbound_id, len(latest_body), latest_body[:120])
+                    log.info(
+                        "KBB ICO: using inbound top-reply from %s (len=%d): %r",
+                        selected_inbound_id, len(latest_body), latest_body[:120]
+                    )
                 else:
                     log.info("KBB ICO: inbound has no usable top-reply body; keeping prior inquiry_text.")
             except Exception as e:
                 log.warning("Could not load inbound activity %s: %s", selected_inbound_id, e)
         else:
             log.info("KBB ICO: no selected inbound id; keeping prior inquiry_text and default subject.")
-    
-                    thread_subject = ((full.get("message") or {}).get("subject") or "").strip()
-
-            except Exception as e:
-                log.warning("Could not load inbound activity %s: %s", selected_inbound_id, e)
-
+        
         # If we picked a concrete newest read, persist it so we won't re-answer older ones
         if newest_read and newest_dt:
             state["last_inbound_activity_id"] = selected_inbound_id
