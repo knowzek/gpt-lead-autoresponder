@@ -664,7 +664,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     if state.get("mode") == "scheduled" or _has_upcoming_appt(acts_live, state):
         log.info("KBB ICO: upcoming appointment detected → skip nudges & cadence (opp=%s)", opp_id)
         state["mode"] = "scheduled"
-        _save_state_comment(token, subscription_id, opp_id, state)
+        #_save_state_comment(token, subscription_id, opp_id, state)
         return state, action_taken
 
     # === Detect customer-booked appointment via booking link (pre-convo) ===
@@ -1221,7 +1221,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         return state, action_taken
     # ===== Still in cadence (never replied) =====
     state["mode"] = "cadence"
-    _save_state_comment(token, subscription_id, opp_id, state)
+    #_save_state_comment(token, subscription_id, opp_id, state)
 
     # Offer-window override (if expired, jump to Day 08/09 track)
     expired = _ico_offer_expired(created_iso, exclude_sunday=True)
