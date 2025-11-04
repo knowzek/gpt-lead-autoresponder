@@ -7,25 +7,30 @@ from datetime import datetime
 import urllib.parse, base64
 from datetime import datetime, timedelta, timezone
 
-_SCHED_PARA = re.compile(r"(?is)<p[^>]*>.*?(LegacySalesApptSchLink|schedule (an )?appointment|schedule your visit|reserve your time).*?</p>")
-
-def strip_sched_cta(body_html: str, *, add_resched: bool = True) -> str:
-    """Remove any scheduling CTA and (optionally) add a reschedule sentence."""
+def rewrite_sched_cta_for_booked(body_html: str) -> str:
+    """
+    If the email contains a schedule CTA, replace the phrasing so it's appropriate
+    for customers who already have an appointment.
+    Keeps <{LegacySalesApptSchLink}> intact.
+    """
     if not body_html:
-        body_html = ""
-    body = _SCHED_PARA.sub("", body_html).strip()
-    if add_resched and "<{LegacySalesApptSchLink}>" not in body:
-        resched = (
-            '<p>If you need to change your time, you can reschedule here: '
-            '<{LegacySalesApptSchLink}></p>'
-        )
-        # insert before footer if present
-        idx = body.lower().rfind("</table>")  # naive: many footers end with a table
-        if idx != -1:
-            return body[:idx] + resched + body[idx:]
-        return body + resched
-    return body
+        return ""
 
+    # Replace any common scheduling intros with a reschedule line
+    replacements = [
+        (r"(?i)(to\s+schedule\s+(your\s+)?(appointment|visit)[^<]*:)", 
+         "If you need to reschedule your appointment, you can do so here:"),
+        (r"(?i)(let\s+me\s+know\s+a\s+time\s+that\s+works\s+for\s+you[^<]*:)", 
+         "If you need to reschedule your appointment, you can do so here:"),
+        (r"(?i)(please\s+let\s+us\s+know\s+a\s+convenient\s+time\s+for\s+you[^<]*:)", 
+         "If you need to reschedule your appointment, you can do so here:")
+    ]
+
+    new_html = body_html
+    for pattern, repl in replacements:
+        new_html = re.sub(pattern, repl, new_html, flags=re.I)
+
+    return new_html
 
 def _fmt_utc_range(start_iso_utc: str, minutes: int = 30):
     # Input: 'YYYY-MM-DDTHH:MM:SSZ' or ISO with tz
