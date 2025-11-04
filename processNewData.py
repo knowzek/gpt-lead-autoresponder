@@ -61,12 +61,6 @@ def _state_signature(state: dict) -> str:
     blob = json.dumps(base, sort_keys=True, separators=(',', ':'))
     return hashlib.md5(blob.encode("utf-8")).hexdigest()
 
-def _should_log_note(prev_sig: str, new_sig: str, action_taken: bool) -> bool:
-    # Only log if we acted OR the signature changed
-    if action_taken:
-        return True
-    return (prev_sig or "") != (new_sig or "")
-
 
 def is_active_opp(opportunity: dict) -> bool:
     # Fortellis opp payloads typically include a status or flags you can check.
@@ -459,8 +453,8 @@ def processHit(hit):
                 last_ts = m.get("last_note_epoch")
                 now = int(time.time())
                 return not last_ts or (now - int(last_ts)) >= seconds
-
-            if _should_log_note(prev_sig, new_sig, action_taken) and _cooldown_ok(meta):
+            
+            if action_taken and _cooldown_ok(meta):
                 compact = {
                     "mode": state.get("mode"),
                     "last_template_day_sent": state.get("last_template_day_sent"),
@@ -469,16 +463,12 @@ def processHit(hit):
                     "last_agent_msg_at": state.get("last_agent_msg_at"),
                 }
                 note_txt = f"[PATTI_KBB_STATE] {json.dumps(compact, separators=(',',':'))}"
-
                 if not OFFLINE_MODE:
                     add_opportunity_comment(tok, subscription_id, opportunityId, note_txt)
-
-                # persist new signature + timestamp so we don’t re-log on next cron pass
-                meta.update({
-                    "last_state_sig": new_sig,
-                    "last_note_epoch": int(time.time()),
-                })
+            
+                meta.update({"last_state_sig": new_sig, "last_note_epoch": int(time.time())})
                 opportunity["_patti_meta"] = meta
+
 
         except Exception as e:
             log.error("KBB ICO handler failed for opp %s: %s", opportunityId, e)
