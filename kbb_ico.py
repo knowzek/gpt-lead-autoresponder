@@ -119,9 +119,10 @@ def append_soft_schedule_sentence(body_html: str, rooftop_name: str) -> str:
 def _short_circuit_if_booked(opportunity, acts_live, state,
                              *, token, subscription_id, rooftop_name, SAFE_MODE, rooftop_sender):
     """
-    If we see a new 'Customer Scheduled Appointment', send a short confirmation,
-    flip subStatus → Appointment Set, persist scheduled state, and return True.
-    Otherwise return False.
+    If we see a 'Customer Scheduled Appointment':
+      - If it’s NEW: send confirmation + flip subStatus, persist state → return (True, True)
+      - If it’s the SAME one we already handled: do nothing → return (True, False)
+    If no appointment found: return (False, False)
     """
     opp_id      = opportunity.get("opportunityId") or opportunity.get("id")
     customer_id = (opportunity.get("customer") or {}).get("id")
@@ -133,7 +134,12 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
     )
     log.info("KBB ICO: booked-appt scan → id=%s due=%s", appt_id, appt_due_iso)
     if not (appt_id and appt_due_iso):
-        return (False, False)
+        return (False, False)  # no short-circuit
+
+    # ✅ ignore the same appointment we've already handled
+    if state.get("last_appt_activity_id") == appt_id:
+        log.info("KBB ICO: appointment already acknowledged (id=%s) → skip re-send", appt_id)
+        return (True, False)  # handled, no send
 
     # Format time
     try:
@@ -190,7 +196,7 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
     recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
     if not recipients:
         log.warning("No recipient; skip send for opp=%s", opp_id)
-        return True  # we still consider it handled; don’t fall through
+        return (True, False)  # handled, but no send
 
     send_opportunity_email_activity(
         token, subscription_id, opp_id,
@@ -200,13 +206,12 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
     )
 
     # Persist scheduled state so Patti stops nudges/templates
-    state["mode"]                 = "scheduled"
+    state["mode"]                  = "scheduled"
     state["last_appt_activity_id"] = appt_id
-    state["appt_due_utc"]         = due_dt_iso_utc
-    state["appt_due_local"]       = appt_human
-    state["nudge_count"]          = 0
-    state["last_agent_msg_at"]    = _dt.now(_tz.utc).isoformat()
-    #_save_state_comment(token, subscription_id, opp_id, state)
+    state["appt_due_utc"]          = due_dt_iso_utc
+    state["appt_due_local"]        = appt_human
+    state["nudge_count"]           = 0
+    state["last_agent_msg_at"]     = _dt.now(_tz.utc).isoformat()
 
     # Flip CRM subStatus → Appointment Set
     try:
@@ -216,8 +221,8 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
     except Exception as e:
         log.warning("set_opportunity_substatus failed: %s", e)
     
-    action_taken = True 
-    return (True, action_taken)
+    return (True, True)  # handled, and we DID send
+
 
 def _latest_read_email_id(acts: list[dict]) -> str | None:
     newest = None
@@ -703,15 +708,15 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             break
 
     # ✅ Always short-circuit if a new customer-booked appointment exists
-    handled, did_act = _short_circuit_if_booked(
+    handled, did_send = _short_circuit_if_booked(
         opportunity, acts_live, state,
         token=token, subscription_id=subscription_id,
         rooftop_name=rooftop_name, SAFE_MODE=SAFE_MODE, rooftop_sender=rooftop_sender
     )
     if handled:
-        action_taken = action_taken or did_act
+        if did_send:
+            action_taken = True   # so your action-only logger writes a note
         return state, action_taken
-
 
     # === If customer already declined earlier, stop everything ==============
     if state.get("mode") == "closed_declined":
