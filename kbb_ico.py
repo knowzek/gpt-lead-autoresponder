@@ -353,6 +353,50 @@ def _has_new_read_email_since(acts: list[dict], since_dt):
             return True
     return False
 
+def build_patti_footer(rooftop_name: str) -> str:
+    from rooftops import ROOFTOP_INFO
+    rt = (ROOFTOP_INFO.get(rooftop_name) or {})
+
+    # Per-store overrides (optional):
+    img_url      = rt.get("signature_img") or "https://content.energage.com/company-images/RP684/RP684_photo_017ebf8affe24118ae205078849a8f51_orig.jpg"
+    patti_email  = rt.get("patti_email")  or "patti@pattersonautos.com"     # <-- placeholder
+    patti_phone  = rt.get("patti_phone")  or "(000) 000-0000"               # <-- placeholder
+    dealer_site  = rt.get("website")      or "https://www.pattersonautos.com"
+    dealer_addr  = rt.get("address")      or ""
+    dealer_phone = rt.get("phone")        or patti_phone
+
+    # Use a table (role=presentation) for maximum Outlook/Gmail compatibility
+    # Left: graphic/logo   Right: contact block
+    sig = f"""
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%; max-width:650px; margin-top:18px;">
+  <tr>
+    <!-- LEFT: signature graphic -->
+    <td valign="top" style="padding:0 16px 0 0; width:310px;">
+      <img src="{img_url}" alt="Patterson Autos" style="max-width:100%; height:auto; display:block; border:0; outline:none; text-decoration:none;">
+    </td>
+
+    <!-- RIGHT: Patti contact details -->
+    <td valign="top" style="padding:0; font-family:Arial, Helvetica, sans-serif; color:#222;">
+      <div style="font-size:16px; line-height:22px; font-weight:bold;">Patti</div>
+      <div style="font-size:13px; line-height:18px; color:#666; margin:2px 0 8px;">Virtual Assistant at {rooftop_name}</div>
+
+      <div style="font-size:13px; line-height:20px;">
+        <div><strong>Mobile:</strong> {patti_phone}</div>
+        <div><strong>Email:</strong> <a href="mailto:{patti_email}" style="color:#0066cc; text-decoration:none;">{patti_email}</a></div>
+        <div><strong>Website:</strong> <a href="{dealer_site}" style="color:#0066cc; text-decoration:none;">{dealer_site.replace('https://','').replace('http://','')}</a></div>
+      </div>
+
+      <div style="font-size:13px; line-height:20px; margin-top:10px; color:#333;">
+        <div>{rooftop_name}</div>
+        <div>{dealer_addr}</div>
+      </div>
+    </td>
+  </tr>
+</table>
+""".strip()
+
+    return sig
+
 
 
 def build_patti_footer(rooftop_name: str) -> str:
