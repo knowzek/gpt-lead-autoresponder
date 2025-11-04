@@ -609,6 +609,8 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     state.setdefault("nudge_count", 0)
     state.setdefault("last_inbound_activity_id", None)
 
+    action_taken = False
+
     # Before you compute mode/cadence, pull LIVE activities
     opp_id = opportunity.get("opportunityId") or opportunity.get("id")
     customer_id = (opportunity.get("customer") or {}).get("id")
