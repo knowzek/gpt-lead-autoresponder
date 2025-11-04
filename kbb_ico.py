@@ -1072,7 +1072,8 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             state["appt_due_local"] = appt_human
             state["nudge_count"]    = 0
             state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
-            _save_state_comment(token, subscription_id, opp_id, state)
+            #_save_state_comment(token, subscription_id, opp_id, state)
+            action_taken = True
 
             # Flip CRM subStatus → Appointment Set
             try:
@@ -1135,11 +1136,6 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             if not recipients:
                 log.warning("No recipient; skip send for opp=%s", opp_id)
                 return state, action_taken
-
-            add_opportunity_comment(
-                token, subscription_id, opp_id,
-                f"[Patti] Replying to customer (convo mode) → to {(email or 'TEST_TO')}"
-            )
 
             import re as _re2
             m = _re2.search(r".{0,80}<\{LegacySalesApptSchLink.*?\}.{0,80}", body_html, flags=_re2.S)
@@ -1354,12 +1350,6 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         email_addr = cust.get("emailAddress") or ""
     recipients = [email_addr] if (email_addr and not SAFE_MODE) else [TEST_TO]
 
-    # Log + send
-    add_opportunity_comment(
-        token, subscription_id, opp_id,
-        f"KBB ICO Day {effective_day}: sending template {tpl_key} to "
-        f"{('TEST_TO' if SAFE_MODE else email_addr)}."
-    )
     send_opportunity_email_activity(
         token, subscription_id, opp_id,
         sender=rooftop_sender,
@@ -1370,7 +1360,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     # Persist idempotency for cadence sends
     state["last_template_day_sent"] = effective_day
     state["last_template_sent_at"]  = _dt.now(_tz.utc).isoformat()
-    _save_state_comment(token, subscription_id, opp_id, state)
+    state["last_agent_msg_at"]      = _dt.now(_tz.utc).isoformat()
 
     # Phone/Text tasks (unchanged)
     if ALLOW_TEXTING and plan.get("create_text_task", False) and _customer_has_text_consent(opportunity):
