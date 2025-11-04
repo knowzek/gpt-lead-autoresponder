@@ -393,7 +393,14 @@ def run_gpt(prompt: str,
             kbb_ctx: dict | None = None):
 
     rooftop_addr = _get_rooftop_address(rooftop_name)
-                
+
+    addr_msg = None
+    if rooftop_addr:
+        addr_msg = {
+            "role": "system",
+            "content": f"Dealer address: {rooftop_addr}. If the guest asks where to go or for directions, include this exact address plainly (no brackets)."
+        }
+           
     # Build system stack (persona-aware)
     # For KBB ICO, we typically exclude generic follow-up rules because cadence uses templates.
     system_msgs = _build_system_stack(
@@ -404,6 +411,8 @@ def run_gpt(prompt: str,
         include_followup_rules=(persona != "kbb_ico")
     )
 
+    if addr_msg:
+        system_msgs.insert(0, addr_msg)   # make sure the address is available to the model
 
     if prevMessages:
         messages = system_msgs + [
@@ -433,7 +442,10 @@ def run_gpt(prompt: str,
             dictResult["subject"] = "Re: " + dictResult["subject"]
 
         return dictResult
-
+        
+    if addr_msg:
+        system_msgs.insert(0, addr_msg)
+                
     else:
         messages = system_msgs + [
             {"role": "user", "content": prompt}
@@ -507,11 +519,8 @@ def run_gpt(prompt: str,
         
         reply['messages'] = messages
 
-        
-        # helpful debug (won't crash cron)
         log.debug("OpenAI model_used=%s, chars=%d", model_used, len(text or ""))
     
-
     return reply
 
 
