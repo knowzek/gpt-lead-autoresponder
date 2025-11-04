@@ -7,7 +7,7 @@ from helpers import (
     get_names_in_dir,
     sortActivities
 )
-from kbb_ico import process_kbb_ico_lead  # ADD
+from kbb_ico import process_kbb_ico_lead 
 from es_resilient import es_update_with_retry
 from esQuerys import getNewData, esClient, getNewDataByDate
 from rooftops import get_rooftop_info
@@ -15,7 +15,7 @@ from constants import *
 from gpt import run_gpt, getCustomerMsgDict
 import re
 import logging
-
+import hashlib, json, time
 from uuid import uuid4
 
 from fortellis import get_activities, get_token, get_activity_by_id_v1, get_opportunity
@@ -52,6 +52,21 @@ def is_exit_message(msg: str) -> bool:
 
 already_processed = get_names_in_dir("jsons/process")
 DEBUGMODE = os.getenv("DEBUGMODE", "1") == "1"
+
+STATE_KEYS = ("mode", "last_template_day_sent", "nudge_count",
+              "last_customer_msg_at", "last_agent_msg_at")
+
+def _state_signature(state: dict) -> str:
+    base = {k: state.get(k) for k in STATE_KEYS}
+    blob = json.dumps(base, sort_keys=True, separators=(',', ':'))
+    return hashlib.md5(blob.encode("utf-8")).hexdigest()
+
+def _should_log_note(prev_sig: str, new_sig: str, action_taken: bool) -> bool:
+    # Only log if we acted OR the signature changed
+    if action_taken:
+        return True
+    return (prev_sig or "") != (new_sig or "")
+
 
 def is_active_opp(opportunity: dict) -> bool:
     # Fortellis opp payloads typically include a status or flags you can check.
@@ -421,19 +436,53 @@ def processHit(hit):
             tok = None
             if not OFFLINE_MODE:
                 tok = get_token(subscription_id)
-            
-            process_kbb_ico_lead(
+
+            # === persona logic ===
+            state, action_taken = process_kbb_ico_lead(
                 opportunity=opportunity,
                 lead_age_days=lead_age_days,
                 rooftop_name=rooftop_name,
                 inquiry_text=inquiry_text_safe,
-                token=tok,                               # ✅ pass a live token
+                token=tok,
                 subscription_id=subscription_id,
                 SAFE_MODE=os.getenv("SAFE_MODE", "1") in ("1","true","True"),
                 rooftop_sender=rooftop_sender,
             )
+
+            # === 2b: only log a Note if we acted or the state changed ===
+            meta = opportunity.get("_patti_meta") or {}
+            prev_sig = meta.get("last_state_sig")
+
+            new_sig = _state_signature(state)  # uses your helper above
+
+            def _cooldown_ok(m: dict, seconds=1*60):
+                last_ts = m.get("last_note_epoch")
+                now = int(time.time())
+                return not last_ts or (now - int(last_ts)) >= seconds
+
+            if _should_log_note(prev_sig, new_sig, action_taken) and _cooldown_ok(meta):
+                compact = {
+                    "mode": state.get("mode"),
+                    "last_template_day_sent": state.get("last_template_day_sent"),
+                    "nudge_count": state.get("nudge_count"),
+                    "last_customer_msg_at": state.get("last_customer_msg_at"),
+                    "last_agent_msg_at": state.get("last_agent_msg_at"),
+                }
+                note_txt = f"[PATTI_KBB_STATE] {json.dumps(compact, separators=(',',':'))}"
+
+                if not OFFLINE_MODE:
+                    add_opportunity_comment(tok, subscription_id, opportunityId, note_txt)
+
+                # persist new signature + timestamp so we don’t re-log on next cron pass
+                meta.update({
+                    "last_state_sig": new_sig,
+                    "last_note_epoch": int(time.time()),
+                })
+                opportunity["_patti_meta"] = meta
+
         except Exception as e:
             log.error("KBB ICO handler failed for opp %s: %s", opportunityId, e)
+
 
         # Persist any updates (messages/state) and exit this hit
         if not OFFLINE_MODE:
