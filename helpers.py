@@ -7,6 +7,26 @@ from datetime import datetime
 import urllib.parse, base64
 from datetime import datetime, timedelta, timezone
 
+_SCHED_PARA = re.compile(r"(?is)<p[^>]*>.*?(LegacySalesApptSchLink|schedule (an )?appointment|schedule your visit|reserve your time).*?</p>")
+
+def strip_sched_cta(body_html: str, *, add_resched: bool = True) -> str:
+    """Remove any scheduling CTA and (optionally) add a reschedule sentence."""
+    if not body_html:
+        body_html = ""
+    body = _SCHED_PARA.sub("", body_html).strip()
+    if add_resched and "<{LegacySalesApptSchLink}>" not in body:
+        resched = (
+            '<p>If you need to change your time, you can reschedule here: '
+            '<{LegacySalesApptSchLink}></p>'
+        )
+        # insert before footer if present
+        idx = body.lower().rfind("</table>")  # naive: many footers end with a table
+        if idx != -1:
+            return body[:idx] + resched + body[idx:]
+        return body + resched
+    return body
+
+
 def _fmt_utc_range(start_iso_utc: str, minutes: int = 30):
     # Input: 'YYYY-MM-DDTHH:MM:SSZ' or ISO with tz
     dt = datetime.fromisoformat(start_iso_utc.replace("Z","+00:00")).astimezone(timezone.utc)
