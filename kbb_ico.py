@@ -712,12 +712,25 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         log.info("KBB ICO: declined → skip all outreach (opp=%s)", opp_id)
         return state, action_taken
     
-    # === If an appointment is booked/upcoming, stop all outreach =====
+    # === If appointment is booked/upcoming, pause cadence but still watch for inbound ===
+
     if state.get("mode") == "scheduled" or _has_upcoming_appt(acts_live, state):
-        log.info("KBB ICO: upcoming appointment detected → skip nudges & cadence (opp=%s)", opp_id)
-        state["mode"] = "scheduled"
-        #_save_state_comment(token, subscription_id, opp_id, state)
-        return state, action_taken
+        has_reply, last_cust_ts, last_inbound_id = customer_has_replied(
+            opportunity, token, subscription_id, state
+        )
+        if has_reply:
+            log.info("KBB ICO: new inbound after appointment → switch to convo mode")
+            state["mode"] = "convo"
+            state["nudge_count"] = 0
+            if last_cust_ts:
+                state["last_customer_msg_at"] = last_cust_ts
+            if last_inbound_id:
+                state["last_inbound_activity_id"] = last_inbound_id
+            # fall through so normal convo-reply code can run (and set action_taken=True when it sends)
+        else:
+            log.info("KBB ICO: appointment active, no new inbound → skip outreach")
+            state["mode"] = "scheduled"
+            return state, action_taken
 
     # === Detect customer-booked appointment via booking link (pre-convo) ===
     appt_id, appt_due_iso = _find_new_customer_scheduled_appt(
