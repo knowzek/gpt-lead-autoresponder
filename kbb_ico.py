@@ -175,7 +175,7 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
     state["appt_due_local"]       = appt_human
     state["nudge_count"]          = 0
     state["last_agent_msg_at"]    = _dt.now(_tz.utc).isoformat()
-    _save_state_comment(token, subscription_id, opp_id, state)
+    #_save_state_comment(token, subscription_id, opp_id, state)
 
     # Flip CRM subStatus → Appointment Set
     try:
@@ -569,7 +569,7 @@ def _save_state_comment(token, subscription_id, opportunity_id, state: dict):
         log.warning("skip state comment: missing opportunity_id")
         return
     payload = f"{STATE_TAG} {json.dumps(state, ensure_ascii=False)}"
-    add_opportunity_comment(token, subscription_id, opportunity_id, payload)
+    #add_opportunity_comment(token, subscription_id, opportunity_id, payload)
 
 
 def customer_has_replied(opportunity: dict, token: str, subscription_id: str, state: dict | None = None):
@@ -952,7 +952,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     )
                     created_appt_ok = True
                     appt_human = _fmt_local_human(dt_local, tz_name="America/Los_Angeles")
-                    add_opportunity_comment(
+                    #add_opportunity_comment(
                         token, subscription_id, opp_id,
                         f"[Patti] Auto-scheduled appointment for {appt_human} (local)."
                     )
@@ -981,7 +981,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
             # 1) Note BEFORE inactivating
             try:
-                add_opportunity_comment(
+                #add_opportunity_comment(
                     token, subscription_id, opp_id,
                     "[Patti] Customer declined the KBB ICO — marking inactive."
                 )
@@ -1009,10 +1009,10 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             state["mode"] = "closed_declined"
             state["nudge_count"] = 0
             state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
-            try:
-                _save_state_comment(token, subscription_id, opp_id, state)
-            except Exception as e:
-                log.warning("save_state_comment failed (pre-inactive): %s", e)
+            #try:
+            #    _save_state_comment(token, subscription_id, opp_id, state)
+            #except Exception as e:
+            #    log.warning("save_state_comment failed (pre-inactive): %s", e)
 
             # 4) Inactivate LAST
             try:
@@ -1163,7 +1163,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
             # Save convo state (NOT scheduled)
             state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
-            _save_state_comment(token, subscription_id, opp_id, state)
+            #_save_state_comment(token, subscription_id, opp_id, state)
             
             action_taken = True 
             return state, action_taken
@@ -1222,7 +1222,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                         email = (opportunity.get("_lead", {}) or {}).get("email_address")
                     recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
                     if recipients:
-                        add_opportunity_comment(
+                        #add_opportunity_comment(
                             token, subscription_id, opp_id,
                             f"[Patti] Sending Nudge #{nudge_count + 1} after silence → to {(email or 'TEST_TO')}"
                         )
@@ -1251,7 +1251,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
                         state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
                         state["nudge_count"] = nudge_count + 1
-                        _save_state_comment(token, subscription_id, opp_id, state)
+                        #_save_state_comment(token, subscription_id, opp_id, state)
                         action_taken = True 
                         return state, action_taken
                     else:
