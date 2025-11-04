@@ -1355,10 +1355,12 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
     # ===== NUDGE LOGIC (customer went dark AFTER a reply) =====
     
-    if scheduled_active_now:
-        log.info("KBB ICO: appointment active → suppress nudges/templates; only reply to inbound")
-        opportunity["_kbb_state"] = state
-        return state, action_taken
+    # If we were scheduled at the start of this run, reply immediately (no nudge/template).
+    if scheduled_active_now and state.get("last_inbound_activity_id"):
+        log.info("KBB ICO: scheduled_active_now=%s (mode=%s, last_appt_id=%r, appt_due=%r)",
+             scheduled_active_now, state.get("mode"),
+             state.get("last_appt_activity_id"), state.get("appt_due_utc"))
+
         
     # If we are already in convo mode, no new inbound detected now, and enough time has passed → send a nudge
     if state.get("mode") == "convo":
