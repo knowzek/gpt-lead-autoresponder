@@ -9,7 +9,7 @@ from fortellis import (
 )
 
 from fortellis import search_activities_by_opportunity
-
+from helpers import build_calendar_links
 import json, re
 STATE_TAG = "[PATTI_KBB_STATE]"  # marker to find the state comment quickly
 
@@ -140,11 +140,30 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
     # Deterministic thanks email
     cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
     subject = f"Re: Appointment confirmed for {appt_human}"
+    
+    # Build Add-to-Calendar links (30-min default; adjust if needed)
+    rt = (ROOFTOP_INFO.get(rooftop_name) or {})
+    summary     = f"{rooftop_name} – KBB Inspection"
+    location    = rt.get("address") or rooftop_name
+    description = "15–20 minute in-person inspection to finalize your Kelley Blue Book® Instant Cash Offer."
+    links       = build_calendar_links(summary, description, location, due_dt_iso_utc, duration_min=30)
+    
+    add_to_cal_html = f"""
+      <p style="margin:16px 0 8px 0;">Add to calendar:</p>
+      <p>
+        <a href="{links['google']}">Google</a> &nbsp;|&nbsp;
+        <a href="{links['outlook']}">Outlook</a> &nbsp;|&nbsp;
+        <a href="{links['yahoo']}">Yahoo</a>
+      </p>
+    """.strip()
+    
     body_html = f"""
         <p>Hi {cust_first},</p>
         <p>Thanks for booking — we’ll see you on <strong>{appt_human}</strong> at {rooftop_name}.</p>
+        {add_to_cal_html}
         <p>Please bring your title, ID, and keys. If you need to change your time, use this link: <{{LegacySalesApptSchLink}}></p>
     """.strip()
+
     body_html = normalize_patti_body(body_html)
     body_html = _PREFS_RE.sub("", body_html).strip()
     body_html = body_html + build_patti_footer(rooftop_name)
@@ -393,30 +412,6 @@ def build_patti_footer(rooftop_name: str) -> str:
   </tr>
 </table>
 """.strip()
-
-def build_patti_footer(rooftop_name: str) -> str:
-    rt = (ROOFTOP_INFO.get(rooftop_name) or {})
-    dealer_phone = rt.get("phone") or ""
-    dealer_addr  = rt.get("address") or ""
-    dealer_site  = rt.get("website") or "https://pattersonautos.com"
-
-    # HTML image signature (centered, retina-safe)
-    sig = f"""
-    <div style="margin-top:20px; line-height:1.4;">
-      <p>Best regards,<br/><strong>Patti</strong></p>
-      <p style="margin:8px 0;">
-        <img src="https://content.energage.com/company-images/RP684/RP684_photo_017ebf8affe24118ae205078849a8f51_orig.jpg"
-             alt="Patti Signature" width="250" style="max-width:100%; height:auto;"/>
-      </p>
-      <p style="font-size:13px; color:#555;">
-        {rooftop_name}<br/>
-        {dealer_addr}<br/>
-        {dealer_phone}
-      </p>
-    </div>
-    """.strip()
-
-    return sig
 
 
 def normalize_patti_body(body_html: str) -> str:
@@ -756,11 +751,30 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             # Compose a deterministic “thanks for booking” email (no GPT)
             cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
             subject = f"Re: Appointment confirmed for {appt_human}"
+            
+            # Build Add-to-Calendar links (30-min default; adjust if needed)
+            rt = (ROOFTOP_INFO.get(rooftop_name) or {})
+            summary     = f"{rooftop_name} – KBB Inspection"
+            location    = rt.get("address") or rooftop_name
+            description = "15–20 minute in-person inspection to finalize your Kelley Blue Book® Instant Cash Offer."
+            links       = build_calendar_links(summary, description, location, due_dt_iso_utc, duration_min=30)
+            
+            add_to_cal_html = f"""
+              <p style="margin:16px 0 8px 0;">Add to calendar:</p>
+              <p>
+                <a href="{links['google']}">Google</a> &nbsp;|&nbsp;
+                <a href="{links['outlook']}">Outlook</a> &nbsp;|&nbsp;
+                <a href="{links['yahoo']}">Yahoo</a>
+              </p>
+            """.strip()
+            
             body_html = f"""
                 <p>Hi {cust_first},</p>
                 <p>Thanks for booking — we’ll see you on <strong>{appt_human}</strong> at {rooftop_name}.</p>
+                {add_to_cal_html}
                 <p>Please bring your title, ID, and keys. If you need to change your time, use this link: <{{LegacySalesApptSchLink}}></p>
             """.strip()
+
             body_html = normalize_patti_body(body_html)
             body_html = _PREFS_RE.sub("", body_html).strip()
             body_html = body_html + build_patti_footer(rooftop_name)
@@ -1031,12 +1045,31 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
         # ---------- APPOINTMENT CONFIRMATION ----------
         elif created_appt_ok and appt_human:
-            subject = f"Re: Your visit on {appt_human}"
-            body_html = f"""
-                <p>Hi {cust_first},</p>
-                <p>Your appointment is confirmed for <strong>{appt_human}</strong> at {rooftop_name}.</p>
-                <p>Please bring your title, ID, and keys. If you need to change your time, use this link: <{{LegacySalesApptSchLink}}></p>
-            """.strip()
+        subject = f"Re: Your visit on {appt_human}"
+    
+        # Build Add-to-Calendar links
+        rt = (ROOFTOP_INFO.get(rooftop_name) or {})
+        summary     = f"{rooftop_name} – KBB Inspection"
+        location    = rt.get("address") or rooftop_name
+        description = "15–20 minute in-person inspection to finalize your Kelley Blue Book® Instant Cash Offer."
+        links       = build_calendar_links(summary, description, location, due_dt_iso_utc, duration_min=30)
+    
+        add_to_cal_html = f"""
+          <p style="margin:16px 0 8px 0;">Add to calendar:</p>
+          <p>
+            <a href="{links['google']}">Google</a> &nbsp;|&nbsp;
+            <a href="{links['outlook']}">Outlook</a> &nbsp;|&nbsp;
+            <a href="{links['yahoo']}">Yahoo</a>
+          </p>
+        """.strip()
+    
+        body_html = f"""
+            <p>Hi {cust_first},</p>
+            <p>Your appointment is confirmed for <strong>{appt_human}</strong> at {rooftop_name}.</p>
+            {add_to_cal_html}
+            <p>Please bring your title, ID, and keys. If you need to change your time, use this link: <{{LegacySalesApptSchLink}}></p>
+        """.strip()
+
 
             # Normalize + footer + subject guard (no extra CTA here)
             body_html = normalize_patti_body(body_html)
