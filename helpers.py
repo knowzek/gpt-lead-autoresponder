@@ -7,6 +7,51 @@ from datetime import datetime
 import urllib.parse, base64
 from datetime import datetime, timedelta, timezone
 
+_KBB_AMOUNT_RE = re.compile(r'(?i)\b(?:offer\s*amount|kbb\s*(?:ico)?\s*amount)\s*:\s*\$?\s*([0-9][0-9,]+)')
+_KBB_LINK_RE   = re.compile(r'(?i)\boffer\s*link\s*:\s*(https?://\S+)')
+
+def get_kbb_offer_context_simple(opp: dict) -> dict:
+    """
+    Pull KBB offer facts from:
+      - opp["comments"] (e.g., "Offer Amount: $7,524. Offer Link: https://…")
+      - opp["tradeIns"][0] (year/make/model/vin)
+    Returns dict with keys: amount_usd, offer_url, vehicle, year, make, model, vin
+    """
+    ctx = {}
+
+    # 1) parse comments blob
+    comments = (opp or {}).get("comments") or ""
+    if comments:
+        m_amt = _KBB_AMOUNT_RE.search(comments)
+        if m_amt:
+            try:
+                ctx["amount_usd"] = f"${int(m_amt.group(1).replace(',', '')):,}"
+            except Exception:
+                pass
+        m_link = _KBB_LINK_RE.search(comments)
+        if m_link:
+            ctx["offer_url"] = m_link.group(1).strip().rstrip(").,;")
+
+    # 2) first trade-in record for vehicle basics
+    ti = ((opp or {}).get("tradeIns") or [])
+    if ti and isinstance(ti, list):
+        t0 = ti[0] or {}
+        ctx["year"]  = t0.get("year")
+        ctx["make"]  = t0.get("make")
+        ctx["model"] = t0.get("model")
+        ctx["vin"]   = t0.get("vin")
+        if any(ctx.get(k) for k in ("year","make","model")):
+            ctx["vehicle"] = " ".join(str(ctx.get(k,"")).strip() for k in ("year","make","model") if ctx.get(k)).strip()
+
+    # prune empties
+    return {k: v for k, v in ctx.items() if v}
+
+def wants_kbb_value(text: str) -> bool:
+    t = (text or "").lower()
+    return any(k in t for k in ("value","offer","amount","quote","kbb","instant cash")) \
+        and any(k in t for k in ("what","how much","remind","tell","value","$","amount"))
+
+
 def rewrite_sched_cta_for_booked(body_html: str) -> str:
     """
     If the email contains a schedule CTA, replace the phrasing so it's appropriate
