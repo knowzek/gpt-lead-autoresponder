@@ -1183,97 +1183,99 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             # also persist for future cycles
             opportunity["messages"] = msgs
             
-            prompt = f"""
-            generate next Patti reply for a Kelley Blue Book® Instant Cash Offer conversation.
-            Here is the full conversation so far (as a python list of dicts):
-            {msgs}
-            """
-
-            reply = run_gpt(
-                prompt,
-                customer_name=cust_first,
-                rooftop_name=rooftop_name,
-                prevMessages=True,
-                persona="kbb_ico",
-                kbb_ctx={"offer_valid_days": 7, "exclude_sunday": True},
-            )
-
-            subject   = reply_subject  # keep thread subject; ignore GPT subject
-            body_html = (reply.get("body") or "")
+            # === Deterministic KBB value shortcut (if customer asks for their offer amount) ===
+            from helpers import get_kbb_offer_context_simple, wants_kbb_value
             
-            # Normalize first
-            body_html = normalize_patti_body(body_html)
-            body_html = _patch_address_placeholders(body_html, rooftop_name)
+            facts = get_kbb_offer_context_simple(opportunity)
             
-            # 🔒 If an appointment is already booked, rewrite any scheduling CTA to a reschedule line.
-            # Otherwise, add your normal soft schedule sentence.
-            is_scheduled = state.get("mode") == "scheduled" or _has_upcoming_appt(acts_live, state)
-            if is_scheduled:
-                from helpers import rewrite_sched_cta_for_booked
-                body_html = rewrite_sched_cta_for_booked(body_html)
-            else:
-                body_html = append_soft_schedule_sentence(body_html, rooftop_name)
-
+            if wants_kbb_value(inquiry_text) and facts.get("amount_usd"):
+                amt = facts["amount_usd"]
+                veh = facts.get("vehicle") or "your vehicle"
+                url = facts.get("offer_url")
             
-            # Finish standard cleanup + footer
-            body_html = _PREFS_RE.sub("", body_html).strip()
-            body_html = body_html + build_patti_footer(rooftop_name)
-            if not subject.lower().startswith("re:"):
-                subject = "Re: " + subject
-
-            # Resolve recipient and send
-            cust = (opportunity.get("customer") or {})
-            email = cust.get("emailAddress") or ((cust.get("emails") or [{}])[0].get("address"))
-            if not email:
-                email = (opportunity.get("_lead", {}) or {}).get("email_address")
-            recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
-            if not recipients:
-                log.warning("No recipient; skip send for opp=%s", opp_id)
+                # If already booked, use reschedule phrasing; otherwise add your soft schedule CTA later
+                is_scheduled = state.get("mode") == "scheduled" or _has_upcoming_appt(acts_live, state)
+            
+                subject = reply_subject  # keep thread subject
+                if is_scheduled:
+                    cta_line = 'If you need to reschedule your appointment, you can do so here: <{LegacySalesApptSchLink}>'
+                else:
+                    # same wording your soft CTA uses
+                    cta_line = 'Please let us know a convenient time for you, or you can instantly reserve your time here: <{LegacySalesApptSchLink}>'
+            
+                extra = f' You can also view the full offer details here: <a href="{url}">View Offer</a>.' if url else ""
+                body_html = f"""
+                    <p>Hi {cust_first},</p>
+                    <p>Your Kelley Blue Book® Instant Cash Offer for {veh} is <strong>{amt}</strong>.{extra}</p>
+                    <p>{cta_line}</p>
+                """.strip()
+            
+                # --- finish + send (same cleanup as GPT path) ---
+                body_html = normalize_patti_body(body_html)
+                body_html = _patch_address_placeholders(body_html, rooftop_name)
+                if is_scheduled:
+                    # rewrite any stray schedule phrasing to reschedule, keep token intact
+                    from helpers import rewrite_sched_cta_for_booked
+                    body_html = rewrite_sched_cta_for_booked(body_html)
+                else:
+                    body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+            
+                body_html = _PREFS_RE.sub("", body_html).strip()
+                body_html = body_html + build_patti_footer(rooftop_name)
+                if not subject.lower().startswith("re:"):
+                    subject = "Re: " + subject
+            
+                # send
+                cust = (opportunity.get("customer") or {})
+                email = cust.get("emailAddress") or ((cust.get("emails") or [{}])[0].get("address"))
+                if not email:
+                    email = (opportunity.get("_lead", {}) or {}).get("email_address")
+                recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
+                if not recipients:
+                    log.warning("No recipient; skip send for opp=%s", opp_id)
+                    opportunity["_kbb_state"] = state
+                    return state, action_taken
+            
+                # only log scheduler token snippet when we expect a schedule CTA
+                if not is_scheduled:
+                    import re as _re2
+                    m = _re2.search(r".{0,80}<\{LegacySalesApptSchLink.*?\}.{0,80}", body_html, flags=_re2.S)
+                    log.info("Scheduler token snippet (deterministic): %r", m.group(0) if m else "none")
+            
+                send_opportunity_email_activity(
+                    token, subscription_id, opp_id,
+                    sender=rooftop_sender,
+                    recipients=recipients, carbon_copies=[],
+                    subject=subject, body_html=body_html, rooftop_name=rooftop_name
+                )
+            
+                # thread memo
+                now_iso = _dt.now(_tz.utc).isoformat()
+                _thread_body = re.sub(r"<[^>]+>", " ", body_html)
+                _thread_body = re.sub(r"\s+", " ", _thread_body).strip()
+                _thread_body = re.sub(
+                    r"(?i)\b(to\s+schedule\s+your\s+(appointment|visit)|if\s+you\s+need\s+to\s+reschedule\s+your\s+appointment)\b.*",
+                    "",
+                    _thread_body
+                ).strip()
+            
+                msgs = opportunity.get("messages", [])
+                if not isinstance(msgs, list):
+                    msgs = []
+                msgs.append({
+                    "msgFrom": "patti",
+                    "subject": subject.replace("Re: ", ""),
+                    "body": _thread_body,
+                    "date": now_iso
+                })
+                opportunity["messages"] = msgs
+            
+                # state + return
+                state["last_agent_msg_at"] = now_iso
+                action_taken = True
                 opportunity["_kbb_state"] = state
                 return state, action_taken
 
-            import re as _re2
-            m = _re2.search(r".{0,80}<\{LegacySalesApptSchLink.*?\}.{0,80}", body_html, flags=_re2.S)
-            log.info("Scheduler token snippet: %r", m.group(0) if m else "none")
-
-            send_opportunity_email_activity(
-                token, subscription_id, opp_id,
-                sender=rooftop_sender,
-                recipients=recipients, carbon_copies=[],
-                subject=subject, body_html=body_html, rooftop_name=rooftop_name
-            )
-
-            now_iso = _dt.now(_tz.utc).isoformat()
-
-            # Store a compact version of Patti’s reply in the thread (no footer/CTA)
-            _thread_body = re.sub(r"<[^>]+>", " ", body_html)        # strip HTML tags
-            _thread_body = re.sub(r"\s+", " ", _thread_body).strip() # collapse whitespace
-            
-            # 🧹 Remove any scheduling or rescheduling lead-in text, but keep the actual link wording intact
-            _thread_body = re.sub(
-                r"(?i)\b(to\s+schedule\s+your\s+(appointment|visit)|if\s+you\s+need\s+to\s+reschedule\s+your\s+appointment)\b.*",
-                "",
-                _thread_body
-            ).strip()
-
-            msgs = opportunity.get("messages", [])
-            if not isinstance(msgs, list):
-                msgs = []
-            msgs.append({
-                "msgFrom": "patti",
-                "subject": subject.replace("Re: ", ""),
-                "body": _thread_body,
-                "date": now_iso
-            })
-            opportunity["messages"] = msgs
-
-            # Save convo state (NOT scheduled)
-            state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
-            #_save_state_comment(token, subscription_id, opp_id, state)
-            
-            action_taken = True 
-            opportunity["_kbb_state"] = state
-            return state, action_taken
 
     # ===== NUDGE LOGIC (customer went dark AFTER a reply) =====
     # If we are already in convo mode, no new inbound detected now, and enough time has passed → send a nudge
