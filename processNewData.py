@@ -454,21 +454,24 @@ def processHit(hit):
                 now = int(time.time())
                 return not last_ts or (now - int(last_ts)) >= seconds
             
+            # Write exactly one state note per action
             if action_taken and _cooldown_ok(meta):
                 compact = {
                     "mode": state.get("mode"),
-                    "last_template_day_sent": state.get("last_template_day_sent"),
-                    "nudge_count": state.get("nudge_count"),
                     "last_customer_msg_at": state.get("last_customer_msg_at"),
                     "last_agent_msg_at": state.get("last_agent_msg_at"),
+                    "last_template_day_sent": state.get("last_template_day_sent"),
+                    "last_template_sent_at": state.get("last_template_sent_at"),
+                    "nudge_count": state.get("nudge_count"),
+                    "last_inbound_activity_id": state.get("last_inbound_activity_id"),
                 }
                 note_txt = f"[PATTI_KBB_STATE] {json.dumps(compact, separators=(',',':'))}"
+            
                 if not OFFLINE_MODE:
                     add_opportunity_comment(tok, subscription_id, opportunityId, note_txt)
             
-                meta.update({"last_state_sig": new_sig, "last_note_epoch": int(time.time())})
+                meta.update({"last_note_epoch": int(time.time()), "last_state_sig": "acted"})
                 opportunity["_patti_meta"] = meta
-
 
         except Exception as e:
             log.error("KBB ICO handler failed for opp %s: %s", opportunityId, e)
