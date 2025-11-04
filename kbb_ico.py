@@ -413,31 +413,31 @@ def build_patti_footer(rooftop_name: str) -> str:
     # ✅ Use fixed widths via attributes (best for Outlook/Gmail + CRM sanitizers)
     # Outer table keeps it from wrapping; inner row is two fixed cells.
     return f"""
-<table width="650" border="0" cellspacing="0" cellpadding="0" style="margin-top:18px;">
-  <tr>
-    <!-- LEFT: image (fixed width) -->
-    <td width="300" valign="top" align="left" style="padding-right:16px;">
-      <img src="{img_url}" alt="Patterson Autos" width="300" border="0" style="display:block; height:auto;">
-    </td>
-
-    <!-- RIGHT: contact block -->
-    <td width="350" valign="top" align="left" style="font-family:Arial, Helvetica, sans-serif; color:#222;">
-      <div style="font-size:13px; line-height:20px; font-weight:bold;">Patti</div>
-
-      <div style="font-size:13px; line-height:20px;">
-        <div><strong>Mobile:</strong> {patti_phone}</div>
-        <div><strong>Email:</strong> <a href="mailto:{patti_email}" style="color:#0066cc; text-decoration:none;">{patti_email}</a></div>
-        <div><strong>Website:</strong> <a href="{dealer_site}" style="color:#0066cc; text-decoration:none;">{dealer_site.replace('https://','').replace('http://','')}</a></div>
-      </div>
-
-      <div style="font-size:13px; line-height:20px; margin-top:10px; color:#333;">
-        <div>{rooftop_name}</div>
-        <div>{dealer_addr}</div>
-      </div>
-    </td>
-  </tr>
-</table>
-""".strip()
+    <table width="650" border="0" cellspacing="0" cellpadding="0" style="margin-top:18px;">
+      <tr>
+        <!-- LEFT: image (fixed width) -->
+        <td width="300" valign="top" align="left" style="padding-right:16px;">
+          <img src="{img_url}" alt="Patterson Autos" width="300" border="0" style="display:block; height:auto;">
+        </td>
+    
+        <!-- RIGHT: contact block -->
+        <td width="350" valign="top" align="left" style="font-family:Arial, Helvetica, sans-serif; color:#222;">
+          <div style="font-size:13px; line-height:20px; font-weight:bold;">Patti</div>
+    
+          <div style="font-size:13px; line-height:20px;">
+            <div><strong>Mobile:</strong> {patti_phone}</div>
+            <div><strong>Email:</strong> <a href="mailto:{patti_email}" style="color:#0066cc; text-decoration:none;">{patti_email}</a></div>
+            <div><strong>Website:</strong> <a href="{dealer_site}" style="color:#0066cc; text-decoration:none;">{dealer_site.replace('https://','').replace('http://','')}</a></div>
+          </div>
+    
+          <div style="font-size:13px; line-height:20px; margin-top:10px; color:#333;">
+            <div>{rooftop_name}</div>
+            <div>{dealer_addr}</div>
+          </div>
+        </td>
+      </tr>
+    </table>
+    """.strip()
 
 
 def normalize_patti_body(body_html: str) -> str:
