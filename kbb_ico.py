@@ -122,7 +122,7 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
     )
     log.info("KBB ICO: booked-appt scan → id=%s due=%s", appt_id, appt_due_iso)
     if not (appt_id and appt_due_iso):
-        return False
+        return (False, False)
 
     # Format time
     try:
@@ -186,7 +186,7 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
         log.warning("set_opportunity_substatus failed: %s", e)
     
     action_taken = True 
-    return True
+    return (True, did_action)
 
 def _latest_read_email_id(acts: list[dict]) -> str | None:
     newest = None
@@ -658,12 +658,15 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             break
 
     # ✅ Always short-circuit if a new customer-booked appointment exists
-    if _short_circuit_if_booked(
+    handled, did_act = _short_circuit_if_booked(
         opportunity, acts_live, state,
         token=token, subscription_id=subscription_id,
         rooftop_name=rooftop_name, SAFE_MODE=SAFE_MODE, rooftop_sender=rooftop_sender
-    ):
+    )
+    if handled:
+        action_taken = action_taken or did_act
         return state, action_taken
+
 
     # === If customer already declined earlier, stop everything ==============
     if state.get("mode") == "closed_declined":
@@ -736,7 +739,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             state["appt_due_local"] = appt_human
             state["nudge_count"] = 0
             state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
-            _save_state_comment(token, subscription_id, opp_id, state)
+            #_save_state_comment(token, subscription_id, opp_id, state)
 
             # Flip CRM subStatus → Appointment Set
             try:
@@ -783,7 +786,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             state["last_customer_msg_at"] = last_cust_ts
         if last_inbound_id:
             state["last_inbound_activity_id"] = last_inbound_id
-        _save_state_comment(token, subscription_id, opp_id, state)
+        #_save_state_comment(token, subscription_id, opp_id, state)
 
         # --- REFRESH activities so we don't use a stale snapshot ---
         acts_now = _fetch_activities_live(opp_id, customer_id, token, subscription_id)
@@ -866,7 +869,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         if newest_read and newest_dt:
             state["last_inbound_activity_id"] = selected_inbound_id
             state["last_customer_msg_at"] = newest_dt.astimezone(_tz.utc).isoformat()
-            _save_state_comment(token, subscription_id, opp_id, state)
+            #_save_state_comment(token, subscription_id, opp_id, state)
 
 
         # Detect decline from customer's top reply
