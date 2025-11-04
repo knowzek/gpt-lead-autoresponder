@@ -1287,7 +1287,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 return state, action_taken
                 
     # If we were scheduled at the start of this run, reply immediately (no nudge/template).
-    if scheduled_active_now and inbound_id:   # <-- use your actual inbound id variable
+    if scheduled_active_now and selected_inbound_id:
         log.info("KBB ICO: scheduled_active_now=%s (mode=%s, last_appt_id=%r, appt_due=%r)",
              scheduled_active_now, state.get("mode"),
              state.get("last_appt_activity_id"), state.get("appt_due_utc"))
@@ -1295,6 +1295,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         cust_first = ((opportunity.get('customer') or {}).get('firstName')) or "there"
     
         # include thread for context (same pattern you use in the nudge code)
+        from gpt import run_gpt
         prompt = compose_kbb_convo_body(rooftop_name, cust_first, inquiry_text or "")
         reply = run_gpt(
             prompt,
