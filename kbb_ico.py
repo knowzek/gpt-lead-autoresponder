@@ -27,6 +27,17 @@ import zoneinfo as _zi
 
 from html import unescape as _unesc
 
+from rooftops import ROOFTOP_INFO as _RTI
+
+def _patch_address_placeholders(html: str, rooftop_name: str) -> str:
+    addr = ((_RTI.get(rooftop_name) or {}).get("address") or "").strip()
+    if not addr:
+        return html
+    # catch common placeholder variants
+    pat = _re.compile(r'\[\s*(?:insert\s+)?address\s*\]|\{address\}|\<address\>', _re.I)
+    return pat.sub(addr, html)
+
+
 # === Decline detection ==========================================================
 
 _DECLINE_RE = _re.compile(
@@ -165,6 +176,7 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
     """.strip()
 
     body_html = normalize_patti_body(body_html)
+    body_html = _patch_address_placeholders(body_html, rooftop_name)
     body_html = _PREFS_RE.sub("", body_html).strip()
     body_html = body_html + build_patti_footer(rooftop_name)
     if not subject.lower().startswith("re:"):
@@ -775,6 +787,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             """.strip()
 
             body_html = normalize_patti_body(body_html)
+            body_html = _patch_address_placeholders(body_html, rooftop_name)
             body_html = _PREFS_RE.sub("", body_html).strip()
             body_html = body_html + build_patti_footer(rooftop_name)
             if not subject.lower().startswith("re:"):
@@ -997,6 +1010,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
             # Normalize (NO CTA) + footer + subject guard
             body_html = normalize_patti_body(body_html)
+            body_html = _patch_address_placeholders(body_html, rooftop_name)
             body_html = _PREFS_RE.sub("", body_html).strip()
             body_html = body_html + build_patti_footer(rooftop_name)
             if not subject.lower().startswith("re:"):
@@ -1072,6 +1086,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
             # Normalize + footer + subject guard (no extra CTA here)
             body_html = normalize_patti_body(body_html)
+            body_html = _patch_address_placeholders(body_html, rooftop_name)
             body_html = _PREFS_RE.sub("", body_html).strip()
             body_html = body_html + build_patti_footer(rooftop_name)
             if not subject.lower().startswith("re:"):
@@ -1148,6 +1163,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
             # Normalize + add CTA only for this path
             body_html = normalize_patti_body(body_html)
+            body_html = _patch_address_placeholders(body_html, rooftop_name)
             #body_html = enforce_standard_schedule_sentence(body_html)
             body_html = append_soft_schedule_sentence(body_html, rooftop_name)
             body_html = _PREFS_RE.sub("", body_html).strip()
@@ -1242,6 +1258,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     subject   = reply.get("subject") or "Still interested in your Instant Cash Offer?"
                     body_html = reply.get("body") or ""
                     body_html = normalize_patti_body(body_html)
+                    body_html = _patch_address_placeholders(body_html, rooftop_name)
                     body_html = _PREFS_RE.sub("", body_html).strip()
                     body_html = body_html + build_patti_footer(rooftop_name)
 
@@ -1363,6 +1380,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     # Ensure exactly one booking CTA
     body_html = replace_or_append_booking_cta(body_html, rooftop_name)
     body_html = normalize_patti_body(body_html)
+    body_html = _patch_address_placeholders(body_html, rooftop_name)
     body_html = _PREFS_RE.sub("", body_html).strip()
 
     # Subject from cadence plan
