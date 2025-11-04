@@ -184,7 +184,8 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
         log.info("SubStatus update response: %s", getattr(resp, "status_code", "n/a"))
     except Exception as e:
         log.warning("set_opportunity_substatus failed: %s", e)
-
+    
+    action_taken = True 
     return True
 
 def _latest_read_email_id(acts: list[dict]) -> str | None:
@@ -652,20 +653,19 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         token=token, subscription_id=subscription_id,
         rooftop_name=rooftop_name, SAFE_MODE=SAFE_MODE, rooftop_sender=rooftop_sender
     ):
-        return
+        return state, action_taken
 
     # === If customer already declined earlier, stop everything ==============
     if state.get("mode") == "closed_declined":
         log.info("KBB ICO: declined → skip all outreach (opp=%s)", opp_id)
-        return
+        return state, action_taken
     
     # === If an appointment is booked/upcoming, stop all outreach =====
     if state.get("mode") == "scheduled" or _has_upcoming_appt(acts_live, state):
         log.info("KBB ICO: upcoming appointment detected → skip nudges & cadence (opp=%s)", opp_id)
-        # (Optional) keep state normalized to 'scheduled'
         state["mode"] = "scheduled"
         _save_state_comment(token, subscription_id, opp_id, state)
-        return
+        return state, action_taken
 
     # === Detect customer-booked appointment via booking link (pre-convo) ===
     appt_id, appt_due_iso = _find_new_customer_scheduled_appt(
@@ -710,7 +710,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
             if not recipients:
                 log.warning("No recipient; skip send for opp=%s", opp_id)
-                return
+                return state, action_taken
 
             send_opportunity_email_activity(
                 token, subscription_id, opp_id,
@@ -735,8 +735,8 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 log.info("SubStatus update response: %s", getattr(resp, "status_code", "n/a"))
             except Exception as e:
                 log.warning("set_opportunity_substatus failed: %s", e)
-
-            return  # stop here once we’ve handled the scheduled appointment
+            action_taken = True   
+            return state, action_taken  # stop here once we’ve handled the scheduled appointment
 
         except Exception as e:
             log.warning("Customer-booked appt handler failed: %s", e)
@@ -745,14 +745,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     # === If customer already declined earlier, stop everything ==============
     if state.get("mode") == "closed_declined":
         log.info("KBB ICO: declined → skip all outreach (opp=%s)", opp_id)
-        return
-
-    # === If an appointment is booked/upcoming, stop all outreach =====
-    if state.get("mode") == "scheduled" or _has_upcoming_appt(acts_live, state):
-        log.info("KBB ICO: upcoming appointment detected → skip nudges & cadence (opp=%s)", opp_id)
-        state["mode"] = "scheduled"
-        _save_state_comment(token, subscription_id, opp_id, state)
-        return
+        return state, action_taken
 
 
     ## NOTE: pass state into the detector so it can ignore already-seen inbounds
@@ -951,7 +944,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
             if not recipients:
                 log.warning("No recipient; skip send for opp=%s", opp_id)
-                return
+                return state, action_taken
 
             send_opportunity_email_activity(
                 token, subscription_id, opp_id,
@@ -980,8 +973,8 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 log.info("Set inactive response: %s", getattr(resp, "status_code", "n/a"))
             except Exception as e:
                 log.warning("set_opportunity_inactive failed: %s", e)
-
-            return  # important: stop here
+            action_taken = True
+            return state, action_taken  # important: stop here
 
         # ---------- APPOINTMENT CONFIRMATION ----------
         elif created_appt_ok and appt_human:
@@ -1007,7 +1000,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
             if not recipients:
                 log.warning("No recipient; skip send for opp=%s", opp_id)
-                return
+                return state, action_taken
 
             send_opportunity_email_activity(
                 token, subscription_id, opp_id,
@@ -1032,7 +1025,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             except Exception as e:
                 log.warning("set_opportunity_substatus failed: %s", e)
 
-            return
+            return state, action_taken
 
         # ---------- NORMAL GPT CONVO ----------
         else:
@@ -1084,7 +1077,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
             if not recipients:
                 log.warning("No recipient; skip send for opp=%s", opp_id)
-                return
+                return state, action_taken
 
             add_opportunity_comment(
                 token, subscription_id, opp_id,
@@ -1123,7 +1116,9 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             # Save convo state (NOT scheduled)
             state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
             _save_state_comment(token, subscription_id, opp_id, state)
-            return
+            
+            action_taken = True 
+            return state, action_taken
 
     # ===== NUDGE LOGIC (customer went dark AFTER a reply) =====
     # If we are already in convo mode, no new inbound detected now, and enough time has passed → send a nudge
@@ -1209,17 +1204,21 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                         state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
                         state["nudge_count"] = nudge_count + 1
                         _save_state_comment(token, subscription_id, opp_id, state)
+                        action_taken = True 
+                        return state, action_taken
                     else:
                         log.warning("No recipient for nudge; opp=%s", opp_id)
-                    return
+                    
+                    
+                    return state, action_taken
 
         # In convo mode but not time for a nudge yet → do nothing this cycle
         log.info("KBB ICO: convo mode, no nudge due. Skipping send.")
-        return
+        return state, action_taken
 
     if state.get("mode") == "convo":
         log.info("KBB ICO: persisted convo mode — skip cadence.")
-        return
+        return state, action_taken
     # ===== Still in cadence (never replied) =====
     state["mode"] = "cadence"
     _save_state_comment(token, subscription_id, opp_id, state)
@@ -1232,18 +1231,18 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
     plan = events_for_day(effective_day)
     if not plan:
-        return
+        return state, action_taken
 
     if state.get("last_template_day_sent") == effective_day:
         log.info("KBB ICO: skipping Day %s (already sent)", effective_day)
-        return
+        return state, action_taken
 
     # Load email template
     tpl_key = plan.get("email_template_day")
     html = TEMPLATES.get(tpl_key)
     if not html:
         log.warning("KBB ICO: missing template for day key=%r", tpl_key)
-        return
+        return state, action_taken
 
     # Rooftop info
     from rooftops import ROOFTOP_INFO
@@ -1331,8 +1330,8 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             activity_name="KBB ICO: Phone Task", activity_type=14,
             comments=f"Auto-scheduled per ICO Day {effective_day}."
         )
-
-
+    action_taken = True  
+    return state, action_taken
 
 def _customer_has_text_consent(opportunity) -> bool:
     # TODO: look at your CRM/TCPA field once available
