@@ -4,6 +4,72 @@ import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime
 
+import urllib.parse, base64
+from datetime import datetime, timedelta, timezone
+
+def _fmt_utc_range(start_iso_utc: str, minutes: int = 30):
+    # Input: 'YYYY-MM-DDTHH:MM:SSZ' or ISO with tz
+    dt = datetime.fromisoformat(start_iso_utc.replace("Z","+00:00")).astimezone(timezone.utc)
+    end = dt + timedelta(minutes=minutes)
+    # Google/Outlook/Yahoo want basic format: YYYYMMDDTHHMMSSZ
+    def z(s: datetime): return s.strftime("%Y%m%dT%H%M%SZ")
+    return z(dt), z(end)
+
+def build_calendar_links(summary: str, description: str, location: str, start_iso_utc: str, duration_min: int = 30):
+    s, e = _fmt_utc_range(start_iso_utc, duration_min)
+    q = urllib.parse.quote
+
+    google = (
+        "https://calendar.google.com/calendar/render?action=TEMPLATE"
+        f"&text={q(summary)}"
+        f"&dates={s}/{e}"
+        f"&details={q(description)}"
+        f"&location={q(location)}"
+    )
+    outlook = (
+        "https://outlook.live.com/calendar/0/deeplink/compose?"
+        "path=/calendar/action/compose&rru=addevent"
+        f"&subject={q(summary)}"
+        f"&startdt={s}"
+        f"&enddt={e}"
+        f"&body={q(description)}"
+        f"&location={q(location)}"
+    )
+    yahoo = (
+        "https://calendar.yahoo.com/?v=60&view=d&type=20"
+        f"&title={q(summary)}"
+        f"&st={s}"
+        f"&et={e}"
+        f"&desc={q(description)}"
+        f"&in_loc={q(location)}"
+    )
+    return {"google": google, "outlook": outlook, "yahoo": yahoo}
+
+def build_ics_text(uid: str, summary: str, description: str, location: str, start_iso_utc: str, duration_min: int = 30, organizer_email: str = ""):
+    dt = datetime.fromisoformat(start_iso_utc.replace("Z","+00:00")).astimezone(timezone.utc)
+    end = dt + timedelta(minutes=duration_min)
+    def z(s: datetime): return s.strftime("%Y%m%dT%H%M%SZ")
+    org = f"ORGANIZER:MAILTO:{organizer_email}\n" if organizer_email else ""
+    return (
+        "BEGIN:VCALENDAR\n"
+        "PRODID:-//Patterson Auto Group//Patti//EN\n"
+        "VERSION:2.0\n"
+        "CALSCALE:GREGORIAN\n"
+        "METHOD:REQUEST\n"
+        "BEGIN:VEVENT\n"
+        f"UID:{uid}\n"
+        f"DTSTAMP:{z(datetime.utcnow().replace(tzinfo=timezone.utc))}\n"
+        f"DTSTART:{z(dt)}\n"
+        f"DTEND:{z(end)}\n"
+        f"SUMMARY:{summary}\n"
+        f"DESCRIPTION:{description}\n"
+        f"LOCATION:{location}\n"
+        f"{org}"
+        "END:VEVENT\n"
+        "END:VCALENDAR\n"
+    )
+
+
 def parse_date(date_str):
     # Try with microseconds first, fallback if not present
     for fmt in ("%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%SZ"):
