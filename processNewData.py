@@ -458,12 +458,14 @@ def processHit(hit):
             if action_taken and _cooldown_ok(meta):
                 compact = {
                     "mode": state.get("mode"),
+                    "last_template_day_sent": state.get("last_template_day_sent"),
+                    "nudge_count": state.get("nudge_count"),
                     "last_customer_msg_at": state.get("last_customer_msg_at"),
                     "last_agent_msg_at": state.get("last_agent_msg_at"),
-                    "last_template_day_sent": state.get("last_template_day_sent"),
-                    "last_template_sent_at": state.get("last_template_sent_at"),
-                    "nudge_count": state.get("nudge_count"),
                     "last_inbound_activity_id": state.get("last_inbound_activity_id"),
+                    "last_appt_activity_id": state.get("last_appt_activity_id"),
+                    "appt_due_utc": state.get("appt_due_utc"),
+                    "appt_due_local": state.get("appt_due_local"),
                 }
                 note_txt = f"[PATTI_KBB_STATE] {json.dumps(compact, separators=(',',':'))}"
             
