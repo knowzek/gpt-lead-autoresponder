@@ -361,14 +361,24 @@ def build_patti_footer(rooftop_name: str) -> str:
     dealer_addr  = rt.get("address") or ""
     dealer_site  = rt.get("website") or "https://pattersonautos.com"
 
-    sig = _tw.dedent(f"""
-    <p>Patti<br/>
-    {rooftop_name}<br/>
-    {dealer_addr}<br/>
-    {dealer_phone}</p>
-    """).strip()
+    # HTML image signature (centered, retina-safe)
+    sig = f"""
+    <div style="margin-top:20px; line-height:1.4;">
+      <p>Best regards,<br/><strong>Patti</strong></p>
+      <p style="margin:8px 0;">
+        <img src="https://content.energage.com/company-images/RP684/RP684_photo_017ebf8affe24118ae205078849a8f51_orig.jpg"
+             alt="Patti Signature" width="250" style="max-width:100%; height:auto;"/>
+      </p>
+      <p style="font-size:13px; color:#555;">
+        {rooftop_name}<br/>
+        {dealer_addr}<br/>
+        {dealer_phone}
+      </p>
+    </div>
+    """.strip()
 
     return sig
+
 
 def normalize_patti_body(body_html: str) -> str:
     """Tidy GPT output: strip stray Patti signatures and collapse whitespace."""
