@@ -395,8 +395,7 @@ def build_patti_footer(rooftop_name: str) -> str:
 
     <!-- RIGHT: contact block -->
     <td width="350" valign="top" align="left" style="font-family:Arial, Helvetica, sans-serif; color:#222;">
-      <div style="font-size:16px; line-height:22px; font-weight:bold;">Patti</div>
-      <div style="font-size:13px; line-height:18px; color:#666; margin:2px 0 8px;">Virtual Assistant at {rooftop_name}</div>
+      <div style="font-size:13px; line-height:20px; font-weight:bold;">Patti</div>
 
       <div style="font-size:13px; line-height:20px;">
         <div><strong>Mobile:</strong> {patti_phone}</div>
