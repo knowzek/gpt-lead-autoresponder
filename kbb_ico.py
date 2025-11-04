@@ -701,6 +701,10 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     customer_id = (opportunity.get("customer") or {}).get("id")
     acts_live = _fetch_activities_live(opp_id, customer_id, token, subscription_id)
 
+    # Track if appointment is currently booked or upcoming
+    scheduled_active = (state.get("mode") == "scheduled") or _has_upcoming_appt(acts_live, state)
+
+
     # After: acts_live = _fetch_activities_live(...)
     try:
         if isinstance(acts_live, dict):
@@ -1274,9 +1278,85 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 action_taken = True
                 opportunity["_kbb_state"] = state
                 return state, action_taken
+                
+    # If we’re scheduled and this is a fresh inbound after Patti’s last send, reply immediately (no nudges/templates)
+    if scheduled_active and _has_new_read_email_since(acts_now or acts_live, last_agent_dt):
+        log.info("KBB ICO: scheduled active + new inbound → send immediate reply via GPT")
+        from gpt import run_gpt
+    
+        cust_first = ((opportunity.get('customer') or {}).get('firstName')) or "there"
+        prompt = compose_kbb_convo_body(rooftop_name, cust_first, inquiry_text or "")
+    
+        reply = run_gpt(
+            prompt,
+            customer_name=cust_first,
+            rooftop_name=rooftop_name,
+            prevMessages=True,
+            persona="kbb_ico",
+            kbb_ctx={"offer_valid_days": 7, "exclude_sunday": True},
+        )
+    
+        subject   = (reply.get("subject") or reply_subject or "").strip()
+        body_html = (reply.get("body") or "").strip()
+    
+        # Normalize + footer
+        body_html = normalize_patti_body(body_html)
+        body_html = _patch_address_placeholders(body_html, rooftop_name)
+        body_html = _PREFS_RE.sub("", body_html).strip()
+        body_html = body_html + build_patti_footer(rooftop_name)
+    
+        if not subject.lower().startswith("re:"):
+            subject = "Re: " + subject
+    
+        # Resolve recipient
+        cust = (opportunity.get("customer") or {})
+        email = cust.get("emailAddress") or ((cust.get("emails") or [{}])[0].get("address"))
+        if not email:
+            email = (opportunity.get("_lead", {}) or {}).get("email_address")
+        recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
+        if not recipients:
+            log.warning("No recipient; skip send for opp=%s", opp_id)
+            opportunity["_kbb_state"] = state
+            return state, action_taken
+    
+        # Send the actual reply (not a nudge)
+        send_opportunity_email_activity(
+            token, subscription_id, opp_id,
+            sender=rooftop_sender,
+            recipients=recipients, carbon_copies=[],
+            subject=subject, body_html=body_html, rooftop_name=rooftop_name
+        )
+    
+        # Thread memo (store compact copy)
+        now_iso = _dt.now(_tz.utc).isoformat()
+        _thread_body = re.sub(r"<[^>]+>", " ", body_html)
+        _thread_body = re.sub(r"\s+", " ", _thread_body).strip()
+        msgs = opportunity.get("messages", [])
+        if not isinstance(msgs, list):
+            msgs = []
+        msgs.append({
+            "msgFrom": "patti",
+            "subject": subject.replace("Re: ", ""),
+            "body": _thread_body,
+            "date": now_iso
+        })
+        opportunity["messages"] = msgs
+    
+        # State updates: stay in convo, do NOT increment nudge_count
+        state["last_agent_msg_at"] = now_iso
+        state["mode"] = "convo"
+        opportunity["_kbb_state"] = state
+        action_taken = True
+        return state, action_taken
 
 
     # ===== NUDGE LOGIC (customer went dark AFTER a reply) =====
+    
+    if scheduled_active:
+        log.info("KBB ICO: appointment active → suppress nudges/templates; only reply to inbound")
+        opportunity["_kbb_state"] = state
+        return state, action_taken
+        
     # If we are already in convo mode, no new inbound detected now, and enough time has passed → send a nudge
     if state.get("mode") == "convo":
         last_agent_ts = state.get("last_agent_msg_at")
