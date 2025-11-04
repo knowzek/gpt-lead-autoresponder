@@ -357,26 +357,25 @@ def build_patti_footer(rooftop_name: str) -> str:
     from rooftops import ROOFTOP_INFO
     rt = (ROOFTOP_INFO.get(rooftop_name) or {})
 
-    # Per-store overrides (optional):
     img_url      = rt.get("signature_img") or "https://content.energage.com/company-images/RP684/RP684_photo_017ebf8affe24118ae205078849a8f51_orig.jpg"
-    patti_email  = rt.get("patti_email")  or "patti@pattersonautos.com"     # <-- placeholder
-    patti_phone  = rt.get("patti_phone")  or "(000) 000-0000"               # <-- placeholder
-    dealer_site  = rt.get("website")      or "https://www.pattersonautos.com"
-    dealer_addr  = rt.get("address")      or ""
-    dealer_phone = rt.get("phone")        or patti_phone
+    patti_email  = rt.get("patti_email")   or "patti@pattersonautos.com"
+    patti_phone  = rt.get("patti_phone")   or "(000) 000-0000"
+    dealer_site  = (rt.get("website") or "https://www.pattersonautos.com").rstrip("/")
+    dealer_addr  = rt.get("address")       or ""
+    dealer_phone = rt.get("phone")         or patti_phone
 
-    # Use a table (role=presentation) for maximum Outlook/Gmail compatibility
-    # Left: graphic/logo   Right: contact block
-    sig = f"""
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%; max-width:650px; margin-top:18px;">
+    # ✅ Use fixed widths via attributes (best for Outlook/Gmail + CRM sanitizers)
+    # Outer table keeps it from wrapping; inner row is two fixed cells.
+    return f"""
+<table width="650" border="0" cellspacing="0" cellpadding="0" style="margin-top:18px;">
   <tr>
-    <!-- LEFT: signature graphic -->
-    <td valign="top" style="padding:0 16px 0 0; width:310px;">
-      <img src="{img_url}" alt="Patterson Autos" style="max-width:100%; height:auto; display:block; border:0; outline:none; text-decoration:none;">
+    <!-- LEFT: image (fixed width) -->
+    <td width="300" valign="top" align="left" style="padding-right:16px;">
+      <img src="{img_url}" alt="Patterson Autos" width="300" border="0" style="display:block; height:auto;">
     </td>
 
-    <!-- RIGHT: Patti contact details -->
-    <td valign="top" style="padding:0; font-family:Arial, Helvetica, sans-serif; color:#222;">
+    <!-- RIGHT: contact block -->
+    <td width="350" valign="top" align="left" style="font-family:Arial, Helvetica, sans-serif; color:#222;">
       <div style="font-size:16px; line-height:22px; font-weight:bold;">Patti</div>
       <div style="font-size:13px; line-height:18px; color:#666; margin:2px 0 8px;">Virtual Assistant at {rooftop_name}</div>
 
@@ -394,10 +393,6 @@ def build_patti_footer(rooftop_name: str) -> str:
   </tr>
 </table>
 """.strip()
-
-    return sig
-
-
 
 def build_patti_footer(rooftop_name: str) -> str:
     rt = (ROOFTOP_INFO.get(rooftop_name) or {})
