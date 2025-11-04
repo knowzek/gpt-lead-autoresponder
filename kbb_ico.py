@@ -1200,12 +1200,22 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
             subject   = reply_subject  # keep thread subject; ignore GPT subject
             body_html = (reply.get("body") or "")
-
-            # Normalize + add CTA only for this path
+            
+            # Normalize first
             body_html = normalize_patti_body(body_html)
             body_html = _patch_address_placeholders(body_html, rooftop_name)
-            #body_html = enforce_standard_schedule_sentence(body_html)
-            body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+            
+            # 🔒 If an appointment is already booked, rewrite any scheduling CTA to a reschedule line.
+            # Otherwise, add your normal soft schedule sentence.
+            is_scheduled = state.get("mode") == "scheduled" or _has_upcoming_appt(acts_live, state)
+            if is_scheduled:
+                from helpers import rewrite_sched_cta_for_booked
+                body_html = rewrite_sched_cta_for_booked(body_html)
+            else:
+                body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+
+            
+            # Finish standard cleanup + footer
             body_html = _PREFS_RE.sub("", body_html).strip()
             body_html = body_html + build_patti_footer(rooftop_name)
             if not subject.lower().startswith("re:"):
@@ -1235,11 +1245,17 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
             now_iso = _dt.now(_tz.utc).isoformat()
 
-            # store a compact version of Patti’s reply in the thread (no footer/CTA)
-            _thread_body = re.sub(r"<[^>]+>", " ", body_html)          # strip tags
-            _thread_body = re.sub(r"\s+", " ", _thread_body).strip()   # collapse whitespace
-            _thread_body = _thread_body.split("Please let us know a convenient time", 1)[0].strip()
+            # Store a compact version of Patti’s reply in the thread (no footer/CTA)
+            _thread_body = re.sub(r"<[^>]+>", " ", body_html)        # strip HTML tags
+            _thread_body = re.sub(r"\s+", " ", _thread_body).strip() # collapse whitespace
             
+            # 🧹 Remove any scheduling or rescheduling lead-in text, but keep the actual link wording intact
+            _thread_body = re.sub(
+                r"(?i)\b(to\s+schedule\s+your\s+(appointment|visit)|if\s+you\s+need\s+to\s+reschedule\s+your\s+appointment)\b.*",
+                "",
+                _thread_body
+            ).strip()
+
             msgs = opportunity.get("messages", [])
             if not isinstance(msgs, list):
                 msgs = []
