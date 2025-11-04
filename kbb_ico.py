@@ -1286,16 +1286,15 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 opportunity["_kbb_state"] = state
                 return state, action_taken
                 
-    # If we WERE scheduled at the start of this run and this inbound is newer than Patti's last send,
-    # reply immediately (no nudge/template)
-    last_agent_dt = state.get("last_agent_msg_at")
-    if scheduled_active_now and _has_new_read_email_since(acts_live, last_agent_dt):
-        log.info("KBB ICO: scheduled_active_now=True + new inbound → immediate convo reply")
-        # == inline reply send (same pipeline you already use) ==
-        from gpt import run_gpt
+    # If we were scheduled at the start of this run, reply immediately (no nudge/template).
+    if scheduled_active_now and inbound_id:   # <-- use your actual inbound id variable
+        log.info("KBB ICO: scheduled_active_now=%s (mode=%s, last_appt_id=%r, appt_due=%r)",
+             scheduled_active_now, state.get("mode"),
+             state.get("last_appt_activity_id"), state.get("appt_due_utc"))
+    
         cust_first = ((opportunity.get('customer') or {}).get('firstName')) or "there"
     
-        # include thread for context (like your nudge code)
+        # include thread for context (same pattern you use in the nudge code)
         prompt = compose_kbb_convo_body(rooftop_name, cust_first, inquiry_text or "")
         reply = run_gpt(
             prompt,
@@ -1336,7 +1335,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         now_iso = _dt.now(_tz.utc).isoformat()
         _thread_body = re.sub(r"<[^>]+>", " ", body_html)
         _thread_body = re.sub(r"\s+", " ", _thread_body).strip()
-        msgs = opportunity.get("messages", [])
+        msgs = opportunity.get("messages", []) or []
         if not isinstance(msgs, list):
             msgs = []
         msgs.append({
@@ -1348,14 +1347,15 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         opportunity["messages"] = msgs
     
         state["last_agent_msg_at"] = now_iso
-        state["mode"] = "convo"    # stay in convo; DO NOT touch nudge_count
+        state["mode"] = "convo"  # stay in convo; DO NOT touch nudge_count
         opportunity["_kbb_state"] = state
         return state, True
 
 
+
     # ===== NUDGE LOGIC (customer went dark AFTER a reply) =====
     
-    if scheduled_active:
+    if scheduled_active_now:
         log.info("KBB ICO: appointment active → suppress nudges/templates; only reply to inbound")
         opportunity["_kbb_state"] = state
         return state, action_taken
