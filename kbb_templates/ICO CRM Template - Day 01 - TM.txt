@@ -224,7 +224,7 @@ To complete the Kelley Blue Book&#174; Instant Cash Offer for your <{TradeModel}
 <!-- Email Header : BEGIN -->
 <tr>
 <td style="background-color: #FFFFFF; padding: 20px 0; text-align: center">
-<a href="https://www.kbb.com/instant-cash-offer/W/54278195/43A6F9B8-DB6C-48C0-A360-F658B2176E3E/" target="blank"><img src="https://kbbico.info/wp/wp-content/email/dealer/tustinmazdacom.png" max-width="100%" max-height="100%" alt="Tustin Mazda" border="0" style="height: auto; background: #; font-family: sans-serif; font-size: 15px; line-height: 15px; color: #555555;"></a>
+<a href="https://www.kbb.com/instant-cash-offer/W/54278195/43A6F9B8-DB6C-48C0-A360-F658B2176E3E/" target="blank"><"https://content.energage.com/company-images/RP684/RP684_photo_017ebf8affe24118ae205078849a8f51_orig.jpg" max-width="100%" max-height="100%" alt="Tustin Mazda" border="0" style="height: auto; background: #; font-family: sans-serif; font-size: 15px; line-height: 15px; color: #555555;"></a>
 </td>
 </tr>
 <!-- Email Header : END -->
