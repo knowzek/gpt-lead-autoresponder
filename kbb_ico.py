@@ -989,15 +989,6 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             if not subject.lower().startswith("re:"):
                 subject = "Re: " + subject
 
-            # 1) Note BEFORE inactivating
-            try:
-                #add_opportunity_comment(
-                #    token, subscription_id, opp_id,
-                #    "[Patti] Customer declined the KBB ICO — marking inactive."
-                #)
-            except Exception as e:
-                log.warning("Decline note failed (pre-inactive): %s", e)
-
             # 2) Resolve recipient + send
             cust = (opportunity.get("customer") or {})
             email = cust.get("emailAddress") or ((cust.get("emails") or [{}])[0].get("address"))
