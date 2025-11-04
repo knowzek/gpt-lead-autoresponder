@@ -952,10 +952,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     )
                     created_appt_ok = True
                     appt_human = _fmt_local_human(dt_local, tz_name="America/Los_Angeles")
-                    #add_opportunity_comment(
-                        token, subscription_id, opp_id,
-                        f"[Patti] Auto-scheduled appointment for {appt_human} (local)."
-                    )
+                
                 except Exception as e:
                     log.warning("KBB ICO: failed to auto-schedule proposed time: %s", e)
 
@@ -982,9 +979,9 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             # 1) Note BEFORE inactivating
             try:
                 #add_opportunity_comment(
-                    token, subscription_id, opp_id,
-                    "[Patti] Customer declined the KBB ICO — marking inactive."
-                )
+                #    token, subscription_id, opp_id,
+                #    "[Patti] Customer declined the KBB ICO — marking inactive."
+                #)
             except Exception as e:
                 log.warning("Decline note failed (pre-inactive): %s", e)
 
@@ -1223,9 +1220,9 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
                     if recipients:
                         #add_opportunity_comment(
-                            token, subscription_id, opp_id,
-                            f"[Patti] Sending Nudge #{nudge_count + 1} after silence → to {(email or 'TEST_TO')}"
-                        )
+                        #    token, subscription_id, opp_id,
+                        #    f"[Patti] Sending Nudge #{nudge_count + 1} after silence → to {(email or 'TEST_TO')}"
+                        #)
                         send_opportunity_email_activity(
                             token, subscription_id, opp_id,
                             sender=rooftop_sender,
