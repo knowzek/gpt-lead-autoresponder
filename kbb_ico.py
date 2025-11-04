@@ -217,7 +217,7 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
         log.warning("set_opportunity_substatus failed: %s", e)
     
     action_taken = True 
-    return (True, did_action)
+    return (True, action_taken)
 
 def _latest_read_email_id(acts: list[dict]) -> str | None:
     newest = None
@@ -1288,6 +1288,8 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                         _thread_body = re.sub(r"\s+", " ", _thread_body).strip()   # collapse whitespace
                         _thread_body = _thread_body.split("Please let us know a convenient time", 1)[0].strip()
                         
+                        now_iso = _dt.now(_tz.utc).isoformat()
+
                         msgs = opportunity.get("messages", [])
                         if not isinstance(msgs, list):
                             msgs = []
