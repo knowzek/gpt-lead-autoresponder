@@ -1045,30 +1045,30 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
         # ---------- APPOINTMENT CONFIRMATION ----------
         elif created_appt_ok and appt_human:
-        subject = f"Re: Your visit on {appt_human}"
-    
-        # Build Add-to-Calendar links
-        rt = (ROOFTOP_INFO.get(rooftop_name) or {})
-        summary     = f"{rooftop_name} – KBB Inspection"
-        location    = rt.get("address") or rooftop_name
-        description = "15–20 minute in-person inspection to finalize your Kelley Blue Book® Instant Cash Offer."
-        links       = build_calendar_links(summary, description, location, due_dt_iso_utc, duration_min=30)
-    
-        add_to_cal_html = f"""
-          <p style="margin:16px 0 8px 0;">Add to calendar:</p>
-          <p>
-            <a href="{links['google']}">Google</a> &nbsp;|&nbsp;
-            <a href="{links['outlook']}">Outlook</a> &nbsp;|&nbsp;
-            <a href="{links['yahoo']}">Yahoo</a>
-          </p>
-        """.strip()
-    
-        body_html = f"""
-            <p>Hi {cust_first},</p>
-            <p>Your appointment is confirmed for <strong>{appt_human}</strong> at {rooftop_name}.</p>
-            {add_to_cal_html}
-            <p>Please bring your title, ID, and keys. If you need to change your time, use this link: <{{LegacySalesApptSchLink}}></p>
-        """.strip()
+            subject = f"Re: Your visit on {appt_human}"
+        
+            # Build Add-to-Calendar links
+            rt = (ROOFTOP_INFO.get(rooftop_name) or {})
+            summary     = f"{rooftop_name} – KBB Inspection"
+            location    = rt.get("address") or rooftop_name
+            description = "15–20 minute in-person inspection to finalize your Kelley Blue Book® Instant Cash Offer."
+            links       = build_calendar_links(summary, description, location, due_dt_iso_utc, duration_min=30)
+        
+            add_to_cal_html = f"""
+              <p style="margin:16px 0 8px 0;">Add to calendar:</p>
+              <p>
+                <a href="{links['google']}">Google</a> &nbsp;|&nbsp;
+                <a href="{links['outlook']}">Outlook</a> &nbsp;|&nbsp;
+                <a href="{links['yahoo']}">Yahoo</a>
+              </p>
+            """.strip()
+        
+            body_html = f"""
+                <p>Hi {cust_first},</p>
+                <p>Your appointment is confirmed for <strong>{appt_human}</strong> at {rooftop_name}.</p>
+                {add_to_cal_html}
+                <p>Please bring your title, ID, and keys. If you need to change your time, use this link: <{{LegacySalesApptSchLink}}></p>
+            """.strip()
 
 
             # Normalize + footer + subject guard (no extra CTA here)
