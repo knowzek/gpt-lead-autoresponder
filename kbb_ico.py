@@ -408,7 +408,6 @@ def build_patti_footer(rooftop_name: str) -> str:
     patti_email  = rt.get("patti_email")   or "patti@pattersonautos.com"
     dealer_site  = (rt.get("website") or "https://www.pattersonautos.com").rstrip("/")
     dealer_addr  = rt.get("address")       or ""
-    dealer_phone = rt.get("phone")         or patti_phone
 
     # ✅ Use fixed widths via attributes (best for Outlook/Gmail + CRM sanitizers)
     # Outer table keeps it from wrapping; inner row is two fixed cells.
@@ -426,7 +425,6 @@ def build_patti_footer(rooftop_name: str) -> str:
           <div style="font-size:12px; line-height:18px; color:#666; margin:2px 0 8px;">Virtual Assistant at {rooftop_name}</div>
           
           <div style="font-size:13px; line-height:20px;">
-            <div><strong>Mobile:</strong> {patti_phone}</div>
             <div><strong>Email:</strong> <a href="mailto:{patti_email}" style="color:#0066cc; text-decoration:none;">{patti_email}</a></div>
             <div><strong>Website:</strong> <a href="{dealer_site}" style="color:#0066cc; text-decoration:none;">{dealer_site.replace('https://','').replace('http://','')}</a></div>
           </div>
