@@ -321,7 +321,7 @@ def send_opportunity_email_activity(token, subscription_id, opportunity_id,
         (b) ensure the subject mentions the rooftop.
     """
     url = f"{BASE_URL}{OPPS_BASE}/sendEmail"
-
+    dealer_key = subscription_id
     # Normalize lists
     recipients = recipients if isinstance(recipients, list) else ([recipients] if recipients else [])
     carbon_copies = carbon_copies or []
