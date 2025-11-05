@@ -77,6 +77,17 @@ def is_active_opp(opportunity: dict) -> bool:
     # Fallback on status text
     return status in {"open", "active", "in progress"}
 
+def _is_kbb_ico_new_active(doc: dict) -> bool:
+    def _v(key):
+        return (str((doc.get(key) or "")).strip().lower())
+    return (
+        _v("source") == "kbb instant cash offer" and
+        _v("status") == "active" and
+        _v("substatus") == "new" and
+        _v("uptype") == "campaign"
+    )
+
+
 def _is_assigned_to_kristin(doc: dict) -> bool:
     """
     Return True if Kristin Nowzek appears on the sales team by name or email.
@@ -258,10 +269,9 @@ def processHit(hit):
     except:
         opportunity : dict = hit
         
-    # ✅ Only run on Kristin-assigned opps
-    if not _is_assigned_to_kristin(opportunity):
-        # optional log to verify the filter is working
-        log.info("Skip opp %s (not assigned to Kristin)",
+    # ✅ Process if assigned to Kristin OR matches KBB ICO (Active/New/Campaign)
+    if not (_is_assigned_to_kristin(opportunity) or _is_kbb_ico_new_active(opportunity)):
+        log.info("Skip opp %s (neither Kristin-assigned nor KBB ICO Active/New/Campaign)",
                  opportunity.get('opportunityId'))
         return
 
@@ -400,9 +410,8 @@ def processHit(hit):
             })
         return
 
-    # === Persona routing: treat Kristin's opps as KBB ICO =======================
-    # TEMP test gate: only flip to KBB mode for opps assigned to Kristin
-    if _is_assigned_to_kristin(opportunity):
+    # === Persona routing: treat KBB ICO opps as KBB ICO (regardless of assignment) ===
+    if _is_kbb_ico_new_active(opportunity):
         # Lead age (7-day window logic can use this inside kbb_ico)
         lead_age_days = 0
         created_raw = (
