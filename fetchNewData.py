@@ -27,6 +27,16 @@ from fortellis import (
     get_activities
 )
 
+def _is_kbb_ico_new_active(doc: dict) -> bool:
+    """True if this opp matches KBB ICO: Source=KBB Instant Cash Offer, Status=Active, SubStatus=New, upType=Campaign."""
+    def _v(key):
+        return (str(doc.get(key) or "").strip().lower())
+    return (
+        _v("source") == "kbb instant cash offer" and
+        _v("status") == "active" and
+        _v("upType") == "campaign"
+    )
+
 def _is_assigned_to_kristin_doc(doc: dict) -> bool:
     for m in (doc.get("salesTeam") or []):
         fn = (m.get("firstName") or "").strip().lower()
