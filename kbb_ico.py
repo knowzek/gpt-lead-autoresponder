@@ -26,10 +26,10 @@ import zoneinfo as _zi
 
 from html import unescape as _unesc
 
-#from rooftops import ROOFTOP_INFO as _RTI
+#from rooftops import ROOFTOP_INFO as ROOFTOP_INFO
 
 def _patch_address_placeholders(html: str, rooftop_name: str) -> str:
-    addr = ((_RTI.get(rooftop_name) or {}).get("address") or "").strip()
+    addr = ((ROOFTOP_INFO.get(rooftop_name) or {}).get("address") or "").strip()
     if not addr:
         return html
     # catch common placeholder variants
