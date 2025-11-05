@@ -703,9 +703,10 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
     # Track if appointment is currently booked or upcoming
     scheduled_active_now = (
-        (state.get("mode") == "scheduled")            
-        or bool(state.get("appt_due_utc"))            # persisted due date/time
-        or _has_upcoming_appt(acts_live, state)       # live scan (may be None in your logs)
+        bool(state.get("last_appt_activity_id")) or
+        bool(state.get("appt_due_utc")) or
+        state.get("mode") == "scheduled" or
+        _has_upcoming_appt(acts_live, state)
     )
     log.info("KBB ICO: scheduled_active_now=%s (mode=%s, last_appt_id=%r, appt_due_utc=%r)",
              scheduled_active_now, state.get("mode"),
@@ -1329,8 +1330,12 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         send_opportunity_email_activity(
             token, subscription_id, opp_id,
             sender=rooftop_sender,
-            recipients=recipients, carbon_copies=[],
-            subject=subject, body_html=body_html, rooftop_name=rooftop_name
+            recipients=recipients,
+            carbon_copies=[],
+            subject=reply_subject,                 # <-- keep the inbound thread subject
+            body_html=body_html,
+            rooftop_name=rooftop_name,
+            reply_to_activity_id=selected_inbound_id  # <-- add this line
         )
     
         now_iso = _dt.now(_tz.utc).isoformat()
