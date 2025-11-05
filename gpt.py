@@ -450,49 +450,47 @@ def run_gpt(prompt: str,
 
         return dictResult
         
-    if addr_msg:
-        system_msgs.insert(0, addr_msg)
-                
-    else:
-        messages = system_msgs + [
-            {"role": "user", "content": prompt}
-        ]
+    # --- non-prevMessages path ---
 
-        # Single chat completion call with fallback logic
-        model_used, resp = chat_complete_with_fallback(messages, want_json=True, temperature=0.6)
+    messages = system_msgs + [
+        {"role": "user", "content": prompt}
+    ]
 
-        text = _safe_extract_text(resp)
-        if not text:
-            log.warning("OpenAI returned empty content (model=%s). Using fallback template.", model_used)
-        
-        # --- Make sure we ALWAYS have subject/body ---
-        fallback_rooftop = rooftop_name or "Patterson Auto Group"
-        default_subject = f"Your vehicle inquiry with {fallback_rooftop}"
-        default_body_leadin = (
-            f"Hi {customer_name or 'there'},\n\n"
-            "Thanks for your inquiry! I’m happy to help with details, availability, and next steps. "
-            "Let me know any preferences on trim, color, or timing and I’ll get everything lined up."
+    # Single chat completion call with fallback logic
+    model_used, resp = chat_complete_with_fallback(messages, want_json=True, temperature=0.6)
+
+    text = _safe_extract_text(resp)
+    if not text:
+        log.warning("OpenAI returned empty content (model=%s). Using fallback template.", model_used)
+
+    # --- Make sure we ALWAYS have subject/body ---
+    fallback_rooftop = rooftop_name or "Patterson Auto Group"
+    default_subject = f"Your vehicle inquiry with {fallback_rooftop}"
+    default_body_leadin = (
+        f"Hi {customer_name or 'there'},\n\n"
+        "Thanks for your inquiry! I’m happy to help with details, availability, and next steps. "
+        "Let me know any preferences on trim, color, or timing and I’ll get everything lined up."
+    )
+
+    reply = _ensure_reply_dict(text, default_subject, default_body_leadin)
+
+    if not reply or not reply.get("body"):
+        log.warning("Model text (truncated): %r", (text or '')[:120])
+
+    # --- Rooftop substitutions ---
+    if rooftop_name:
+        if reply.get("subject"):
+            reply["subject"] = reply["subject"].replace("Patterson Auto Group", rooftop_name)
+        if reply.get("body"):
+            reply["body"] = reply["body"].replace("Patterson Auto Group", rooftop_name)
+
+    # --- First-name personalization ---
+    if customer_name and reply.get("body"):
+        reply["body"] = (
+            reply["body"]
+            .replace("[Guest's Name]", customer_name)
+            .replace("[Guest’s Name]", customer_name)
         )
-        
-        reply = _ensure_reply_dict(text, default_subject, default_body_leadin)
-
-        if not reply or not reply.get("body"):
-            log.warning("Model text (truncated): %r", (text or '')[:120])
-        
-        # --- Rooftop substitutions (unchanged) ---
-        if rooftop_name:
-            if reply.get("subject"):
-                reply["subject"] = reply["subject"].replace("Patterson Auto Group", rooftop_name)
-            if reply.get("body"):
-                reply["body"] = reply["body"].replace("Patterson Auto Group", rooftop_name)
-        
-        # --- First-name personalization (unchanged) ---
-        if customer_name and reply.get("body"):
-            reply["body"] = (
-                reply["body"]
-                .replace("[Guest's Name]", customer_name)
-                .replace("[Guest’s Name]", customer_name)
-            )
         
         # --- Append dynamic schedule link + closing signature ---
         if rooftop_name:
