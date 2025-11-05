@@ -406,7 +406,6 @@ def build_patti_footer(rooftop_name: str) -> str:
 
     img_url      = rt.get("signature_img") or "https://content.energage.com/company-images/RP684/RP684_photo_017ebf8affe24118ae205078849a8f51_orig.jpg"
     patti_email  = rt.get("patti_email")   or "patti@pattersonautos.com"
-    patti_phone  = rt.get("patti_phone")   or "(000) 000-0000"
     dealer_site  = (rt.get("website") or "https://www.pattersonautos.com").rstrip("/")
     dealer_addr  = rt.get("address")       or ""
     dealer_phone = rt.get("phone")         or patti_phone
@@ -424,7 +423,8 @@ def build_patti_footer(rooftop_name: str) -> str:
         <!-- RIGHT: contact block -->
         <td width="350" valign="top" align="left" style="font-family:Arial, Helvetica, sans-serif; color:#222;">
           <div style="font-size:13px; line-height:20px; font-weight:bold;">Patti</div>
-    
+          <div style="font-size:12px; line-height:18px; color:#666; margin:2px 0 8px;">Virtual Assistant at {rooftop_name}</div>
+          
           <div style="font-size:13px; line-height:20px;">
             <div><strong>Mobile:</strong> {patti_phone}</div>
             <div><strong>Email:</strong> <a href="mailto:{patti_email}" style="color:#0066cc; text-decoration:none;">{patti_email}</a></div>
