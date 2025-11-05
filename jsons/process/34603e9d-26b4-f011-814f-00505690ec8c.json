@@ -1,0 +1,1363 @@
+{
+    "_subscription_id": "7a05ce2c-cf00-4748-b841-45b3442665a7",
+    "opportunityId": "34603e9d-26b4-f011-814f-00505690ec8c",
+    "activityId": null,
+    "links": [
+        {
+            "rel": "create",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities",
+            "method": "POST",
+            "title": "Create Opportunity"
+        },
+        {
+            "rel": "self",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/34603e9d-26b4-f011-814f-00505690ec8c",
+            "method": "GET",
+            "title": "Get Opportunity"
+        },
+        {
+            "rel": "comment",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/comment",
+            "method": "POST",
+            "title": "Add Comment"
+        },
+        {
+            "rel": "email",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/sendEmail",
+            "method": "POST",
+            "title": "Send Email"
+        },
+        {
+            "rel": "tradein",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/tradein",
+            "method": "POST",
+            "title": "Add Trade-In"
+        },
+        {
+            "rel": "vehiclesought",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/vehicleSought",
+            "method": "POST",
+            "title": "Add Vehicle Sought"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/reassignPrimarySalesperson",
+            "method": "POST",
+            "title": "Reassign Primary Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/34603e9d-26b4-f011-814f-00505690ec8c/salesteam/add",
+            "method": "POST",
+            "title": "Add Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/34603e9d-26b4-f011-814f-00505690ec8c/salesteam/remove",
+            "method": "POST",
+            "title": "Remove Salesperson"
+        },
+        {
+            "rel": "substatus",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/34603e9d-26b4-f011-814f-00505690ec8c/subStatus/update",
+            "method": "POST",
+            "title": "Update SubStatus"
+        },
+        {
+            "rel": "inactive",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/34603e9d-26b4-f011-814f-00505690ec8c/set-inactive",
+            "method": "POST",
+            "title": "Set Opportunity Inactive"
+        }
+    ],
+    "source": "CarNow",
+    "upType": "Internet",
+    "soughtVehicles": [
+        {
+            "id": "35603e9d-26b4-f011-814f-00505690ec8c",
+            "isNew": true,
+            "yearFrom": 2023,
+            "yearTo": 2023,
+            "make": "Mazda",
+            "model": "CX-9",
+            "isPrimary": true
+        }
+    ],
+    "salesTeam": [
+        {
+            "id": "8f693b1a-7966-ea11-a977-005056b72b57",
+            "firstName": "Joshua",
+            "lastName": "Wheelan",
+            "isPrimary": true,
+            "isPositionPrimary": true,
+            "positionName": "Salesperson",
+            "positionCode": "S",
+            "links": []
+        }
+    ],
+    "tradeIns": [
+        {
+            "id": "f2417b9c-1556-f011-814d-00505690ec8c",
+            "year": 2023,
+            "make": "Mazda",
+            "model": "CX-9",
+            "trim": "Touring Plus (A6) 4dr i-ACTIV All-Wheel Drive Sport Utility",
+            "vin": "JM3TCBAY9P0639998",
+            "estimatedMileage": 32624,
+            "interiorColor": "Sand",
+            "exteriorColor": "Snowflake White Pearl Mica"
+        }
+    ],
+    "createdBy": null,
+    "updated_at": "2025-10-30T16:06:31.407620",
+    "customer": {
+        "id": "5b4ba321-43f2-ee11-b0d2-00505690dca3",
+        "isBusiness": false,
+        "firstName": "JUAN",
+        "lastName": "TORRES",
+        "birthday": "1991-08-20",
+        "emails": [
+            {
+                "address": "JUAN91ORTEGA@YAHOO.COM",
+                "emailType": "Personal",
+                "doNotEmail": false,
+                "isPreferred": true
+            }
+        ],
+        "phones": [
+            {
+                "number": "(714) 338-8708",
+                "phoneType": "Home",
+                "preferredTimeToContact": "Unspecified",
+                "doNotText": true,
+                "preferText": false,
+                "onDoNotCallRegistry": false
+            },
+            {
+                "number": "(714) 388-8708",
+                "phoneType": "Cellular",
+                "preferredTimeToContact": "Unspecified",
+                "doNotCall": false,
+                "doNotText": true,
+                "preferText": false,
+                "onDoNotCallRegistry": false
+            },
+            {
+                "number": "(800) 424-3278",
+                "phoneType": "Work",
+                "preferredTimeToContact": "Unspecified",
+                "doNotText": true,
+                "preferText": false,
+                "onDoNotCallRegistry": false
+            },
+            {
+                "number": "(714) 388-8708",
+                "phoneType": "Work",
+                "preferredTimeToContact": "Day",
+                "doNotText": true,
+                "preferText": false,
+                "onDoNotCallRegistry": false
+            }
+        ],
+        "address": {
+            "addressLine1": "478 GIOTTO",
+            "city": "IRVINE",
+            "state": "CA",
+            "zip": "92614",
+            "country": "US"
+        },
+        "privacySettings": [
+            {
+                "name": "CCPADoNotContact",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotShare",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotSell",
+                "value": "False"
+            }
+        ],
+        "links": [
+            {
+                "rel": "self",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/5b4ba321-43f2-ee11-b0d2-00505690dca3",
+                "method": "GET",
+                "title": "Fetch Customer"
+            },
+            {
+                "rel": "create",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers",
+                "method": "POST",
+                "title": "Create Customer"
+            },
+            {
+                "rel": "update",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/5b4ba321-43f2-ee11-b0d2-00505690dca3",
+                "method": "POST",
+                "title": "Update Customer"
+            }
+        ]
+    },
+    "created_at": "2025-10-30T16:06:31.407620",
+    "isActive": false,
+    "scheduledActivities": [
+        {
+            "activityId": "db6e2c7c-28b4-f011-814f-00505690ec8c",
+            "activityName": "Phone Follow Up",
+            "activityType": 2,
+            "dueDate": "2025-10-29T18:00:00Z",
+            "assignedTo": "Wheelan, J",
+            "comments": ""
+        },
+        {
+            "activityId": "38603e9d-26b4-f011-814f-00505690ec8c",
+            "activityName": "BDC Virtual Immediate Call",
+            "activityType": 2,
+            "dueDate": "2025-10-31T17:50:43.863Z",
+            "assignedTo": "Alcontin, A",
+            "comments": ""
+        },
+        {
+            "activityId": "c40ed575-a8b3-f011-814f-00505690ec8c",
+            "activityName": "2 Month Lease Term Call",
+            "activityType": 2,
+            "dueDate": "2025-11-03T16:30:00Z",
+            "assignedTo": "Henderson, L",
+            "comments": ""
+        }
+    ],
+    "completedActivities": [
+        {
+            "activityId": "a0d76a37-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-10-28T16:07:50Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "Hey Juan, I just received another inquiry about financing options for your current CX-9 lease. We won’t know the exact payment until we get the rates back from the banks, since we’ll need to submit your info to a couple of them first.\n\nWould you like to schedule a time to bring in the CX-9 and complete the buyout?\nJosh – Tustin Mazda",
+            "category": "Completed"
+        },
+        {
+            "activityId": "d3386763-28b4-f011-814f-00505690ec8c",
+            "activityName": "Text #1",
+            "activityType": 48,
+            "completedDate": "2025-10-28T16:04:09Z",
+            "outcome": "Email #1",
+            "completedBy": "Wheelan, J",
+            "comments": "",
+            "category": "Completed"
+        },
+        {
+            "activityId": "37603e9d-26b4-f011-814f-00505690ec8c",
+            "activityName": "Call # 1",
+            "activityType": 2,
+            "completedDate": "2025-10-28T16:03:26Z",
+            "outcome": "Text #1",
+            "completedBy": "Wheelan, J",
+            "comments": "left voicemail",
+            "category": "Completed"
+        },
+        {
+            "activityId": "36603e9d-26b4-f011-814f-00505690ec8c",
+            "activityName": "Duplicate Lead",
+            "activityType": 40,
+            "completedDate": "2025-10-28T15:50:43.863Z",
+            "outcome": "Auto Response",
+            "completedBy": "Jasso, O",
+            "comments": "<i>Mazda ADF XML Lead</i><br />Customer Intent : UNDECIDED, Mr. Torres is interested in getting information on financing option and what the monthly payments will look like and interest rate, cust prefers info sent to emailOwnershipType: OwnerServicingDealerCode: 42066SalesDealerCode: 42066InteriorColor: ExteriorColor: ModelCode: ModelYear: Model: VIN:",
+            "category": "Completed"
+        },
+        {
+            "activityId": "d3530437-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-10-27T21:07:59Z",
+            "outcome": "Completed",
+            "completedBy": "Alcontin, A",
+            "comments": "AL here at Tustin Mazda, where we stand out with no addendums and value every trade even if you don't buy with us! How about we start by finding the perfect Mazda for you? When is a good time to visit us?\n\n STOP to unsubscribe or HELP for support. Msg freq. varies, msg&data rates may apply.",
+            "category": "Completed"
+        },
+        {
+            "activityId": "ed4ad236-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-10-24T23:33:11Z",
+            "outcome": "Completed",
+            "completedBy": "Alcontin, A",
+            "comments": "Just a quick note to see if there any questions I might be able to answer and see where you are at in your decision process in your search for a vehicle. Please give me a call or reply here.",
+            "category": "Completed"
+        },
+        {
+            "activityId": "20276538-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-10-23T23:03:42Z",
+            "outcome": "Completed",
+            "completedBy": "Alcontin, A",
+            "comments": "Hello , this is AL with Tustin Mazda. I know its been a few days since you first submitted an inquiry with us and wanted to see if there is anything I can do to help. Give me a call at your convenience.\n",
+            "category": "Completed"
+        },
+        {
+            "activityId": "e40bc648-8c66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-10-22T22:48:09Z",
+            "outcome": "Completed",
+            "completedBy": "Alcontin, A",
+            "comments": "Just reaching back out to you to make sure you have all the information you need. If you have any questions I can answer please don't hesitate to call me or reply to this message.\n",
+            "category": "Completed"
+        },
+        {
+            "activityId": "e63c09be-c0ab-f011-814f-00505690ec8c",
+            "activityName": "Phone Follow Up",
+            "activityType": 2,
+            "completedDate": "2025-10-22T21:54:21Z",
+            "outcome": "Phone Follow Up",
+            "completedBy": "Wheelan, J",
+            "comments": "",
+            "category": "Completed"
+        },
+        {
+            "activityId": "a1becb38-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-10-20T20:29:31Z",
+            "outcome": "Completed",
+            "completedBy": "Alcontin, A",
+            "comments": "Hello Juan , Here with Tustin Mazda. I know it's been a few weeks since you first submitted an inquiry with us and wanted to see if there is anything I can do to help. are you still in the market for a vehicle?",
+            "category": "Completed"
+        },
+        {
+            "activityId": "c7b514c7-d6ad-f011-814f-00505690ec8c",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "completedDate": "2025-10-20T15:04:06.873Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "<i>Better service</i>",
+            "category": "Completed"
+        },
+        {
+            "activityId": "a43b691d-05aa-f011-814f-00505690ec8c",
+            "activityName": "Phone Follow Up",
+            "activityType": 2,
+            "completedDate": "2025-10-17T23:21:16Z",
+            "outcome": "Phone Follow Up",
+            "completedBy": "Wheelan, J",
+            "comments": "",
+            "category": "Completed"
+        },
+        {
+            "activityId": "b1db045c-26a9-f011-814f-00505690ec8c",
+            "activityName": "Phone Follow Up",
+            "activityType": 2,
+            "completedDate": "2025-10-15T18:25:40Z",
+            "outcome": "Phone Follow Up",
+            "completedBy": "Wheelan, J",
+            "comments": "",
+            "category": "Completed"
+        },
+        {
+            "activityId": "172e486e-26a9-f011-814f-00505690ec8c",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "completedDate": "2025-10-14T15:51:47.99Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "<i>Re: Yesterday's  inquiry</i>",
+            "category": "Completed"
+        },
+        {
+            "activityId": "6037fd08-bfa6-f011-814f-00505690ec8c",
+            "activityName": "Phone Follow Up",
+            "activityType": 2,
+            "completedDate": "2025-10-14T15:51:09Z",
+            "outcome": "Phone Follow Up",
+            "completedBy": "Wheelan, J",
+            "comments": "left voicemail",
+            "category": "Completed"
+        },
+        {
+            "activityId": "a46da2d0-26a9-f011-814f-00505690ec8c",
+            "activityName": "Possible Outbound Call",
+            "activityType": 2,
+            "completedDate": "2025-10-14T15:49:55Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "https://audio.callrevu.com/ob/355286535",
+            "numberDialed": "(714) 388-8708",
+            "callDuration": "01:00",
+            "category": "Completed"
+        },
+        {
+            "activityId": "56b4c65e-bfa6-f011-814f-00505690ec8c",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "completedDate": "2025-10-11T14:28:58.64Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "<i>CX-9 Lease Buyout Assistance</i>",
+            "category": "Completed"
+        },
+        {
+            "activityId": "8e6bd0ec-1467-f011-814f-00505690ec8c",
+            "activityName": "Phone Follow Up",
+            "activityType": 2,
+            "completedDate": "2025-10-11T14:26:34Z",
+            "outcome": "Phone Follow Up",
+            "completedBy": "Wheelan, J",
+            "comments": "left voicemail",
+            "category": "Completed"
+        },
+        {
+            "activityId": "83e72c71-bfa6-f011-814f-00505690ec8c",
+            "activityName": "Possible Outbound Call",
+            "activityType": 2,
+            "completedDate": "2025-10-11T14:25:02Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "https://audio.callrevu.com/ob/354222228",
+            "numberDialed": "(714) 388-8708",
+            "callDuration": "01:04",
+            "category": "Completed"
+        },
+        {
+            "activityId": "4edbde67-23a6-f011-814f-00505690ec8c",
+            "activityName": "Outbound Call",
+            "activityType": 2,
+            "completedDate": "2025-10-10T19:52:00Z",
+            "outcome": "Completed",
+            "completedBy": "Asue, C",
+            "comments": "SCD",
+            "category": "Completed"
+        },
+        {
+            "activityId": "a1cc39dc-22a6-f011-814f-00505690ec8c",
+            "activityName": "Duplicate Lead",
+            "activityType": 40,
+            "completedDate": "2025-10-10T19:48:31.843Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "<i>Mazda ADF XML Lead</i><br />Customer Intent : PURCHASE cust wants lpa waiver please contact asap phone or email is fine OwnershipType: OwnerServicingDealerCode: 42066SalesDealerCode: 42066InteriorColor: ExteriorColor: ModelCode: ModelYear: Model: VIN:",
+            "category": "Completed"
+        },
+        {
+            "activityId": "93802735-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-10-04T22:59:00Z",
+            "outcome": "Completed",
+            "completedBy": "Cruz, J",
+            "comments": "Juan. Just touching base to see if you thought about when you would like to come check out our lineup. Can we lock in a time tomorrow?\n",
+            "category": "Completed"
+        },
+        {
+            "activityId": "8ffff234-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-10-03T20:19:12Z",
+            "outcome": "Completed",
+            "completedBy": "Cruz, J",
+            "comments": "Hi Juan. Here at Tustin Mazda we stand out with no addendums and value every trade even if you don't buy with us! How about we start by finding the perfect Mazda for you? When is a good time to visit us?\n",
+            "category": "Completed"
+        },
+        {
+            "activityId": "4a52026b-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-09-28T16:13:44Z",
+            "outcome": "Completed",
+            "completedBy": "Feinstein, J",
+            "comments": "Hello Juan  Are you still in the market for a car?",
+            "category": "Completed"
+        },
+        {
+            "activityId": "fa2af170-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-09-26T16:23:27Z",
+            "outcome": "Completed",
+            "completedBy": "Feinstein, J",
+            "comments": "Hi Juan.  Is see you are back in the market for a Mazda.  Is that correct? STOP to unsubscribe or HELP for support. Msg freq. varies, msg&data rates may apply.",
+            "category": "Completed"
+        },
+        {
+            "activityId": "8454d291-449a-f011-814f-00505690ec8c",
+            "activityName": "Bulk Text",
+            "activityType": 69,
+            "completedDate": "2025-09-25T17:27:04.177Z",
+            "outcome": "Completed",
+            "completedBy": "Thompson, M",
+            "comments": "",
+            "category": "Completed"
+        },
+        {
+            "activityId": "32073ac0-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message: TextCampaign",
+            "activityType": 48,
+            "completedDate": "2025-09-25T17:27:04Z",
+            "outcome": "Completed",
+            "completedBy": "Thompson, M",
+            "comments": "Hi JUAN,  Still looking to upgrade your vehicle?  At Tustin Mazda we have NO addendums, NO markups, and NO surprise add-ons — you won't find a better deal this September and only at Tustin Mazda.\n\n👉 View Inventory & Specials - https://www.elead.us/go/Qvvgsjsv-ku7HYv-WNm7Kg\n\nReply YES to schedule a test drive or call us at 714-832-6222. STOP to unsubscribe or HELP for support. Msg freq. varies, msg&data rates may apply.",
+            "category": "Completed"
+        },
+        {
+            "activityId": "c996c633-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-08-27T14:19:37Z",
+            "outcome": "Completed",
+            "completedBy": "System",
+            "comments": "Yes I am",
+            "category": "Completed"
+        },
+        {
+            "activityId": "c0ae6aae-5883-f011-814f-00505690ec8c",
+            "activityName": "Bulk Text",
+            "activityType": 69,
+            "completedDate": "2025-08-27T13:18:18.467Z",
+            "outcome": "Completed",
+            "completedBy": "Thompson, M",
+            "comments": "",
+            "category": "Completed"
+        },
+        {
+            "activityId": "6160bf33-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message: TextCampaign",
+            "activityType": 48,
+            "completedDate": "2025-08-27T13:18:18Z",
+            "outcome": "Completed",
+            "completedBy": "Thompson, M",
+            "comments": "JUAN, Still looking for a new vehicle?  We can have it ready for your Labor Day fun and get you the best deal of the year, at Tustin Mazda!  Check out these savings my owner John Patterson just put together for you...https://www.elead.us/go/LszNSv0sNEaJ0_PnjUA16g STOP to unsubscribe or HELP for support. Msg freq. varies, msg&data rates may apply.",
+            "category": "Completed"
+        },
+        {
+            "activityId": "a64786b1-d46c-f011-814f-00505690ec8c",
+            "activityName": "Send Email",
+            "activityType": 3,
+            "completedDate": "2025-07-29T22:06:36.117Z",
+            "outcome": "Completed",
+            "completedBy": "Herman, C",
+            "comments": "<i>Hot Deal on Stylish Mazda CX-90 Expires Soon!</i>",
+            "category": "Completed"
+        },
+        {
+            "activityId": "652314ad-b768-f011-814f-00505690ec8c",
+            "activityName": "Send Email",
+            "activityType": 3,
+            "completedDate": "2025-07-24T16:30:23.323Z",
+            "outcome": "Completed",
+            "completedBy": "Herman, C",
+            "comments": "<i>A Lux Ride: Mazda CX-90 or CX-90 PHEV for 1.9% APR</i>",
+            "category": "Completed"
+        },
+        {
+            "activityId": "d15e7bf1-7163-f011-814f-00505690ec8c",
+            "activityName": "Phone Follow Up",
+            "activityType": 2,
+            "completedDate": "2025-07-22T14:00:05Z",
+            "outcome": "Manager Review",
+            "completedBy": "Wheelan, J",
+            "comments": "left voicemail",
+            "category": "Completed"
+        },
+        {
+            "activityId": "e157bb67-1567-f011-814f-00505690ec8c",
+            "activityName": "Possible Outbound Call",
+            "activityType": 2,
+            "completedDate": "2025-07-22T13:59:36Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "https://audio.callrevu.com/ob/321586921",
+            "numberDialed": "(714) 388-8708",
+            "callDuration": "00:43",
+            "category": "Completed"
+        },
+        {
+            "activityId": "2a09b890-b462-f011-814f-00505690ec8c",
+            "activityName": "Phone Follow Up",
+            "activityType": 2,
+            "completedDate": "2025-07-17T22:55:58Z",
+            "outcome": "Phone Follow Up",
+            "completedBy": "Wheelan, J",
+            "comments": "(Sent Text)",
+            "category": "Completed"
+        },
+        {
+            "activityId": "82155c32-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-07-17T22:55:45Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "Good evening Juan. Are you still interested in the CX-90? Joshua - Tustin Mazda",
+            "category": "Completed"
+        },
+        {
+            "activityId": "3f6fea84-1861-f011-814f-00505690ec8c",
+            "activityName": "Phone Follow Up",
+            "activityType": 2,
+            "completedDate": "2025-07-17T00:20:11Z",
+            "outcome": "Phone Follow Up",
+            "completedBy": "Wheelan, J",
+            "comments": "",
+            "category": "Completed"
+        },
+        {
+            "activityId": "928fb8ad-6a62-f011-814f-00505690ec8c",
+            "activityName": "Send Email",
+            "activityType": 3,
+            "completedDate": "2025-07-16T16:07:29.563Z",
+            "outcome": "Completed",
+            "completedBy": "Herman, C",
+            "comments": "<i>Friday: Free Lunch & Donation Pack-up Event for Orange County Rescue Mission</i>",
+            "category": "Completed"
+        },
+        {
+            "activityId": "6b84b9e4-5a5f-f011-814d-00505690ec8c",
+            "activityName": "Phone Follow Up",
+            "activityType": 2,
+            "completedDate": "2025-07-14T23:10:49Z",
+            "outcome": "Phone Follow Up",
+            "completedBy": "Wheelan, J",
+            "comments": "Jeff sent text",
+            "category": "Completed"
+        },
+        {
+            "activityId": "2bd0d131-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-07-14T21:04:34Z",
+            "outcome": "Completed",
+            "completedBy": "Walker, J",
+            "comments": "Hello Juan, my name is Jeff Walker, General Manager here at Tustin Mazda. I see you've been corresponding with Josh regarding the 2025 CX-90. If there is anything I can do to assist you in this process, please reach out to me. Thank you.",
+            "category": "Completed"
+        },
+        {
+            "activityId": "956ca94b-a45e-f011-814d-00505690ec8c",
+            "activityName": "Phone Follow Up",
+            "activityType": 2,
+            "completedDate": "2025-07-12T18:00:46Z",
+            "outcome": "Phone Follow Up",
+            "completedBy": "Wheelan, J",
+            "comments": "left voicemail",
+            "category": "Completed"
+        },
+        {
+            "activityId": "4fb20c48-5b5f-f011-814d-00505690ec8c",
+            "activityName": "Possible Outbound Call",
+            "activityType": 2,
+            "completedDate": "2025-07-12T17:59:25Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "https://audio.callrevu.com/ob/318027577",
+            "numberDialed": "(714) 388-8708",
+            "callDuration": "00:59",
+            "category": "Completed"
+        },
+        {
+            "activityId": "70c3ea8a-195c-f011-814d-00505690ec8c",
+            "activityName": "Phone Follow Up",
+            "activityType": 2,
+            "completedDate": "2025-07-11T20:13:48Z",
+            "outcome": "Phone Follow Up",
+            "completedBy": "Wheelan, J",
+            "comments": "(Sent Text)",
+            "category": "Completed"
+        },
+        {
+            "activityId": "96d8a631-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-07-11T20:13:31Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "Hey Juan, I checking in and seeing if you have time this weekend for us to look at the CX-9 trade. Joshua - Tustin Mazda",
+            "category": "Completed"
+        },
+        {
+            "activityId": "a9d90e05-565e-f011-814d-00505690ec8c",
+            "activityName": "Send Email",
+            "activityType": 3,
+            "completedDate": "2025-07-11T11:18:56.207Z",
+            "outcome": "Completed",
+            "completedBy": "Herman, C",
+            "comments": "<i>Lunch & Donation Pack-up Invite—Tustin Mazda</i>",
+            "category": "Completed"
+        },
+        {
+            "activityId": "1f9242b3-c066-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-07-08T14:39:46Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "Okay, thank you for the update. ",
+            "category": "Completed"
+        },
+        {
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-07-08T14:39:08Z",
+            "outcome": "Completed",
+            "completedBy": "System",
+            "comments": "Hello i wont be able to go in for service today.ima rescheduled for Saturday or Friday ",
+            "category": "Completed"
+        },
+        {
+            "activityId": "4c564515-bd59-f011-814d-00505690ec8c",
+            "activityName": "Phone Follow Up",
+            "activityType": 2,
+            "completedDate": "2025-07-08T14:35:30Z",
+            "outcome": "Phone Follow Up",
+            "completedBy": "Wheelan, J",
+            "comments": "(Sent Text)",
+            "category": "Completed"
+        },
+        {
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-07-08T14:35:19Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": " Hey Juan, I see you are coming into service today. If you have any question I'm here today and ready to assist.  STOP to unsubscribe or HELP for support. Msg freq. varies, msg&data rates may apply.",
+            "category": "Completed"
+        },
+        {
+            "activityId": "d15b3159-1256-f011-814d-00505690ec8c",
+            "activityName": "Day 6 Internet Call",
+            "activityType": 2,
+            "completedDate": "2025-07-05T14:28:52Z",
+            "outcome": "Phone Follow Up",
+            "completedBy": "Wheelan, J",
+            "comments": "",
+            "category": "Completed"
+        },
+        {
+            "activityId": "75e227ac-3a58-f011-814d-00505690ec8c",
+            "activityName": "Phone Follow Up",
+            "activityType": 2,
+            "completedDate": "2025-07-05T14:28:37Z",
+            "outcome": "Phone Follow Up",
+            "completedBy": "Wheelan, J",
+            "comments": "(Sent Text)",
+            "category": "Completed"
+        },
+        {
+            "activityId": "0e20232f-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-07-05T14:28:26Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "Hey Juan. I hope you had a great 4th of July. I wanted to check in with you regarding coming in for the CX-90? ",
+            "category": "Completed"
+        },
+        {
+            "activityId": "e0e42f16-7b57-f011-814d-00505690ec8c",
+            "activityName": "Phone Follow Up",
+            "activityType": 2,
+            "completedDate": "2025-07-03T16:22:32Z",
+            "outcome": "Phone Follow Up",
+            "completedBy": "Wheelan, J",
+            "comments": "He said he can come in today, just waiting on a time..",
+            "category": "Completed"
+        },
+        {
+            "activityId": "2feabe2e-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-07-03T14:15:32Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "What time can you come in today? ",
+            "category": "Completed"
+        },
+        {
+            "activityId": "9905c62e-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-07-03T01:52:36Z",
+            "outcome": "Completed",
+            "completedBy": "System",
+            "comments": "I can come in tom",
+            "category": "Completed"
+        },
+        {
+            "activityId": "5b22692e-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-07-02T21:08:08Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "When can you come in? I need to take a look at the trade and see if I can find something help make this deal happen.  ",
+            "category": "Completed"
+        },
+        {
+            "activityId": "bd0e4f9f-c066-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-07-02T20:44:07Z",
+            "outcome": "Completed",
+            "completedBy": "System",
+            "comments": "U can't make 0 down the 589 ",
+            "category": "Completed"
+        },
+        {
+            "activityId": "c47ee4c1-c066-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-07-02T20:18:46Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "Here is the new price sheet. Let me know your thoughts? ",
+            "category": "Completed"
+        },
+        {
+            "activityId": "0b03cc32-8c66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-07-02T19:01:40Z",
+            "outcome": "Completed",
+            "completedBy": "System",
+            "comments": "👍",
+            "category": "Completed"
+        },
+        {
+            "activityId": "29579b03-1556-f011-814d-00505690ec8c",
+            "activityName": "Phone Follow Up",
+            "activityType": 2,
+            "completedDate": "2025-07-02T17:31:03Z",
+            "outcome": "Phone Follow Up",
+            "completedBy": "Wheelan, J",
+            "comments": "texting",
+            "category": "Completed"
+        },
+        {
+            "activityId": "1aa428c9-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-07-02T17:30:13Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "Good afternoon Juan. The July programs just came in, so I’m going to take another look and see what I can do on the deal for you.",
+            "category": "Completed"
+        },
+        {
+            "activityId": "58e2e09f-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-07-01T01:25:16Z",
+            "outcome": "Completed",
+            "completedBy": "System",
+            "comments": "Yeah bro sounds good ",
+            "category": "Completed"
+        },
+        {
+            "activityId": "e7945ce5-c066-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-07-01T01:24:23Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "I am off tomorrow, but I can see what I can do on Wednesday.",
+            "category": "Completed"
+        },
+        {
+            "activityId": "5c77ea9f-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-07-01T01:19:59Z",
+            "outcome": "Completed",
+            "completedBy": "System",
+            "comments": "I wanted a bit under 600",
+            "category": "Completed"
+        },
+        {
+            "activityId": "3debe09f-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-07-01T00:46:05Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "Your thoughts? ]",
+            "category": "Completed"
+        },
+        {
+            "activityId": "52a0d5e3-c066-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-07-01T00:24:22Z",
+            "outcome": "Completed",
+            "completedBy": "System",
+            "comments": "Yes just saw that",
+            "category": "Completed"
+        },
+        {
+            "activityId": "c0f3905b-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-07-01T00:05:56Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "I just sent you an email with the lease figures. ",
+            "category": "Completed"
+        },
+        {
+            "activityId": "73d4e3d9-1f56-f011-814d-00505690ec8c",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "completedDate": "2025-07-01T00:05:25.793Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "<i>CX-90 Lease figures</i>",
+            "category": "Completed"
+        },
+        {
+            "activityId": "01ad955b-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-06-30T23:40:57Z",
+            "outcome": "Completed",
+            "completedBy": "System",
+            "comments": "K ",
+            "category": "Completed"
+        },
+        {
+            "activityId": "e2ab955b-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-06-30T23:36:10Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "Call me at 714.606.8606 that's my cell",
+            "category": "Completed"
+        },
+        {
+            "activityId": "b4f3905b-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-06-30T23:35:25Z",
+            "outcome": "Completed",
+            "completedBy": "System",
+            "comments": "Yes if so or less even better .yes give me 5 min an ill call u back ",
+            "category": "Completed"
+        },
+        {
+            "activityId": "01948e5b-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-06-30T23:29:00Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "Can you take a phone call? ",
+            "category": "Completed"
+        },
+        {
+            "activityId": "714dbe5d-8c66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-06-30T23:21:06Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "If there is way to somehow keep you at the same payment you are now. Would you come in right",
+            "category": "Completed"
+        },
+        {
+            "activityId": "0656be5d-8c66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-06-30T23:05:28Z",
+            "outcome": "Completed",
+            "completedBy": "System",
+            "comments": "I can possibly go in today but I would want to see some type of number before zero down ",
+            "category": "Completed"
+        },
+        {
+            "activityId": "3f33ffd1-c066-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-06-30T23:04:53Z",
+            "outcome": "Completed",
+            "completedBy": "System",
+            "comments": "Preferably white but open with the color ",
+            "category": "Completed"
+        },
+        {
+            "activityId": "7ae7efc7-c066-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-06-30T23:04:51Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "\"You’re welcome to turn it in early. When would you like to come in to go over your options?\"",
+            "category": "Completed"
+        },
+        {
+            "activityId": "126dc55d-8c66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-06-30T23:01:10Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "Do you want white again or you open to color? ",
+            "category": "Completed"
+        },
+        {
+            "activityId": "7945d1dd-c066-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-06-30T22:58:42Z",
+            "outcome": "Completed",
+            "completedBy": "System",
+            "comments": "Select please ",
+            "category": "Completed"
+        },
+        {
+            "activityId": "9e68be5d-8c66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-06-30T22:58:01Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "Select, Preferred, Premium, or Premium Plus Package",
+            "category": "Completed"
+        },
+        {
+            "activityId": "914cbe5d-8c66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-06-30T22:55:55Z",
+            "outcome": "Completed",
+            "completedBy": "System",
+            "comments": "No problem ",
+            "category": "Completed"
+        },
+        {
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-06-30T22:55:47Z",
+            "outcome": "Completed",
+            "completedBy": "System",
+            "comments": "Inline 6 ",
+            "category": "Completed"
+        },
+        {
+            "activityId": "945abe5d-8c66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-06-30T22:55:20Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "\"I’ll see what I can do for you. Do you know which CX-90 you want—Inline-6 or PHEV?\"",
+            "category": "Completed"
+        },
+        {
+            "activityId": "a1abd4c0-c066-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-06-30T22:49:45Z",
+            "outcome": "Completed",
+            "completedBy": "System",
+            "comments": "I have a lease that will be due by the end of the year wanted to see what u guys can work for me to term it early . I currently have mazda cx9 touring plus Vin JM3TCBAY9P0639998 WITH  28,746 miles . I'm looking into staying with mazda for the cx90 as a lease as well ",
+            "category": "Completed"
+        },
+        {
+            "activityId": "d35b3159-1256-f011-814d-00505690ec8c",
+            "activityName": "Phone Follow Up",
+            "activityType": 2,
+            "completedDate": "2025-06-30T22:47:50Z",
+            "outcome": "Phone Follow Up",
+            "completedBy": "Wheelan, J",
+            "comments": "left voicemail",
+            "category": "Completed"
+        },
+        {
+            "activityId": "18e4a3b9-c066-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-06-30T22:40:59Z",
+            "outcome": "Completed",
+            "completedBy": "Wheelan, J",
+            "comments": "Glad to see you are still in the market for a CX-90.  We have a few hours left to put deals together for month end.  Would you like to set up a time to meet today.  Or do you have specific questions?",
+            "category": "Completed"
+        },
+        {
+            "activityId": "d05b3159-1256-f011-814d-00505690ec8c",
+            "activityName": "Duplicate Lead",
+            "activityType": 40,
+            "completedDate": "2025-06-30T22:28:50.403Z",
+            "outcome": "Auto Response",
+            "completedBy": "Wheelan, J",
+            "comments": "<i>Mazda ADF XML Lead</i><br />[05:16pm] Tustin Mazda: Welcome to Tustin Mazda.[05:16pm] Tustin Mazda: How may we help you today?[05:17pm] Juan Ortega: I'm intrested in a mazda cx90[05:17pm] Tustin Mazda: Thank you. May I ask who I have the pleasure of speaking with?[05:17pm] Juan Ortega: Juan ortega[05:17pm] Tustin Mazda: One moment while I connect you with a member of our team.[05:17pm] Juan Ortega: Thank you[05:18pm] Alvaro O: Hello Juan, I am Alvaro O. I'll take just a moment to look into this for you.[05:18pm] Juan Ortega: Hello no problem[05:19pm] Juan Ortega: Alvaro please contact me at 7143888708[05:20pm] Alvaro O: INVENTORY SENT - 2025 Mazda CX-90 PHEV Preferred [M240028][05:20pm] Alvaro O: INVENTORY SENT - 2025 Mazda CX-90 PHEV Premium [M239780][05:20pm] Alvaro O: To confirm, this is the vehicle you are looking for?[05:20pm] Alvaro O: I'm an offsite agent here to assist the dealership and their live chat customers.[05:23pm] Alvaro O: Are you still available?[05:24pm] Alvaro O: I will forward your information over right away and a member of our team will be contacting you as soon as they're available.[05:24pm] Alvaro O: If you need anything else please feel free to reach back out.[05:28pm] Alvaro O: personal info provided // interested in mazda cx90Transcript: http://app.carnow.com/da/5wBGw41aeng2L25r",
+            "category": "Completed"
+        }
+    ],
+    "followUP_date": "2025-10-31T16:06:31.407620",
+    "followUP_count": 0,
+    "messages": [],
+    "alreadyProcessedActivities": {
+        "d05b3159-1256-f011-814d-00505690ec8c": {
+            "id": "d05b3159-1256-f011-814d-00505690ec8c",
+            "activityType": "Duplicate Lead",
+            "category": "Completed",
+            "name": "Duplicate Lead",
+            "completedDate": "2025-07-01T00:28:50.403Z",
+            "dueDate": "2025-07-01T00:29:00Z",
+            "outcome": "Auto Response",
+            "createdBy": "Wheelan, Joshua",
+            "assignedTo": "Wheelan, Joshua",
+            "completedBy": "Wheelan, Joshua",
+            "opportunityId": "34603e9d-26b4-f011-814f-00505690ec8c",
+            "upType": "Internet",
+            "source": "CarNow",
+            "subSource": "CarNow - Sales",
+            "createdByUserId": "8f693b1a-7966-ea11-a977-005056b72b57",
+            "assignedToUserId": "8f693b1a-7966-ea11-a977-005056b72b57",
+            "completedByUserId": "8f693b1a-7966-ea11-a977-005056b72b57",
+            "message": {
+                "date": "2025-07-01T00:28:51Z",
+                "from": "starlead@eleadcrm.com",
+                "to": "starlead@eleadcrm.com",
+                "subject": "Mazda ADF XML Lead",
+                "body": "<adf>\r\n\t<prospect status=\"new\">\r\n\t\t<id source=\"Mazda Digital\">38b93a79-5179-4dfe-9da4-ce913a9f8119</id>\r\n    \r\n    <id sequence=\"2\" source=\"CarNow\">C117679731</id>\r\n<id sequence=\"3\" source=\"sdSessionId\">c1dc0e54-5951-4380-980f-2448f9840eaa</id>\r\n\r\n    <requestdate>2025-07-01T00:28:29</requestdate>\r\n\t\t<vehicle interest=\"buy\" status=\"new\">\r\n  <year>2025</year>\r\n  <make>Mazda</make>\r\n  <model>CX-90</model>\r\n</vehicle>\r\n\t\t\r\n\t\t<customer>\r\n\t\t\t<contact primarycontact=\"1\">\r\n\t\t\t\t<name type=\"individual\" part=\"first\">Juan</name>\r\n\t\t\t\t<name type=\"individual\" part=\"last\">Ortega</name>\r\n\t\t\t\t<email></email>\r\n\t\t\t\t<phone type=\"voice\" time=\"evening\"></phone>\r\n\t\t\t\t<phone type=\"voice\" time=\"day\">7143888708</phone>\r\n\t\t\t\t<phone type=\"cellphone\"></phone>\r\n\t\t\t\t<address type=\"home\">\r\n\t\t\t\t\t<street line=\"1\"></street>\r\n\t\t\t\t\t<street line=\"2\"></street>\r\n\t\t\t\t\t<city>MIAMI</city>\r\n\t\t\t\t\t<regioncode>FL</regioncode>\r\n\t\t\t\t\t<postalcode>33181</postalcode>\r\n\t\t\t\t</address>\r\n\t\t\t</contact>\r\n\t\t\t<timeframe>\r\n\t\t\t\t<description></description>\r\n\t\t\t</timeframe>\r\n\t\t\t<comments>[05:16pm] Tustin Mazda: Welcome to Tustin Mazda.[05:16pm] Tustin Mazda: How may we help you today?[05:17pm] Juan Ortega: I&apos;m intrested in a mazda cx90[05:17pm] Tustin Mazda: Thank you. May I ask who I have the pleasure of speaking with?[05:17pm] Juan Ortega: Juan ortega[05:17pm] Tustin Mazda: One moment while I connect you with a member of our team.[05:17pm] Juan Ortega: Thank you[05:18pm] Alvaro O: Hello Juan, I am Alvaro O. I&apos;ll take just a moment to look into this for you.[05:18pm] Juan Ortega: Hello no problem[05:19pm] Juan Ortega: Alvaro please contact me at 7143888708[05:20pm] Alvaro O: INVENTORY SENT - 2025 Mazda CX-90 PHEV Preferred [M240028][05:20pm] Alvaro O: INVENTORY SENT - 2025 Mazda CX-90 PHEV Premium [M239780][05:20pm] Alvaro O: To confirm, this is the vehicle you are looking for?[05:20pm] Alvaro O: I&apos;m an offsite agent here to assist the dealership and their live chat customers.[05:23pm] Alvaro O: Are you still available?[05:24pm] Alvaro O: I will forward your information over right away and a member of our team will be contacting you as soon as they&apos;re available.[05:24pm] Alvaro O: If you need anything else please feel free to reach back out.[05:28pm] Alvaro O: personal info provided // interested in mazda cx90\nTranscript: http://app.carnow.com/da/5wBGw41aeng2L25r \n</comments>\r\n\t\t</customer>\r\n\t\t<vendor>\r\n\t\t\t<id source=\"Mazda Digital\">42066</id>\r\n\t\t\t<vendorname>TUSTIN MAZDA</vendorname>\r\n\t\t\t<contact>\r\n\t\t\t\t<name type=\"business\" part=\"full\">TUSTIN MAZDA</name>\r\n\t\t\t\t<email></email>\r\n\t\t\t\t<phone type=\"voice\">7148326222</phone>\r\n\t\t\t\t<address>\r\n\t\t\t\t\t<street line=\"1\">28A AUTO CENTER DRIVE</street>\r\n\t\t\t\t\t<city>TUSTIN</city>\r\n\t\t\t\t\t<regioncode>CA</regioncode>\r\n\t\t\t\t\t<postalcode>92782</postalcode>\r\n\t\t\t\t</address>\r\n\t\t\t</contact>\r\n\t\t</vendor>\r\n\t\t<provider>\r\n\t\t\t<name type=\"business\" part=\"full\">CarNow - Sales</name>\r\n\t\t\t<service>Mazda Digital</service>\r\n\t\t\t<url></url>\r\n\t\t</provider>\r\n\t</prospect>\r\n</adf>"
+            },
+            "links": []
+        }
+    },
+    "checkedDict": {
+        "is_sales_contacted": false,
+        "patti_already_contacted": false,
+        "last_msg_by": null
+    },
+    "firstActivity": {
+        "activityId": "d05b3159-1256-f011-814d-00505690ec8c",
+        "activityName": "Duplicate Lead",
+        "activityType": 40,
+        "completedDate": "2025-06-30T22:28:50.403Z",
+        "outcome": "Auto Response",
+        "completedBy": "Wheelan, J",
+        "comments": "<i>Mazda ADF XML Lead</i><br />[05:16pm] Tustin Mazda: Welcome to Tustin Mazda.[05:16pm] Tustin Mazda: How may we help you today?[05:17pm] Juan Ortega: I'm intrested in a mazda cx90[05:17pm] Tustin Mazda: Thank you. May I ask who I have the pleasure of speaking with?[05:17pm] Juan Ortega: Juan ortega[05:17pm] Tustin Mazda: One moment while I connect you with a member of our team.[05:17pm] Juan Ortega: Thank you[05:18pm] Alvaro O: Hello Juan, I am Alvaro O. I'll take just a moment to look into this for you.[05:18pm] Juan Ortega: Hello no problem[05:19pm] Juan Ortega: Alvaro please contact me at 7143888708[05:20pm] Alvaro O: INVENTORY SENT - 2025 Mazda CX-90 PHEV Preferred [M240028][05:20pm] Alvaro O: INVENTORY SENT - 2025 Mazda CX-90 PHEV Premium [M239780][05:20pm] Alvaro O: To confirm, this is the vehicle you are looking for?[05:20pm] Alvaro O: I'm an offsite agent here to assist the dealership and their live chat customers.[05:23pm] Alvaro O: Are you still available?[05:24pm] Alvaro O: I will forward your information over right away and a member of our team will be contacting you as soon as they're available.[05:24pm] Alvaro O: If you need anything else please feel free to reach back out.[05:28pm] Alvaro O: personal info provided // interested in mazda cx90Transcript: http://app.carnow.com/da/5wBGw41aeng2L25r",
+        "category": "Completed"
+    },
+    "firstActivityFull": {
+        "id": "d05b3159-1256-f011-814d-00505690ec8c",
+        "activityType": "Duplicate Lead",
+        "category": "Completed",
+        "name": "Duplicate Lead",
+        "completedDate": "2025-07-01T00:28:50.403Z",
+        "dueDate": "2025-07-01T00:29:00Z",
+        "outcome": "Auto Response",
+        "createdBy": "Wheelan, Joshua",
+        "assignedTo": "Wheelan, Joshua",
+        "completedBy": "Wheelan, Joshua",
+        "opportunityId": "34603e9d-26b4-f011-814f-00505690ec8c",
+        "upType": "Internet",
+        "source": "CarNow",
+        "subSource": "CarNow - Sales",
+        "createdByUserId": "8f693b1a-7966-ea11-a977-005056b72b57",
+        "assignedToUserId": "8f693b1a-7966-ea11-a977-005056b72b57",
+        "completedByUserId": "8f693b1a-7966-ea11-a977-005056b72b57",
+        "message": {
+            "date": "2025-07-01T00:28:51Z",
+            "from": "starlead@eleadcrm.com",
+            "to": "starlead@eleadcrm.com",
+            "subject": "Mazda ADF XML Lead",
+            "body": "<adf>\r\n\t<prospect status=\"new\">\r\n\t\t<id source=\"Mazda Digital\">38b93a79-5179-4dfe-9da4-ce913a9f8119</id>\r\n    \r\n    <id sequence=\"2\" source=\"CarNow\">C117679731</id>\r\n<id sequence=\"3\" source=\"sdSessionId\">c1dc0e54-5951-4380-980f-2448f9840eaa</id>\r\n\r\n    <requestdate>2025-07-01T00:28:29</requestdate>\r\n\t\t<vehicle interest=\"buy\" status=\"new\">\r\n  <year>2025</year>\r\n  <make>Mazda</make>\r\n  <model>CX-90</model>\r\n</vehicle>\r\n\t\t\r\n\t\t<customer>\r\n\t\t\t<contact primarycontact=\"1\">\r\n\t\t\t\t<name type=\"individual\" part=\"first\">Juan</name>\r\n\t\t\t\t<name type=\"individual\" part=\"last\">Ortega</name>\r\n\t\t\t\t<email></email>\r\n\t\t\t\t<phone type=\"voice\" time=\"evening\"></phone>\r\n\t\t\t\t<phone type=\"voice\" time=\"day\">7143888708</phone>\r\n\t\t\t\t<phone type=\"cellphone\"></phone>\r\n\t\t\t\t<address type=\"home\">\r\n\t\t\t\t\t<street line=\"1\"></street>\r\n\t\t\t\t\t<street line=\"2\"></street>\r\n\t\t\t\t\t<city>MIAMI</city>\r\n\t\t\t\t\t<regioncode>FL</regioncode>\r\n\t\t\t\t\t<postalcode>33181</postalcode>\r\n\t\t\t\t</address>\r\n\t\t\t</contact>\r\n\t\t\t<timeframe>\r\n\t\t\t\t<description></description>\r\n\t\t\t</timeframe>\r\n\t\t\t<comments>[05:16pm] Tustin Mazda: Welcome to Tustin Mazda.[05:16pm] Tustin Mazda: How may we help you today?[05:17pm] Juan Ortega: I&apos;m intrested in a mazda cx90[05:17pm] Tustin Mazda: Thank you. May I ask who I have the pleasure of speaking with?[05:17pm] Juan Ortega: Juan ortega[05:17pm] Tustin Mazda: One moment while I connect you with a member of our team.[05:17pm] Juan Ortega: Thank you[05:18pm] Alvaro O: Hello Juan, I am Alvaro O. I&apos;ll take just a moment to look into this for you.[05:18pm] Juan Ortega: Hello no problem[05:19pm] Juan Ortega: Alvaro please contact me at 7143888708[05:20pm] Alvaro O: INVENTORY SENT - 2025 Mazda CX-90 PHEV Preferred [M240028][05:20pm] Alvaro O: INVENTORY SENT - 2025 Mazda CX-90 PHEV Premium [M239780][05:20pm] Alvaro O: To confirm, this is the vehicle you are looking for?[05:20pm] Alvaro O: I&apos;m an offsite agent here to assist the dealership and their live chat customers.[05:23pm] Alvaro O: Are you still available?[05:24pm] Alvaro O: I will forward your information over right away and a member of our team will be contacting you as soon as they&apos;re available.[05:24pm] Alvaro O: If you need anything else please feel free to reach back out.[05:28pm] Alvaro O: personal info provided // interested in mazda cx90\nTranscript: http://app.carnow.com/da/5wBGw41aeng2L25r \n</comments>\r\n\t\t</customer>\r\n\t\t<vendor>\r\n\t\t\t<id source=\"Mazda Digital\">42066</id>\r\n\t\t\t<vendorname>TUSTIN MAZDA</vendorname>\r\n\t\t\t<contact>\r\n\t\t\t\t<name type=\"business\" part=\"full\">TUSTIN MAZDA</name>\r\n\t\t\t\t<email></email>\r\n\t\t\t\t<phone type=\"voice\">7148326222</phone>\r\n\t\t\t\t<address>\r\n\t\t\t\t\t<street line=\"1\">28A AUTO CENTER DRIVE</street>\r\n\t\t\t\t\t<city>TUSTIN</city>\r\n\t\t\t\t\t<regioncode>CA</regioncode>\r\n\t\t\t\t\t<postalcode>92782</postalcode>\r\n\t\t\t\t</address>\r\n\t\t\t</contact>\r\n\t\t</vendor>\r\n\t\t<provider>\r\n\t\t\t<name type=\"business\" part=\"full\">CarNow - Sales</name>\r\n\t\t\t<service>Mazda Digital</service>\r\n\t\t\t<url></url>\r\n\t\t</provider>\r\n\t</prospect>\r\n</adf>"
+        },
+        "links": []
+    },
+    "firstActivityAdfDict": {
+        "adf": {
+            "prospect": {
+                "@attributes": {
+                    "status": "new"
+                },
+                "id": [
+                    {
+                        "@attributes": {
+                            "source": "Mazda Digital"
+                        },
+                        "#text": "38b93a79-5179-4dfe-9da4-ce913a9f8119"
+                    },
+                    {
+                        "@attributes": {
+                            "sequence": "2",
+                            "source": "CarNow"
+                        },
+                        "#text": "C117679731"
+                    },
+                    {
+                        "@attributes": {
+                            "sequence": "3",
+                            "source": "sdSessionId"
+                        },
+                        "#text": "c1dc0e54-5951-4380-980f-2448f9840eaa"
+                    }
+                ],
+                "requestdate": {
+                    "#text": "2025-07-01T00:28:29"
+                },
+                "vehicle": {
+                    "@attributes": {
+                        "interest": "buy",
+                        "status": "new"
+                    },
+                    "year": {
+                        "#text": "2025"
+                    },
+                    "make": {
+                        "#text": "Mazda"
+                    },
+                    "model": {
+                        "#text": "CX-90"
+                    }
+                },
+                "customer": {
+                    "contact": {
+                        "@attributes": {
+                            "primarycontact": "1"
+                        },
+                        "name": [
+                            {
+                                "@attributes": {
+                                    "type": "individual",
+                                    "part": "first"
+                                },
+                                "#text": "Juan"
+                            },
+                            {
+                                "@attributes": {
+                                    "type": "individual",
+                                    "part": "last"
+                                },
+                                "#text": "Ortega"
+                            }
+                        ],
+                        "email": {},
+                        "phone": [
+                            {
+                                "@attributes": {
+                                    "type": "voice",
+                                    "time": "evening"
+                                }
+                            },
+                            {
+                                "@attributes": {
+                                    "type": "voice",
+                                    "time": "day"
+                                },
+                                "#text": "7143888708"
+                            },
+                            {
+                                "@attributes": {
+                                    "type": "cellphone"
+                                }
+                            }
+                        ],
+                        "address": {
+                            "@attributes": {
+                                "type": "home"
+                            },
+                            "street": [
+                                {
+                                    "@attributes": {
+                                        "line": "1"
+                                    }
+                                },
+                                {
+                                    "@attributes": {
+                                        "line": "2"
+                                    }
+                                }
+                            ],
+                            "city": {
+                                "#text": "MIAMI"
+                            },
+                            "regioncode": {
+                                "#text": "FL"
+                            },
+                            "postalcode": {
+                                "#text": "33181"
+                            }
+                        }
+                    },
+                    "timeframe": {
+                        "description": {}
+                    },
+                    "comments": {
+                        "#text": "[05:16pm] Tustin Mazda: Welcome to Tustin Mazda.[05:16pm] Tustin Mazda: How may we help you today?[05:17pm] Juan Ortega: I'm intrested in a mazda cx90[05:17pm] Tustin Mazda: Thank you. May I ask who I have the pleasure of speaking with?[05:17pm] Juan Ortega: Juan ortega[05:17pm] Tustin Mazda: One moment while I connect you with a member of our team.[05:17pm] Juan Ortega: Thank you[05:18pm] Alvaro O: Hello Juan, I am Alvaro O. I'll take just a moment to look into this for you.[05:18pm] Juan Ortega: Hello no problem[05:19pm] Juan Ortega: Alvaro please contact me at 7143888708[05:20pm] Alvaro O: INVENTORY SENT - 2025 Mazda CX-90 PHEV Preferred [M240028][05:20pm] Alvaro O: INVENTORY SENT - 2025 Mazda CX-90 PHEV Premium [M239780][05:20pm] Alvaro O: To confirm, this is the vehicle you are looking for?[05:20pm] Alvaro O: I'm an offsite agent here to assist the dealership and their live chat customers.[05:23pm] Alvaro O: Are you still available?[05:24pm] Alvaro O: I will forward your information over right away and a member of our team will be contacting you as soon as they're available.[05:24pm] Alvaro O: If you need anything else please feel free to reach back out.[05:28pm] Alvaro O: personal info provided // interested in mazda cx90\nTranscript: http://app.carnow.com/da/5wBGw41aeng2L25r"
+                    }
+                },
+                "vendor": {
+                    "id": {
+                        "@attributes": {
+                            "source": "Mazda Digital"
+                        },
+                        "#text": "42066"
+                    },
+                    "vendorname": {
+                        "#text": "TUSTIN MAZDA"
+                    },
+                    "contact": {
+                        "name": {
+                            "@attributes": {
+                                "type": "business",
+                                "part": "full"
+                            },
+                            "#text": "TUSTIN MAZDA"
+                        },
+                        "email": {},
+                        "phone": {
+                            "@attributes": {
+                                "type": "voice"
+                            },
+                            "#text": "7148326222"
+                        },
+                        "address": {
+                            "street": {
+                                "@attributes": {
+                                    "line": "1"
+                                },
+                                "#text": "28A AUTO CENTER DRIVE"
+                            },
+                            "city": {
+                                "#text": "TUSTIN"
+                            },
+                            "regioncode": {
+                                "#text": "CA"
+                            },
+                            "postalcode": {
+                                "#text": "92782"
+                            }
+                        }
+                    }
+                },
+                "provider": {
+                    "name": {
+                        "@attributes": {
+                            "type": "business",
+                            "part": "full"
+                        },
+                        "#text": "CarNow - Sales"
+                    },
+                    "service": {
+                        "#text": "Mazda Digital"
+                    },
+                    "url": {}
+                }
+            }
+        }
+    },
+    "inquiry_text_body": "[05:16pm] Tustin Mazda: Welcome to Tustin Mazda.[05:16pm] Tustin Mazda: How may we help you today?[05:17pm] Juan Ortega: I'm intrested in a mazda cx90[05:17pm] Tustin Mazda: Thank you. May I ask who I have the pleasure of speaking with?[05:17pm] Juan Ortega: Juan ortega[05:17pm] Tustin Mazda: One moment while I connect you with a member of our team.[05:17pm] Juan Ortega: Thank you[05:18pm] Alvaro O: Hello Juan, I am Alvaro O. I'll take just a moment to look into this for you.[05:18pm] Juan Ortega: Hello no problem[05:19pm] Juan Ortega: Alvaro please contact me at 7143888708[05:20pm] Alvaro O: INVENTORY SENT - 2025 Mazda CX-90 PHEV Preferred [M240028][05:20pm] Alvaro O: INVENTORY SENT - 2025 Mazda CX-90 PHEV Premium [M239780][05:20pm] Alvaro O: To confirm, this is the vehicle you are looking for?[05:20pm] Alvaro O: I'm an offsite agent here to assist the dealership and their live chat customers.[05:23pm] Alvaro O: Are you still available?[05:24pm] Alvaro O: I will forward your information over right away and a member of our team will be contacting you as soon as they're available.[05:24pm] Alvaro O: If you need anything else please feel free to reach back out.[05:28pm] Alvaro O: personal info provided // interested in mazda cx90\nTranscript: http://app.carnow.com/da/5wBGw41aeng2L25r",
+    "customerFirstMsgDict": {
+        "customerMsg": "I'm interested in a mazda cx90. Alvaro please contact me at 7143888708.",
+        "isCustomerMsg": true,
+        "class": "specific_vehicle_request, contact_request",
+        "notes": "The customer is interested in a Mazda CX-90 and provided contact information for follow-up.",
+        "salesAlreadyContact": true
+    }
+}

@@ -1,0 +1,551 @@
+{
+    "_subscription_id": "2c61b27b-b239-4b54-bd34-dfd73aa5a568",
+    "opportunityId": "8d3effab-0ca9-f011-814f-00505690ec8c",
+    "activityId": null,
+    "links": [
+        {
+            "rel": "create",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities",
+            "method": "POST",
+            "title": "Create Opportunity"
+        },
+        {
+            "rel": "self",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/8d3effab-0ca9-f011-814f-00505690ec8c",
+            "method": "GET",
+            "title": "Get Opportunity"
+        },
+        {
+            "rel": "comment",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/comment",
+            "method": "POST",
+            "title": "Add Comment"
+        },
+        {
+            "rel": "email",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/sendEmail",
+            "method": "POST",
+            "title": "Send Email"
+        },
+        {
+            "rel": "tradein",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/tradein",
+            "method": "POST",
+            "title": "Add Trade-In"
+        },
+        {
+            "rel": "vehiclesought",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/vehicleSought",
+            "method": "POST",
+            "title": "Add Vehicle Sought"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/reassignPrimarySalesperson",
+            "method": "POST",
+            "title": "Reassign Primary Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/8d3effab-0ca9-f011-814f-00505690ec8c/salesteam/add",
+            "method": "POST",
+            "title": "Add Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/8d3effab-0ca9-f011-814f-00505690ec8c/salesteam/remove",
+            "method": "POST",
+            "title": "Remove Salesperson"
+        },
+        {
+            "rel": "substatus",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/8d3effab-0ca9-f011-814f-00505690ec8c/subStatus/update",
+            "method": "POST",
+            "title": "Update SubStatus"
+        },
+        {
+            "rel": "inactive",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/8d3effab-0ca9-f011-814f-00505690ec8c/set-inactive",
+            "method": "POST",
+            "title": "Set Opportunity Inactive"
+        }
+    ],
+    "source": "TrueCar",
+    "upType": "Internet",
+    "soughtVehicles": [
+        {
+            "id": "8f3effab-0ca9-f011-814f-00505690ec8c",
+            "isNew": true,
+            "yearFrom": 2026,
+            "yearTo": 2026,
+            "make": "Hyundai",
+            "model": "Venue",
+            "trim": "SEL",
+            "vin": "KMHRC8A32TU421846",
+            "stockNumber": "H421846",
+            "isPrimary": true
+        }
+    ],
+    "salesTeam": [
+        {
+            "id": "1f753b1a-7966-ea11-a977-005056b72b57",
+            "firstName": "Ivan",
+            "lastName": "Ventura",
+            "isPrimary": true,
+            "isPositionPrimary": true,
+            "positionName": "Salesperson",
+            "positionCode": "S",
+            "links": []
+        },
+        {
+            "id": "f6061eef-a036-f011-814d-00505690ec8c",
+            "firstName": "Jacqueline",
+            "lastName": "Cruz",
+            "isPrimary": false,
+            "isPositionPrimary": true,
+            "positionName": "BDC Agent",
+            "positionCode": "BDC",
+            "links": []
+        }
+    ],
+    "customer": {
+        "id": "8b3effab-0ca9-f011-814f-00505690ec8c",
+        "isBusiness": false,
+        "firstName": "Navnath",
+        "middleName": "",
+        "lastName": "Malve",
+        "nickname": "",
+        "emails": [
+            {
+                "address": "navnathmalve82@gmail.com",
+                "emailType": "Personal",
+                "doNotEmail": false,
+                "isPreferred": true
+            }
+        ],
+        "phones": [
+            {
+                "number": "(954) 541-0487",
+                "phoneType": "Home",
+                "preferredTimeToContact": "Day",
+                "onDoNotCallRegistry": false
+            },
+            {
+                "number": "(954) 541-0487",
+                "phoneType": "Cellular",
+                "preferredTimeToContact": "Day",
+                "onDoNotCallRegistry": false
+            }
+        ],
+        "address": {
+            "addressLine1": "1 not provided",
+            "city": "Fountain Valley",
+            "state": "CA",
+            "zip": "92708",
+            "country": "US"
+        },
+        "privacySettings": [
+            {
+                "name": "CCPADoNotContact",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotShare",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotSell",
+                "value": "False"
+            }
+        ],
+        "links": [
+            {
+                "rel": "self",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/8b3effab-0ca9-f011-814f-00505690ec8c",
+                "method": "GET",
+                "title": "Fetch Customer"
+            },
+            {
+                "rel": "create",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers",
+                "method": "POST",
+                "title": "Create Customer"
+            },
+            {
+                "rel": "update",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/8b3effab-0ca9-f011-814f-00505690ec8c",
+                "method": "POST",
+                "title": "Update Customer"
+            }
+        ]
+    },
+    "tradeIns": null,
+    "createdBy": null,
+    "created_at": "2025-10-18",
+    "updated_at": "2025-10-20",
+    "isActive": true,
+    "completedActivities": [
+        {
+            "activityId": "fb2030e6-8eab-f011-814f-00505690ec8c",
+            "comments": "<i>Your time frame for buying - Tustin Hyundai</i>",
+            "activityName": "Email #3",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-18T16:01:11Z",
+            "outcome": "Complete",
+            "completedBy": "Ventura, I"
+        },
+        {
+            "activityId": "2ded5977-3fac-f011-814f-00505690ec8c",
+            "comments": "<i>No Addendums here at Tustin Hyundai</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:28:29.67Z",
+            "outcome": "Completed",
+            "completedBy": "Cruz, J"
+        },
+        {
+            "activityId": "a43effab-0ca9-f011-814f-00505690ec8c",
+            "comments": "wrong #",
+            "activityName": "BDC Virtual Immediate Call",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:28:14Z",
+            "outcome": "BDC Virtual Call #2",
+            "completedBy": "Cruz, J"
+        },
+        {
+            "activityId": "b812fd89-1ca9-f011-814f-00505690ec8c",
+            "comments": "<i>Ivan Ventura - Tustin Hyundai</i>",
+            "activityName": "Email #2",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-17T17:24:30Z",
+            "outcome": "Email #3",
+            "completedBy": "Ventura, I"
+        },
+        {
+            "activityId": "d9603335-8b66-ea11-a977-005056b72b57",
+            "comments": "Wrong number ",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-14T14:42:37Z",
+            "outcome": "Completed",
+            "completedBy": "System"
+        },
+        {
+            "activityId": "b72b2c35-8b66-ea11-a977-005056b72b57",
+            "comments": "Good morning Navnath, \nMy name is Ivan. I am the internet sales director here at Tustin Hyundai. \nI am reaching out in regards to the Venue you inquired on. 24,665-2,500 truecar discount \nIt is still available. Are you available to check it out today? STOP to unsubscribe or HELP for support. Msg freq. varies, msg&data rates may apply.",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-14T14:41:04Z",
+            "outcome": "Completed",
+            "completedBy": "Ventura, I"
+        },
+        {
+            "activityId": "9e3effab-0ca9-f011-814f-00505690ec8c",
+            "comments": "<i>Your Venue at Tustin Hyundai</i>",
+            "activityName": "Email #1",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-14T14:40:53Z",
+            "outcome": "Email #2",
+            "completedBy": "Ventura, I"
+        },
+        {
+            "activityId": "973effab-0ca9-f011-814f-00505690ec8c",
+            "comments": "",
+            "activityName": "Text #1",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-14T14:26:44Z",
+            "outcome": "No Phone",
+            "completedBy": "Ventura, I"
+        },
+        {
+            "activityId": "9f3effab-0ca9-f011-814f-00505690ec8c",
+            "callDuration": "00:33",
+            "comments": "https://audio.callrevu.com/ob/355224038",
+            "numberDialed": "(954) 541-0487",
+            "activityName": "Call #1",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-14T14:26:07Z",
+            "outcome": "No Phone",
+            "completedBy": "Ventura, I"
+        },
+        {
+            "activityId": "a7a7e1b5-16a9-f011-814f-00505690ec8c",
+            "comments": "",
+            "activityName": "Outbound Call",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-14T13:59:00Z",
+            "outcome": "Completed",
+            "completedBy": "Ventura, I"
+        },
+        {
+            "activityId": "943effab-0ca9-f011-814f-00505690ec8c",
+            "comments": "<i>TrueCar / Extended Network: New Customer Inquiry</i><br />*** DEALER PORTAL ***; https://dealerportal.truecar.com/dfe/prospects/E5MT49MZ8G?_xt=1&utm_source=crm&utm_medium=deeplink&utm_campaign=15642; Lead from TrueCar: Extended Network (Non-Affinity Partner). In-market customer has not received pricing and is requesting an offer. Follow up promptly to provide pricing and next steps.",
+            "activityName": "Internet Up",
+            "activityType": 13,
+            "category": "Completed",
+            "completedDate": "2025-10-14T12:47:00Z",
+            "outcome": "Auto Response",
+            "completedBy": "Ventura, I"
+        }
+    ],
+    "scheduledActivities": [
+        {
+            "activityId": "bfe14871-3fac-f011-814f-00505690ec8c",
+            "comments": "",
+            "dueDate": "2025-10-19T16:00:00Z",
+            "activityName": "BDC Virtual Call #2",
+            "activityType": 2,
+            "assignedTo": "Cruz, J"
+        }
+    ],
+    "firstActivity": {
+        "id": "943effab-0ca9-f011-814f-00505690ec8c",
+        "activityType": "Internet Up",
+        "category": "Completed",
+        "name": "Internet Up",
+        "completedDate": "2025-10-14T14:47:00Z",
+        "dueDate": "2025-10-14T16:47:00Z",
+        "outcome": "Auto Response",
+        "createdBy": "Ventura, Ivan",
+        "assignedTo": "Ventura, Ivan",
+        "completedBy": "Ventura, Ivan",
+        "opportunityId": "8d3effab-0ca9-f011-814f-00505690ec8c",
+        "upType": "Internet",
+        "source": "TrueCar",
+        "createdByUserId": "1f753b1a-7966-ea11-a977-005056b72b57",
+        "assignedToUserId": "1f753b1a-7966-ea11-a977-005056b72b57",
+        "completedByUserId": "1f753b1a-7966-ea11-a977-005056b72b57",
+        "message": {
+            "date": "2025-10-14T14:47:14Z",
+            "from": "extendednetwork@secureleads.truecarmail.com",
+            "to": "sales@tustinhyundai.edealerhub.com",
+            "subject": "TrueCar / Extended Network: New Customer Inquiry",
+            "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<?ADF version=\"1.0\"?><adf>\r\n  <prospect>\r\n    <id source=\"TrueCar Lead ID\">1142793083</id>\r\n    <requestdate>2025-10-14T07:47:00-07:00</requestdate>\r\n    <vehicle interest=\"buy\" status=\"new\">\r\n      <id source=\"model code\">30422F45</id>\r\n      <year>2026</year>\r\n      <make>Hyundai</make>\r\n      <model>Venue</model>\r\n      <vin>KMHRC8A32TU421846</vin>\r\n      <stock>H421846</stock>\r\n      <trim>SEL</trim>\r\n      <doors>4</doors>\r\n      <bodystyle>SUV</bodystyle>\r\n      <transmission>Automatic</transmission>\r\n      <odometer units=\"mi\">14</odometer>\r\n      <colorcombination>\r\n        <interiorcolor>BLACK</interiorcolor>\r\n        <exteriorcolor>Intense Blue</exteriorcolor>\r\n        <preference>1</preference>\r\n      </colorcombination>\r\n      <price type=\"quote\">24665.0</price>\r\n      <pricecomments>\r\n        <![CDATA[]]>\r\n      </pricecomments>\r\n      <finance>\r\n        <method>finance</method>\r\n        <amount>1.0</amount>\r\n      </finance>\r\n    </vehicle>\r\n    <customer>\r\n      <contact>\r\n        <name part=\"first\">Navnath </name>\r\n        <name part=\"last\">Malve</name>\r\n        <email preferredcontact=\"0\">navnathmalve82@gmail.com</email>\r\n        <phone preferredcontact=\"0\" time=\"nopreference\" type=\"voice\">9545410487</phone>\r\n        <address>\r\n          <street line=\"1\">1 not provided</street>\r\n          <city>Fountain Valley</city>\r\n          <regioncode>CA</regioncode>\r\n          <postalcode>92708</postalcode>\r\n          <country/>\r\n        </address>\r\n      </contact>\r\n      <comments>\r\n        <![CDATA[*** DEALER PORTAL *** <br /> https://dealerportal.truecar.com/dfe/prospects/E5MT49MZ8G?_xt=1&utm_source=crm&utm_medium=deeplink&utm_campaign=15642 <br /> Lead from TrueCar: Extended Network (Non-Affinity Partner). In-market customer has not received pricing and is requesting an offer. Follow up promptly to provide pricing and next steps.]]>\r\n      </comments>\r\n    </customer>\r\n    <vendor>\r\n      <id source=\"205:ADF XML Email\"/>\r\n      <id source=\"AdditionalEmails\"></id>\r\n      <id source=\"DealerId\">15642</id>\r\n      <vendorname>Tustin Hyundai</vendorname>\r\n      <contact>\r\n        <name part=\"full\" type=\"individual\"/>\r\n        <email preferredcontact=\"0\">sales@tustinHyundai.edealerhub.com</email>\r\n        <phone preferredcontact=\"0\" time=\"nopreference\" type=\"voice\"/>\r\n        <address>\r\n          <street line=\"1\">16 Auto Center Dr</street>\r\n          <city>Tustin</city>\r\n          <regioncode>CA</regioncode>\r\n          <postalcode>92782</postalcode>\r\n        </address>\r\n      </contact>\r\n    </vendor>\r\n    <provider>\r\n      <name part=\"full\">TrueCar/Extended Network</name>\r\n      <service>New TrueCar/Extended Network Auto Buying Customer Inquiry</service>\r\n      <leadtype>internet</leadtype>\r\n    </provider>\r\n  </prospect>\r\n</adf>"
+        },
+        "links": [],
+        "adfDict": {
+            "adf": {
+                "prospect": {
+                    "id": {
+                        "@attributes": {
+                            "source": "TrueCar Lead ID"
+                        },
+                        "#text": "1142793083"
+                    },
+                    "requestdate": {
+                        "#text": "2025-10-14T07:47:00-07:00"
+                    },
+                    "vehicle": {
+                        "@attributes": {
+                            "interest": "buy",
+                            "status": "new"
+                        },
+                        "id": {
+                            "@attributes": {
+                                "source": "model code"
+                            },
+                            "#text": "30422F45"
+                        },
+                        "year": {
+                            "#text": "2026"
+                        },
+                        "make": {
+                            "#text": "Hyundai"
+                        },
+                        "model": {
+                            "#text": "Venue"
+                        },
+                        "vin": {
+                            "#text": "KMHRC8A32TU421846"
+                        },
+                        "stock": {
+                            "#text": "H421846"
+                        },
+                        "trim": {
+                            "#text": "SEL"
+                        },
+                        "doors": {
+                            "#text": "4"
+                        },
+                        "bodystyle": {
+                            "#text": "SUV"
+                        },
+                        "transmission": {
+                            "#text": "Automatic"
+                        },
+                        "odometer": {
+                            "@attributes": {
+                                "units": "mi"
+                            },
+                            "#text": "14"
+                        },
+                        "colorcombination": {
+                            "interiorcolor": {
+                                "#text": "BLACK"
+                            },
+                            "exteriorcolor": {
+                                "#text": "Intense Blue"
+                            },
+                            "preference": {
+                                "#text": "1"
+                            }
+                        },
+                        "price": {
+                            "@attributes": {
+                                "type": "quote"
+                            },
+                            "#text": "24665.0"
+                        },
+                        "pricecomments": {},
+                        "finance": {
+                            "method": {
+                                "#text": "finance"
+                            },
+                            "amount": {
+                                "#text": "1.0"
+                            }
+                        }
+                    },
+                    "customer": {
+                        "contact": {
+                            "name": [
+                                {
+                                    "@attributes": {
+                                        "part": "first"
+                                    },
+                                    "#text": "Navnath"
+                                },
+                                {
+                                    "@attributes": {
+                                        "part": "last"
+                                    },
+                                    "#text": "Malve"
+                                }
+                            ],
+                            "email": {
+                                "@attributes": {
+                                    "preferredcontact": "0"
+                                },
+                                "#text": "navnathmalve82@gmail.com"
+                            },
+                            "phone": {
+                                "@attributes": {
+                                    "preferredcontact": "0",
+                                    "time": "nopreference",
+                                    "type": "voice"
+                                },
+                                "#text": "9545410487"
+                            },
+                            "address": {
+                                "street": {
+                                    "@attributes": {
+                                        "line": "1"
+                                    },
+                                    "#text": "1 not provided"
+                                },
+                                "city": {
+                                    "#text": "Fountain Valley"
+                                },
+                                "regioncode": {
+                                    "#text": "CA"
+                                },
+                                "postalcode": {
+                                    "#text": "92708"
+                                },
+                                "country": {}
+                            }
+                        },
+                        "comments": {
+                            "#text": "*** DEALER PORTAL *** <br /> https://dealerportal.truecar.com/dfe/prospects/E5MT49MZ8G?_xt=1&utm_source=crm&utm_medium=deeplink&utm_campaign=15642 <br /> Lead from TrueCar: Extended Network (Non-Affinity Partner). In-market customer has not received pricing and is requesting an offer. Follow up promptly to provide pricing and next steps."
+                        }
+                    },
+                    "vendor": {
+                        "id": [
+                            {
+                                "@attributes": {
+                                    "source": "205:ADF XML Email"
+                                }
+                            },
+                            {
+                                "@attributes": {
+                                    "source": "AdditionalEmails"
+                                }
+                            },
+                            {
+                                "@attributes": {
+                                    "source": "DealerId"
+                                },
+                                "#text": "15642"
+                            }
+                        ],
+                        "vendorname": {
+                            "#text": "Tustin Hyundai"
+                        },
+                        "contact": {
+                            "name": {
+                                "@attributes": {
+                                    "part": "full",
+                                    "type": "individual"
+                                }
+                            },
+                            "email": {
+                                "@attributes": {
+                                    "preferredcontact": "0"
+                                },
+                                "#text": "sales@tustinHyundai.edealerhub.com"
+                            },
+                            "phone": {
+                                "@attributes": {
+                                    "preferredcontact": "0",
+                                    "time": "nopreference",
+                                    "type": "voice"
+                                }
+                            },
+                            "address": {
+                                "street": {
+                                    "@attributes": {
+                                        "line": "1"
+                                    },
+                                    "#text": "16 Auto Center Dr"
+                                },
+                                "city": {
+                                    "#text": "Tustin"
+                                },
+                                "regioncode": {
+                                    "#text": "CA"
+                                },
+                                "postalcode": {
+                                    "#text": "92782"
+                                }
+                            }
+                        }
+                    },
+                    "provider": {
+                        "name": {
+                            "@attributes": {
+                                "part": "full"
+                            },
+                            "#text": "TrueCar/Extended Network"
+                        },
+                        "service": {
+                            "#text": "New TrueCar/Extended Network Auto Buying Customer Inquiry"
+                        },
+                        "leadtype": {
+                            "#text": "internet"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,610 @@
+{
+    "_subscription_id": "a4efeb74-2289-43d5-9814-1049fd35e894",
+    "opportunityId": "a5a8cc44-43ac-f011-814f-00505690ec8c",
+    "activityId": null,
+    "links": [
+        {
+            "rel": "create",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities",
+            "method": "POST",
+            "title": "Create Opportunity"
+        },
+        {
+            "rel": "self",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/a5a8cc44-43ac-f011-814f-00505690ec8c",
+            "method": "GET",
+            "title": "Get Opportunity"
+        },
+        {
+            "rel": "comment",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/comment",
+            "method": "POST",
+            "title": "Add Comment"
+        },
+        {
+            "rel": "email",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/sendEmail",
+            "method": "POST",
+            "title": "Send Email"
+        },
+        {
+            "rel": "tradein",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/tradein",
+            "method": "POST",
+            "title": "Add Trade-In"
+        },
+        {
+            "rel": "vehiclesought",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/vehicleSought",
+            "method": "POST",
+            "title": "Add Vehicle Sought"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/reassignPrimarySalesperson",
+            "method": "POST",
+            "title": "Reassign Primary Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/a5a8cc44-43ac-f011-814f-00505690ec8c/salesteam/add",
+            "method": "POST",
+            "title": "Add Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/a5a8cc44-43ac-f011-814f-00505690ec8c/salesteam/remove",
+            "method": "POST",
+            "title": "Remove Salesperson"
+        },
+        {
+            "rel": "substatus",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/a5a8cc44-43ac-f011-814f-00505690ec8c/subStatus/update",
+            "method": "POST",
+            "title": "Update SubStatus"
+        },
+        {
+            "rel": "inactive",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/a5a8cc44-43ac-f011-814f-00505690ec8c/set-inactive",
+            "method": "POST",
+            "title": "Set Opportunity Inactive"
+        }
+    ],
+    "source": "Cars.com",
+    "upType": "Internet",
+    "soughtVehicles": [
+        {
+            "id": "a6a8cc44-43ac-f011-814f-00505690ec8c",
+            "isNew": false,
+            "yearFrom": 2017,
+            "yearTo": 2017,
+            "make": "Audi",
+            "model": "A3",
+            "trim": "2.0T Premium 4dr Front-wheel Drive Sedan",
+            "vin": "WAUAUGFF4H1057494",
+            "stockNumber": "K242436A",
+            "isPrimary": true
+        }
+    ],
+    "salesTeam": [
+        {
+            "id": "82595556-b733-ee11-b0ce-00505690dca3",
+            "firstName": "Jacob",
+            "lastName": "Amezola",
+            "isPrimary": true,
+            "isPositionPrimary": true,
+            "positionName": "Salesperson",
+            "positionCode": "S",
+            "links": []
+        }
+    ],
+    "customer": {
+        "id": "a4a8cc44-43ac-f011-814f-00505690ec8c",
+        "isBusiness": false,
+        "firstName": "Sav",
+        "middleName": "",
+        "lastName": "Lyons",
+        "nickname": "",
+        "emails": [
+            {
+                "address": "slyons0423@outlook.com",
+                "emailType": "Personal",
+                "doNotEmail": false,
+                "isPreferred": true
+            }
+        ],
+        "phones": [
+            {
+                "number": "(619) 762-8546",
+                "phoneType": "Home",
+                "preferredTimeToContact": "Day",
+                "onDoNotCallRegistry": false
+            }
+        ],
+        "address": {
+            "city": "Chicago",
+            "state": "IL",
+            "zip": "60678",
+            "country": "US"
+        },
+        "privacySettings": [
+            {
+                "name": "CCPADoNotContact",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotShare",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotSell",
+                "value": "False"
+            }
+        ],
+        "links": [
+            {
+                "rel": "self",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/a4a8cc44-43ac-f011-814f-00505690ec8c",
+                "method": "GET",
+                "title": "Fetch Customer"
+            },
+            {
+                "rel": "create",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers",
+                "method": "POST",
+                "title": "Create Customer"
+            },
+            {
+                "rel": "update",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/a4a8cc44-43ac-f011-814f-00505690ec8c",
+                "method": "POST",
+                "title": "Update Customer"
+            }
+        ]
+    },
+    "tradeIns": null,
+    "createdBy": null,
+    "created_at": "2025-10-18",
+    "updated_at": "2025-10-20",
+    "isActive": true,
+    "completedActivities": [
+        {
+            "activityId": "966f2113-6cad-f011-814f-00505690ec8c",
+            "comments": "<i>Cars.com Used Car Lead for Mission Viejo Kia - 2017 Audi A3</i>",
+            "activityName": "Duplicate Lead",
+            "activityType": 40,
+            "category": "Completed",
+            "completedDate": "2025-10-20T02:20:16.907Z",
+            "outcome": "Completed",
+            "completedBy": "System"
+        },
+        {
+            "activityId": "ba05a536-8b66-ea11-a977-005056b72b57",
+            "comments": "\r\n\r\nhttps://www.elead.us/go/NBkTvGe8BE2hHY48Wi6HHQ\r\n",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T17:05:14Z",
+            "outcome": "Completed",
+            "completedBy": "Amezola, J"
+        },
+        {
+            "activityId": "cc5bc636-8b66-ea11-a977-005056b72b57",
+            "comments": "Hello Sav, this is Jacob with MV Kia. I am responding back to your inquiry on our 2017 Audi A3 through cars.com! How may I assist you with your search? STOP to unsubscribe or HELP for support. Msg freq. varies, msg&data rates may apply.",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T17:05:05Z",
+            "outcome": "Completed",
+            "completedBy": "Amezola, J"
+        },
+        {
+            "activityId": "ada8cc44-43ac-f011-814f-00505690ec8c",
+            "comments": "",
+            "activityName": "Call # 1",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-18T17:04:23Z",
+            "outcome": "Text #1",
+            "completedBy": "Amezola, J"
+        },
+        {
+            "activityId": "3780e133-55ac-f011-814f-00505690ec8c",
+            "comments": "<i>RE: 2017 Audi A3/ Cars.com</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-18T17:04:07.67Z",
+            "outcome": "Completed",
+            "completedBy": "Amezola, J"
+        },
+        {
+            "activityId": "6d433d3a-55ac-f011-814f-00505690ec8c",
+            "comments": "(No Answer) cant lv vcmail",
+            "activityName": "Outbound Call",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-18T17:04:00Z",
+            "outcome": "Completed",
+            "completedBy": "Amezola, J"
+        },
+        {
+            "activityId": "eaee1063-43ac-f011-814f-00505690ec8c",
+            "comments": "View conversation https://assistant.crmaiva.ai/conversation?id=8bfd1ca99bc96929865ba101fc46dadcx4amx&viewonly=true; Reply as assistant https://assistant.crmaiva.ai/conversation?id=8bfd1ca99bc96929865ba101fc46dadcx4amx&; Stop communication: https://unsubscribe.crmaiva.ai/crm/mission-viejo-kia/slyons0423@outlook.com/8bfd1ca99bc96929865ba101fc46dadcx4amx?; *EMAIL*; Assistant says:; Hello Sav,; It's Sierra Brooks from Patterson Mission Viejo Kia.; Thank you for contacting us.; The 2017 Audi A3 you inquired about is currently available in our inventory!; If you'd like to schedule an appointment, simply choose a day and time, and I'll arrange it for you. Alternatively, would you like us to call your number, 619-762-8546, before you schedule an appointment?; 2017 Audi A3    $14,000    VIN: WAUAUGFF4H1057494    Stock #: K242436A; Best Regards,; Sierra Brooks; Online Relations Assistant; Thank you for considering Mission Viejo Kia! Here’s why you’ll love; 1. Exceptional Service: Our approachable, stress-free sales experience, facilitated by a dedicated single contact person, ensures a seamless car-buying journey. Look at our impressive  4.9-star  rating on Google Reviews to see what our customers are saying!; 2. Vast Inventory: Choose from a wide range of new and pre-owned Kia models.; 3. Competitive Pricing: Enjoy great deals and flexible financing options tailored to your needs.; 4. Certified Pre-Owned: Get peace of mind with our rigorously inspected CPO vehicles backed by comprehen",
+            "activityName": "Note",
+            "activityType": 37,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:57:30Z",
+            "outcome": "Completed",
+            "completedBy": "Leads, M"
+        },
+        {
+            "activityId": "9a1afb50-43ac-f011-814f-00505690ec8c",
+            "comments": "Sales AI email/text sent. Clock stopped.",
+            "activityName": "Phone Call",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:57:02Z",
+            "outcome": "Completed",
+            "completedBy": "Leads, M"
+        },
+        {
+            "activityId": "aca8cc44-43ac-f011-814f-00505690ec8c",
+            "comments": "<i>Cars.com Used Car Lead for Mission Viejo Kia - 2017 Audi A3</i><br />You have a new lead from Cars.com! Before you reach out, click the link to see all available Shopper Details, including other leads, target budget, and VDP views:; https://dealerdash.cars.com/dealers/361df846-ab14-4b37-af13-13af44423e05/leads/0dddebdb-b481-4fee-b2ef-eab714a47c75?utm_content=SD0&utm_medium=email; I'd like to know if the Used 2017 Audi A3 2.0T Premium you have listed on Cars.com for $14,000 is still available.",
+            "activityName": "Internet Up",
+            "activityType": 13,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:56:00Z",
+            "outcome": "Auto Response",
+            "completedBy": "Leads, M"
+        }
+    ],
+    "scheduledActivities": [
+        {
+            "activityId": "a4184440-55ac-f011-814f-00505690ec8c",
+            "comments": "",
+            "dueDate": "2025-10-19T19:00:00Z",
+            "activityName": "Text #1",
+            "activityType": 48,
+            "assignedTo": "Amezola, J"
+        },
+        {
+            "activityId": "aea8cc44-43ac-f011-814f-00505690ec8c",
+            "comments": "",
+            "dueDate": "2025-10-21T16:56:00Z",
+            "activityName": "BDC Virtual Immediate Call",
+            "activityType": 2,
+            "assignedTo": "Maqui, R"
+        }
+    ],
+    "firstActivity": {
+        "activityId": "aca8cc44-43ac-f011-814f-00505690ec8c",
+        "comments": "<i>Cars.com Used Car Lead for Mission Viejo Kia - 2017 Audi A3</i><br />You have a new lead from Cars.com! Before you reach out, click the link to see all available Shopper Details, including other leads, target budget, and VDP views:; https://dealerdash.cars.com/dealers/361df846-ab14-4b37-af13-13af44423e05/leads/0dddebdb-b481-4fee-b2ef-eab714a47c75?utm_content=SD0&utm_medium=email; I'd like to know if the Used 2017 Audi A3 2.0T Premium you have listed on Cars.com for $14,000 is still available.",
+        "activityName": "Internet Up",
+        "activityType": 13,
+        "category": "Completed",
+        "completedDate": "2025-10-18T14:56:00Z",
+        "outcome": "Auto Response",
+        "completedBy": "Leads, M"
+    },
+    "firstActivityFull": {
+        "id": "aca8cc44-43ac-f011-814f-00505690ec8c",
+        "activityType": "Internet Up",
+        "category": "Completed",
+        "name": "Internet Up",
+        "completedDate": "2025-10-18T16:56:00Z",
+        "dueDate": "2025-10-18T18:56:00Z",
+        "outcome": "Auto Response",
+        "createdBy": "Leads, MVK Bucket",
+        "assignedTo": "Leads, MVK Bucket",
+        "completedBy": "Leads, MVK Bucket",
+        "opportunityId": "a5a8cc44-43ac-f011-814f-00505690ec8c",
+        "upType": "Internet",
+        "source": "Cars.com",
+        "subSource": "Cars.com Leads",
+        "createdByUserId": "1ac48ebf-2354-ef11-814a-00505690043e",
+        "assignedToUserId": "1ac48ebf-2354-ef11-814a-00505690043e",
+        "completedByUserId": "1ac48ebf-2354-ef11-814a-00505690043e",
+        "message": {
+            "date": "2025-10-18T16:55:36Z",
+            "from": "salesleads@cars.com",
+            "to": "sales@missionviejokia.edealerhub.com",
+            "subject": "Cars.com Used Car Lead for Mission Viejo Kia - 2017 Audi A3",
+            "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<?adf version=\"1.0\"?><adf>\r\n  <prospect>\r\n    <requestdate>2025-10-18T16:50:36Z</requestdate>\r\n    \r\n      <vehicle interest=\"buy\" status=\"used\">\r\n        <id sequence=\"1\" source=\"cars.com\">0dddebdb-b481-4fee-b2ef-eab714a47c75</id>\r\n        <year>2017</year>\r\n        <make>Audi</make>\r\n        <model>A3</model>\r\n        <vin>WAUAUGFF4H1057494</vin>\r\n        <stock>K242436A</stock>\r\n        <trim>2.0T Premium</trim>\r\n        <doors>4</doors>\r\n        <bodystyle>Sedan</bodystyle>\r\n        <transmission>6-Speed Automatic S tronic</transmission>\r\n        <odometer units=\"mi\">45425</odometer>\r\n        <colorcombination>\r\n          <interiorcolor>Rock Gray</interiorcolor>\r\n          <exteriorcolor>Cosmos Blue Metallic</exteriorcolor>\r\n          <preference>1</preference>\r\n        </colorcombination>\r\n        <price currency=\"USD\">14000</price>\r\n        <option>\r\n          <optionname>\r\n            Adaptive Cruise Control, Alloy Wheels, Android Auto®, Apple CarPlay®, CD Player, Automatic Emergency Braking, Backup Camera, Brake Assist, Stability Control, Sunroof/Moonroof, Keyless Start, HomeLink, Bluetooth®, Heated Seats, Keyless Entry, Leather Seats, Navigation System, Rain Sensing Wipers, USB Port\r\n          </optionname>\r\n        </option>\r\n        <option>\r\n          <optionname>\r\n            The 2017 Audi A3 2.0T Premium offers a blend of sophistication, performance, and cutting-edge technology in a compact luxury sedan. Powered by a 2.0L 4-cylinder TFSI engine, paired with a 6-speed automatic S tronic transmission, this vehicle delivers responsive handling and efficient performance. The FrontTrak front-wheel-drive system ensures excellent traction for a smooth driving experience. The A3s Cosmos Blue Metallic exterior is paired with a refined gray leather interior, providing both style and comfort.Inside, the A3 boasts a variety of premium features, including a navigation system, Audi MMI Navigation Plus with MMI Touch, and the Audi Virtual Cockpit. It also comes with an array of packages, such as the Premium Plus Package, Sport Package, and Technology Package, offering an extensive list of features like Audi Side Assist, Active Cruise Control, LED Lighting Package, and a Sport Suspension. For entertainment, it&#39;s equipped with a 10-speaker sound system, SiriusXM radio, and a USB Audi Music Interface.The car also offers impressive safety features, such as Audi Drive Select, Dual front impact airbags, Brake assist, Electronic Stability Control, and a Rearview Camera. The Panoramic moonroof, Heated front seats, and Sport Seats add to the driving comfort, while the Alloy wheels and Carbon Fiber Package enhance its sporty exterior design.This vehicle has a clean history with no accidents or damage reported. It has had two owners, both of whom maintained the vehicle well, with regular services such as brake and fluid replacements, oil changes, and more. The A3 has a reported mileage of 65,421 miles.For more information or to schedule a test drive, you can call (949) 682-3262 or visit https://www.missionviejokia.com. You can also stop by at 28802 Marguerite Pkwy, Mission Viejo, CA 92692 to explore this stunning Audi A3 in person! Enjoy the benefits of no addendum, no dealer markups, an award-winning dealer, and an Orange County Top Workplace.\r\n          </optionname>\r\n        </option>\r\n        <option>\r\n          <optionname>\r\n            Exterior Color: Cosmos Blue Metallic, Fuel Type: Gasoline, Interior Color: Rock Gray, City MPG: 26, Highway MPG: 35, Stock: K242436A, Drivetrain: Front-wheel Drive, Transmission: 6-Speed Automatic S tronic, Engine: 2L I-4 gasoline direct injection, DOHC, variable valve control,, Mileage: 45425\r\n          </optionname>\r\n        </option>\r\n      </vehicle>\r\n    \r\n    \r\n    <customer>\r\n      <contact primarycontact=\"1\">\r\n        <name part=\"first\">sav</name>\r\n        <name part=\"last\">lyons</name>\r\n        <email>slyons0423@outlook.com</email>\r\n        <phone>619-762-8546</phone>\r\n        \r\n          <address type=\"home\">\r\n            <street line=\"1\"></street>\r\n            \r\n              <city>Chicago</city>\r\n            \r\n            \r\n              <regioncode>IL</regioncode>\r\n            \r\n            \r\n              <postalcode>60678</postalcode>\r\n            \r\n          </address>\r\n        \r\n      </contact>\r\n      <comments>\r\nYou have a new lead from Cars.com! Before you reach out, click the link to see all available Shopper Details, including other leads, target budget, and VDP views:\r\nhttps://dealerdash.cars.com/dealers/361df846-ab14-4b37-af13-13af44423e05/leads/0dddebdb-b481-4fee-b2ef-eab714a47c75?utm_content=SD0&amp;utm_medium=email\r\n\r\nI&#39;d like to know if the Used 2017 Audi A3 2.0T Premium you have listed on Cars.com for $14,000 is still available.\r\n\r\n\r\n\r\n\r\n</comments>\r\n    </customer>\r\n\r\n    \r\n      <vendor>\r\n        <id sequence=\"1\" source=\"cars.com\">6062576</id>\r\n        <id sequence=\"2\"></id>\r\n        <vendorname>Mission Viejo Kia</vendorname>\r\n        <url></url>\r\n        <contact primarycontact=\"1\">\r\n          <name part=\"full\">Sales Lead</name>\r\n          <email>sales@missionviejokia.edealerhub.com</email>\r\n          <phone type=\"voice\" time=\"day\">949-359-4074</phone>\r\n          <address>\r\n            <street line=\"1\">28802 Marguerite Parkway</street>\r\n            <street line=\"2\"></street>\r\n            <city>Mission Viejo</city>\r\n            <regioncode>CA</regioncode>\r\n            <postalcode>92692</postalcode>\r\n            <country>USA</country>\r\n          </address>\r\n        </contact>\r\n      </vendor>\r\n    \r\n\r\n    <provider>\r\n      \r\n          <name part=\"full\">Cars.com</name>\r\n      \r\n      \r\n        <service>Cars.com Leads</service>\r\n      \r\n      <url>https://www.cars.com</url>\r\n      <email>support@cars.com</email>\r\n      <phone>888-252-7731</phone>\r\n      <contact primarycontact=\"1\">\r\n        <address>\r\n          <street>300 S. Riverside Pl</street>\r\n          <city>Chicago</city>\r\n          <regioncode>IL</regioncode>\r\n          <postalcode>60606</postalcode>\r\n          <country>USA</country>\r\n        </address>\r\n      </contact>\r\n    </provider>\r\n    \r\n  </prospect>\r\n</adf>"
+        },
+        "links": []
+    },
+    "firstActivityAdfDict": {
+        "adf": {
+            "prospect": {
+                "requestdate": {
+                    "#text": "2025-10-18T16:50:36Z"
+                },
+                "vehicle": {
+                    "@attributes": {
+                        "interest": "buy",
+                        "status": "used"
+                    },
+                    "id": {
+                        "@attributes": {
+                            "sequence": "1",
+                            "source": "cars.com"
+                        },
+                        "#text": "0dddebdb-b481-4fee-b2ef-eab714a47c75"
+                    },
+                    "year": {
+                        "#text": "2017"
+                    },
+                    "make": {
+                        "#text": "Audi"
+                    },
+                    "model": {
+                        "#text": "A3"
+                    },
+                    "vin": {
+                        "#text": "WAUAUGFF4H1057494"
+                    },
+                    "stock": {
+                        "#text": "K242436A"
+                    },
+                    "trim": {
+                        "#text": "2.0T Premium"
+                    },
+                    "doors": {
+                        "#text": "4"
+                    },
+                    "bodystyle": {
+                        "#text": "Sedan"
+                    },
+                    "transmission": {
+                        "#text": "6-Speed Automatic S tronic"
+                    },
+                    "odometer": {
+                        "@attributes": {
+                            "units": "mi"
+                        },
+                        "#text": "45425"
+                    },
+                    "colorcombination": {
+                        "interiorcolor": {
+                            "#text": "Rock Gray"
+                        },
+                        "exteriorcolor": {
+                            "#text": "Cosmos Blue Metallic"
+                        },
+                        "preference": {
+                            "#text": "1"
+                        }
+                    },
+                    "price": {
+                        "@attributes": {
+                            "currency": "USD"
+                        },
+                        "#text": "14000"
+                    },
+                    "option": [
+                        {
+                            "optionname": {
+                                "#text": "Adaptive Cruise Control, Alloy Wheels, Android Auto®, Apple CarPlay®, CD Player, Automatic Emergency Braking, Backup Camera, Brake Assist, Stability Control, Sunroof/Moonroof, Keyless Start, HomeLink, Bluetooth®, Heated Seats, Keyless Entry, Leather Seats, Navigation System, Rain Sensing Wipers, USB Port"
+                            }
+                        },
+                        {
+                            "optionname": {
+                                "#text": "The 2017 Audi A3 2.0T Premium offers a blend of sophistication, performance, and cutting-edge technology in a compact luxury sedan. Powered by a 2.0L 4-cylinder TFSI engine, paired with a 6-speed automatic S tronic transmission, this vehicle delivers responsive handling and efficient performance. The FrontTrak front-wheel-drive system ensures excellent traction for a smooth driving experience. The A3s Cosmos Blue Metallic exterior is paired with a refined gray leather interior, providing both style and comfort.Inside, the A3 boasts a variety of premium features, including a navigation system, Audi MMI Navigation Plus with MMI Touch, and the Audi Virtual Cockpit. It also comes with an array of packages, such as the Premium Plus Package, Sport Package, and Technology Package, offering an extensive list of features like Audi Side Assist, Active Cruise Control, LED Lighting Package, and a Sport Suspension. For entertainment, it's equipped with a 10-speaker sound system, SiriusXM radio, and a USB Audi Music Interface.The car also offers impressive safety features, such as Audi Drive Select, Dual front impact airbags, Brake assist, Electronic Stability Control, and a Rearview Camera. The Panoramic moonroof, Heated front seats, and Sport Seats add to the driving comfort, while the Alloy wheels and Carbon Fiber Package enhance its sporty exterior design.This vehicle has a clean history with no accidents or damage reported. It has had two owners, both of whom maintained the vehicle well, with regular services such as brake and fluid replacements, oil changes, and more. The A3 has a reported mileage of 65,421 miles.For more information or to schedule a test drive, you can call (949) 682-3262 or visit https://www.missionviejokia.com. You can also stop by at 28802 Marguerite Pkwy, Mission Viejo, CA 92692 to explore this stunning Audi A3 in person! Enjoy the benefits of no addendum, no dealer markups, an award-winning dealer, and an Orange County Top Workplace."
+                            }
+                        },
+                        {
+                            "optionname": {
+                                "#text": "Exterior Color: Cosmos Blue Metallic, Fuel Type: Gasoline, Interior Color: Rock Gray, City MPG: 26, Highway MPG: 35, Stock: K242436A, Drivetrain: Front-wheel Drive, Transmission: 6-Speed Automatic S tronic, Engine: 2L I-4 gasoline direct injection, DOHC, variable valve control,, Mileage: 45425"
+                            }
+                        }
+                    ]
+                },
+                "customer": {
+                    "contact": {
+                        "@attributes": {
+                            "primarycontact": "1"
+                        },
+                        "name": [
+                            {
+                                "@attributes": {
+                                    "part": "first"
+                                },
+                                "#text": "sav"
+                            },
+                            {
+                                "@attributes": {
+                                    "part": "last"
+                                },
+                                "#text": "lyons"
+                            }
+                        ],
+                        "email": {
+                            "#text": "slyons0423@outlook.com"
+                        },
+                        "phone": {
+                            "#text": "619-762-8546"
+                        },
+                        "address": {
+                            "@attributes": {
+                                "type": "home"
+                            },
+                            "street": {
+                                "@attributes": {
+                                    "line": "1"
+                                }
+                            },
+                            "city": {
+                                "#text": "Chicago"
+                            },
+                            "regioncode": {
+                                "#text": "IL"
+                            },
+                            "postalcode": {
+                                "#text": "60678"
+                            }
+                        }
+                    },
+                    "comments": {
+                        "#text": "You have a new lead from Cars.com! Before you reach out, click the link to see all available Shopper Details, including other leads, target budget, and VDP views:\nhttps://dealerdash.cars.com/dealers/361df846-ab14-4b37-af13-13af44423e05/leads/0dddebdb-b481-4fee-b2ef-eab714a47c75?utm_content=SD0&utm_medium=email\n\nI'd like to know if the Used 2017 Audi A3 2.0T Premium you have listed on Cars.com for $14,000 is still available."
+                    }
+                },
+                "vendor": {
+                    "id": [
+                        {
+                            "@attributes": {
+                                "sequence": "1",
+                                "source": "cars.com"
+                            },
+                            "#text": "6062576"
+                        },
+                        {
+                            "@attributes": {
+                                "sequence": "2"
+                            }
+                        }
+                    ],
+                    "vendorname": {
+                        "#text": "Mission Viejo Kia"
+                    },
+                    "url": {},
+                    "contact": {
+                        "@attributes": {
+                            "primarycontact": "1"
+                        },
+                        "name": {
+                            "@attributes": {
+                                "part": "full"
+                            },
+                            "#text": "Sales Lead"
+                        },
+                        "email": {
+                            "#text": "sales@missionviejokia.edealerhub.com"
+                        },
+                        "phone": {
+                            "@attributes": {
+                                "type": "voice",
+                                "time": "day"
+                            },
+                            "#text": "949-359-4074"
+                        },
+                        "address": {
+                            "street": [
+                                {
+                                    "@attributes": {
+                                        "line": "1"
+                                    },
+                                    "#text": "28802 Marguerite Parkway"
+                                },
+                                {
+                                    "@attributes": {
+                                        "line": "2"
+                                    }
+                                }
+                            ],
+                            "city": {
+                                "#text": "Mission Viejo"
+                            },
+                            "regioncode": {
+                                "#text": "CA"
+                            },
+                            "postalcode": {
+                                "#text": "92692"
+                            },
+                            "country": {
+                                "#text": "USA"
+                            }
+                        }
+                    }
+                },
+                "provider": {
+                    "name": {
+                        "@attributes": {
+                            "part": "full"
+                        },
+                        "#text": "Cars.com"
+                    },
+                    "service": {
+                        "#text": "Cars.com Leads"
+                    },
+                    "url": {
+                        "#text": "https://www.cars.com"
+                    },
+                    "email": {
+                        "#text": "support@cars.com"
+                    },
+                    "phone": {
+                        "#text": "888-252-7731"
+                    },
+                    "contact": {
+                        "@attributes": {
+                            "primarycontact": "1"
+                        },
+                        "address": {
+                            "street": {
+                                "#text": "300 S. Riverside Pl"
+                            },
+                            "city": {
+                                "#text": "Chicago"
+                            },
+                            "regioncode": {
+                                "#text": "IL"
+                            },
+                            "postalcode": {
+                                "#text": "60606"
+                            },
+                            "country": {
+                                "#text": "USA"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "inquiry_text_body": "You have a new lead from Cars.com! Before you reach out, click the link to see all available Shopper Details, including other leads, target budget, and VDP views:\nhttps://dealerdash.cars.com/dealers/361df846-ab14-4b37-af13-13af44423e05/leads/0dddebdb-b481-4fee-b2ef-eab714a47c75?utm_content=SD0&utm_medium=email\n\nI'd like to know if the Used 2017 Audi A3 2.0T Premium you have listed on Cars.com for $14,000 is still available.",
+    "customerFirstMsgDict": {
+        "customerMsg": "I'd like to know if the Used 2017 Audi A3 2.0T Premium you have listed on Cars.com for $14,000 is still available.",
+        "isCustomerMsg": true,
+        "class": "availability_inquiry",
+        "notes": "The customer is inquiring about the availability of a specific vehicle listed for sale."
+    },
+    "alreadyProcessedActivities": {
+        "aca8cc44-43ac-f011-814f-00505690ec8c": {
+            "id": "aca8cc44-43ac-f011-814f-00505690ec8c",
+            "activityType": "Internet Up",
+            "category": "Completed",
+            "name": "Internet Up",
+            "completedDate": "2025-10-18T16:56:00Z",
+            "dueDate": "2025-10-18T18:56:00Z",
+            "outcome": "Auto Response",
+            "createdBy": "Leads, MVK Bucket",
+            "assignedTo": "Leads, MVK Bucket",
+            "completedBy": "Leads, MVK Bucket",
+            "opportunityId": "a5a8cc44-43ac-f011-814f-00505690ec8c",
+            "upType": "Internet",
+            "source": "Cars.com",
+            "subSource": "Cars.com Leads",
+            "createdByUserId": "1ac48ebf-2354-ef11-814a-00505690043e",
+            "assignedToUserId": "1ac48ebf-2354-ef11-814a-00505690043e",
+            "completedByUserId": "1ac48ebf-2354-ef11-814a-00505690043e",
+            "message": {
+                "date": "2025-10-18T16:55:36Z",
+                "from": "salesleads@cars.com",
+                "to": "sales@missionviejokia.edealerhub.com",
+                "subject": "Cars.com Used Car Lead for Mission Viejo Kia - 2017 Audi A3",
+                "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<?adf version=\"1.0\"?><adf>\r\n  <prospect>\r\n    <requestdate>2025-10-18T16:50:36Z</requestdate>\r\n    \r\n      <vehicle interest=\"buy\" status=\"used\">\r\n        <id sequence=\"1\" source=\"cars.com\">0dddebdb-b481-4fee-b2ef-eab714a47c75</id>\r\n        <year>2017</year>\r\n        <make>Audi</make>\r\n        <model>A3</model>\r\n        <vin>WAUAUGFF4H1057494</vin>\r\n        <stock>K242436A</stock>\r\n        <trim>2.0T Premium</trim>\r\n        <doors>4</doors>\r\n        <bodystyle>Sedan</bodystyle>\r\n        <transmission>6-Speed Automatic S tronic</transmission>\r\n        <odometer units=\"mi\">45425</odometer>\r\n        <colorcombination>\r\n          <interiorcolor>Rock Gray</interiorcolor>\r\n          <exteriorcolor>Cosmos Blue Metallic</exteriorcolor>\r\n          <preference>1</preference>\r\n        </colorcombination>\r\n        <price currency=\"USD\">14000</price>\r\n        <option>\r\n          <optionname>\r\n            Adaptive Cruise Control, Alloy Wheels, Android Auto®, Apple CarPlay®, CD Player, Automatic Emergency Braking, Backup Camera, Brake Assist, Stability Control, Sunroof/Moonroof, Keyless Start, HomeLink, Bluetooth®, Heated Seats, Keyless Entry, Leather Seats, Navigation System, Rain Sensing Wipers, USB Port\r\n          </optionname>\r\n        </option>\r\n        <option>\r\n          <optionname>\r\n            The 2017 Audi A3 2.0T Premium offers a blend of sophistication, performance, and cutting-edge technology in a compact luxury sedan. Powered by a 2.0L 4-cylinder TFSI engine, paired with a 6-speed automatic S tronic transmission, this vehicle delivers responsive handling and efficient performance. The FrontTrak front-wheel-drive system ensures excellent traction for a smooth driving experience. The A3s Cosmos Blue Metallic exterior is paired with a refined gray leather interior, providing both style and comfort.Inside, the A3 boasts a variety of premium features, including a navigation system, Audi MMI Navigation Plus with MMI Touch, and the Audi Virtual Cockpit. It also comes with an array of packages, such as the Premium Plus Package, Sport Package, and Technology Package, offering an extensive list of features like Audi Side Assist, Active Cruise Control, LED Lighting Package, and a Sport Suspension. For entertainment, it&#39;s equipped with a 10-speaker sound system, SiriusXM radio, and a USB Audi Music Interface.The car also offers impressive safety features, such as Audi Drive Select, Dual front impact airbags, Brake assist, Electronic Stability Control, and a Rearview Camera. The Panoramic moonroof, Heated front seats, and Sport Seats add to the driving comfort, while the Alloy wheels and Carbon Fiber Package enhance its sporty exterior design.This vehicle has a clean history with no accidents or damage reported. It has had two owners, both of whom maintained the vehicle well, with regular services such as brake and fluid replacements, oil changes, and more. The A3 has a reported mileage of 65,421 miles.For more information or to schedule a test drive, you can call (949) 682-3262 or visit https://www.missionviejokia.com. You can also stop by at 28802 Marguerite Pkwy, Mission Viejo, CA 92692 to explore this stunning Audi A3 in person! Enjoy the benefits of no addendum, no dealer markups, an award-winning dealer, and an Orange County Top Workplace.\r\n          </optionname>\r\n        </option>\r\n        <option>\r\n          <optionname>\r\n            Exterior Color: Cosmos Blue Metallic, Fuel Type: Gasoline, Interior Color: Rock Gray, City MPG: 26, Highway MPG: 35, Stock: K242436A, Drivetrain: Front-wheel Drive, Transmission: 6-Speed Automatic S tronic, Engine: 2L I-4 gasoline direct injection, DOHC, variable valve control,, Mileage: 45425\r\n          </optionname>\r\n        </option>\r\n      </vehicle>\r\n    \r\n    \r\n    <customer>\r\n      <contact primarycontact=\"1\">\r\n        <name part=\"first\">sav</name>\r\n        <name part=\"last\">lyons</name>\r\n        <email>slyons0423@outlook.com</email>\r\n        <phone>619-762-8546</phone>\r\n        \r\n          <address type=\"home\">\r\n            <street line=\"1\"></street>\r\n            \r\n              <city>Chicago</city>\r\n            \r\n            \r\n              <regioncode>IL</regioncode>\r\n            \r\n            \r\n              <postalcode>60678</postalcode>\r\n            \r\n          </address>\r\n        \r\n      </contact>\r\n      <comments>\r\nYou have a new lead from Cars.com! Before you reach out, click the link to see all available Shopper Details, including other leads, target budget, and VDP views:\r\nhttps://dealerdash.cars.com/dealers/361df846-ab14-4b37-af13-13af44423e05/leads/0dddebdb-b481-4fee-b2ef-eab714a47c75?utm_content=SD0&amp;utm_medium=email\r\n\r\nI&#39;d like to know if the Used 2017 Audi A3 2.0T Premium you have listed on Cars.com for $14,000 is still available.\r\n\r\n\r\n\r\n\r\n</comments>\r\n    </customer>\r\n\r\n    \r\n      <vendor>\r\n        <id sequence=\"1\" source=\"cars.com\">6062576</id>\r\n        <id sequence=\"2\"></id>\r\n        <vendorname>Mission Viejo Kia</vendorname>\r\n        <url></url>\r\n        <contact primarycontact=\"1\">\r\n          <name part=\"full\">Sales Lead</name>\r\n          <email>sales@missionviejokia.edealerhub.com</email>\r\n          <phone type=\"voice\" time=\"day\">949-359-4074</phone>\r\n          <address>\r\n            <street line=\"1\">28802 Marguerite Parkway</street>\r\n            <street line=\"2\"></street>\r\n            <city>Mission Viejo</city>\r\n            <regioncode>CA</regioncode>\r\n            <postalcode>92692</postalcode>\r\n            <country>USA</country>\r\n          </address>\r\n        </contact>\r\n      </vendor>\r\n    \r\n\r\n    <provider>\r\n      \r\n          <name part=\"full\">Cars.com</name>\r\n      \r\n      \r\n        <service>Cars.com Leads</service>\r\n      \r\n      <url>https://www.cars.com</url>\r\n      <email>support@cars.com</email>\r\n      <phone>888-252-7731</phone>\r\n      <contact primarycontact=\"1\">\r\n        <address>\r\n          <street>300 S. Riverside Pl</street>\r\n          <city>Chicago</city>\r\n          <regioncode>IL</regioncode>\r\n          <postalcode>60606</postalcode>\r\n          <country>USA</country>\r\n        </address>\r\n      </contact>\r\n    </provider>\r\n    \r\n  </prospect>\r\n</adf>"
+            },
+            "links": []
+        }
+    },
+    "body_html": "Hi Sav,\n\nThank you for your interest in the <a href=\"https://www.missionviejokia.com/used-inventory/?make=Audi&model=A3\">2017 Audi A3 2.0T Premium</a>. This model is known for its impressive performance and luxurious interior, making it a great choice for anyone seeking style and comfort.\n\nI'm happy to confirm that this vehicle is still available! If you're interested, Jacob Amezola would be thrilled to assist you further. Would you like to schedule a time to come in for a test drive or to discuss it in more detail? You can also reserve your time instantly here: Schedule Your Visit.\n\nPlease let us know a convenient time for you, or you can instantly reserve your time here: <{LegacySalesApptSchLink}>\n\n\nPatti\nMission Viejo Kia\n24041 El Toro Rd, Lake Forest, CA 92630",
+    "messages": [
+        {
+            "msgFrom": "patti",
+            "subject": "Used 2017 Audi A3 Availability",
+            "body": "Hi Sav,\n\nThank you for your interest in the <a href=\"https://www.missionviejokia.com/used-inventory/?make=Audi&model=A3\">2017 Audi A3 2.0T Premium</a>. This model is known for its impressive performance and luxurious interior, making it a great choice for anyone seeking style and comfort.\n\nI'm happy to confirm that this vehicle is still available! If you're interested, Jacob Amezola would be thrilled to assist you further. Would you like to schedule a time to come in for a test drive or to discuss it in more detail? You can also reserve your time instantly here: Schedule Your Visit.\n\nPlease let us know a convenient time for you, or you can instantly reserve your time here: <{LegacySalesApptSchLink}>\n\n\nPatti\nMission Viejo Kia\n24041 El Toro Rd, Lake Forest, CA 92630",
+            "date": "2025-10-30T15:52:46.775969"
+        }
+    ]
+}

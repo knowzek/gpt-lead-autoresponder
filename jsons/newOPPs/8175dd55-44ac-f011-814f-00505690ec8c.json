@@ -1,0 +1,384 @@
+{
+    "_subscription_id": "a4efeb74-2289-43d5-9814-1049fd35e894",
+    "opportunityId": "8175dd55-44ac-f011-814f-00505690ec8c",
+    "activityId": null,
+    "links": [
+        {
+            "rel": "create",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities",
+            "method": "POST",
+            "title": "Create Opportunity"
+        },
+        {
+            "rel": "self",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/8175dd55-44ac-f011-814f-00505690ec8c",
+            "method": "GET",
+            "title": "Get Opportunity"
+        },
+        {
+            "rel": "comment",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/comment",
+            "method": "POST",
+            "title": "Add Comment"
+        },
+        {
+            "rel": "email",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/sendEmail",
+            "method": "POST",
+            "title": "Send Email"
+        },
+        {
+            "rel": "tradein",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/tradein",
+            "method": "POST",
+            "title": "Add Trade-In"
+        },
+        {
+            "rel": "vehiclesought",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/vehicleSought",
+            "method": "POST",
+            "title": "Add Vehicle Sought"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/reassignPrimarySalesperson",
+            "method": "POST",
+            "title": "Reassign Primary Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/8175dd55-44ac-f011-814f-00505690ec8c/salesteam/add",
+            "method": "POST",
+            "title": "Add Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/8175dd55-44ac-f011-814f-00505690ec8c/salesteam/remove",
+            "method": "POST",
+            "title": "Remove Salesperson"
+        },
+        {
+            "rel": "substatus",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/8175dd55-44ac-f011-814f-00505690ec8c/subStatus/update",
+            "method": "POST",
+            "title": "Update SubStatus"
+        },
+        {
+            "rel": "inactive",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/8175dd55-44ac-f011-814f-00505690ec8c/set-inactive",
+            "method": "POST",
+            "title": "Set Opportunity Inactive"
+        }
+    ],
+    "source": "OfferUp",
+    "upType": "Internet",
+    "soughtVehicles": [
+        {
+            "id": "8275dd55-44ac-f011-814f-00505690ec8c",
+            "isNew": false,
+            "yearFrom": 2020,
+            "yearTo": 2020,
+            "make": "KIA",
+            "model": "Sportage",
+            "trim": "LX (A6) 4dr Front-wheel Drive",
+            "vin": "KNDPM3AC7L7763464",
+            "stockNumber": "K242684A",
+            "isPrimary": true
+        }
+    ],
+    "salesTeam": [
+        {
+            "id": "3dc4eb41-6345-f011-814d-00505690ec8c",
+            "firstName": "Tommy",
+            "lastName": "Vilayphonh",
+            "isPrimary": true,
+            "isPositionPrimary": true,
+            "positionName": "Salesperson",
+            "positionCode": "S",
+            "links": []
+        }
+    ],
+    "customer": {
+        "id": "8075dd55-44ac-f011-814f-00505690ec8c",
+        "isBusiness": false,
+        "firstName": "Terry",
+        "middleName": "",
+        "lastName": "Na",
+        "nickname": "",
+        "emails": [
+            {
+                "address": "terry.beal@ymail.com",
+                "emailType": "Personal",
+                "doNotEmail": false,
+                "isPreferred": true
+            }
+        ],
+        "phones": [
+            {
+                "number": "(714) 335-1076",
+                "phoneType": "Home",
+                "preferredTimeToContact": "Day",
+                "doNotCall": false,
+                "doNotText": true,
+                "preferCall": false,
+                "preferText": false,
+                "onDoNotCallRegistry": false
+            },
+            {
+                "number": "(714) 335-1076",
+                "phoneType": "Cellular",
+                "preferredTimeToContact": "Evening",
+                "doNotCall": false,
+                "doNotText": true,
+                "preferCall": false,
+                "preferText": false,
+                "onDoNotCallRegistry": false
+            }
+        ],
+        "privacySettings": [
+            {
+                "name": "CCPADoNotContact",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotShare",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotSell",
+                "value": "False"
+            }
+        ],
+        "links": [
+            {
+                "rel": "self",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/8075dd55-44ac-f011-814f-00505690ec8c",
+                "method": "GET",
+                "title": "Fetch Customer"
+            },
+            {
+                "rel": "create",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers",
+                "method": "POST",
+                "title": "Create Customer"
+            },
+            {
+                "rel": "update",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/8075dd55-44ac-f011-814f-00505690ec8c",
+                "method": "POST",
+                "title": "Update Customer"
+            }
+        ]
+    },
+    "tradeIns": null,
+    "createdBy": null,
+    "created_at": "2025-10-18",
+    "updated_at": "2025-10-20",
+    "isActive": true,
+    "completedActivities": [
+        {
+            "activityId": "c4956f6a-4bac-f011-814f-00505690ec8c",
+            "comments": "<i>RE: your request from Mission Viejo KIA</i>",
+            "activityName": "Email #1",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-18T15:55:49Z",
+            "outcome": "Call #2",
+            "completedBy": "Vilayphonh, T"
+        },
+        {
+            "activityId": "d0f22836-8b66-ea11-a977-005056b72b57",
+            "comments": "Hey Terry, looking forward to chat with you about the 2020 KIA Sportage you submitted an inquiry on. -Mission Viejo KIA | Tommy V. (Sales) STOP to unsubscribe or HELP for support. Msg freq. varies, msg&data rates may apply.",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T15:55:05Z",
+            "outcome": "Completed",
+            "completedBy": "Vilayphonh, T"
+        },
+        {
+            "activityId": "773a5558-4bac-f011-814f-00505690ec8c",
+            "comments": "",
+            "activityName": "Text #1",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T15:54:04Z",
+            "outcome": "Email #1",
+            "completedBy": "Vilayphonh, T"
+        },
+        {
+            "activityId": "8675dd55-44ac-f011-814f-00505690ec8c",
+            "comments": "(Left Message)(No Answer)",
+            "activityName": "Call # 1",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-18T15:53:35Z",
+            "outcome": "Text #1",
+            "completedBy": "Vilayphonh, T"
+        },
+        {
+            "activityId": "8cd318c6-4bac-f011-814f-00505690ec8c",
+            "callDuration": "00:45",
+            "comments": "https://audio.callrevu.com/ob/357180828",
+            "numberDialed": "(714) 335-1076",
+            "activityName": "Outbound Call",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-18T15:52:26Z",
+            "outcome": "Completed",
+            "completedBy": "System"
+        },
+        {
+            "activityId": "7afc00c3-44ac-f011-814f-00505690ec8c",
+            "comments": "View conversation https://assistant.crmaiva.ai/conversation?id=cc9b81f689b4f6d1854cd9301068767cOyzTS&viewonly=true; Reply as assistant https://assistant.crmaiva.ai/conversation?id=cc9b81f689b4f6d1854cd9301068767cOyzTS&; Stop communication: https://unsubscribe.crmaiva.ai/crm/mission-viejo-kia/terry.beal@ymail.com/cc9b81f689b4f6d1854cd9301068767cOyzTS?; *EMAIL*; Assistant says:; Hello Terry,; It's Sierra Brooks from Patterson Mission Viejo Kia.; Thank you for getting in touch.; It seems that you are interested in specials on this 2020 Kia Sportage.; We can discuss that via phone.; Would you like us to call you at 714-335-1076 to discuss your needs further?; Best Regards,; Sierra Brooks; Online Relations Assistant; Thank you for considering Mission Viejo Kia! Here’s why you’ll love; 1. Exceptional Service: Our approachable, stress-free sales experience, facilitated by a dedicated single contact person, ensures a seamless car-buying journey. Look at our impressive  4.9-star  rating on Google Reviews to see what our customers are saying!; 2. Vast Inventory: Choose from a wide range of new and pre-owned Kia models.; 3. Competitive Pricing: Enjoy great deals and flexible financing options tailored to your needs.; 4. Certified Pre-Owned: Get peace of mind with our rigorously inspected CPO vehicles backed by comprehensive warranties.; 5. Award-Winning Service: Our factory-trained technicians use genuine Kia parts for all maintenance and repairs.; 6. Community Commitment: We proudly su",
+            "activityName": "Note",
+            "activityType": 37,
+            "category": "Completed",
+            "completedDate": "2025-10-18T15:07:26Z",
+            "outcome": "Completed",
+            "completedBy": "Leads, M"
+        },
+        {
+            "activityId": "681eebb6-44ac-f011-814f-00505690ec8c",
+            "comments": "Sales AI email/text sent. Clock stopped.",
+            "activityName": "Phone Call",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-18T15:07:03Z",
+            "outcome": "Completed",
+            "completedBy": "Leads, M"
+        },
+        {
+            "activityId": "8575dd55-44ac-f011-814f-00505690ec8c",
+            "comments": "<i>OfferUp Lead</i>",
+            "activityName": "Internet Up",
+            "activityType": 13,
+            "category": "Completed",
+            "completedDate": "2025-10-18T15:03:00Z",
+            "outcome": "Auto Response",
+            "completedBy": "Leads, M"
+        }
+    ],
+    "scheduledActivities": [
+        {
+            "activityId": "c551c9ad-4bac-f011-814f-00505690ec8c",
+            "comments": "",
+            "dueDate": "2025-10-18T17:00:00Z",
+            "activityName": "Call #2",
+            "activityType": 2,
+            "assignedTo": "Vilayphonh, T"
+        },
+        {
+            "activityId": "8775dd55-44ac-f011-814f-00505690ec8c",
+            "comments": "",
+            "dueDate": "2025-10-21T17:03:00Z",
+            "activityName": "BDC Virtual Immediate Call",
+            "activityType": 2,
+            "assignedTo": "Maqui, R"
+        }
+    ],
+    "firstActivity": {
+        "id": "8575dd55-44ac-f011-814f-00505690ec8c",
+        "activityType": "Internet Up",
+        "category": "Completed",
+        "name": "Internet Up",
+        "completedDate": "2025-10-18T17:03:00Z",
+        "dueDate": "2025-10-18T19:03:00Z",
+        "outcome": "Auto Response",
+        "createdBy": "Leads, MVK Bucket",
+        "assignedTo": "Leads, MVK Bucket",
+        "completedBy": "Leads, MVK Bucket",
+        "opportunityId": "8175dd55-44ac-f011-814f-00505690ec8c",
+        "upType": "Internet",
+        "source": "OfferUp",
+        "createdByUserId": "1ac48ebf-2354-ef11-814a-00505690043e",
+        "assignedToUserId": "1ac48ebf-2354-ef11-814a-00505690043e",
+        "completedByUserId": "1ac48ebf-2354-ef11-814a-00505690043e",
+        "message": {
+            "date": "2025-10-18T17:03:15Z",
+            "from": "offerup@notify.offerup.com",
+            "to": "sales@missionviejokia.edealerhub.com",
+            "subject": "OfferUp Lead",
+            "body": "<?xml version=\"1.0\"?>\r\n<?adf version=\"1.0\"?><adf>\r\n    <prospect status=\"new\">\r\n        <id sequence=\"1\" source=\"OFFERUP\">OFFERUP</id>\r\n        <requestdate>2025-10-18T05:03:15-05:03</requestdate>\r\n        <vehicle>\r\n            <year>2020</year>\r\n            <make>Kia</make>\r\n            <model>Sportage</model>\r\n            <stock>K242684A</stock>\r\n            <vin>KNDPM3AC7L7763464</vin>\r\n        </vehicle>\r\n        <customer>\r\n            <contact>\r\n                <name part=\"first\" type=\"individual\">Terry</name>\r\n                <name part=\"last\" type=\"individual\">N/A</name>\r\n                <email>terry.beal@ymail.com</email>\r\n                <phone>7143351076</phone>\r\n            </contact>\r\n        </customer>\r\n        <provider>\r\n            <id sequence=\"1\" source=\"OFFERUP\">OFFERUP</id>\r\n            <name part=\"full\" type=\"individual\">OFFERUP</name>\r\n        </provider>\r\n    </prospect>\r\n</adf>"
+        },
+        "links": [],
+        "adfDict": {
+            "adf": {
+                "prospect": {
+                    "@attributes": {
+                        "status": "new"
+                    },
+                    "id": {
+                        "@attributes": {
+                            "sequence": "1",
+                            "source": "OFFERUP"
+                        },
+                        "#text": "OFFERUP"
+                    },
+                    "requestdate": {
+                        "#text": "2025-10-18T05:03:15-05:03"
+                    },
+                    "vehicle": {
+                        "year": {
+                            "#text": "2020"
+                        },
+                        "make": {
+                            "#text": "Kia"
+                        },
+                        "model": {
+                            "#text": "Sportage"
+                        },
+                        "stock": {
+                            "#text": "K242684A"
+                        },
+                        "vin": {
+                            "#text": "KNDPM3AC7L7763464"
+                        }
+                    },
+                    "customer": {
+                        "contact": {
+                            "name": [
+                                {
+                                    "@attributes": {
+                                        "part": "first",
+                                        "type": "individual"
+                                    },
+                                    "#text": "Terry"
+                                },
+                                {
+                                    "@attributes": {
+                                        "part": "last",
+                                        "type": "individual"
+                                    },
+                                    "#text": "N/A"
+                                }
+                            ],
+                            "email": {
+                                "#text": "terry.beal@ymail.com"
+                            },
+                            "phone": {
+                                "#text": "7143351076"
+                            }
+                        }
+                    },
+                    "provider": {
+                        "id": {
+                            "@attributes": {
+                                "sequence": "1",
+                                "source": "OFFERUP"
+                            },
+                            "#text": "OFFERUP"
+                        },
+                        "name": {
+                            "@attributes": {
+                                "part": "full",
+                                "type": "individual"
+                            },
+                            "#text": "OFFERUP"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

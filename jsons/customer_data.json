@@ -1,0 +1,57 @@
+{
+    "id": "1e36c7b6-86a7-f011-814f-00505690ec8c",
+    "isBusiness": false,
+    "firstName": "Andrew",
+    "middleName": "",
+    "lastName": "Mejia",
+    "nickname": "",
+    "emails": [
+        {
+            "address": "mr.amejia@yahoo.com",
+            "emailType": "Personal",
+            "doNotEmail": false,
+            "isPreferred": true
+        }
+    ],
+    "address": {
+        "addressLine1": "2501 W SUNFLOWER AVE",
+        "city": "SANTA ANA",
+        "state": "CA",
+        "zip": "92704",
+        "country": "US"
+    },
+    "privacySettings": [
+        {
+            "name": "CCPADoNotContact",
+            "value": "False"
+        },
+        {
+            "name": "CCPADoNotShare",
+            "value": "False"
+        },
+        {
+            "name": "CCPADoNotSell",
+            "value": "False"
+        }
+    ],
+    "links": [
+        {
+            "rel": "self",
+            "href": "https://api.fortellis.io/sales/v1/elead/customers/1e36c7b6-86a7-f011-814f-00505690ec8c",
+            "method": "GET",
+            "title": "Fetch Customer"
+        },
+        {
+            "rel": "create",
+            "href": "https://api.fortellis.io/sales/v1/elead/customers",
+            "method": "POST",
+            "title": "Create Customer"
+        },
+        {
+            "rel": "update",
+            "href": "https://api.fortellis.io/sales/v1/elead/customers/1e36c7b6-86a7-f011-814f-00505690ec8c",
+            "method": "POST",
+            "title": "Update Customer"
+        }
+    ]
+}

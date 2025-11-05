@@ -1,0 +1,830 @@
+{
+    "_subscription_id": "a4efeb74-2289-43d5-9814-1049fd35e894",
+    "opportunityId": "692a8b82-9ba0-f011-814f-00505690ec8c",
+    "activityId": null,
+    "links": [
+        {
+            "rel": "create",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities",
+            "method": "POST",
+            "title": "Create Opportunity"
+        },
+        {
+            "rel": "self",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/692a8b82-9ba0-f011-814f-00505690ec8c",
+            "method": "GET",
+            "title": "Get Opportunity"
+        },
+        {
+            "rel": "comment",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/comment",
+            "method": "POST",
+            "title": "Add Comment"
+        },
+        {
+            "rel": "email",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/sendEmail",
+            "method": "POST",
+            "title": "Send Email"
+        },
+        {
+            "rel": "tradein",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/tradein",
+            "method": "POST",
+            "title": "Add Trade-In"
+        },
+        {
+            "rel": "vehiclesought",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/vehicleSought",
+            "method": "POST",
+            "title": "Add Vehicle Sought"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/reassignPrimarySalesperson",
+            "method": "POST",
+            "title": "Reassign Primary Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/692a8b82-9ba0-f011-814f-00505690ec8c/salesteam/add",
+            "method": "POST",
+            "title": "Add Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/692a8b82-9ba0-f011-814f-00505690ec8c/salesteam/remove",
+            "method": "POST",
+            "title": "Remove Salesperson"
+        },
+        {
+            "rel": "substatus",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/692a8b82-9ba0-f011-814f-00505690ec8c/subStatus/update",
+            "method": "POST",
+            "title": "Update SubStatus"
+        },
+        {
+            "rel": "inactive",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/692a8b82-9ba0-f011-814f-00505690ec8c/set-inactive",
+            "method": "POST",
+            "title": "Set Opportunity Inactive"
+        }
+    ],
+    "source": "Kia",
+    "upType": "Internet",
+    "soughtVehicles": [
+        {
+            "id": "6c2a8b82-9ba0-f011-814f-00505690ec8c",
+            "isNew": true,
+            "yearFrom": 2026,
+            "yearTo": 2026,
+            "make": "KIA",
+            "model": "Carnival Hybrid",
+            "trim": "SX (A6) Passenger Van",
+            "vin": "KNDNE5KA0T6106475",
+            "stockNumber": "K106475",
+            "isPrimary": true
+        }
+    ],
+    "salesTeam": [
+        {
+            "id": "54faece6-9aa0-f011-814f-00505690ec8c",
+            "firstName": "Anthony",
+            "lastName": "Calabrese",
+            "isPrimary": true,
+            "isPositionPrimary": true,
+            "positionName": "Salesperson",
+            "positionCode": "S",
+            "links": []
+        },
+        {
+            "id": "41f7e632-940c-ee11-b0ce-00505690dca3",
+            "firstName": "Austin",
+            "lastName": "Yoon",
+            "isPrimary": false,
+            "isPositionPrimary": false,
+            "positionName": "Desk Manager",
+            "positionCode": "DM",
+            "links": []
+        },
+        {
+            "id": "54faece6-9aa0-f011-814f-00505690ec8c",
+            "firstName": "Anthony",
+            "lastName": "Calabrese",
+            "isPrimary": false,
+            "isPositionPrimary": true,
+            "positionName": "Desk Manager",
+            "positionCode": "DM",
+            "links": []
+        }
+    ],
+    "customer": {
+        "id": "632a8b82-9ba0-f011-814f-00505690ec8c",
+        "isBusiness": false,
+        "firstName": "Alan",
+        "middleName": "",
+        "lastName": "Herrera",
+        "nickname": "",
+        "emails": [
+            {
+                "address": "danherveg@hotmail.com",
+                "emailType": "Personal",
+                "doNotEmail": false,
+                "isPreferred": true
+            }
+        ],
+        "phones": [
+            {
+                "number": "(213) 675-9970",
+                "phoneType": "Work",
+                "preferredTimeToContact": "Day",
+                "doNotCall": false,
+                "doNotText": true,
+                "preferCall": false,
+                "preferText": false,
+                "onDoNotCallRegistry": false,
+                "doNotCallAfterDate": "2027-03-22T15:57:00"
+            },
+            {
+                "number": "(213) 675-9970",
+                "phoneType": "Cellular",
+                "preferredTimeToContact": "Evening",
+                "doNotCall": false,
+                "doNotText": true,
+                "preferCall": false,
+                "preferText": false,
+                "onDoNotCallRegistry": false,
+                "doNotCallAfterDate": "2027-03-22T15:57:00"
+            }
+        ],
+        "address": {
+            "addressLine1": "",
+            "addressLine2": "",
+            "city": "LADERA RANCH",
+            "state": "CA",
+            "zip": "92694",
+            "country": "US",
+            "county": "ORANGE",
+            "doNotMail": false,
+            "isPreferred": false
+        },
+        "privacySettings": [
+            {
+                "name": "CCPADoNotContact",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotShare",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotSell",
+                "value": "False"
+            }
+        ],
+        "links": [
+            {
+                "rel": "self",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/632a8b82-9ba0-f011-814f-00505690ec8c",
+                "method": "GET",
+                "title": "Fetch Customer"
+            },
+            {
+                "rel": "create",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers",
+                "method": "POST",
+                "title": "Create Customer"
+            },
+            {
+                "rel": "update",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/632a8b82-9ba0-f011-814f-00505690ec8c",
+                "method": "POST",
+                "title": "Update Customer"
+            }
+        ]
+    },
+    "tradeIns": null,
+    "createdBy": null,
+    "created_at": "2025-10-18",
+    "updated_at": "2025-10-20",
+    "isActive": true,
+    "completedActivities": [
+        {
+            "activityId": "78628037-8b66-ea11-a977-005056b72b57",
+            "comments": "",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:31:42Z",
+            "outcome": "Completed",
+            "completedBy": "Calabrese, A"
+        },
+        {
+            "activityId": "62e6a74f-abab-f011-814f-00505690ec8c",
+            "comments": "<i>RE: Reaching Out To You</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-17T20:48:01.713Z",
+            "outcome": "Completed",
+            "completedBy": "Maqui, R"
+        },
+        {
+            "activityId": "bc611435-8b66-ea11-a977-005056b72b57",
+            "comments": "Hello Alan, we have not heard from you in a bit and just wanted to check in. Still interested in finding your perfect Kia with us?",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-17T20:47:09Z",
+            "outcome": "Completed",
+            "completedBy": "Maqui, R"
+        },
+        {
+            "activityId": "8a53fc6b-90ab-f011-814f-00505690ec8c",
+            "comments": "<i>Style, Space, and Savings: New Carnival Hybrid Offers</i>",
+            "activityName": "Send Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-17T18:06:26.76Z",
+            "outcome": "Completed",
+            "completedBy": "Herman, C"
+        },
+        {
+            "activityId": "4f173a24-62a8-f011-814f-00505690ec8c",
+            "comments": "<i>RE: Following up / New 2026 KIA Carnival Hybrid SX</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-13T16:26:33.713Z",
+            "outcome": "Completed",
+            "completedBy": "Maqui, R"
+        },
+        {
+            "activityId": "553af438-8b66-ea11-a977-005056b72b57",
+            "comments": "Hello Alan, I was wondering if you would like to stop by this week to check out the  2026 KIA Carnival Hybrid SX ?",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-13T16:25:54Z",
+            "outcome": "Completed",
+            "completedBy": "Maqui, R"
+        },
+        {
+            "activityId": "752a8b82-9ba0-f011-814f-00505690ec8c",
+            "comments": "(No Answer)(Left Message)",
+            "activityName": "BDC Virtual Immediate Call",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-13T16:24:47Z",
+            "outcome": "BDC Virtual Call #2",
+            "completedBy": "Maqui, R"
+        },
+        {
+            "activityId": "553e43fe-b4a0-f011-814f-00505690ec8c",
+            "comments": "",
+            "activityName": "Text #1",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-09T17:46:06Z",
+            "outcome": "Email #1",
+            "completedBy": "Calabrese, A"
+        },
+        {
+            "activityId": "82248935-8b66-ea11-a977-005056b72b57",
+            "comments": "Hi Alan, are you open to color on the Carnival Hybrid? I have two that are on special.",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-09T17:45:34Z",
+            "outcome": "Completed",
+            "completedBy": "Calabrese, A"
+        },
+        {
+            "activityId": "5131736f-38a2-f011-814f-00505690ec8c",
+            "comments": "",
+            "activityName": "Apt. No Show Call",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-08T20:49:23Z",
+            "outcome": "Phone Follow Up",
+            "completedBy": "Calabrese, A"
+        },
+        {
+            "activityId": "7b67fefe-dfa2-f011-814f-00505690ec8c",
+            "comments": "<i>New 2026 KIA Carnival Hybrid SX</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-06T16:12:19.793Z",
+            "outcome": "Completed",
+            "completedBy": "Maqui, R"
+        },
+        {
+            "activityId": "0b486297-8b66-ea11-a977-005056b72b57",
+            "comments": "Good morning Alan, just checking back in if you would like to stop by today to check out the 2026 KIA Carnival Hybrid SX?",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-06T16:11:23Z",
+            "outcome": "Completed",
+            "completedBy": "Maqui, R"
+        },
+        {
+            "activityId": "a4812735-8b66-ea11-a977-005056b72b57",
+            "comments": "Thank you for your reply Alan, Just let me know what time so i can make sure the car is ready for you front of the Show Room. ",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-05T16:15:57Z",
+            "outcome": "Completed",
+            "completedBy": "Awad, L"
+        },
+        {
+            "activityId": "a7662735-8b66-ea11-a977-005056b72b57",
+            "comments": "Hi Garret something came up, I won't be able to make it at 11, I'll try to stop by later today, thanks",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-05T15:54:56Z",
+            "outcome": "Completed",
+            "completedBy": "System"
+        },
+        {
+            "activityId": "7a662735-8b66-ea11-a977-005056b72b57",
+            "comments": "Good morning Garrett, this is Mission Viejo Kia. We are reaching out this morning to confirm your appointment with Anthony in sales at 11:00am today.",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-05T15:31:02Z",
+            "outcome": "Completed",
+            "completedBy": "Awad, L"
+        },
+        {
+            "activityId": "1c36016a-83a1-f011-814f-00505690ec8c",
+            "comments": "<i>A Quick Reminder About Your Appointment</i>",
+            "activityName": "1 Day Prior to Appt Auto Reminder",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-04T23:27:42Z",
+            "outcome": "Complete",
+            "completedBy": "Calabrese, A"
+        },
+        {
+            "activityId": "b877967f-7ca1-f011-814f-00505690ec8c",
+            "comments": "View conversation https://assistant.crmaiva.ai/conversation?id=cccbc75698318ca3140ac7059e14594dtSwXo&viewonly=true; Reply as assistant https://assistant.crmaiva.ai/conversation?id=cccbc75698318ca3140ac7059e14594dtSwXo&; Stop communication: https://unsubscribe.crmaiva.ai/crm/mission-viejo-kia/+12136759970/cccbc75698318ca3140ac7059e14594dtSwXo?; *SMS*; **Requires human takeover**; **Action: schedule appointment**; Assistant says:; Thanks for sharing the offer you received, Alan. We appreciate you considering us and your interest in the 2026 Kia Carnival MPV Hybrid. Our team will review your request and provide you with a response as soon as possible regarding pricing.  Your appointment has been scheduled for 10/05/2025 at 11:00 AM. A member of our team will be happy to assist you the moment you come to the dealership. When you visit us, our dealership is located at 28802 Marguerite Parkway Mission Viejo CA 92692.  Do you currently own a vehicle that you are considering trading in?; Client Says:; Hi Sierra, Kia Cerritos is giving me the selling price of $48,269 for an Astra Blue, can you offer me something better? I can stop by for a drive test tomorrow around 11 am",
+            "activityName": "Note",
+            "activityType": 37,
+            "category": "Completed",
+            "completedDate": "2025-10-04T21:48:43Z",
+            "outcome": "Completed",
+            "completedBy": "Calabrese, A"
+        },
+        {
+            "activityId": "e439d3fc-78a1-f011-814f-00505690ec8c",
+            "comments": "NOT THAT FAR OFF PRICEWISE IF HE FINANCES WITH KMF. ",
+            "activityName": "Note",
+            "activityType": 37,
+            "category": "Completed",
+            "completedDate": "2025-10-04T21:22:29.613Z",
+            "outcome": "Completed",
+            "completedBy": "Calabrese, A"
+        },
+        {
+            "activityId": "08526aea-76a1-f011-814f-00505690ec8c",
+            "comments": "TEXTED ME ON MY CELL PHONE ASKING ME TO BEAT CERRITOS. SENT ME A PIC OF THE QUOTE FROM THEM FOR THE CARNIVAL FOR $48269 + TAX AND ACCESSORIES. I TOLD HIM DID HE NOTICES THE $3K MARKUP FOR PAINT PROTECTION AND GPS? HE SAID THEY ARE TAKING IT OFF. HAVENT RECIEVED AN UPDATED QUOTE THAT THEY ALLEGEDLY ARE REMOVING THE ADD'S.",
+            "activityName": "Note",
+            "activityType": 37,
+            "category": "Completed",
+            "completedDate": "2025-10-04T21:07:38.04Z",
+            "outcome": "Completed",
+            "completedBy": "Calabrese, A"
+        },
+        {
+            "activityId": "c0a71a36-8b66-ea11-a977-005056b72b57",
+            "comments": "Hi Alan, would you like to visit us for a test drive? Do you have any additional questions?",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-04T17:26:25Z",
+            "outcome": "Completed",
+            "completedBy": "Yoon, A"
+        },
+        {
+            "activityId": "722a8b82-9ba0-f011-814f-00505690ec8c",
+            "comments": "(Left Message)",
+            "activityName": "Call # 1",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-03T21:59:29Z",
+            "outcome": "Text #1",
+            "completedBy": "Vilayphonh, T"
+        },
+        {
+            "activityId": "66eb05e0-b6a0-f011-814f-00505690ec8c",
+            "callDuration": "00:50",
+            "comments": "https://audio.callrevu.com/ob/351141321",
+            "numberDialed": "(213) 675-9970",
+            "activityName": "Outbound Call",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-03T21:58:07Z",
+            "outcome": "Completed",
+            "completedBy": "System"
+        },
+        {
+            "activityId": "19f4f234-8b66-ea11-a977-005056b72b57",
+            "comments": "There is an additional $1000 rebate if you choose to finance with Kia.",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-03T20:36:08Z",
+            "outcome": "Completed",
+            "completedBy": "Yoon, A"
+        },
+        {
+            "activityId": "c982fc34-8b66-ea11-a977-005056b72b57",
+            "comments": "For you review.",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-03T20:32:48Z",
+            "outcome": "Completed",
+            "completedBy": "Yoon, A"
+        },
+        {
+            "activityId": "d8f4f234-8b66-ea11-a977-005056b72b57",
+            "comments": "",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-03T20:32:37Z",
+            "outcome": "Completed",
+            "completedBy": "Yoon, A"
+        },
+        {
+            "activityId": "3405f334-8b66-ea11-a977-005056b72b57",
+            "comments": "92694",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-03T20:17:59Z",
+            "outcome": "Completed",
+            "completedBy": "System"
+        },
+        {
+            "activityId": "ce07f334-8b66-ea11-a977-005056b72b57",
+            "comments": "Can you provide your zip code so I can calculate OTD for you?",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-03T20:15:21Z",
+            "outcome": "Completed",
+            "completedBy": "Yoon, A"
+        },
+        {
+            "activityId": "593987fc-8b66-ea11-a977-005056b72b57",
+            "comments": "Hi Alan, My name is Anthony from Mission Viejo Kia. I see that you are interested in a new 2026 Kia Carnival Hybrid SX. And our dealer does not have any add ons or accessories.  STOP to unsubscribe or HELP for support. Msg freq. varies, msg&data rates may apply.",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-03T20:14:18Z",
+            "outcome": "Completed",
+            "completedBy": "Yoon, A"
+        },
+        {
+            "activityId": "2d830805-a5a0-f011-814f-00505690ec8c",
+            "comments": "View conversation https://assistant.crmaiva.ai/conversation?id=cccbc75698318ca3140ac7059e14594dtSwXo&viewonly=true; Reply as assistant https://assistant.crmaiva.ai/conversation?id=cccbc75698318ca3140ac7059e14594dtSwXo&; Stop communication: https://unsubscribe.crmaiva.ai/crm/mission-viejo-kia/danherveg@hotmail.com/cccbc75698318ca3140ac7059e14594dtSwXo?; *EMAIL*; Assistant says:; Hi Alan,; Thank you for your interest in the 2026 Kia Carnival MPV Hybrid and for your question about the out-the-door price. We appreciate your request, and our team will review it and provide you with a response as soon as possible. If any more information is needed, we'll be sure to reach out.; Do you prefer to be called at your number - 213-675-9970 for further discussion about your needs?; Best Regards,; Sierra Brooks; Online Relations Assistant; Thank you for considering Mission Viejo Kia! Here’s why you’ll love; 1. Exceptional Service: Our approachable, stress-free sales experience, facilitated by a dedicated single contact person, ensures a seamless car-buying journey. Look at our impressive  4.9-star  rating on Google Reviews to see what our customers are saying!; 2. Vast Inventory: Choose from a wide range of new and pre-owned Kia models.; 3. Competitive Pricing: Enjoy great deals and flexible financing options tailored to your needs.; 4. Certified Pre-Owned: Get peace of mind with our rigorously inspected CPO vehicles backed by comprehensive warranties.; 5. Award-Winning Service: Our factory",
+            "activityName": "Note",
+            "activityType": 37,
+            "category": "Completed",
+            "completedDate": "2025-10-03T20:06:08Z",
+            "outcome": "Completed",
+            "completedBy": "Calabrese, A"
+        },
+        {
+            "activityId": "f8a387b1-9ca0-f011-814f-00505690ec8c",
+            "comments": "View conversation https://assistant.crmaiva.ai/conversation?id=cccbc75698318ca3140ac7059e14594dtSwXo&viewonly=true; Reply as assistant https://assistant.crmaiva.ai/conversation?id=cccbc75698318ca3140ac7059e14594dtSwXo&; Stop communication: https://unsubscribe.crmaiva.ai/crm/mission-viejo-kia/danherveg@hotmail.com/cccbc75698318ca3140ac7059e14594dtSwXo?; *EMAIL*; Assistant says:; Hi Alan,; It's Sierra Brooks from Patterson Mission Viejo Kia.; Thank you for getting in touch.; This 2026 Kia Carnival MPV Hybrid is available at this moment.; If you'd like to schedule an appointment, simply choose a day and time, and I'll arrange it for you. Alternatively, would you like us to call your number, 213-675-9970, before you schedule an appointment?; 2026 Kia Carnival MPV Hybrid    $50,840    VIN: KNDNE5KA0T6106475    Stock #: K106475; Best Regards,; Sierra Brooks; Online Relations Assistant; Thank you for considering Mission Viejo Kia! Here’s why you’ll love; 1. Exceptional Service: Our approachable, stress-free sales experience, facilitated by a dedicated single contact person, ensures a seamless car-buying journey. Look at our impressive  4.9-star  rating on Google Reviews to see what our customers are saying!; 2. Vast Inventory: Choose from a wide range of new and pre-owned Kia models.; 3. Competitive Pricing: Enjoy great deals and flexible financing options tailored to your needs.; 4. Certified Pre-Owned: Get peace of mind with our rigorously inspected CPO vehicles backed by comprehe",
+            "activityName": "Note",
+            "activityType": 37,
+            "category": "Completed",
+            "completedDate": "2025-10-03T19:06:31Z",
+            "outcome": "Completed",
+            "completedBy": "Leads, M"
+        },
+        {
+            "activityId": "ed85060d-9ca0-f011-814f-00505690ec8c",
+            "comments": "Sales AI email/text sent. Clock stopped.",
+            "activityName": "Phone Call",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-03T19:02:00Z",
+            "outcome": "Completed",
+            "completedBy": "Leads, M"
+        },
+        {
+            "activityId": "702a8b82-9ba0-f011-814f-00505690ec8c",
+            "comments": "<i>Kia ADF XML Lead</i>",
+            "activityName": "Internet Up",
+            "activityType": 13,
+            "category": "Completed",
+            "completedDate": "2025-10-03T18:57:11.867Z",
+            "outcome": "Auto Response",
+            "completedBy": "Leads, M"
+        },
+        {
+            "activityId": "3e04fd85-7ca1-f011-814f-00505690ec8c",
+            "comments": "Appointment from Sales AI",
+            "activityName": "Appointment",
+            "activityType": 7,
+            "category": "Completed",
+            "completedDate": "2025-10-05T20:09:34Z",
+            "outcome": "No Show - Delete Current Task",
+            "completedBy": "Calabrese, A"
+        }
+    ],
+    "scheduledActivities": [
+        {
+            "activityId": "8bdfa093-48a5-f011-814f-00505690ec8c",
+            "comments": "",
+            "dueDate": "2025-10-09T19:00:00Z",
+            "activityName": "Email #1",
+            "activityType": 3,
+            "assignedTo": "Calabrese, A"
+        },
+        {
+            "activityId": "5b559f02-99a4-f011-814f-00505690ec8c",
+            "comments": "",
+            "dueDate": "2025-10-09T22:10:00Z",
+            "activityName": "Phone Follow Up",
+            "activityType": 2,
+            "assignedTo": "Calabrese, A"
+        },
+        {
+            "activityId": "670a60e1-61a8-f011-814f-00505690ec8c",
+            "comments": "",
+            "dueDate": "2025-10-18T18:00:00Z",
+            "activityName": "BDC Virtual Call #2",
+            "activityType": 2,
+            "assignedTo": "Maqui, R"
+        }
+    ],
+    "firstActivity": {
+        "id": "702a8b82-9ba0-f011-814f-00505690ec8c",
+        "activityType": "Internet Up",
+        "category": "Completed",
+        "name": "Internet Up",
+        "completedDate": "2025-10-03T20:57:11.867Z",
+        "dueDate": "2025-10-03T20:57:00Z",
+        "outcome": "Auto Response",
+        "createdBy": "Leads, MVK Bucket",
+        "assignedTo": "Leads, MVK Bucket",
+        "completedBy": "Leads, MVK Bucket",
+        "opportunityId": "692a8b82-9ba0-f011-814f-00505690ec8c",
+        "upType": "Internet",
+        "source": "Kia",
+        "subSource": "Kia.com",
+        "createdByUserId": "1ac48ebf-2354-ef11-814a-00505690043e",
+        "assignedToUserId": "1ac48ebf-2354-ef11-814a-00505690043e",
+        "completedByUserId": "1ac48ebf-2354-ef11-814a-00505690043e",
+        "message": {
+            "date": "2025-10-03T20:57:12Z",
+            "from": "starlead@eleadcrm.com",
+            "to": "starlead@eleadcrm.com",
+            "subject": "Kia ADF XML Lead",
+            "body": "<adf>\r\n\t<prospect status=\"new\">\r\n\t\t<id source=\"Kia Digital\">59277123</id>\r\n\t\t<id source=\"IsCILead\">True</id>\r\n    \r\n    <id sequence=\"2\" source=\"sessionId\">1613941860.1758770668</id>\r\n<id sequence=\"3\" source=\"name:full\">kia.com</id>\r\n<id sequence=\"4\" source=\"LeadType\">TestDrive</id>\r\n\r\n\t\t<requestdate>2025-10-03T20:56:58</requestdate>\r\n\t\t<vehicle interest=\"buy\" status=\"new\">\r\n  <year>2026</year>\r\n  <make>Kia</make>\r\n  <model>Carnival MPV Hybrid</model>\r\n  <vin>KNDNE5KA0T6106475</vin>\r\n  <trim>SX FWD</trim>\r\n  <colorcombination>\r\n    <interiorcolor>Off-black &amp; Taupe Two-tone Syntex Seat Trim</interiorcolor>\r\n    <exteriorcolor>Aurora Black Pearl</exteriorcolor>\r\n    <preference>1</preference>\r\n  </colorcombination>\r\n  <option>\r\n    <optionname>Carpeted Floor Mats (8-Passenger)</optionname>\r\n    <manufacturercode></manufacturercode>\r\n  </option>\r\n  <option>\r\n    <optionname>Auto-Dimming Mirror w/HomeLink</optionname>\r\n    <manufacturercode></manufacturercode>\r\n  </option>\r\n  <option>\r\n    <optionname>Roadside Assistance Kit</optionname>\r\n    <manufacturercode></manufacturercode>\r\n  </option>\r\n  <option>\r\n    <optionname>Std. Package</optionname>\r\n    <manufacturercode></manufacturercode>\r\n  </option>\r\n</vehicle>\r\n\t\t\r\n\t\t<customer>\r\n\t\t\t<contact primarycontact=\"1\">\r\n\t\t\t\t<name type=\"individual\" part=\"first\">Alan</name>\r\n\t\t\t\t<name type=\"individual\" part=\"last\">Herrera</name>\r\n\t\t\t\t<email>danherveg@hotmail.com</email>\r\n\t\t\t\t<phone type=\"voice\" time=\"evening\"></phone>\r\n\t\t\t\t<phone type=\"voice\" time=\"day\">2136759970</phone>\r\n\t\t\t\t<phone type=\"cellphone\"></phone>\r\n\t\t\t\t<address type=\"home\">\r\n\t\t\t\t\t<street line=\"1\"></street>\r\n\t\t\t\t\t<street line=\"2\"></street>\r\n\t\t\t\t\t<city></city>\r\n\t\t\t\t\t<regioncode></regioncode>\r\n\t\t\t\t\t<postalcode></postalcode>\r\n\t\t\t\t</address>\r\n\t\t\t</contact>\r\n\t\t\t<timeframe>\r\n\t\t\t\t<description></description>\r\n\t\t\t</timeframe>\r\n\t\t\t<comments></comments>\r\n\t\t</customer>\r\n\t\t<vendor>\r\n\t\t\t<id source=\"Kia Digital\">CA328</id>\r\n\t\t\t<vendorname>Mission Viejo Kia</vendorname>\r\n\t\t\t<contact>\r\n\t\t\t\t<name type=\"business\" part=\"full\">Mission Viejo Kia</name>\r\n\t\t\t\t<email></email>\r\n\t\t\t\t<phone type=\"voice\">9498229556</phone>\r\n\t\t\t\t<address>\r\n\t\t\t\t\t<street line=\"1\">28802 Marguerite Parkway</street>\r\n\t\t\t\t\t<city>Mission Viejo</city>\r\n\t\t\t\t\t<regioncode>CA</regioncode>\r\n\t\t\t\t\t<postalcode>92692</postalcode>\r\n\t\t\t\t</address>\r\n\t\t\t</contact>\r\n\t\t</vendor>\r\n\t\t<provider>\r\n\t\t\t<name type=\"business\" part=\"full\">Kia.com</name>\r\n\t\t\t<service>Kia Digital</service>\r\n\t\t\t<url></url>\r\n\t\t</provider>\r\n\t</prospect>\r\n</adf>"
+        },
+        "links": [],
+        "adfDict": {
+            "adf": {
+                "prospect": {
+                    "@attributes": {
+                        "status": "new"
+                    },
+                    "id": [
+                        {
+                            "@attributes": {
+                                "source": "Kia Digital"
+                            },
+                            "#text": "59277123"
+                        },
+                        {
+                            "@attributes": {
+                                "source": "IsCILead"
+                            },
+                            "#text": "True"
+                        },
+                        {
+                            "@attributes": {
+                                "sequence": "2",
+                                "source": "sessionId"
+                            },
+                            "#text": "1613941860.1758770668"
+                        },
+                        {
+                            "@attributes": {
+                                "sequence": "3",
+                                "source": "name:full"
+                            },
+                            "#text": "kia.com"
+                        },
+                        {
+                            "@attributes": {
+                                "sequence": "4",
+                                "source": "LeadType"
+                            },
+                            "#text": "TestDrive"
+                        }
+                    ],
+                    "requestdate": {
+                        "#text": "2025-10-03T20:56:58"
+                    },
+                    "vehicle": {
+                        "@attributes": {
+                            "interest": "buy",
+                            "status": "new"
+                        },
+                        "year": {
+                            "#text": "2026"
+                        },
+                        "make": {
+                            "#text": "Kia"
+                        },
+                        "model": {
+                            "#text": "Carnival MPV Hybrid"
+                        },
+                        "vin": {
+                            "#text": "KNDNE5KA0T6106475"
+                        },
+                        "trim": {
+                            "#text": "SX FWD"
+                        },
+                        "colorcombination": {
+                            "interiorcolor": {
+                                "#text": "Off-black & Taupe Two-tone Syntex Seat Trim"
+                            },
+                            "exteriorcolor": {
+                                "#text": "Aurora Black Pearl"
+                            },
+                            "preference": {
+                                "#text": "1"
+                            }
+                        },
+                        "option": [
+                            {
+                                "optionname": {
+                                    "#text": "Carpeted Floor Mats (8-Passenger)"
+                                },
+                                "manufacturercode": {}
+                            },
+                            {
+                                "optionname": {
+                                    "#text": "Auto-Dimming Mirror w/HomeLink"
+                                },
+                                "manufacturercode": {}
+                            },
+                            {
+                                "optionname": {
+                                    "#text": "Roadside Assistance Kit"
+                                },
+                                "manufacturercode": {}
+                            },
+                            {
+                                "optionname": {
+                                    "#text": "Std. Package"
+                                },
+                                "manufacturercode": {}
+                            }
+                        ]
+                    },
+                    "customer": {
+                        "contact": {
+                            "@attributes": {
+                                "primarycontact": "1"
+                            },
+                            "name": [
+                                {
+                                    "@attributes": {
+                                        "type": "individual",
+                                        "part": "first"
+                                    },
+                                    "#text": "Alan"
+                                },
+                                {
+                                    "@attributes": {
+                                        "type": "individual",
+                                        "part": "last"
+                                    },
+                                    "#text": "Herrera"
+                                }
+                            ],
+                            "email": {
+                                "#text": "danherveg@hotmail.com"
+                            },
+                            "phone": [
+                                {
+                                    "@attributes": {
+                                        "type": "voice",
+                                        "time": "evening"
+                                    }
+                                },
+                                {
+                                    "@attributes": {
+                                        "type": "voice",
+                                        "time": "day"
+                                    },
+                                    "#text": "2136759970"
+                                },
+                                {
+                                    "@attributes": {
+                                        "type": "cellphone"
+                                    }
+                                }
+                            ],
+                            "address": {
+                                "@attributes": {
+                                    "type": "home"
+                                },
+                                "street": [
+                                    {
+                                        "@attributes": {
+                                            "line": "1"
+                                        }
+                                    },
+                                    {
+                                        "@attributes": {
+                                            "line": "2"
+                                        }
+                                    }
+                                ],
+                                "city": {},
+                                "regioncode": {},
+                                "postalcode": {}
+                            }
+                        },
+                        "timeframe": {
+                            "description": {}
+                        },
+                        "comments": {}
+                    },
+                    "vendor": {
+                        "id": {
+                            "@attributes": {
+                                "source": "Kia Digital"
+                            },
+                            "#text": "CA328"
+                        },
+                        "vendorname": {
+                            "#text": "Mission Viejo Kia"
+                        },
+                        "contact": {
+                            "name": {
+                                "@attributes": {
+                                    "type": "business",
+                                    "part": "full"
+                                },
+                                "#text": "Mission Viejo Kia"
+                            },
+                            "email": {},
+                            "phone": {
+                                "@attributes": {
+                                    "type": "voice"
+                                },
+                                "#text": "9498229556"
+                            },
+                            "address": {
+                                "street": {
+                                    "@attributes": {
+                                        "line": "1"
+                                    },
+                                    "#text": "28802 Marguerite Parkway"
+                                },
+                                "city": {
+                                    "#text": "Mission Viejo"
+                                },
+                                "regioncode": {
+                                    "#text": "CA"
+                                },
+                                "postalcode": {
+                                    "#text": "92692"
+                                }
+                            }
+                        }
+                    },
+                    "provider": {
+                        "name": {
+                            "@attributes": {
+                                "type": "business",
+                                "part": "full"
+                            },
+                            "#text": "Kia.com"
+                        },
+                        "service": {
+                            "#text": "Kia Digital"
+                        },
+                        "url": {}
+                    }
+                }
+            }
+        }
+    }
+}

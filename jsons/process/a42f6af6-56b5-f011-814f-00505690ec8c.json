@@ -1,0 +1,498 @@
+{
+    "_subscription_id": "7a05ce2c-cf00-4748-b841-45b3442665a7",
+    "opportunityId": "a42f6af6-56b5-f011-814f-00505690ec8c",
+    "activityId": null,
+    "links": [
+        {
+            "rel": "create",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities",
+            "method": "POST",
+            "title": "Create Opportunity"
+        },
+        {
+            "rel": "self",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/a42f6af6-56b5-f011-814f-00505690ec8c",
+            "method": "GET",
+            "title": "Get Opportunity"
+        },
+        {
+            "rel": "comment",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/comment",
+            "method": "POST",
+            "title": "Add Comment"
+        },
+        {
+            "rel": "email",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/sendEmail",
+            "method": "POST",
+            "title": "Send Email"
+        },
+        {
+            "rel": "tradein",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/tradein",
+            "method": "POST",
+            "title": "Add Trade-In"
+        },
+        {
+            "rel": "vehiclesought",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/vehicleSought",
+            "method": "POST",
+            "title": "Add Vehicle Sought"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/reassignPrimarySalesperson",
+            "method": "POST",
+            "title": "Reassign Primary Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/a42f6af6-56b5-f011-814f-00505690ec8c/salesteam/add",
+            "method": "POST",
+            "title": "Add Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/a42f6af6-56b5-f011-814f-00505690ec8c/salesteam/remove",
+            "method": "POST",
+            "title": "Remove Salesperson"
+        },
+        {
+            "rel": "substatus",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/a42f6af6-56b5-f011-814f-00505690ec8c/subStatus/update",
+            "method": "POST",
+            "title": "Update SubStatus"
+        },
+        {
+            "rel": "inactive",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/a42f6af6-56b5-f011-814f-00505690ec8c/set-inactive",
+            "method": "POST",
+            "title": "Set Opportunity Inactive"
+        }
+    ],
+    "source": "Mazda Config",
+    "upType": "Internet",
+    "soughtVehicles": [
+        {
+            "id": "a52f6af6-56b5-f011-814f-00505690ec8c",
+            "isNew": true,
+            "yearFrom": 2026,
+            "yearTo": 2026,
+            "make": "Mazda",
+            "model": "CX-90",
+            "trim": "3.3 Turbo S Premium Sport 4dr i-ACTIV All-Wheel Drive Sport Utility",
+            "isPrimary": true
+        }
+    ],
+    "salesTeam": [
+        {
+            "id": "83693b1a-7966-ea11-a977-005056b72b57",
+            "firstName": "Jim",
+            "lastName": "Feinstein",
+            "isPrimary": true,
+            "isPositionPrimary": true,
+            "positionName": "Salesperson",
+            "positionCode": "S",
+            "links": []
+        }
+    ],
+    "tradeIns": null,
+    "createdBy": null,
+    "updated_at": "2025-10-30T16:06:10.904453",
+    "customer": {
+        "id": "a22f6af6-56b5-f011-814f-00505690ec8c",
+        "isBusiness": false,
+        "firstName": "Waleed",
+        "lastName": "Dandan",
+        "emails": [
+            {
+                "address": "waleeddandan@gmail.com",
+                "emailType": "Personal",
+                "doNotEmail": false,
+                "isPreferred": true
+            }
+        ],
+        "address": {
+            "city": "ANAHEIM",
+            "state": "CA",
+            "zip": "92805",
+            "country": "US"
+        },
+        "privacySettings": [
+            {
+                "name": "CCPADoNotContact",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotShare",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotSell",
+                "value": "False"
+            }
+        ],
+        "links": [
+            {
+                "rel": "self",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/a22f6af6-56b5-f011-814f-00505690ec8c",
+                "method": "GET",
+                "title": "Fetch Customer"
+            },
+            {
+                "rel": "create",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers",
+                "method": "POST",
+                "title": "Create Customer"
+            },
+            {
+                "rel": "update",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/a22f6af6-56b5-f011-814f-00505690ec8c",
+                "method": "POST",
+                "title": "Update Customer"
+            }
+        ]
+    },
+    "created_at": "2025-10-30T16:06:10.904453",
+    "isActive": true,
+    "scheduledActivities": [
+        {
+            "activityId": "a72f6af6-56b5-f011-814f-00505690ec8c",
+            "activityName": "Call # 1",
+            "activityType": 2,
+            "dueDate": "2025-10-30T06:09:20.933Z",
+            "assignedTo": "Feinstein, J",
+            "comments": ""
+        },
+        {
+            "activityId": "a82f6af6-56b5-f011-814f-00505690ec8c",
+            "activityName": "BDC Virtual Immediate Call",
+            "activityType": 2,
+            "dueDate": "2025-11-02T06:09:20.933Z",
+            "assignedTo": "Alcontin, A",
+            "comments": ""
+        }
+    ],
+    "completedActivities": [
+        {
+            "activityId": "a62f6af6-56b5-f011-814f-00505690ec8c",
+            "activityName": "Internet Up",
+            "activityType": 13,
+            "completedDate": "2025-10-30T04:09:20.933Z",
+            "outcome": "Auto Response",
+            "completedBy": "Feinstein, J",
+            "comments": "<i>Mazda ADF XML Lead</i><br />Preferred contact method: emailThis lead contains customer provided telephone information. Recent changes to the Telephone Consumers Protection Act (TCPA) require a customer's prior express written consent prior to contacting the customer for marketing purposes by phone using automatic telephone dialing systems, SMS texts or artificial/prerecorded voice (each, an \"Unauthorized Contact Method\"). Please note that Mazda has not obtained such consent and you are required to obtain a customer's prior express written consent before contacting the customer through one of the Unauthorized Contact Methods.\r\n CUSTOMER'S IDEAL CONFIGURATION",
+            "category": "Completed"
+        }
+    ],
+    "followUP_date": "2025-10-31T16:06:10.904453",
+    "followUP_count": 0,
+    "messages": [
+        {
+            "msgFrom": "patti",
+            "subject": "Interest in the 2026 Mazda CX-90",
+            "body": "Hi Waleed,\n\nThank you for your interest in the 2026 Mazda CX-90 3.3 Turbo S Premium Sport! This model offers an impressive blend of power and sophistication with its turbocharged engine and luxurious interior, making every drive a pleasure. At Tustin Mazda, we pride ourselves on being a community-driven dealership with no addendums or dealer markups, ensuring you receive the best value.\n\nWe’re here to help you find the perfect vehicle, so please feel free to share any specific questions or preferences you might have. Jim Feinstein, your assigned salesperson, is ready to assist you with any information you need.\n\nPlease let us know a convenient time for you, or you can instantly reserve your time here: <{LegacySalesApptSchLink}>\n\n\nPatti\nTustin Mazda\n28 Auto Center Dr, Tustin, CA 92782",
+            "date": "2025-10-30T16:15:32.872388"
+        }
+    ],
+    "alreadyProcessedActivities": {
+        "a62f6af6-56b5-f011-814f-00505690ec8c": {
+            "id": "a62f6af6-56b5-f011-814f-00505690ec8c",
+            "activityType": "Internet Up",
+            "category": "Completed",
+            "name": "Internet Up",
+            "completedDate": "2025-10-30T06:09:20.933Z",
+            "dueDate": "2025-10-30T06:09:00Z",
+            "outcome": "Auto Response",
+            "createdBy": "Feinstein, Jim",
+            "assignedTo": "Feinstein, Jim",
+            "completedBy": "Feinstein, Jim",
+            "opportunityId": "a42f6af6-56b5-f011-814f-00505690ec8c",
+            "upType": "Internet",
+            "source": "Mazda Config",
+            "createdByUserId": "83693b1a-7966-ea11-a977-005056b72b57",
+            "assignedToUserId": "83693b1a-7966-ea11-a977-005056b72b57",
+            "completedByUserId": "83693b1a-7966-ea11-a977-005056b72b57",
+            "message": {
+                "date": "2025-10-30T06:09:21Z",
+                "from": "starlead@eleadcrm.com",
+                "to": "starlead@eleadcrm.com",
+                "subject": "Mazda ADF XML Lead",
+                "body": "<adf>\r\n\t<prospect status=\"new\">\r\n\t\t<id source=\"Mazda Digital\">ee9003c4-b13d-4f9c-8c7c-a244761dd338</id>\r\n    \r\n    <id sequence=\"2\" source=\"MUSA\">201484527</id>\r\n\r\n    <requestdate>2025-10-30T06:09:16</requestdate>\r\n\t\t<vehicle interest=\"buy\" status=\"new\">\r\n  <year>2026</year>\r\n  <make>Mazda</make>\r\n  <model>CX-90</model>\r\n  <trim>3.3 TURBO S PREMIUM SPORT</trim>\r\n  <transmission>Automatic</transmission>\r\n  <colorcombination>\r\n    <interiorcolor>White Nappa Leather</interiorcolor>\r\n    <exteriorcolor>Jet Black Mica</exteriorcolor>\r\n    <preference>1</preference>\r\n  </colorcombination>\r\n  <price type=\"msrp\" currency=\"USD\">$55,795.00</price>\r\n  <option>\r\n    <optionname><![CDATA[AWD]]></optionname>\r\n    <manufacturercode></manufacturercode>\r\n  </option>\r\n  <option>\r\n    <optionname><![CDATA[Illuminated Doorsill Trim Plates]]></optionname>\r\n    <manufacturercode></manufacturercode>\r\n  </option>\r\n  <option>\r\n    <optionname><![CDATA[<p class=\"p1\">2nd Row Captain's Chairs with Center Walkthrough]]></optionname>\r\n    <manufacturercode></manufacturercode>\r\n  </option>\r\n  <comments> CUSTOMER'S IDEAL CONFIGURATION</comments>\r\n</vehicle>\r\n\t\t\r\n\t\t<customer>\r\n\t\t\t<contact primarycontact=\"1\">\r\n\t\t\t\t<name type=\"individual\" part=\"first\">Waleed</name>\r\n\t\t\t\t<name type=\"individual\" part=\"last\">Dandan</name>\r\n\t\t\t\t<email>WALEEDDANDAN@GMAIL.COM</email>\r\n\t\t\t\t<phone type=\"voice\" time=\"evening\"></phone>\r\n\t\t\t\t<phone type=\"voice\" time=\"day\"></phone>\r\n\t\t\t\t<phone type=\"cellphone\"></phone>\r\n\t\t\t\t<address type=\"home\">\r\n\t\t\t\t\t<street line=\"1\"></street>\r\n\t\t\t\t\t<street line=\"2\"></street>\r\n\t\t\t\t\t<city>ANAHEIM</city>\r\n\t\t\t\t\t<regioncode>CA</regioncode>\r\n\t\t\t\t\t<postalcode>92805</postalcode>\r\n\t\t\t\t</address>\r\n\t\t\t</contact>\r\n\t\t\t<timeframe>\r\n\t\t\t\t<description></description>\r\n\t\t\t</timeframe>\r\n\t\t\t<comments><![CDATA[ \r\n\r\nPreferred contact method: email\r\n\r\nThis lead contains customer provided telephone information. Recent changes to the Telephone Consumers Protection Act (TCPA) require a customer's prior express written consent prior to contacting the customer for marketing purposes by phone using automatic telephone dialing systems, SMS texts or artificial/prerecorded voice (each, an \"Unauthorized Contact Method\"). Please note that Mazda has not obtained such consent and you are required to obtain a customer's prior express written consent before contacting the customer through one of the Unauthorized Contact Methods.]]></comments>\r\n\t\t</customer>\r\n\t\t<vendor>\r\n\t\t\t<id source=\"Mazda Digital\">42066</id>\r\n\t\t\t<vendorname>TUSTIN MAZDA</vendorname>\r\n\t\t\t<contact>\r\n\t\t\t\t<name type=\"business\" part=\"full\">TUSTIN MAZDA</name>\r\n\t\t\t\t<email></email>\r\n\t\t\t\t<phone type=\"voice\">7148326222</phone>\r\n\t\t\t\t<address>\r\n\t\t\t\t\t<street line=\"1\">28A AUTO CENTER DRIVE</street>\r\n\t\t\t\t\t<city>TUSTIN</city>\r\n\t\t\t\t\t<regioncode>CA</regioncode>\r\n\t\t\t\t\t<postalcode>92782</postalcode>\r\n\t\t\t\t</address>\r\n\t\t\t</contact>\r\n\t\t</vendor>\r\n\t\t<provider>\r\n\t\t\t<name type=\"business\" part=\"full\">Mazda Config</name>\r\n\t\t\t<service>Mazda Digital</service>\r\n\t\t\t<url></url>\r\n\t\t</provider>\r\n\t</prospect>\r\n</adf>"
+            },
+            "links": []
+        }
+    },
+    "checkedDict": {
+        "is_sales_contacted": false,
+        "patti_already_contacted": false,
+        "last_msg_by": null
+    },
+    "firstActivity": {
+        "activityId": "a62f6af6-56b5-f011-814f-00505690ec8c",
+        "activityName": "Internet Up",
+        "activityType": 13,
+        "completedDate": "2025-10-30T04:09:20.933Z",
+        "outcome": "Auto Response",
+        "completedBy": "Feinstein, J",
+        "comments": "<i>Mazda ADF XML Lead</i><br />Preferred contact method: emailThis lead contains customer provided telephone information. Recent changes to the Telephone Consumers Protection Act (TCPA) require a customer's prior express written consent prior to contacting the customer for marketing purposes by phone using automatic telephone dialing systems, SMS texts or artificial/prerecorded voice (each, an \"Unauthorized Contact Method\"). Please note that Mazda has not obtained such consent and you are required to obtain a customer's prior express written consent before contacting the customer through one of the Unauthorized Contact Methods.\r\n CUSTOMER'S IDEAL CONFIGURATION",
+        "category": "Completed"
+    },
+    "firstActivityFull": {
+        "id": "a62f6af6-56b5-f011-814f-00505690ec8c",
+        "activityType": "Internet Up",
+        "category": "Completed",
+        "name": "Internet Up",
+        "completedDate": "2025-10-30T06:09:20.933Z",
+        "dueDate": "2025-10-30T06:09:00Z",
+        "outcome": "Auto Response",
+        "createdBy": "Feinstein, Jim",
+        "assignedTo": "Feinstein, Jim",
+        "completedBy": "Feinstein, Jim",
+        "opportunityId": "a42f6af6-56b5-f011-814f-00505690ec8c",
+        "upType": "Internet",
+        "source": "Mazda Config",
+        "createdByUserId": "83693b1a-7966-ea11-a977-005056b72b57",
+        "assignedToUserId": "83693b1a-7966-ea11-a977-005056b72b57",
+        "completedByUserId": "83693b1a-7966-ea11-a977-005056b72b57",
+        "message": {
+            "date": "2025-10-30T06:09:21Z",
+            "from": "starlead@eleadcrm.com",
+            "to": "starlead@eleadcrm.com",
+            "subject": "Mazda ADF XML Lead",
+            "body": "<adf>\r\n\t<prospect status=\"new\">\r\n\t\t<id source=\"Mazda Digital\">ee9003c4-b13d-4f9c-8c7c-a244761dd338</id>\r\n    \r\n    <id sequence=\"2\" source=\"MUSA\">201484527</id>\r\n\r\n    <requestdate>2025-10-30T06:09:16</requestdate>\r\n\t\t<vehicle interest=\"buy\" status=\"new\">\r\n  <year>2026</year>\r\n  <make>Mazda</make>\r\n  <model>CX-90</model>\r\n  <trim>3.3 TURBO S PREMIUM SPORT</trim>\r\n  <transmission>Automatic</transmission>\r\n  <colorcombination>\r\n    <interiorcolor>White Nappa Leather</interiorcolor>\r\n    <exteriorcolor>Jet Black Mica</exteriorcolor>\r\n    <preference>1</preference>\r\n  </colorcombination>\r\n  <price type=\"msrp\" currency=\"USD\">$55,795.00</price>\r\n  <option>\r\n    <optionname><![CDATA[AWD]]></optionname>\r\n    <manufacturercode></manufacturercode>\r\n  </option>\r\n  <option>\r\n    <optionname><![CDATA[Illuminated Doorsill Trim Plates]]></optionname>\r\n    <manufacturercode></manufacturercode>\r\n  </option>\r\n  <option>\r\n    <optionname><![CDATA[<p class=\"p1\">2nd Row Captain's Chairs with Center Walkthrough]]></optionname>\r\n    <manufacturercode></manufacturercode>\r\n  </option>\r\n  <comments> CUSTOMER'S IDEAL CONFIGURATION</comments>\r\n</vehicle>\r\n\t\t\r\n\t\t<customer>\r\n\t\t\t<contact primarycontact=\"1\">\r\n\t\t\t\t<name type=\"individual\" part=\"first\">Waleed</name>\r\n\t\t\t\t<name type=\"individual\" part=\"last\">Dandan</name>\r\n\t\t\t\t<email>WALEEDDANDAN@GMAIL.COM</email>\r\n\t\t\t\t<phone type=\"voice\" time=\"evening\"></phone>\r\n\t\t\t\t<phone type=\"voice\" time=\"day\"></phone>\r\n\t\t\t\t<phone type=\"cellphone\"></phone>\r\n\t\t\t\t<address type=\"home\">\r\n\t\t\t\t\t<street line=\"1\"></street>\r\n\t\t\t\t\t<street line=\"2\"></street>\r\n\t\t\t\t\t<city>ANAHEIM</city>\r\n\t\t\t\t\t<regioncode>CA</regioncode>\r\n\t\t\t\t\t<postalcode>92805</postalcode>\r\n\t\t\t\t</address>\r\n\t\t\t</contact>\r\n\t\t\t<timeframe>\r\n\t\t\t\t<description></description>\r\n\t\t\t</timeframe>\r\n\t\t\t<comments><![CDATA[ \r\n\r\nPreferred contact method: email\r\n\r\nThis lead contains customer provided telephone information. Recent changes to the Telephone Consumers Protection Act (TCPA) require a customer's prior express written consent prior to contacting the customer for marketing purposes by phone using automatic telephone dialing systems, SMS texts or artificial/prerecorded voice (each, an \"Unauthorized Contact Method\"). Please note that Mazda has not obtained such consent and you are required to obtain a customer's prior express written consent before contacting the customer through one of the Unauthorized Contact Methods.]]></comments>\r\n\t\t</customer>\r\n\t\t<vendor>\r\n\t\t\t<id source=\"Mazda Digital\">42066</id>\r\n\t\t\t<vendorname>TUSTIN MAZDA</vendorname>\r\n\t\t\t<contact>\r\n\t\t\t\t<name type=\"business\" part=\"full\">TUSTIN MAZDA</name>\r\n\t\t\t\t<email></email>\r\n\t\t\t\t<phone type=\"voice\">7148326222</phone>\r\n\t\t\t\t<address>\r\n\t\t\t\t\t<street line=\"1\">28A AUTO CENTER DRIVE</street>\r\n\t\t\t\t\t<city>TUSTIN</city>\r\n\t\t\t\t\t<regioncode>CA</regioncode>\r\n\t\t\t\t\t<postalcode>92782</postalcode>\r\n\t\t\t\t</address>\r\n\t\t\t</contact>\r\n\t\t</vendor>\r\n\t\t<provider>\r\n\t\t\t<name type=\"business\" part=\"full\">Mazda Config</name>\r\n\t\t\t<service>Mazda Digital</service>\r\n\t\t\t<url></url>\r\n\t\t</provider>\r\n\t</prospect>\r\n</adf>"
+        },
+        "links": []
+    },
+    "firstActivityAdfDict": {
+        "adf": {
+            "prospect": {
+                "@attributes": {
+                    "status": "new"
+                },
+                "id": [
+                    {
+                        "@attributes": {
+                            "source": "Mazda Digital"
+                        },
+                        "#text": "ee9003c4-b13d-4f9c-8c7c-a244761dd338"
+                    },
+                    {
+                        "@attributes": {
+                            "sequence": "2",
+                            "source": "MUSA"
+                        },
+                        "#text": "201484527"
+                    }
+                ],
+                "requestdate": {
+                    "#text": "2025-10-30T06:09:16"
+                },
+                "vehicle": {
+                    "@attributes": {
+                        "interest": "buy",
+                        "status": "new"
+                    },
+                    "year": {
+                        "#text": "2026"
+                    },
+                    "make": {
+                        "#text": "Mazda"
+                    },
+                    "model": {
+                        "#text": "CX-90"
+                    },
+                    "trim": {
+                        "#text": "3.3 TURBO S PREMIUM SPORT"
+                    },
+                    "transmission": {
+                        "#text": "Automatic"
+                    },
+                    "colorcombination": {
+                        "interiorcolor": {
+                            "#text": "White Nappa Leather"
+                        },
+                        "exteriorcolor": {
+                            "#text": "Jet Black Mica"
+                        },
+                        "preference": {
+                            "#text": "1"
+                        }
+                    },
+                    "price": {
+                        "@attributes": {
+                            "type": "msrp",
+                            "currency": "USD"
+                        },
+                        "#text": "$55,795.00"
+                    },
+                    "option": [
+                        {
+                            "optionname": {
+                                "#text": "AWD"
+                            },
+                            "manufacturercode": {}
+                        },
+                        {
+                            "optionname": {
+                                "#text": "Illuminated Doorsill Trim Plates"
+                            },
+                            "manufacturercode": {}
+                        },
+                        {
+                            "optionname": {
+                                "#text": "<p class=\"p1\">2nd Row Captain's Chairs with Center Walkthrough"
+                            },
+                            "manufacturercode": {}
+                        }
+                    ],
+                    "comments": {
+                        "#text": "CUSTOMER'S IDEAL CONFIGURATION"
+                    }
+                },
+                "customer": {
+                    "contact": {
+                        "@attributes": {
+                            "primarycontact": "1"
+                        },
+                        "name": [
+                            {
+                                "@attributes": {
+                                    "type": "individual",
+                                    "part": "first"
+                                },
+                                "#text": "Waleed"
+                            },
+                            {
+                                "@attributes": {
+                                    "type": "individual",
+                                    "part": "last"
+                                },
+                                "#text": "Dandan"
+                            }
+                        ],
+                        "email": {
+                            "#text": "WALEEDDANDAN@GMAIL.COM"
+                        },
+                        "phone": [
+                            {
+                                "@attributes": {
+                                    "type": "voice",
+                                    "time": "evening"
+                                }
+                            },
+                            {
+                                "@attributes": {
+                                    "type": "voice",
+                                    "time": "day"
+                                }
+                            },
+                            {
+                                "@attributes": {
+                                    "type": "cellphone"
+                                }
+                            }
+                        ],
+                        "address": {
+                            "@attributes": {
+                                "type": "home"
+                            },
+                            "street": [
+                                {
+                                    "@attributes": {
+                                        "line": "1"
+                                    }
+                                },
+                                {
+                                    "@attributes": {
+                                        "line": "2"
+                                    }
+                                }
+                            ],
+                            "city": {
+                                "#text": "ANAHEIM"
+                            },
+                            "regioncode": {
+                                "#text": "CA"
+                            },
+                            "postalcode": {
+                                "#text": "92805"
+                            }
+                        }
+                    },
+                    "timeframe": {
+                        "description": {}
+                    },
+                    "comments": {
+                        "#text": "Preferred contact method: email\n\nThis lead contains customer provided telephone information. Recent changes to the Telephone Consumers Protection Act (TCPA) require a customer's prior express written consent prior to contacting the customer for marketing purposes by phone using automatic telephone dialing systems, SMS texts or artificial/prerecorded voice (each, an \"Unauthorized Contact Method\"). Please note that Mazda has not obtained such consent and you are required to obtain a customer's prior express written consent before contacting the customer through one of the Unauthorized Contact Methods."
+                    }
+                },
+                "vendor": {
+                    "id": {
+                        "@attributes": {
+                            "source": "Mazda Digital"
+                        },
+                        "#text": "42066"
+                    },
+                    "vendorname": {
+                        "#text": "TUSTIN MAZDA"
+                    },
+                    "contact": {
+                        "name": {
+                            "@attributes": {
+                                "type": "business",
+                                "part": "full"
+                            },
+                            "#text": "TUSTIN MAZDA"
+                        },
+                        "email": {},
+                        "phone": {
+                            "@attributes": {
+                                "type": "voice"
+                            },
+                            "#text": "7148326222"
+                        },
+                        "address": {
+                            "street": {
+                                "@attributes": {
+                                    "line": "1"
+                                },
+                                "#text": "28A AUTO CENTER DRIVE"
+                            },
+                            "city": {
+                                "#text": "TUSTIN"
+                            },
+                            "regioncode": {
+                                "#text": "CA"
+                            },
+                            "postalcode": {
+                                "#text": "92782"
+                            }
+                        }
+                    }
+                },
+                "provider": {
+                    "name": {
+                        "@attributes": {
+                            "type": "business",
+                            "part": "full"
+                        },
+                        "#text": "Mazda Config"
+                    },
+                    "service": {
+                        "#text": "Mazda Digital"
+                    },
+                    "url": {}
+                }
+            }
+        }
+    },
+    "inquiry_text_body": "Preferred contact method: email\n\nThis lead contains customer provided telephone information. Recent changes to the Telephone Consumers Protection Act (TCPA) require a customer's prior express written consent prior to contacting the customer for marketing purposes by phone using automatic telephone dialing systems, SMS texts or artificial/prerecorded voice (each, an \"Unauthorized Contact Method\"). Please note that Mazda has not obtained such consent and you are required to obtain a customer's prior express written consent before contacting the customer through one of the Unauthorized Contact Methods.",
+    "customerFirstMsgDict": {
+        "customerMsg": "",
+        "isCustomerMsg": false,
+        "class": "",
+        "notes": ""
+    },
+    "body_html": "Hi Waleed,\n\nThank you for your interest in the 2026 Mazda CX-90 3.3 Turbo S Premium Sport! This model offers an impressive blend of power and sophistication with its turbocharged engine and luxurious interior, making every drive a pleasure. At Tustin Mazda, we pride ourselves on being a community-driven dealership with no addendums or dealer markups, ensuring you receive the best value.\n\nWe’re here to help you find the perfect vehicle, so please feel free to share any specific questions or preferences you might have. Jim Feinstein, your assigned salesperson, is ready to assist you with any information you need.\n\nPlease let us know a convenient time for you, or you can instantly reserve your time here: <{LegacySalesApptSchLink}>\n\n\nPatti\nTustin Mazda\n28 Auto Center Dr, Tustin, CA 92782"
+}

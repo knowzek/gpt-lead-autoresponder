@@ -9,6 +9,8 @@ import requests
 from inventory_matcher import recommend_from_xml
 from fortellis import get_vehicle_inventory_xml  # we’ll add this helper next
 import re, html as _html
+from kbb_ico import process_kbb_ico_lead
+
 log = logging.getLogger(__name__)
 
 DRY_RUN = int(os.getenv("DRY_RUN", "1"))  # 1 = DO NOT write to CRM, 0 = allow writes
@@ -28,6 +30,17 @@ from fortellis import (
     complete_activity,
     search_activities_by_opportunity,  # <-- add this
 )
+
+def _is_assigned_to_kristin_doc(doc: dict) -> bool:
+    for m in (doc.get("salesTeam") or []):
+        fn = (m.get("firstName") or "").strip().lower()
+        ln = (m.get("lastName") or "").strip().lower()
+        em = (m.get("email") or "").strip().lower()
+        if (fn == "kristin" and ln == "nowzek") or em in {
+            "knowzek@pattersonautos.com", "knowzek@gmail.com"
+        }:
+            return True
+    return False
 
 def _html_to_text(h: str) -> str:
     if not h: return ""
@@ -75,7 +88,7 @@ TEST_FROM = os.getenv("FORTELLIS_TEST_FROM", "sales@claycooleygenesisofmesquite.
 TEST_TO   = os.getenv("FORTELLIS_TEST_TO",   "rishabhrajendraprasad.shukla@cdk.com")
 
 MICKEY_EMAIL = os.getenv("MICKEY_EMAIL")  # proof recipient
-ELIGIBLE_UPTYPES = {s.strip().lower() for s in os.getenv("ELIGIBLE_UPTYPES", "internet").split(",")}
+ELIGIBLE_UPTYPES = {s.strip().lower() for s in os.getenv("ELIGIBLE_UPTYPES", "internet", "campaign").split(",")}
 PROOF_RECIPIENTS = [
     "knowzek@gmail.com",
     "mickeyt@the-dms.com",
@@ -239,7 +252,10 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
         up_type = (op.get("upType") or "").lower()
         if up_type not in ELIGIBLE_UPTYPES:
             continue  # skip showroom/phone/etc.
-    
+
+        if not _is_assigned_to_kristin_doc(op):
+            continue
+            
         items.append({
             "_subscription_id": subscription_id,
             "opportunityId": op.get("id"),
@@ -382,9 +398,51 @@ else:
         inquiry_text = (activity_data.get("notes", "") or "")
         if not inquiry_text and "message" in activity_data:
             inquiry_text = extract_adf_comment(activity_data["message"].get("body", ""))
+
     except Exception as e:
         log.warning("Failed to fetch activity: %s", e)
         inquiry_text = ""
+
+def _is_assigned_to_kristin(opportunity: dict) -> bool:
+    """Return True if Kristin Nowzek is on the sales team."""
+    sales_team = opportunity.get("salesTeam") or []
+    for m in sales_team:
+        fn = (m.get("firstName") or "").strip().lower()
+        ln = (m.get("lastName") or "").strip().lower()
+        em = (m.get("email") or "").strip().lower()
+        if (fn == "kristin" and ln == "nowzek") or em in {
+            "knowzek@pattersonautos.com",
+            "knowzek@gmail.com",
+        }:
+            return True
+    return False
+
+
+# === Persona routing: KBB ICO vs General ==============================
+src = (opportunity.get("source") or lead.get("source") or "").lower()
+is_kbb_ico = (
+    src.startswith("kbb ico")
+    or "kbb instant cash offer" in src
+    or "kelley blue book" in src
+    or _is_assigned_to_kristin(opportunity)  # 👈 treat Kristin’s opps as ICOs
+)
+
+
+lead_age_days = 0
+created_raw = opportunity.get("createdDate") or lead.get("createdDate")
+try:
+    if created_raw:
+        created_dt = _dt.fromisoformat(created_raw.replace("Z", "+00:00"))
+        lead_age_days = (_dt.now(_tz.utc) - created_dt).days
+except Exception:
+    pass
+
+
+mode = "kbb_ico" if is_kbb_ico else "general"
+opportunity["mode"] = mode
+opportunity["lead_age_days"] = lead_age_days
+
+log.info("Persona route: mode=%s lead_age_days=%s src=%s", mode, lead_age_days, src[:120])
 
 
 # --- Rooftop resolution (from Subscription-Id) ---
@@ -482,6 +540,21 @@ trade_ins = opportunity.get("tradeIns", [])
 trade_in = (trade_ins[0].get("make") if trade_ins else "") or ""
 
 customer_name = lead.get("customer_first") or "there"
+
+# --- KBB ICO short-circuit -------------------------------------------
+if opportunity.get("mode") == "kbb_ico":
+    process_kbb_ico_lead(
+        opportunity=opportunity,
+        lead_age_days=opportunity.get("lead_age_days", 0),
+        rooftop_name=rooftop_name,
+        inquiry_text=inquiry_text,
+        token=token,
+        subscription_id=subscription_id,
+        SAFE_MODE=SAFE_MODE,
+    )
+
+    raise SystemExit(0)
+
 
 # === Compose with GPT ===============================================
 fallback_mode = not inquiry_text or inquiry_text.strip().lower() in ["", "request a quote", "interested", "info", "information", "looking"]

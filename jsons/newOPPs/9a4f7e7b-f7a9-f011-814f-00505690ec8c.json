@@ -1,0 +1,583 @@
+{
+    "_subscription_id": "bb4a4f18-1693-4450-a08e-40d8df30c139",
+    "opportunityId": "9a4f7e7b-f7a9-f011-814f-00505690ec8c",
+    "activityId": null,
+    "links": [
+        {
+            "rel": "create",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities",
+            "method": "POST",
+            "title": "Create Opportunity"
+        },
+        {
+            "rel": "self",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/9a4f7e7b-f7a9-f011-814f-00505690ec8c",
+            "method": "GET",
+            "title": "Get Opportunity"
+        },
+        {
+            "rel": "comment",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/comment",
+            "method": "POST",
+            "title": "Add Comment"
+        },
+        {
+            "rel": "email",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/sendEmail",
+            "method": "POST",
+            "title": "Send Email"
+        },
+        {
+            "rel": "tradein",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/tradein",
+            "method": "POST",
+            "title": "Add Trade-In"
+        },
+        {
+            "rel": "vehiclesought",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/vehicleSought",
+            "method": "POST",
+            "title": "Add Vehicle Sought"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/reassignPrimarySalesperson",
+            "method": "POST",
+            "title": "Reassign Primary Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/9a4f7e7b-f7a9-f011-814f-00505690ec8c/salesteam/add",
+            "method": "POST",
+            "title": "Add Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/9a4f7e7b-f7a9-f011-814f-00505690ec8c/salesteam/remove",
+            "method": "POST",
+            "title": "Remove Salesperson"
+        },
+        {
+            "rel": "substatus",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/9a4f7e7b-f7a9-f011-814f-00505690ec8c/subStatus/update",
+            "method": "POST",
+            "title": "Update SubStatus"
+        },
+        {
+            "rel": "inactive",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/9a4f7e7b-f7a9-f011-814f-00505690ec8c/set-inactive",
+            "method": "POST",
+            "title": "Set Opportunity Inactive"
+        }
+    ],
+    "source": "Apollo Website",
+    "upType": "Internet",
+    "soughtVehicles": [
+        {
+            "id": "708bfe3a-03aa-f011-814f-00505690ec8c",
+            "isNew": true,
+            "yearFrom": 2026,
+            "make": "Mazda",
+            "model": "CX-30",
+            "vin": "3MVDMBCLXTM105880",
+            "isPrimary": true
+        },
+        {
+            "id": "9b4f7e7b-f7a9-f011-814f-00505690ec8c",
+            "isNew": true,
+            "yearFrom": 2023,
+            "yearTo": 2023,
+            "make": "Mazda",
+            "model": "CX-50",
+            "isPrimary": false
+        }
+    ],
+    "salesTeam": [
+        {
+            "id": "da683b1a-7966-ea11-a977-005056b72b57",
+            "firstName": "Joe",
+            "lastName": "Balisalisa",
+            "isPrimary": true,
+            "isPositionPrimary": true,
+            "positionName": "Salesperson",
+            "positionCode": "S",
+            "links": []
+        },
+        {
+            "id": "da683b1a-7966-ea11-a977-005056b72b57",
+            "firstName": "Joe",
+            "lastName": "Balisalisa",
+            "isPrimary": false,
+            "isPositionPrimary": false,
+            "positionName": "Desking Salesperson",
+            "positionCode": "DM",
+            "links": []
+        },
+        {
+            "id": "d5683b1a-7966-ea11-a977-005056b72b57",
+            "firstName": "Jerry",
+            "lastName": "Hicks",
+            "isPrimary": false,
+            "isPositionPrimary": true,
+            "positionName": "Desk Manager",
+            "positionCode": "DM",
+            "links": []
+        }
+    ],
+    "customer": {
+        "id": "994f7e7b-f7a9-f011-814f-00505690ec8c",
+        "isBusiness": false,
+        "firstName": "Joanne",
+        "middleName": "",
+        "lastName": "Smith",
+        "nickname": "",
+        "emails": [
+            {
+                "address": "josmthe@gmail.com",
+                "emailType": "Personal",
+                "doNotEmail": false,
+                "isPreferred": true
+            }
+        ],
+        "address": {
+            "addressLine1": "",
+            "addressLine2": "",
+            "city": "NORTH HOLLYWOOD",
+            "state": "CA",
+            "zip": "91607",
+            "country": "US",
+            "county": "LOS ANGELES",
+            "doNotMail": false,
+            "isPreferred": false
+        },
+        "privacySettings": [
+            {
+                "name": "CCPADoNotContact",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotShare",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotSell",
+                "value": "False"
+            }
+        ],
+        "links": [
+            {
+                "rel": "self",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/994f7e7b-f7a9-f011-814f-00505690ec8c",
+                "method": "GET",
+                "title": "Fetch Customer"
+            },
+            {
+                "rel": "create",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers",
+                "method": "POST",
+                "title": "Create Customer"
+            },
+            {
+                "rel": "update",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/994f7e7b-f7a9-f011-814f-00505690ec8c",
+                "method": "POST",
+                "title": "Update Customer"
+            }
+        ]
+    },
+    "tradeIns": [
+        {
+            "id": "ebffd4be-25aa-f011-814f-00505690ec8c",
+            "year": 2022,
+            "make": "Mazda",
+            "model": "CX-30",
+            "trim": "2.5 S Preferred Package (A6) 4dr i-ACTIV All-Wheel Drive Sport Utility",
+            "vin": "3MVDMBCL5NM438720",
+            "estimatedMileage": 16378,
+            "interiorColor": "",
+            "exteriorColor": ""
+        }
+    ],
+    "createdBy": null,
+    "created_at": "2025-10-18",
+    "updated_at": "2025-10-20",
+    "isActive": true,
+    "completedActivities": [
+        {
+            "activityId": "3c59e5c6-6aac-f011-814f-00505690ec8c",
+            "comments": "Please add a note if I can step in for follow-up. \r\n",
+            "activityName": "BDC Virtual Call #2",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-18T19:38:37Z",
+            "outcome": "No Phone",
+            "completedBy": "Castanos, K"
+        },
+        {
+            "activityId": "a04f7e7b-f7a9-f011-814f-00505690ec8c",
+            "comments": "The customer engages with the salesperson; no action is needed from BDC yet.",
+            "activityName": "BDC Virtual Immediate Call",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-18T19:38:26Z",
+            "outcome": "BDC Virtual Call #2",
+            "completedBy": "Castanos, K"
+        },
+        {
+            "activityId": "341be942-5cac-f011-814f-00505690ec8c",
+            "comments": "<i>RE:Re: Re: Mazda CX-30 from HB Mazda</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-18T17:54:40.607Z",
+            "outcome": "Completed",
+            "completedBy": "Balisalisa, J"
+        },
+        {
+            "activityId": "1151f76a-5bac-f011-814f-00505690ec8c",
+            "comments": "<i>Re: Re: Mazda CX-30 from HB Mazda</i>",
+            "activityName": "Read Email",
+            "activityType": 20,
+            "category": "Completed",
+            "completedDate": "2025-10-18T17:48:37.04Z",
+            "outcome": "Completed",
+            "completedBy": "Balisalisa, J"
+        },
+        {
+            "activityId": "84aa04af-51ac-f011-814f-00505690ec8c",
+            "comments": "<i>RE:Re: Mazda CX-30 from HB Mazda</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-18T16:38:49.897Z",
+            "outcome": "Completed",
+            "completedBy": "Balisalisa, J"
+        },
+        {
+            "activityId": "9de01f58-78ab-f011-814f-00505690ec8c",
+            "comments": "<i>Re: Mazda CX-30 from HB Mazda</i>",
+            "activityName": "Read Email",
+            "activityType": 20,
+            "category": "Completed",
+            "completedDate": "2025-10-17T14:43:10.397Z",
+            "outcome": "Completed",
+            "completedBy": "Balisalisa, J"
+        },
+        {
+            "activityId": "ab4cdf32-76ab-f011-814f-00505690ec8c",
+            "comments": "<i>RE:Re: Mazda CX-30 from HB Mazda</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-17T14:27:49.823Z",
+            "outcome": "Completed",
+            "completedBy": "Balisalisa, J"
+        },
+        {
+            "activityId": "27c4e6c7-0eab-f011-814f-00505690ec8c",
+            "comments": "<i>Re: Mazda CX-30 from HB Mazda</i>",
+            "activityName": "Read Email",
+            "activityType": 20,
+            "category": "Completed",
+            "completedDate": "2025-10-17T02:07:25.577Z",
+            "outcome": "Completed",
+            "completedBy": "Balisalisa, J"
+        },
+        {
+            "activityId": "a16d2041-e4aa-f011-814f-00505690ec8c",
+            "comments": "<i>2025 Mazda CX-30 Offers: Style & Performance</i>",
+            "activityName": "Send Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-16T21:21:18.527Z",
+            "outcome": "Completed",
+            "completedBy": "Herman, C"
+        },
+        {
+            "activityId": "42dd7dd8-00aa-f011-814f-00505690ec8c",
+            "comments": "",
+            "activityName": "Text #1",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-16T21:09:38Z",
+            "outcome": "Email #1",
+            "completedBy": "Balisalisa, J"
+        },
+        {
+            "activityId": "2fa24021-e5aa-f011-814f-00505690ec8c",
+            "comments": "<i>Mazda CX-30 from HB Mazda</i>",
+            "activityName": "Send Worksheet",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-16T21:09:23.973Z",
+            "outcome": "Completed",
+            "completedBy": "Balisalisa, J"
+        },
+        {
+            "activityId": "5a1a347a-c2aa-f011-814f-00505690ec8c",
+            "comments": "<i>RE:Re: Mazda CX-50 from HB Mazda</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-16T17:01:18.803Z",
+            "outcome": "Completed",
+            "completedBy": "Balisalisa, J"
+        },
+        {
+            "activityId": "aff19f17-53aa-f011-814f-00505690ec8c",
+            "comments": "<i>Re: Mazda CX-50 from HB Mazda</i>",
+            "activityName": "Read Email",
+            "activityType": 20,
+            "category": "Completed",
+            "completedDate": "2025-10-16T03:43:56.833Z",
+            "outcome": "Completed",
+            "completedBy": "Balisalisa, J"
+        },
+        {
+            "activityId": "49435db3-27aa-f011-814f-00505690ec8c",
+            "comments": "<i>RE:Re: Mazda CX-50 from HB Mazda</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-15T22:33:22.377Z",
+            "outcome": "Completed",
+            "completedBy": "Balisalisa, J"
+        },
+        {
+            "activityId": "43badf2f-1eaa-f011-814f-00505690ec8c",
+            "comments": "<i>Re: Mazda CX-50 from HB Mazda</i>",
+            "activityName": "Read Email",
+            "activityType": 20,
+            "category": "Completed",
+            "completedDate": "2025-10-15T21:25:10.34Z",
+            "outcome": "Completed",
+            "completedBy": "Balisalisa, J"
+        },
+        {
+            "activityId": "50fa3c95-16aa-f011-814f-00505690ec8c",
+            "comments": "<i>RE:Re: Mazda CX-50 from HB Mazda</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-15T20:30:45.503Z",
+            "outcome": "Completed",
+            "completedBy": "Balisalisa, J"
+        },
+        {
+            "activityId": "8d310133-16aa-f011-814f-00505690ec8c",
+            "comments": "<i>Re: Mazda CX-50 from HB Mazda</i>",
+            "activityName": "Read Email",
+            "activityType": 20,
+            "category": "Completed",
+            "completedDate": "2025-10-15T20:28:02.523Z",
+            "outcome": "Completed",
+            "completedBy": "Balisalisa, J"
+        },
+        {
+            "activityId": "2ed146a9-09aa-f011-814f-00505690ec8c",
+            "comments": "<i>RE:RE:Re: Mazda CX-50 from HB Mazda</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-15T18:58:18.57Z",
+            "outcome": "Completed",
+            "completedBy": "Balisalisa, J"
+        },
+        {
+            "activityId": "488f6974-07aa-f011-814f-00505690ec8c",
+            "comments": "<i>RE:Re: Mazda CX-50 from HB Mazda</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-15T18:42:25.893Z",
+            "outcome": "Completed",
+            "completedBy": "Balisalisa, J"
+        },
+        {
+            "activityId": "4b2f35ae-01aa-f011-814f-00505690ec8c",
+            "comments": "<i>Re: Mazda CX-50 from HB Mazda</i>",
+            "activityName": "Read Email",
+            "activityType": 20,
+            "category": "Completed",
+            "completedDate": "2025-10-15T18:01:12.883Z",
+            "outcome": "Completed",
+            "completedBy": "Balisalisa, J"
+        },
+        {
+            "activityId": "343af0f0-00aa-f011-814f-00505690ec8c",
+            "comments": "<i>Mazda CX-50 from HB Mazda</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-15T17:55:47.717Z",
+            "outcome": "Completed",
+            "completedBy": "Balisalisa, J"
+        },
+        {
+            "activityId": "9e4f7e7b-f7a9-f011-814f-00505690ec8c",
+            "comments": "",
+            "activityName": "Call # 1",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-15T17:55:12Z",
+            "outcome": "Text #1",
+            "completedBy": "Balisalisa, J"
+        },
+        {
+            "activityId": "9d4f7e7b-f7a9-f011-814f-00505690ec8c",
+            "comments": "<i>Apollo Website Lead-Contact Dealer</i><br />Have internet sales Joe Balisalisa contact me about buying a new mazda IP Address: 72.134.103.186",
+            "activityName": "Internet Up",
+            "activityType": 13,
+            "category": "Completed",
+            "completedDate": "2025-10-15T16:48:00Z",
+            "outcome": "Auto Response",
+            "completedBy": "Paco, V"
+        }
+    ],
+    "scheduledActivities": [],
+    "firstActivity": {
+        "id": "9d4f7e7b-f7a9-f011-814f-00505690ec8c",
+        "activityType": "Internet Up",
+        "category": "Completed",
+        "name": "Internet Up",
+        "completedDate": "2025-10-15T18:48:00Z",
+        "dueDate": "2025-10-15T20:48:00Z",
+        "outcome": "Auto Response",
+        "createdBy": "Paco, Veronica",
+        "assignedTo": "Paco, Veronica",
+        "completedBy": "Paco, Veronica",
+        "opportunityId": "9a4f7e7b-f7a9-f011-814f-00505690ec8c",
+        "upType": "Internet",
+        "source": "Apollo Website",
+        "subSource": "Contact Dealer",
+        "createdByUserId": "b67e5380-34d0-ea11-a97e-005056b72b57",
+        "assignedToUserId": "b67e5380-34d0-ea11-a97e-005056b72b57",
+        "completedByUserId": "b67e5380-34d0-ea11-a97e-005056b72b57",
+        "message": {
+            "date": "2025-10-15T18:48:04Z",
+            "from": "leads@velocityoffersites.com",
+            "to": "sales@huntingtonbeachmazda.edealerhub.com",
+            "subject": "Apollo Website Lead-Contact Dealer",
+            "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n<?adf version=\"1.0\"?><adf>\r\n  <prospect status=\"new\">\r\n    <requestdate>2025-10-15T14:46:55-04:00</requestdate>\r\n    <vehicle interest=\"buy\" status=\"new\">\r\n      <year>2023</year>\r\n      <make>Mazda</make>\r\n      <model>CX-50</model>\r\n      <vin />\r\n      <colorcombination>\r\n        <preference>1</preference>\r\n      </colorcombination>\r\n      <price type=\"call\" currency=\"USD\">0</price>\r\n    </vehicle>\r\n    <customer>\r\n      <contact>\r\n        <name part=\"first\">JoAnne</name>\r\n        <name part=\"last\">Smith</name>\r\n        <email preferredcontact=\"1\">josmthe@gmail.com</email>\r\n        <phone preferredcontact=\"0\"></phone>\r\n        <address>\r\n          <street line=\"1\" />\r\n          <street line=\"2\" />\r\n          <postalcode>91607</postalcode>\r\n        </address>\r\n      </contact>\r\n      <comments>Have internet sales Joe Balisalisa contact me about buying a new mazda IP Address: 72.134.103.186</comments>\r\n    </customer>\r\n    <vendor>\r\n      <vendorname>Huntington Beach Mazda</vendorname>\r\n      <contact />\r\n    </vendor>\r\n    <provider>\r\n      <id sequence=\"1\" source=\"Apollo Websites\" />\r\n      <name part=\"full\">Apollo Websites - Contact Dealer</name>\r\n      <service>Contact Dealer</service>\r\n      <url>https://email.velocityoffersites.com/c/eJxsykuOwyAMANDTNMvIuDa4Cw7DxwxINEiBNpo5_Uhdd_1e9qigopt64ywwEwht1Qs7LPcgkVICEUvJoX1EeCA4IaWteQRkA4aNkADtnNlxLIXR6t1yuBG8tY_U1u8oRc_Zls49jefW_XVde30dqx0_axxRQ6rP8JfDh08_Q9d5I_haNGvoetZX_Oy3x_8AAAD__7BFPns</url>\r\n    </provider>\r\n    <leadtype>Sales</leadtype>\r\n  </prospect>\r\n</adf>"
+        },
+        "links": [],
+        "adfDict": {
+            "adf": {
+                "prospect": {
+                    "@attributes": {
+                        "status": "new"
+                    },
+                    "requestdate": {
+                        "#text": "2025-10-15T14:46:55-04:00"
+                    },
+                    "vehicle": {
+                        "@attributes": {
+                            "interest": "buy",
+                            "status": "new"
+                        },
+                        "year": {
+                            "#text": "2023"
+                        },
+                        "make": {
+                            "#text": "Mazda"
+                        },
+                        "model": {
+                            "#text": "CX-50"
+                        },
+                        "vin": {},
+                        "colorcombination": {
+                            "preference": {
+                                "#text": "1"
+                            }
+                        },
+                        "price": {
+                            "@attributes": {
+                                "type": "call",
+                                "currency": "USD"
+                            },
+                            "#text": "0"
+                        }
+                    },
+                    "customer": {
+                        "contact": {
+                            "name": [
+                                {
+                                    "@attributes": {
+                                        "part": "first"
+                                    },
+                                    "#text": "JoAnne"
+                                },
+                                {
+                                    "@attributes": {
+                                        "part": "last"
+                                    },
+                                    "#text": "Smith"
+                                }
+                            ],
+                            "email": {
+                                "@attributes": {
+                                    "preferredcontact": "1"
+                                },
+                                "#text": "josmthe@gmail.com"
+                            },
+                            "phone": {
+                                "@attributes": {
+                                    "preferredcontact": "0"
+                                }
+                            },
+                            "address": {
+                                "street": [
+                                    {
+                                        "@attributes": {
+                                            "line": "1"
+                                        }
+                                    },
+                                    {
+                                        "@attributes": {
+                                            "line": "2"
+                                        }
+                                    }
+                                ],
+                                "postalcode": {
+                                    "#text": "91607"
+                                }
+                            }
+                        },
+                        "comments": {
+                            "#text": "Have internet sales Joe Balisalisa contact me about buying a new mazda IP Address: 72.134.103.186"
+                        }
+                    },
+                    "vendor": {
+                        "vendorname": {
+                            "#text": "Huntington Beach Mazda"
+                        },
+                        "contact": {}
+                    },
+                    "provider": {
+                        "id": {
+                            "@attributes": {
+                                "sequence": "1",
+                                "source": "Apollo Websites"
+                            }
+                        },
+                        "name": {
+                            "@attributes": {
+                                "part": "full"
+                            },
+                            "#text": "Apollo Websites - Contact Dealer"
+                        },
+                        "service": {
+                            "#text": "Contact Dealer"
+                        },
+                        "url": {
+                            "#text": "https://email.velocityoffersites.com/c/eJxsykuOwyAMANDTNMvIuDa4Cw7DxwxINEiBNpo5_Uhdd_1e9qigopt64ywwEwht1Qs7LPcgkVICEUvJoX1EeCA4IaWteQRkA4aNkADtnNlxLIXR6t1yuBG8tY_U1u8oRc_Zls49jefW_XVde30dqx0_axxRQ6rP8JfDh08_Q9d5I_haNGvoetZX_Oy3x_8AAAD__7BFPns"
+                        }
+                    },
+                    "leadtype": {
+                        "#text": "Sales"
+                    }
+                }
+            }
+        }
+    }
+}

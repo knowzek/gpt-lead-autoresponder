@@ -1,0 +1,475 @@
+{
+    "_subscription_id": "7a05ce2c-cf00-4748-b841-45b3442665a7",
+    "opportunityId": "88540c88-4dac-f011-814f-00505690ec8c",
+    "activityId": null,
+    "links": [
+        {
+            "rel": "create",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities",
+            "method": "POST",
+            "title": "Create Opportunity"
+        },
+        {
+            "rel": "self",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/88540c88-4dac-f011-814f-00505690ec8c",
+            "method": "GET",
+            "title": "Get Opportunity"
+        },
+        {
+            "rel": "comment",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/comment",
+            "method": "POST",
+            "title": "Add Comment"
+        },
+        {
+            "rel": "email",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/sendEmail",
+            "method": "POST",
+            "title": "Send Email"
+        },
+        {
+            "rel": "tradein",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/tradein",
+            "method": "POST",
+            "title": "Add Trade-In"
+        },
+        {
+            "rel": "vehiclesought",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/vehicleSought",
+            "method": "POST",
+            "title": "Add Vehicle Sought"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/reassignPrimarySalesperson",
+            "method": "POST",
+            "title": "Reassign Primary Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/88540c88-4dac-f011-814f-00505690ec8c/salesteam/add",
+            "method": "POST",
+            "title": "Add Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/88540c88-4dac-f011-814f-00505690ec8c/salesteam/remove",
+            "method": "POST",
+            "title": "Remove Salesperson"
+        },
+        {
+            "rel": "substatus",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/88540c88-4dac-f011-814f-00505690ec8c/subStatus/update",
+            "method": "POST",
+            "title": "Update SubStatus"
+        },
+        {
+            "rel": "inactive",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/88540c88-4dac-f011-814f-00505690ec8c/set-inactive",
+            "method": "POST",
+            "title": "Set Opportunity Inactive"
+        }
+    ],
+    "source": "TrueCar",
+    "upType": "Internet",
+    "soughtVehicles": [
+        {
+            "id": "89540c88-4dac-f011-814f-00505690ec8c",
+            "isNew": false,
+            "yearFrom": 2020,
+            "yearTo": 2020,
+            "make": "Subaru",
+            "model": "WRX",
+            "trim": "Limited (CVT) 4dr All-wheel Drive Sedan",
+            "vin": "JF1VA1P61L8806119",
+            "stockNumber": "M373277A",
+            "isPrimary": true
+        }
+    ],
+    "salesTeam": [
+        {
+            "id": "83693b1a-7966-ea11-a977-005056b72b57",
+            "firstName": "Jim",
+            "lastName": "Feinstein",
+            "isPrimary": true,
+            "isPositionPrimary": true,
+            "positionName": "Salesperson",
+            "positionCode": "S",
+            "links": []
+        }
+    ],
+    "customer": {
+        "id": "87540c88-4dac-f011-814f-00505690ec8c",
+        "isBusiness": false,
+        "firstName": "Victor",
+        "middleName": "",
+        "lastName": "Martinez",
+        "nickname": "",
+        "emails": [
+            {
+                "address": "victor.martinez1993@yahoo.com",
+                "emailType": "Personal",
+                "doNotEmail": false,
+                "isPreferred": true
+            }
+        ],
+        "phones": [
+            {
+                "number": "(562) 316-7205",
+                "phoneType": "Home",
+                "preferredTimeToContact": "Day",
+                "doNotCall": false,
+                "doNotText": true,
+                "preferCall": false,
+                "preferText": false,
+                "onDoNotCallRegistry": false
+            },
+            {
+                "number": "(562) 316-7205",
+                "phoneType": "Cellular",
+                "preferredTimeToContact": "Evening",
+                "doNotCall": false,
+                "doNotText": true,
+                "preferCall": false,
+                "preferText": false,
+                "onDoNotCallRegistry": false
+            }
+        ],
+        "address": {
+            "addressLine1": "10381 Park Ave",
+            "addressLine2": "",
+            "city": "Garden Grove",
+            "state": "CA",
+            "zip": "92840",
+            "country": "US",
+            "county": "ORANGE CO",
+            "doNotMail": false,
+            "isPreferred": false
+        },
+        "privacySettings": [
+            {
+                "name": "CCPADoNotContact",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotShare",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotSell",
+                "value": "False"
+            }
+        ],
+        "links": [
+            {
+                "rel": "self",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/87540c88-4dac-f011-814f-00505690ec8c",
+                "method": "GET",
+                "title": "Fetch Customer"
+            },
+            {
+                "rel": "create",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers",
+                "method": "POST",
+                "title": "Create Customer"
+            },
+            {
+                "rel": "update",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/87540c88-4dac-f011-814f-00505690ec8c",
+                "method": "POST",
+                "title": "Update Customer"
+            }
+        ]
+    },
+    "tradeIns": null,
+    "createdBy": null,
+    "created_at": "2025-10-18",
+    "updated_at": "2025-10-20",
+    "isActive": true,
+    "completedActivities": [
+        {
+            "activityId": "1bde824b-4eac-f011-814f-00505690ec8c",
+            "comments": "texting from cell",
+            "activityName": "Text #1",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-19T15:52:02Z",
+            "outcome": "Email #1",
+            "completedBy": "Feinstein, J"
+        },
+        {
+            "activityId": "cb00a536-8b66-ea11-a977-005056b72b57",
+            "comments": "It's Jim.  Here's a quick video for your review\nhttps://vidmails.com/v/zHZcdlAWJO STOP to unsubscribe or HELP for support. Msg freq. varies, msg&data rates may apply.",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T16:23:51Z",
+            "outcome": "Completed",
+            "completedBy": "Feinstein, J"
+        },
+        {
+            "activityId": "8f540c88-4dac-f011-814f-00505690ec8c",
+            "comments": "looking at others as well   may come by to check it out",
+            "activityName": "Call # 1",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-18T16:14:38Z",
+            "outcome": "Text #1",
+            "completedBy": "Feinstein, J"
+        },
+        {
+            "activityId": "8c540c88-4dac-f011-814f-00505690ec8c",
+            "comments": "<i>TrueCar / SchoolsFirst FCU: New Customer Inquiry</i><br />Motivated Buyer: increased probability to purchase vehicle.; *** DEALER PORTAL ***; https://dealerportal.truecar.com/dfe/prospects/P5RTDMN3RN?_xt=1&utm_source=crm&utm_medium=deeplink&utm_campaign=1144",
+            "activityName": "Internet Up",
+            "activityType": 13,
+            "category": "Completed",
+            "completedDate": "2025-10-18T16:09:00Z",
+            "outcome": "Auto Response",
+            "completedBy": "Feinstein, J"
+        }
+    ],
+    "scheduledActivities": [],
+    "firstActivity": {
+        "id": "8c540c88-4dac-f011-814f-00505690ec8c",
+        "activityType": "Internet Up",
+        "category": "Completed",
+        "name": "Internet Up",
+        "completedDate": "2025-10-18T18:09:00Z",
+        "dueDate": "2025-10-18T20:09:00Z",
+        "outcome": "Auto Response",
+        "createdBy": "Feinstein, Jim",
+        "assignedTo": "Feinstein, Jim",
+        "completedBy": "Feinstein, Jim",
+        "opportunityId": "88540c88-4dac-f011-814f-00505690ec8c",
+        "upType": "Internet",
+        "source": "TrueCar",
+        "subSource": "New TrueCar/SchoolsFirst FCU Auto Buying Customer Inquiry",
+        "createdByUserId": "83693b1a-7966-ea11-a977-005056b72b57",
+        "assignedToUserId": "83693b1a-7966-ea11-a977-005056b72b57",
+        "completedByUserId": "83693b1a-7966-ea11-a977-005056b72b57",
+        "message": {
+            "date": "2025-10-18T18:09:11Z",
+            "from": "schoolsfirstfcu@secureleads.truecarmail.com",
+            "to": "sales@tustinmazda.edealerhub.com",
+            "subject": "TrueCar / SchoolsFirst FCU: New Customer Inquiry",
+            "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<?ADF version=\"1.0\"?><adf>\r\n  <prospect>\r\n    <id source=\"TrueCar Lead ID\">1142918169</id>\r\n    <requestdate>2025-10-18T11:09:00-07:00</requestdate>\r\n    <vehicle interest=\"buy\" status=\"used\">\r\n      <id source=\"model code\">LUR</id>\r\n      <year>2020</year>\r\n      <make>Subaru</make>\r\n      <model>WRX</model>\r\n      <vin>JF1VA1P61L8806119</vin>\r\n      <stock>M373277A</stock>\r\n      <trim>Limited</trim>\r\n      <doors>4</doors>\r\n      <bodystyle>Sedan</bodystyle>\r\n      <transmission>Automatic</transmission>\r\n      <odometer units=\"mi\">40226</odometer>\r\n      <colorcombination>\r\n        <interiorcolor>CARBON BLACK</interiorcolor>\r\n        <exteriorcolor>Magnetite Gray Metallic</exteriorcolor>\r\n        <preference>1</preference>\r\n      </colorcombination>\r\n      <price type=\"quote\">27280.0</price>\r\n      <pricecomments>\r\n        <![CDATA[]]>\r\n      </pricecomments>\r\n      <finance>\r\n        <method>finance</method>\r\n        <amount>1.0</amount>\r\n      </finance>\r\n    </vehicle>\r\n    <customer>\r\n      <contact>\r\n        <name part=\"first\">Victor</name>\r\n        <name part=\"last\">Martinez</name>\r\n        <email preferredcontact=\"0\">victor.martinez1993@yahoo.com</email>\r\n        <phone preferredcontact=\"0\" time=\"nopreference\" type=\"voice\">(562) 316-7205</phone>\r\n        <address>\r\n          <street line=\"1\">10381 Park Ave</street>\r\n          <city>Garden Grove</city>\r\n          <regioncode>CA</regioncode>\r\n          <postalcode>92840</postalcode>\r\n          <country/>\r\n        </address>\r\n      </contact>\r\n      <comments>\r\n        <![CDATA[Motivated Buyer: increased probability to purchase vehicle. <br /> *** DEALER PORTAL *** <br /> https://dealerportal.truecar.com/dfe/prospects/P5RTDMN3RN?_xt=1&utm_source=crm&utm_medium=deeplink&utm_campaign=1144]]>\r\n      </comments>\r\n    </customer>\r\n    <vendor>\r\n      <id source=\"205:ADF XML Email\"/>\r\n      <id source=\"AdditionalEmails\">jeffw@pattersonautos.com, jimf@pattersonautos.com, tustin-mazda-adf@testenv.impel.io</id>\r\n      <id source=\"DealerId\">1144</id>\r\n      <vendorname>Tustin Mazda</vendorname>\r\n      <contact>\r\n        <name part=\"full\" type=\"individual\">Jim Feinstein</name>\r\n        <email preferredcontact=\"0\">sales@tustinmazda.edealerhub.com</email>\r\n        <phone preferredcontact=\"0\" time=\"nopreference\" type=\"voice\"/>\r\n        <address>\r\n          <street line=\"1\">28 Auto Center Drive</street>\r\n          <city>Tustin</city>\r\n          <regioncode>CA</regioncode>\r\n          <postalcode>92782</postalcode>\r\n        </address>\r\n      </contact>\r\n    </vendor>\r\n    <provider>\r\n      <name part=\"full\">TrueCar/SchoolsFirst FCU</name>\r\n      <service>New TrueCar/SchoolsFirst FCU Auto Buying Customer Inquiry</service>\r\n      <leadtype>internet</leadtype>\r\n    </provider>\r\n  </prospect>\r\n</adf>"
+        },
+        "links": [],
+        "adfDict": {
+            "adf": {
+                "prospect": {
+                    "id": {
+                        "@attributes": {
+                            "source": "TrueCar Lead ID"
+                        },
+                        "#text": "1142918169"
+                    },
+                    "requestdate": {
+                        "#text": "2025-10-18T11:09:00-07:00"
+                    },
+                    "vehicle": {
+                        "@attributes": {
+                            "interest": "buy",
+                            "status": "used"
+                        },
+                        "id": {
+                            "@attributes": {
+                                "source": "model code"
+                            },
+                            "#text": "LUR"
+                        },
+                        "year": {
+                            "#text": "2020"
+                        },
+                        "make": {
+                            "#text": "Subaru"
+                        },
+                        "model": {
+                            "#text": "WRX"
+                        },
+                        "vin": {
+                            "#text": "JF1VA1P61L8806119"
+                        },
+                        "stock": {
+                            "#text": "M373277A"
+                        },
+                        "trim": {
+                            "#text": "Limited"
+                        },
+                        "doors": {
+                            "#text": "4"
+                        },
+                        "bodystyle": {
+                            "#text": "Sedan"
+                        },
+                        "transmission": {
+                            "#text": "Automatic"
+                        },
+                        "odometer": {
+                            "@attributes": {
+                                "units": "mi"
+                            },
+                            "#text": "40226"
+                        },
+                        "colorcombination": {
+                            "interiorcolor": {
+                                "#text": "CARBON BLACK"
+                            },
+                            "exteriorcolor": {
+                                "#text": "Magnetite Gray Metallic"
+                            },
+                            "preference": {
+                                "#text": "1"
+                            }
+                        },
+                        "price": {
+                            "@attributes": {
+                                "type": "quote"
+                            },
+                            "#text": "27280.0"
+                        },
+                        "pricecomments": {},
+                        "finance": {
+                            "method": {
+                                "#text": "finance"
+                            },
+                            "amount": {
+                                "#text": "1.0"
+                            }
+                        }
+                    },
+                    "customer": {
+                        "contact": {
+                            "name": [
+                                {
+                                    "@attributes": {
+                                        "part": "first"
+                                    },
+                                    "#text": "Victor"
+                                },
+                                {
+                                    "@attributes": {
+                                        "part": "last"
+                                    },
+                                    "#text": "Martinez"
+                                }
+                            ],
+                            "email": {
+                                "@attributes": {
+                                    "preferredcontact": "0"
+                                },
+                                "#text": "victor.martinez1993@yahoo.com"
+                            },
+                            "phone": {
+                                "@attributes": {
+                                    "preferredcontact": "0",
+                                    "time": "nopreference",
+                                    "type": "voice"
+                                },
+                                "#text": "(562) 316-7205"
+                            },
+                            "address": {
+                                "street": {
+                                    "@attributes": {
+                                        "line": "1"
+                                    },
+                                    "#text": "10381 Park Ave"
+                                },
+                                "city": {
+                                    "#text": "Garden Grove"
+                                },
+                                "regioncode": {
+                                    "#text": "CA"
+                                },
+                                "postalcode": {
+                                    "#text": "92840"
+                                },
+                                "country": {}
+                            }
+                        },
+                        "comments": {
+                            "#text": "Motivated Buyer: increased probability to purchase vehicle. <br /> *** DEALER PORTAL *** <br /> https://dealerportal.truecar.com/dfe/prospects/P5RTDMN3RN?_xt=1&utm_source=crm&utm_medium=deeplink&utm_campaign=1144"
+                        }
+                    },
+                    "vendor": {
+                        "id": [
+                            {
+                                "@attributes": {
+                                    "source": "205:ADF XML Email"
+                                }
+                            },
+                            {
+                                "@attributes": {
+                                    "source": "AdditionalEmails"
+                                },
+                                "#text": "jeffw@pattersonautos.com, jimf@pattersonautos.com, tustin-mazda-adf@testenv.impel.io"
+                            },
+                            {
+                                "@attributes": {
+                                    "source": "DealerId"
+                                },
+                                "#text": "1144"
+                            }
+                        ],
+                        "vendorname": {
+                            "#text": "Tustin Mazda"
+                        },
+                        "contact": {
+                            "name": {
+                                "@attributes": {
+                                    "part": "full",
+                                    "type": "individual"
+                                },
+                                "#text": "Jim Feinstein"
+                            },
+                            "email": {
+                                "@attributes": {
+                                    "preferredcontact": "0"
+                                },
+                                "#text": "sales@tustinmazda.edealerhub.com"
+                            },
+                            "phone": {
+                                "@attributes": {
+                                    "preferredcontact": "0",
+                                    "time": "nopreference",
+                                    "type": "voice"
+                                }
+                            },
+                            "address": {
+                                "street": {
+                                    "@attributes": {
+                                        "line": "1"
+                                    },
+                                    "#text": "28 Auto Center Drive"
+                                },
+                                "city": {
+                                    "#text": "Tustin"
+                                },
+                                "regioncode": {
+                                    "#text": "CA"
+                                },
+                                "postalcode": {
+                                    "#text": "92782"
+                                }
+                            }
+                        }
+                    },
+                    "provider": {
+                        "name": {
+                            "@attributes": {
+                                "part": "full"
+                            },
+                            "#text": "TrueCar/SchoolsFirst FCU"
+                        },
+                        "service": {
+                            "#text": "New TrueCar/SchoolsFirst FCU Auto Buying Customer Inquiry"
+                        },
+                        "leadtype": {
+                            "#text": "internet"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

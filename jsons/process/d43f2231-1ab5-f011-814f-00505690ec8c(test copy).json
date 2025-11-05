@@ -1,0 +1,526 @@
+{
+    "_subscription_id": "7a05ce2c-cf00-4748-b841-45b3442665a7",
+    "opportunityId": "d43f2231-1ab5-f011-814f-00505690ec8c",
+    "activityId": null,
+    "links": [
+        {
+            "rel": "create",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities",
+            "method": "POST",
+            "title": "Create Opportunity"
+        },
+        {
+            "rel": "self",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/d43f2231-1ab5-f011-814f-00505690ec8c",
+            "method": "GET",
+            "title": "Get Opportunity"
+        },
+        {
+            "rel": "comment",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/comment",
+            "method": "POST",
+            "title": "Add Comment"
+        },
+        {
+            "rel": "email",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/sendEmail",
+            "method": "POST",
+            "title": "Send Email"
+        },
+        {
+            "rel": "tradein",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/tradein",
+            "method": "POST",
+            "title": "Add Trade-In"
+        },
+        {
+            "rel": "vehiclesought",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/vehicleSought",
+            "method": "POST",
+            "title": "Add Vehicle Sought"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/reassignPrimarySalesperson",
+            "method": "POST",
+            "title": "Reassign Primary Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/d43f2231-1ab5-f011-814f-00505690ec8c/salesteam/add",
+            "method": "POST",
+            "title": "Add Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/d43f2231-1ab5-f011-814f-00505690ec8c/salesteam/remove",
+            "method": "POST",
+            "title": "Remove Salesperson"
+        },
+        {
+            "rel": "substatus",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/d43f2231-1ab5-f011-814f-00505690ec8c/subStatus/update",
+            "method": "POST",
+            "title": "Update SubStatus"
+        },
+        {
+            "rel": "inactive",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/d43f2231-1ab5-f011-814f-00505690ec8c/set-inactive",
+            "method": "POST",
+            "title": "Set Opportunity Inactive"
+        }
+    ],
+    "source": "Costco.com",
+    "upType": "Internet",
+    "soughtVehicles": [
+        {
+            "id": "d53f2231-1ab5-f011-814f-00505690ec8c",
+            "isNew": true,
+            "yearFrom": 2025,
+            "yearTo": 2025,
+            "make": "Mazda",
+            "isPrimary": true
+        }
+    ],
+    "salesTeam": [
+        {
+            "id": "6f9407e7-1459-f011-814d-00505690ec8c",
+            "firstName": "Manny",
+            "lastName": "Zecena",
+            "isPrimary": true,
+            "isPositionPrimary": true,
+            "positionName": "Salesperson",
+            "positionCode": "S",
+            "links": []
+        }
+    ],
+    "tradeIns": [
+        {
+            "id": "d93f2231-1ab5-f011-814f-00505690ec8c",
+            "vin": "",
+            "estimatedMileage": 0,
+            "interiorColor": "",
+            "exteriorColor": ""
+        }
+    ],
+    "createdBy": null,
+    "updated_at": "2025-10-30T16:06:22.591593",
+    "customer": {
+        "id": "d33f2231-1ab5-f011-814f-00505690ec8c",
+        "isBusiness": false,
+        "firstName": "Christina",
+        "lastName": "Wells",
+        "emails": [
+            {
+                "address": "baebeeblu@yahoo.com",
+                "emailType": "Personal",
+                "doNotEmail": false,
+                "isPreferred": true
+            }
+        ],
+        "phones": [
+            {
+                "number": "(562) 343-0156",
+                "phoneType": "Home",
+                "preferredTimeToContact": "Day",
+                "onDoNotCallRegistry": false
+            },
+            {
+                "number": "(562) 343-0156",
+                "phoneType": "Cellular",
+                "preferredTimeToContact": "Day",
+                "onDoNotCallRegistry": false
+            }
+        ],
+        "address": {},
+        "privacySettings": [
+            {
+                "name": "CCPADoNotContact",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotShare",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotSell",
+                "value": "False"
+            }
+        ],
+        "links": [
+            {
+                "rel": "self",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/d33f2231-1ab5-f011-814f-00505690ec8c",
+                "method": "GET",
+                "title": "Fetch Customer"
+            },
+            {
+                "rel": "create",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers",
+                "method": "POST",
+                "title": "Create Customer"
+            },
+            {
+                "rel": "update",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/d33f2231-1ab5-f011-814f-00505690ec8c",
+                "method": "POST",
+                "title": "Update Customer"
+            }
+        ]
+    },
+    "created_at": "2025-10-30T16:06:22.591593",
+    "isActive": true,
+    "scheduledActivities": [
+        {
+            "activityId": "293ffc16-23b5-f011-814f-00505690ec8c",
+            "activityName": "Call #2",
+            "activityType": 2,
+            "dueDate": "2025-10-30T23:00:00Z",
+            "assignedTo": "Zecena, M",
+            "comments": ""
+        },
+        {
+            "activityId": "dd3f2231-1ab5-f011-814f-00505690ec8c",
+            "activityName": "BDC Virtual Immediate Call",
+            "activityType": 2,
+            "dueDate": "2025-11-01T22:54:00Z",
+            "assignedTo": "Alcontin, A",
+            "comments": ""
+        }
+    ],
+    "completedActivities": [
+        {
+            "activityId": "2a643fa6-c066-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-10-29T21:58:31Z",
+            "outcome": "Completed",
+            "completedBy": "Zecena, M",
+            "comments": "Sounds good, enjoy the rest of your evening.",
+            "category": "Completed"
+        },
+        {
+            "activityId": "f2fc741d-22b5-f011-814f-00505690ec8c",
+            "activityName": "Email #1",
+            "activityType": 3,
+            "completedDate": "2025-10-29T21:58:01Z",
+            "outcome": "Call #2",
+            "completedBy": "Zecena, M",
+            "comments": "<i>Costco Auto Program</i>",
+            "category": "Completed"
+        },
+        {
+            "activityId": "a9026f35-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-10-29T21:57:38Z",
+            "outcome": "Completed",
+            "completedBy": "System",
+            "comments": "Thanks Manny. Talk to you tomorrow. ",
+            "category": "Completed"
+        },
+        {
+            "activityId": "d5c65435-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-10-29T21:57:25Z",
+            "outcome": "Completed",
+            "completedBy": "Zecena, M",
+            "comments": "This is my office number but you can also feel free to reach me at my cell number (949) 402-8893. ",
+            "category": "Completed"
+        },
+        {
+            "activityId": "d4c65435-8b66-ea11-a977-005056b72b57",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "completedDate": "2025-10-29T21:56:55Z",
+            "outcome": "Completed",
+            "completedBy": "Zecena, M",
+            "comments": "Hello Christina, thank you for taking my call and the oppertunity to help you with your car buying. I will set a tentativbe time for friday 10/31/2025 at noon but if anything chnages please let me know.  STOP to unsubscribe or HELP for support. Msg freq. varies, msg&data rates may apply.",
+            "category": "Completed"
+        },
+        {
+            "activityId": "bbbc98ce-1ab5-f011-814f-00505690ec8c",
+            "activityName": "Text #1",
+            "activityType": 48,
+            "completedDate": "2025-10-29T21:51:07Z",
+            "outcome": "Email #1",
+            "completedBy": "Zecena, M",
+            "comments": "",
+            "category": "Completed"
+        },
+        {
+            "activityId": "f9c79bbb-21b5-f011-814f-00505690ec8c",
+            "activityName": "Note",
+            "activityType": 37,
+            "completedDate": "2025-10-29T21:48:20.24Z",
+            "outcome": "Completed",
+            "completedBy": "Zecena, M",
+            "comments": "in between the mazda 3 sedan or HB ",
+            "category": "Completed"
+        },
+        {
+            "activityId": "db3f2231-1ab5-f011-814f-00505690ec8c",
+            "activityName": "Call # 1",
+            "activityType": 2,
+            "completedDate": "2025-10-29T20:58:42Z",
+            "outcome": "Text #1",
+            "completedBy": "Zecena, M",
+            "comments": "(Left Message)",
+            "category": "Completed"
+        },
+        {
+            "activityId": "da3f2231-1ab5-f011-814f-00505690ec8c",
+            "activityName": "Internet Up",
+            "activityType": 13,
+            "completedDate": "2025-10-29T20:54:00Z",
+            "outcome": "Auto Response",
+            "completedBy": "Zecena, M",
+            "comments": "<i>Costco Auto Program Referral - Wells auth#: 02181-1025-85770-1 C</i><br />Click the link below to create a personalized price sheet for this referral: http://dealers.costcoauto.com/pnlogin.aspx?key=4wm4i93003ta",
+            "category": "Completed"
+        }
+    ],
+    "completedActivitiesTesting": [
+        {
+            "activityId": "testing-id-1030-0630-pm",
+            "activityName": "Read Email",
+            "activityType": 20,
+            "completedDate": "2025-10-30T20:54:00Z",
+            "outcome": "Completed",
+            "completedBy": "testing",
+            "comments": "is there one with a blue color?",
+            "category": "Completed",
+            "message": {
+                "date": "2025-10-30T20:54:00Z",
+                "from": "baebeeblu@yahoo.com",
+                "to": "testing@test.com",
+                "subject": "Re: Interest in 2025 Mazda",
+                "body": "is there one with a blue color?"
+            }
+        },
+        {
+            "activityId": "testing-id-1030-0530-pm",
+            "activityName": "Note",
+            "activityType": 37,
+            "completedDate": "2025-10-30T20:57:00Z",
+            "outcome": "Completed",
+            "completedBy": "testing",
+            "comments": "[patti]: no inquery from customer, patti send init message",
+            "category": "Completed"
+        },
+        {
+            "activityId": "da3f2231-1ab5-f011-814f-00505690ec8c",
+            "activityName": "Internet Up",
+            "activityType": 13,
+            "completedDate": "2025-10-29T20:54:00Z",
+            "outcome": "Auto Response",
+            "completedBy": "Zecena, M",
+            "comments": "<i>Costco Auto Program Referral - Wells auth#: 02181-1025-85770-1 C</i><br />Click the link below to create a personalized price sheet for this referral: http://dealers.costcoauto.com/pnlogin.aspx?key=4wm4i93003ta",
+            "category": "Completed"
+        }
+    ],
+    "followUP_date": "2025-10-31T16:06:22.591593",
+    "followUP_count": 0,
+    "messages": [
+        {
+            "msgFrom": "patti",
+            "subject": "Interest in 2025 Mazda",
+            "body": "Hi Christina,\n\nThank you for reaching out! The 2025 Mazda offers an exceptional blend of performance and style, ensuring a thrilling driving experience while keeping you comfortable and safe. Plus, at Tustin Mazda, we pride ourselves on our No Addendums or Dealer Markups, making your purchase straightforward and transparent.\n\nWe’re here to help you with any questions you may have or to discuss specific features you’re interested in. Whether it’s a particular trim, color, or any other details, feel free to share your preferences!\n\nManny Zecena will be your dedicated salesperson, ready to assist you every step of the way. Looking forward to hearing from you soon!\n\nPlease let us know a convenient time for you, or you can instantly reserve your time here: <{LegacySalesApptSchLink}>\n\n\nPatti\nTustin Mazda\n28 Auto Center Dr, Tustin, CA 92782",
+            "date": "2025-10-30T18:16:42.288553"
+        }
+    ],
+    "alreadyProcessedActivities": {
+        "da3f2231-1ab5-f011-814f-00505690ec8c": {
+            "id": "da3f2231-1ab5-f011-814f-00505690ec8c",
+            "activityType": "Internet Up",
+            "category": "Completed",
+            "name": "Internet Up",
+            "completedDate": "2025-10-29T22:54:00Z",
+            "dueDate": "2025-10-30T00:54:00Z",
+            "outcome": "Auto Response",
+            "createdBy": "Zecena, Manny",
+            "assignedTo": "Zecena, Manny",
+            "completedBy": "Zecena, Manny",
+            "opportunityId": "d43f2231-1ab5-f011-814f-00505690ec8c",
+            "upType": "Internet",
+            "source": "Costco.com",
+            "subSource": "Costco Auto Program",
+            "createdByUserId": "6f9407e7-1459-f011-814d-00505690ec8c",
+            "assignedToUserId": "6f9407e7-1459-f011-814d-00505690ec8c",
+            "completedByUserId": "6f9407e7-1459-f011-814d-00505690ec8c",
+            "message": {
+                "date": "2025-10-29T22:54:22Z",
+                "from": "leads@costcoauto.com",
+                "to": "sales@tustinmazda.edealerhub.com",
+                "subject": "Costco Auto Program Referral - Wells auth#: 02181-1025-85770-1 C",
+                "body": "<?xml version=\"1.0\"?>\r\n<!--ADF-->\r\n<?adf version=\"1.0\"?><adf>\r\n<prospect>\r\n<requestdate>2025-10-29T23:50:56.457Z</requestdate>\r\n<vehicle interest=\"buy\" status=\"new\">\r\n<year>2025</year>\r\n<make>Mazda</make>\r\n<model>Mazda3 Sedan 2.5 S FWD</model>\r\n<vin></vin>\r\n<trim></trim>\r\n<pricecomments>&lt;p style=\"margin-bottom: 8x;\"&gt;&lt;FONT FACE=\"Arial\" SIZE=\"2\" COLOR=\"#000000\"&gt;&lt;b&gt;&lt;u&gt;Costco member value proposition&lt;/u&gt;&lt;/b&gt;&lt;/FONT&gt;&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Costco Member Price = $1750 under Invoice&lt;/li&gt;&lt;li&gt;Accessories discount: &lt;b&gt;Minimum 15% off all accessories&lt;/b&gt;&lt;/li&gt;&lt;li&gt;Dealer Pre-installed accessories: See Personalized Price Sheet.&lt;/li&gt;&lt;li&gt;&lt;b&gt;Plus&lt;/b&gt;, all available dealer cash, finance incentives and all applicable customer rebates&lt;/li&gt;&lt;/ul&gt;</pricecomments>\r\n</vehicle>\r\n<vehicle interest=\"trade-in\">\r\n<year></year>\r\n<make></make>\r\n<model></model>\r\n</vehicle>\r\n<customer>\r\n<contact>\r\n<name part=\"full\">Christina Wells</name>\r\n<email emailonly=\"N\">baebeeblu@yahoo.com</email>\r\n<phone type=\"voice\" time=\"day\">(562) 343-0156</phone>\r\n</contact>\r\n<comments><![CDATA[ Click the link below to create a personalized price sheet for this referral: http://dealers.costcoauto.com/pnlogin.aspx?key=4wm4i93003ta  ]]></comments>\r\n</customer>\r\n<vendor>\r\n<vendorname>Tustin Mazda</vendorname>\r\n</vendor>\r\n<provider>\r\n<id>0</id>\r\n<name part=\"full\">Costco Auto Program</name>\r\n<service>Costco Auto Program</service>\r\n<url>http://www.costcoauto.com</url>\r\n<contact type=\"primary\">\r\n<name part=\"full\">Costco Auto Customer Service</name>\r\n<email>leads@costcoauto.com</email>\r\n<phone>800-755-2519</phone>\r\n</contact>\r\n</provider>\r\n</prospect>\r\n</adf>"
+            },
+            "links": []
+        },
+        "testing-id-1030-0530-pm": {
+            "activityId": "testing-id-1030-0530-pm",
+            "activityName": "Note",
+            "activityType": 37,
+            "completedDate": "2025-10-30T20:57:00Z",
+            "outcome": "Completed",
+            "completedBy": "testing",
+            "comments": "[patti]: no inquery from customer",
+            "category": "Completed"
+        }
+    },
+    "checkedDict": {
+        "is_sales_contacted": false,
+        "patti_already_contacted": true,
+        "last_msg_by": "patti"
+    },
+    "firstActivity": {
+        "activityId": "da3f2231-1ab5-f011-814f-00505690ec8c",
+        "activityName": "Internet Up",
+        "activityType": 13,
+        "completedDate": "2025-10-29T20:54:00Z",
+        "outcome": "Auto Response",
+        "completedBy": "Zecena, M",
+        "comments": "<i>Costco Auto Program Referral - Wells auth#: 02181-1025-85770-1 C</i><br />Click the link below to create a personalized price sheet for this referral: http://dealers.costcoauto.com/pnlogin.aspx?key=4wm4i93003ta",
+        "category": "Completed"
+    },
+    "firstActivityFull": {
+        "id": "da3f2231-1ab5-f011-814f-00505690ec8c",
+        "activityType": "Internet Up",
+        "category": "Completed",
+        "name": "Internet Up",
+        "completedDate": "2025-10-29T22:54:00Z",
+        "dueDate": "2025-10-30T00:54:00Z",
+        "outcome": "Auto Response",
+        "createdBy": "Zecena, Manny",
+        "assignedTo": "Zecena, Manny",
+        "completedBy": "Zecena, Manny",
+        "opportunityId": "d43f2231-1ab5-f011-814f-00505690ec8c",
+        "upType": "Internet",
+        "source": "Costco.com",
+        "subSource": "Costco Auto Program",
+        "createdByUserId": "6f9407e7-1459-f011-814d-00505690ec8c",
+        "assignedToUserId": "6f9407e7-1459-f011-814d-00505690ec8c",
+        "completedByUserId": "6f9407e7-1459-f011-814d-00505690ec8c",
+        "message": {
+            "date": "2025-10-29T22:54:22Z",
+            "from": "leads@costcoauto.com",
+            "to": "sales@tustinmazda.edealerhub.com",
+            "subject": "Costco Auto Program Referral - Wells auth#: 02181-1025-85770-1 C",
+            "body": "<?xml version=\"1.0\"?>\r\n<!--ADF-->\r\n<?adf version=\"1.0\"?><adf>\r\n<prospect>\r\n<requestdate>2025-10-29T23:50:56.457Z</requestdate>\r\n<vehicle interest=\"buy\" status=\"new\">\r\n<year>2025</year>\r\n<make>Mazda</make>\r\n<model>Mazda3 Sedan 2.5 S FWD</model>\r\n<vin></vin>\r\n<trim></trim>\r\n<pricecomments>&lt;p style=\"margin-bottom: 8x;\"&gt;&lt;FONT FACE=\"Arial\" SIZE=\"2\" COLOR=\"#000000\"&gt;&lt;b&gt;&lt;u&gt;Costco member value proposition&lt;/u&gt;&lt;/b&gt;&lt;/FONT&gt;&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Costco Member Price = $1750 under Invoice&lt;/li&gt;&lt;li&gt;Accessories discount: &lt;b&gt;Minimum 15% off all accessories&lt;/b&gt;&lt;/li&gt;&lt;li&gt;Dealer Pre-installed accessories: See Personalized Price Sheet.&lt;/li&gt;&lt;li&gt;&lt;b&gt;Plus&lt;/b&gt;, all available dealer cash, finance incentives and all applicable customer rebates&lt;/li&gt;&lt;/ul&gt;</pricecomments>\r\n</vehicle>\r\n<vehicle interest=\"trade-in\">\r\n<year></year>\r\n<make></make>\r\n<model></model>\r\n</vehicle>\r\n<customer>\r\n<contact>\r\n<name part=\"full\">Christina Wells</name>\r\n<email emailonly=\"N\">baebeeblu@yahoo.com</email>\r\n<phone type=\"voice\" time=\"day\">(562) 343-0156</phone>\r\n</contact>\r\n<comments><![CDATA[ Click the link below to create a personalized price sheet for this referral: http://dealers.costcoauto.com/pnlogin.aspx?key=4wm4i93003ta  ]]></comments>\r\n</customer>\r\n<vendor>\r\n<vendorname>Tustin Mazda</vendorname>\r\n</vendor>\r\n<provider>\r\n<id>0</id>\r\n<name part=\"full\">Costco Auto Program</name>\r\n<service>Costco Auto Program</service>\r\n<url>http://www.costcoauto.com</url>\r\n<contact type=\"primary\">\r\n<name part=\"full\">Costco Auto Customer Service</name>\r\n<email>leads@costcoauto.com</email>\r\n<phone>800-755-2519</phone>\r\n</contact>\r\n</provider>\r\n</prospect>\r\n</adf>"
+        },
+        "links": []
+    },
+    "firstActivityAdfDict": {
+        "adf": {
+            "prospect": {
+                "requestdate": {
+                    "#text": "2025-10-29T23:50:56.457Z"
+                },
+                "vehicle": [
+                    {
+                        "@attributes": {
+                            "interest": "buy",
+                            "status": "new"
+                        },
+                        "year": {
+                            "#text": "2025"
+                        },
+                        "make": {
+                            "#text": "Mazda"
+                        },
+                        "model": {
+                            "#text": "Mazda3 Sedan 2.5 S FWD"
+                        },
+                        "vin": {},
+                        "trim": {},
+                        "pricecomments": {
+                            "#text": "<p style=\"margin-bottom: 8x;\"><FONT FACE=\"Arial\" SIZE=\"2\" COLOR=\"#000000\"><b><u>Costco member value proposition</u></b></FONT></p><ul><li>Costco Member Price = $1750 under Invoice</li><li>Accessories discount: <b>Minimum 15% off all accessories</b></li><li>Dealer Pre-installed accessories: See Personalized Price Sheet.</li><li><b>Plus</b>, all available dealer cash, finance incentives and all applicable customer rebates</li></ul>"
+                        }
+                    },
+                    {
+                        "@attributes": {
+                            "interest": "trade-in"
+                        },
+                        "year": {},
+                        "make": {},
+                        "model": {}
+                    }
+                ],
+                "customer": {
+                    "contact": {
+                        "name": {
+                            "@attributes": {
+                                "part": "full"
+                            },
+                            "#text": "Christina Wells"
+                        },
+                        "email": {
+                            "@attributes": {
+                                "emailonly": "N"
+                            },
+                            "#text": "baebeeblu@yahoo.com"
+                        },
+                        "phone": {
+                            "@attributes": {
+                                "type": "voice",
+                                "time": "day"
+                            },
+                            "#text": "(562) 343-0156"
+                        }
+                    },
+                    "comments": {
+                        "#text": "Click the link below to create a personalized price sheet for this referral: http://dealers.costcoauto.com/pnlogin.aspx?key=4wm4i93003ta"
+                    }
+                },
+                "vendor": {
+                    "vendorname": {
+                        "#text": "Tustin Mazda"
+                    }
+                },
+                "provider": {
+                    "id": {
+                        "#text": "0"
+                    },
+                    "name": {
+                        "@attributes": {
+                            "part": "full"
+                        },
+                        "#text": "Costco Auto Program"
+                    },
+                    "service": {
+                        "#text": "Costco Auto Program"
+                    },
+                    "url": {
+                        "#text": "http://www.costcoauto.com"
+                    },
+                    "contact": {
+                        "@attributes": {
+                            "type": "primary"
+                        },
+                        "name": {
+                            "@attributes": {
+                                "part": "full"
+                            },
+                            "#text": "Costco Auto Customer Service"
+                        },
+                        "email": {
+                            "#text": "leads@costcoauto.com"
+                        },
+                        "phone": {
+                            "#text": "800-755-2519"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "inquiry_text_body": "Click the link below to create a personalized price sheet for this referral: http://dealers.costcoauto.com/pnlogin.aspx?key=4wm4i93003ta",
+    "customerFirstMsgDict": {
+        "customerMsg": "",
+        "isCustomerMsg": false,
+        "class": "",
+        "notes": "",
+        "salesAlreadyContact": false
+    },
+    "body_html": "Hi Christina,\n\nThank you for reaching out! The 2025 Mazda offers an exceptional blend of performance and style, ensuring a thrilling driving experience while keeping you comfortable and safe. Plus, at Tustin Mazda, we pride ourselves on our No Addendums or Dealer Markups, making your purchase straightforward and transparent.\n\nWe’re here to help you with any questions you may have or to discuss specific features you’re interested in. Whether it’s a particular trim, color, or any other details, feel free to share your preferences!\n\nManny Zecena will be your dedicated salesperson, ready to assist you every step of the way. Looking forward to hearing from you soon!\n\nPlease let us know a convenient time for you, or you can instantly reserve your time here: <{LegacySalesApptSchLink}>\n\n\nPatti\nTustin Mazda\n28 Auto Center Dr, Tustin, CA 92782"
+}

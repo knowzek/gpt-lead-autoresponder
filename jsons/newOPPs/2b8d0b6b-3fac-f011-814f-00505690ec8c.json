@@ -1,0 +1,542 @@
+{
+    "_subscription_id": "a4efeb74-2289-43d5-9814-1049fd35e894",
+    "opportunityId": "2b8d0b6b-3fac-f011-814f-00505690ec8c",
+    "activityId": null,
+    "links": [
+        {
+            "rel": "create",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities",
+            "method": "POST",
+            "title": "Create Opportunity"
+        },
+        {
+            "rel": "self",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/2b8d0b6b-3fac-f011-814f-00505690ec8c",
+            "method": "GET",
+            "title": "Get Opportunity"
+        },
+        {
+            "rel": "comment",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/comment",
+            "method": "POST",
+            "title": "Add Comment"
+        },
+        {
+            "rel": "email",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/sendEmail",
+            "method": "POST",
+            "title": "Send Email"
+        },
+        {
+            "rel": "tradein",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/tradein",
+            "method": "POST",
+            "title": "Add Trade-In"
+        },
+        {
+            "rel": "vehiclesought",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/vehicleSought",
+            "method": "POST",
+            "title": "Add Vehicle Sought"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/reassignPrimarySalesperson",
+            "method": "POST",
+            "title": "Reassign Primary Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/2b8d0b6b-3fac-f011-814f-00505690ec8c/salesteam/add",
+            "method": "POST",
+            "title": "Add Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/2b8d0b6b-3fac-f011-814f-00505690ec8c/salesteam/remove",
+            "method": "POST",
+            "title": "Remove Salesperson"
+        },
+        {
+            "rel": "substatus",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/2b8d0b6b-3fac-f011-814f-00505690ec8c/subStatus/update",
+            "method": "POST",
+            "title": "Update SubStatus"
+        },
+        {
+            "rel": "inactive",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/2b8d0b6b-3fac-f011-814f-00505690ec8c/set-inactive",
+            "method": "POST",
+            "title": "Set Opportunity Inactive"
+        }
+    ],
+    "source": "Kia Digital",
+    "upType": "Internet",
+    "soughtVehicles": [
+        {
+            "id": "86b3a18f-40ac-f011-814f-00505690ec8c",
+            "isNew": true,
+            "yearFrom": 2025,
+            "make": "KIA",
+            "model": "Soul",
+            "trim": "LX (IVT) 4dr Hatchback",
+            "vin": "KNDJ23AU9S7933892",
+            "maxMileage": 13,
+            "stockNumber": "K933892",
+            "isPrimary": true
+        },
+        {
+            "id": "2d8d0b6b-3fac-f011-814f-00505690ec8c",
+            "isNew": true,
+            "yearFrom": 2025,
+            "yearTo": 2025,
+            "make": "KIA",
+            "model": "Soul",
+            "trim": "S (IVT) 4dr Hatchback",
+            "isPrimary": false
+        }
+    ],
+    "salesTeam": [
+        {
+            "id": "54faece6-9aa0-f011-814f-00505690ec8c",
+            "firstName": "Anthony",
+            "lastName": "Calabrese",
+            "isPrimary": true,
+            "isPositionPrimary": true,
+            "positionName": "Salesperson",
+            "positionCode": "S",
+            "links": []
+        },
+        {
+            "id": "d206c2f7-f219-ef11-b0d2-00505690dca3",
+            "firstName": "Roan",
+            "lastName": "Maqui",
+            "isPrimary": false,
+            "isPositionPrimary": true,
+            "positionName": "BDC Agent",
+            "positionCode": "BDC",
+            "links": []
+        },
+        {
+            "id": "54faece6-9aa0-f011-814f-00505690ec8c",
+            "firstName": "Anthony",
+            "lastName": "Calabrese",
+            "isPrimary": false,
+            "isPositionPrimary": true,
+            "positionName": "Desk Manager",
+            "positionCode": "DM",
+            "links": []
+        }
+    ],
+    "customer": {
+        "id": "248d0b6b-3fac-f011-814f-00505690ec8c",
+        "isBusiness": false,
+        "firstName": "Yongwoo",
+        "middleName": "",
+        "lastName": "Lee",
+        "nickname": "",
+        "emails": [
+            {
+                "address": "johnywlee@gmail.com",
+                "emailType": "Personal",
+                "doNotEmail": false,
+                "isPreferred": true
+            }
+        ],
+        "phones": [
+            {
+                "number": "(714) 949-6395",
+                "phoneType": "Work",
+                "preferredTimeToContact": "Day",
+                "doNotCall": false,
+                "doNotText": true,
+                "preferCall": false,
+                "preferText": false,
+                "onDoNotCallRegistry": false
+            },
+            {
+                "number": "(714) 949-6395",
+                "phoneType": "Cellular",
+                "preferredTimeToContact": "Evening",
+                "doNotCall": false,
+                "doNotText": true,
+                "preferCall": false,
+                "preferText": false,
+                "onDoNotCallRegistry": false
+            }
+        ],
+        "address": {
+            "addressLine1": "1 not provided",
+            "addressLine2": "",
+            "city": "IRVINE",
+            "state": "CA",
+            "zip": "92606",
+            "country": "US",
+            "county": "ORANGE",
+            "doNotMail": false,
+            "isPreferred": false
+        },
+        "privacySettings": [
+            {
+                "name": "CCPADoNotContact",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotShare",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotSell",
+                "value": "False"
+            }
+        ],
+        "links": [
+            {
+                "rel": "self",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/248d0b6b-3fac-f011-814f-00505690ec8c",
+                "method": "GET",
+                "title": "Fetch Customer"
+            },
+            {
+                "rel": "create",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers",
+                "method": "POST",
+                "title": "Create Customer"
+            },
+            {
+                "rel": "update",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/248d0b6b-3fac-f011-814f-00505690ec8c",
+                "method": "POST",
+                "title": "Update Customer"
+            }
+        ]
+    },
+    "tradeIns": null,
+    "createdBy": null,
+    "created_at": "2025-10-18",
+    "updated_at": "2025-10-20",
+    "isActive": true,
+    "completedActivities": [
+        {
+            "activityId": "03e95d78-41ac-f011-814f-00505690ec8c",
+            "comments": "<i>Your Quote at Mission Viejo Kia</i>",
+            "activityName": "Send Worksheet",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:42:54.8Z",
+            "outcome": "Completed",
+            "completedBy": "Calabrese, A"
+        },
+        {
+            "activityId": "308d0b6b-3fac-f011-814f-00505690ec8c",
+            "comments": "Spoke with Yongwoo. Language barrier..all i got out of him is that he wants to lease it.",
+            "activityName": "Call # 1",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:35:26Z",
+            "outcome": "Text #1",
+            "completedBy": "Calabrese, A"
+        },
+        {
+            "activityId": "4f534fcc-40ac-f011-814f-00505690ec8c",
+            "callDuration": "01:12",
+            "comments": "https://audio.callrevu.com/ob/357133429",
+            "numberDialed": "(714) 949-6395",
+            "activityName": "Outbound Call",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:33:30Z",
+            "outcome": "Completed",
+            "completedBy": "System"
+        },
+        {
+            "activityId": "9c097027-40ac-f011-814f-00505690ec8c",
+            "comments": "<i>RE: your request from Mission Viejo KIA</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:33:24.853Z",
+            "outcome": "Completed",
+            "completedBy": "Calabrese, A"
+        },
+        {
+            "activityId": "c61da26b-8b66-ea11-a977-005056b72b57",
+            "comments": "Hello Yongwoo! This is Anthony from Mission Viejo Kia. How can I help you with the Kia Soul? STOP to unsubscribe or HELP for support. Msg freq. varies, msg&data rates may apply.",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:33:10Z",
+            "outcome": "Completed",
+            "completedBy": "Calabrese, A"
+        },
+        {
+            "activityId": "db5249de-3fac-f011-814f-00505690ec8c",
+            "comments": "View conversation https://assistant.crmaiva.ai/conversation?id=a06c48d868d70e3b9eefc01f5496e4bctJaOY&viewonly=true; Reply as assistant https://assistant.crmaiva.ai/conversation?id=a06c48d868d70e3b9eefc01f5496e4bctJaOY&; Stop communication: https://unsubscribe.crmaiva.ai/crm/mission-viejo-kia/johnywlee@gmail.com/a06c48d868d70e3b9eefc01f5496e4bctJaOY?; *EMAIL*; Assistant says:; Hi Yongwoo,; It's Sierra Brooks from Patterson Mission Viejo Kia.; Thank you for expressing your interest.; Please see below for a couple of 2025 KIA Soul options that you might like.; If you have any questions, feel free to reach out, and I'll be happy to answer them.; If you'd like to schedule an appointment, simply choose a day and time, and I'll arrange it for you. Alternatively, would you like us to call your number, 714-949-6395, before you schedule an appointment?; 2025 Kia Soul    $25,003    VIN: KNDJ33AU4S7950287    Stock #: K950287         2025 Kia Soul    $20,687    VIN: KNDJ23AU9S7933892    Stock #: K933892         2025 Kia Soul    $21,207    VIN: KNDJ23AU6S7947880    Stock #: K947880; Best Regards,; Sierra Brooks; Online Relations Assistant; Thank you for considering Mission Viejo Kia! Here’s why you’ll love; 1. Exceptional Service: Our approachable, stress-free sales experience, facilitated by a dedicated single contact person, ensures a seamless car-buying journey. Look at our impressive  4.9-star  rating on Google Reviews to see what our customers are saying!; 2. Vast Inventory: Choose fr",
+            "activityName": "Note",
+            "activityType": 37,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:32:23Z",
+            "outcome": "Completed",
+            "completedBy": "Leads, M"
+        },
+        {
+            "activityId": "dfe21ed2-3fac-f011-814f-00505690ec8c",
+            "comments": "Sales AI email/text sent. Clock stopped.",
+            "activityName": "Phone Call",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:32:00Z",
+            "outcome": "Completed",
+            "completedBy": "Leads, M"
+        },
+        {
+            "activityId": "2f8d0b6b-3fac-f011-814f-00505690ec8c",
+            "comments": "<i>Kia ADF XML Lead</i>",
+            "activityName": "Internet Up",
+            "activityType": 13,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:28:04.293Z",
+            "outcome": "Auto Response",
+            "completedBy": "Leads, M"
+        }
+    ],
+    "scheduledActivities": [
+        {
+            "activityId": "5765e270-40ac-f011-814f-00505690ec8c",
+            "comments": "",
+            "dueDate": "2025-10-18T16:45:00Z",
+            "activityName": "Text #1",
+            "activityType": 48,
+            "assignedTo": "Calabrese, A"
+        },
+        {
+            "activityId": "328d0b6b-3fac-f011-814f-00505690ec8c",
+            "comments": "",
+            "dueDate": "2025-10-21T16:28:04.293Z",
+            "activityName": "BDC Virtual Immediate Call",
+            "activityType": 2,
+            "assignedTo": "Maqui, R"
+        }
+    ],
+    "firstActivity": {
+        "id": "2f8d0b6b-3fac-f011-814f-00505690ec8c",
+        "activityType": "Internet Up",
+        "category": "Completed",
+        "name": "Internet Up",
+        "completedDate": "2025-10-18T16:28:04.293Z",
+        "dueDate": "2025-10-18T16:28:00Z",
+        "outcome": "Auto Response",
+        "createdBy": "Leads, MVK Bucket",
+        "assignedTo": "Leads, MVK Bucket",
+        "completedBy": "Leads, MVK Bucket",
+        "opportunityId": "2b8d0b6b-3fac-f011-814f-00505690ec8c",
+        "upType": "Internet",
+        "source": "Kia Digital",
+        "subSource": "Kia Digital - 3rd Party Lead",
+        "createdByUserId": "1ac48ebf-2354-ef11-814a-00505690043e",
+        "assignedToUserId": "1ac48ebf-2354-ef11-814a-00505690043e",
+        "completedByUserId": "1ac48ebf-2354-ef11-814a-00505690043e",
+        "message": {
+            "date": "2025-10-18T16:28:04Z",
+            "from": "starlead@eleadcrm.com",
+            "to": "starlead@eleadcrm.com",
+            "subject": "Kia ADF XML Lead",
+            "body": "<adf>\r\n\t<prospect status=\"new\">\r\n\t\t<id source=\"Kia Digital\">59485286</id>\r\n\t\t<id source=\"IsCILead\">True</id>\r\n    \r\n    <id sequence=\"2\" source=\"CarsDirect\">102573605</id>\r\n\r\n\t\t<requestdate>2025-10-18T16:27:39</requestdate>\r\n\t\t<vehicle interest=\"buy\" status=\"new\">\r\n  <year>2025</year>\r\n  <make>Kia</make>\r\n  <model>Soul</model>\r\n  <trim>S FWD</trim>\r\n  <bodystyle>Hatchback</bodystyle>\r\n  <finance>\r\n    <method>Cash</method>\r\n  </finance>\r\n</vehicle>\r\n\t\t\r\n\t\t<customer>\r\n\t\t\t<contact primarycontact=\"1\">\r\n\t\t\t\t<name type=\"individual\" part=\"first\">Yongwoo</name>\r\n\t\t\t\t<name type=\"individual\" part=\"last\">LEE</name>\r\n\t\t\t\t<email>johnywlee@gmail.com</email>\r\n\t\t\t\t<phone type=\"voice\" time=\"evening\">7149496395</phone>\r\n\t\t\t\t<phone type=\"voice\" time=\"day\">7149496395</phone>\r\n\t\t\t\t<phone type=\"cellphone\"></phone>\r\n\t\t\t\t<address type=\"home\">\r\n\t\t\t\t\t<street line=\"1\">1 not provided</street>\r\n\t\t\t\t\t<street line=\"2\"></street>\r\n\t\t\t\t\t<city>Irvine</city>\r\n\t\t\t\t\t<regioncode>CA</regioncode>\r\n\t\t\t\t\t<postalcode>92606</postalcode>\r\n\t\t\t\t</address>\r\n\t\t\t</contact>\r\n\t\t\t<timeframe>\r\n\t\t\t\t<description></description>\r\n\t\t\t</timeframe>\r\n\t\t\t<comments></comments>\r\n\t\t</customer>\r\n\t\t<vendor>\r\n\t\t\t<id source=\"Kia Digital\">CA328</id>\r\n\t\t\t<vendorname>Mission Viejo Kia</vendorname>\r\n\t\t\t<contact>\r\n\t\t\t\t<name type=\"business\" part=\"full\">Mission Viejo Kia</name>\r\n\t\t\t\t<email></email>\r\n\t\t\t\t<phone type=\"voice\">9498229556</phone>\r\n\t\t\t\t<address>\r\n\t\t\t\t\t<street line=\"1\">28802 Marguerite Parkway</street>\r\n\t\t\t\t\t<city>Mission Viejo</city>\r\n\t\t\t\t\t<regioncode>CA</regioncode>\r\n\t\t\t\t\t<postalcode>92692</postalcode>\r\n\t\t\t\t</address>\r\n\t\t\t</contact>\r\n\t\t</vendor>\r\n\t\t<provider>\r\n\t\t\t<name type=\"business\" part=\"full\">Kia Digital - 3rd Party Lead</name>\r\n\t\t\t<service>Kia Digital</service>\r\n\t\t\t<url></url>\r\n\t\t</provider>\r\n\t</prospect>\r\n</adf>"
+        },
+        "links": [],
+        "adfDict": {
+            "adf": {
+                "prospect": {
+                    "@attributes": {
+                        "status": "new"
+                    },
+                    "id": [
+                        {
+                            "@attributes": {
+                                "source": "Kia Digital"
+                            },
+                            "#text": "59485286"
+                        },
+                        {
+                            "@attributes": {
+                                "source": "IsCILead"
+                            },
+                            "#text": "True"
+                        },
+                        {
+                            "@attributes": {
+                                "sequence": "2",
+                                "source": "CarsDirect"
+                            },
+                            "#text": "102573605"
+                        }
+                    ],
+                    "requestdate": {
+                        "#text": "2025-10-18T16:27:39"
+                    },
+                    "vehicle": {
+                        "@attributes": {
+                            "interest": "buy",
+                            "status": "new"
+                        },
+                        "year": {
+                            "#text": "2025"
+                        },
+                        "make": {
+                            "#text": "Kia"
+                        },
+                        "model": {
+                            "#text": "Soul"
+                        },
+                        "trim": {
+                            "#text": "S FWD"
+                        },
+                        "bodystyle": {
+                            "#text": "Hatchback"
+                        },
+                        "finance": {
+                            "method": {
+                                "#text": "Cash"
+                            }
+                        }
+                    },
+                    "customer": {
+                        "contact": {
+                            "@attributes": {
+                                "primarycontact": "1"
+                            },
+                            "name": [
+                                {
+                                    "@attributes": {
+                                        "type": "individual",
+                                        "part": "first"
+                                    },
+                                    "#text": "Yongwoo"
+                                },
+                                {
+                                    "@attributes": {
+                                        "type": "individual",
+                                        "part": "last"
+                                    },
+                                    "#text": "LEE"
+                                }
+                            ],
+                            "email": {
+                                "#text": "johnywlee@gmail.com"
+                            },
+                            "phone": [
+                                {
+                                    "@attributes": {
+                                        "type": "voice",
+                                        "time": "evening"
+                                    },
+                                    "#text": "7149496395"
+                                },
+                                {
+                                    "@attributes": {
+                                        "type": "voice",
+                                        "time": "day"
+                                    },
+                                    "#text": "7149496395"
+                                },
+                                {
+                                    "@attributes": {
+                                        "type": "cellphone"
+                                    }
+                                }
+                            ],
+                            "address": {
+                                "@attributes": {
+                                    "type": "home"
+                                },
+                                "street": [
+                                    {
+                                        "@attributes": {
+                                            "line": "1"
+                                        },
+                                        "#text": "1 not provided"
+                                    },
+                                    {
+                                        "@attributes": {
+                                            "line": "2"
+                                        }
+                                    }
+                                ],
+                                "city": {
+                                    "#text": "Irvine"
+                                },
+                                "regioncode": {
+                                    "#text": "CA"
+                                },
+                                "postalcode": {
+                                    "#text": "92606"
+                                }
+                            }
+                        },
+                        "timeframe": {
+                            "description": {}
+                        },
+                        "comments": {}
+                    },
+                    "vendor": {
+                        "id": {
+                            "@attributes": {
+                                "source": "Kia Digital"
+                            },
+                            "#text": "CA328"
+                        },
+                        "vendorname": {
+                            "#text": "Mission Viejo Kia"
+                        },
+                        "contact": {
+                            "name": {
+                                "@attributes": {
+                                    "type": "business",
+                                    "part": "full"
+                                },
+                                "#text": "Mission Viejo Kia"
+                            },
+                            "email": {},
+                            "phone": {
+                                "@attributes": {
+                                    "type": "voice"
+                                },
+                                "#text": "9498229556"
+                            },
+                            "address": {
+                                "street": {
+                                    "@attributes": {
+                                        "line": "1"
+                                    },
+                                    "#text": "28802 Marguerite Parkway"
+                                },
+                                "city": {
+                                    "#text": "Mission Viejo"
+                                },
+                                "regioncode": {
+                                    "#text": "CA"
+                                },
+                                "postalcode": {
+                                    "#text": "92692"
+                                }
+                            }
+                        }
+                    },
+                    "provider": {
+                        "name": {
+                            "@attributes": {
+                                "type": "business",
+                                "part": "full"
+                            },
+                            "#text": "Kia Digital - 3rd Party Lead"
+                        },
+                        "service": {
+                            "#text": "Kia Digital"
+                        },
+                        "url": {}
+                    }
+                }
+            }
+        }
+    }
+}

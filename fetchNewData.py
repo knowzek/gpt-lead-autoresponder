@@ -1,0 +1,258 @@
+import os, json, re, xml.etree.ElementTree as ET, email
+from imapclient import IMAPClient
+import logging
+from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+from rooftops import get_rooftop_info
+from gpt import run_gpt
+from emailer import send_email
+import requests
+from es_resilient import es_upsert_with_retry
+
+import html as _html
+
+from helpers import rJson, wJson, _html_to_text
+from dotenv import load_dotenv
+load_dotenv()
+
+from constants import *
+from esQuerys import esClient, isIdExist
+
+DRY_RUN = int(os.getenv("DRY_RUN", "1"))  # 1 = DO NOT write to CRM, 0 = allow writes
+
+from fortellis import (
+    SUB_MAP,
+    get_token,
+    get_recent_opportunities,   
+    get_customer_by_url,
+    get_activities
+)
+
+def _is_kbb_ico_new_active(doc: dict) -> bool:
+    """True if this opp matches KBB ICO: Source=KBB Instant Cash Offer, Status=Active, SubStatus=New, upType=Campaign."""
+    def _v(key):
+        return (str(doc.get(key) or "").strip().lower())
+    return (
+        _v("source") == "kbb instant cash offer" and
+        _v("status") == "active" and
+        _v("upType") == "campaign"
+    )
+
+def _is_assigned_to_kristin_doc(doc: dict) -> bool:
+    for m in (doc.get("salesTeam") or []):
+        fn = (m.get("firstName") or "").strip().lower()
+        ln = (m.get("lastName") or "").strip().lower()
+        em = (m.get("email") or "").strip().lower()
+        if (fn == "kristin" and ln == "nowzek") or em in {"knowzek@pattersonautos.com","knowzek@gmail.com"}:
+            return True
+    return False
+
+# ── Logging (compact) ────────────────────────────────────────────────
+LOG_LEVEL = os.getenv("APP_LOG_LEVEL", "INFO").upper()
+logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO),
+                    format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger("patti")
+
+inquiry_text = None  # ensure defined
+
+# === Email fetcher & parsers (quiet logging) =========================
+def fetch_adf_xml_from_gmail(email_address, app_password, sender_filters=None):
+    if sender_filters is None:
+        sender_filters = [
+            "notify@eleadnotify.com",
+            "Sales@tustinhyundai.edealerhub.com",
+            "sales@missionviejokia.edealerhub.com",
+        ]
+    results = []
+    with IMAPClient("imap.gmail.com", ssl=True) as client:
+        client.login(email_address, app_password)
+        client.select_folder("INBOX")
+        messages = client.search(["UNSEEN"])
+        if not messages:
+            log.info("No new lead emails found.")
+            return []
+        for uid, message_data in client.fetch(messages, ["RFC822"]).items():
+            msg = email.message_from_bytes(message_data[b"RFC822"])
+            from_header = msg.get("From", "").lower()
+            if any(sender.lower() in from_header for sender in sender_filters):
+                for part in msg.walk():
+                    if part.get_content_type() in ["text/plain", "text/html"]:
+                        body = part.get_payload(decode=True).decode(errors="ignore")
+                        results.append((body.strip(), from_header, uid))
+                        break
+        for _, _, uid in results:
+            client.add_flags(uid, ["\\Seen"])
+    return results
+
+def parse_plaintext_lead(body):
+    try:
+        vehicle_match = re.search(r"Vehicle:\s([^\n<]+)", body)
+        name_match    = re.search(r"Name:\s([^\n<]+)", body)
+        phone_match   = re.search(r"Phone:\s([^\n<]+)", body)
+        email_match   = re.search(r"E-?Mail:\s([^\s<]+)", body)
+        comment_match = re.search(r"Comments:\s(.*?)<", body)
+        vehicle_parts = vehicle_match.group(1).split() if vehicle_match else []
+        year  = vehicle_parts[0] if len(vehicle_parts) > 0 else ""
+        make  = vehicle_parts[1] if len(vehicle_parts) > 1 else ""
+        model = " ".join(vehicle_parts[2:]) if len(vehicle_parts) > 2 else ""
+        return {
+            "activityId": "email-lead",
+            "opportunityId": "email-opportunity",
+            "source": "Email",
+            "customerId": "email-customer",
+            "links": [],
+            "email_first": name_match.group(1).split()[0] if name_match else "Guest",
+            "email_last": " ".join(name_match.group(1).split()[1:]) if name_match else "",
+            "email_address": email_match.group(1) if email_match else "",
+            "email_phone": phone_match.group(1) if phone_match else "",
+            "vehicle": {"year": year, "make": make, "model": model, "trim": ""},
+            "notes": (comment_match.group(1).strip() if comment_match else ""),
+        }
+    except Exception as e:
+        log.warning("Failed to parse plain text lead: %s", e)
+        return None
+
+def extract_adf_comment(adf_xml: str) -> str:
+    try:
+        root = ET.fromstring(adf_xml)
+        comment_el = root.find(".//customer/comments")
+        if comment_el is not None and comment_el.text:
+            return comment_el.text.strip()
+    except Exception as e:
+        log.warning("Failed to parse ADF XML: %s", e)
+    return ""
+
+
+
+
+# === Pull opportunity leads ======================================================
+
+all_items = []
+per_rooftop_counts = {sub_id: 0 for sub_id in SUB_MAP.values()}
+
+for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
+    # remove later
+    if subscription_id != "7a05ce2c-cf00-4748-b841-45b3442665a7":
+        continue
+
+    token = get_token(subscription_id) 
+
+    # Opportunities delta (the base you confirmed in Postman)
+    opp_data = get_recent_opportunities(token, subscription_id,
+                                        since_minutes=WINDOW_MIN,
+                                        page_size=PAGE_SIZE)
+    
+    opp_items = (opp_data or {}).get("items", []) or []
+    log.info("API reported opportunity totalItems for %s: %s",
+             subscription_id, (opp_data or {}).get("totalItems", "N/A"))
+    
+    # before the for-loop (keep these)
+    raw_count = len(opp_items)
+    items = []
+    
+    for op in opp_items:
+        up_type = (op.get("upType") or "").lower()
+        is_kbb = _is_kbb_ico_new_active(op)
+        
+        # Keep your normal upType gate for non-KBB, but allow KBB ICO through even if ELIGIBLE_UPTYPES is stricter
+        if (not is_kbb) and (up_type not in ELIGIBLE_UPTYPES):
+            continue
+        
+        # Previously we only processed Kristin-assigned opps; now also allow KBB ICO new/active/campaign opps
+        if (not _is_assigned_to_kristin_doc(op)) and (not is_kbb):
+            continue
+    
+        # one canonical id everywhere
+        opp_id = op.get("opportunityId") or op.get("id")
+        if not opp_id:
+            continue
+    
+        # build base doc (ISO timestamps)
+        curr_iso = _dt.now(_tz.utc).isoformat()
+        customerID = (op.get("customer") or {}).get("id")
+        customerData = (op.get("customer") or {}) or {}
+    
+        docToIndex = {
+            "_subscription_id": subscription_id,
+            "id": opp_id,
+            "opportunityId": opp_id,
+            "links": op.get("links", []),
+            "source": op.get("source"),
+            "upType": op.get("upType"),
+            "soughtVehicles": op.get("soughtVehicles"),
+            "salesTeam": op.get("salesTeam"),
+            "tradeIns": op.get("tradeIns"),
+            "createdBy": op.get("createdBy"),
+            "customer": customerData,
+            "updated_at": curr_iso,
+            "createdDate": (op.get("createdDate") or op.get("created_on")),
+            "updatedDate": op.get("updatedDate"),
+        }
+    
+        # Single, safe upsert (no HEAD)
+        resp = es_upsert_with_retry(
+            esClient, index="opportunities", id=opp_id, document=docToIndex
+        )
+    
+        # If created now, optionally hydrate with activities and init state, then upsert again
+        if resp and resp.get("result") == "created":
+            # fetch richer customer only on create (optional)
+            if customerID:
+                try:
+                    richer = get_customer_by_url(f"{CUSTOMER_URL}/{customerID}", token, subscription_id) or {}
+                    if richer:
+                        docToIndex["customer"] = richer
+                except Exception as e:
+                    log.warning("customer hydrate failed opp_id=%s err=%s", opp_id, e)
+    
+            completedActivities = []
+            try:
+                acts = get_activities(opp_id, customerID, token, subscription_id) or {}
+                completedActivities = acts.get("items") or acts.get("activities") or []
+            except Exception as e:
+                log.warning("get_activities failed opp_id=%s err=%s", opp_id, e)
+    
+            init_doc = {
+                "customer": docToIndex["customer"],
+                "completedActivities": completedActivities,
+                "scheduledActivities": [],            # seed empty if you don’t have these yet
+                "messages": [],
+                "alreadyProcessedActivities": {},
+                "checkedDict": {
+                    "is_sales_contacted": False,
+                    "patti_already_contacted": False,
+                    "last_msg_by": None,
+                },
+                "isActive": True,
+                "followUP_count": 0,
+                "followUP_date": (_dt.now(_tz.utc) + _td(days=1)).isoformat(),
+                "created_at": curr_iso,               # keep ISO, not datetime object
+                "updated_at": _dt.now(_tz.utc).isoformat(),
+            }
+            es_upsert_with_retry(esClient, index="opportunities", id=opp_id, document=init_doc)
+    
+        # keep what we’re sending for logging/return
+        items.append(docToIndex)
+
+
+        # exit()
+
+    
+    eligible_count = len(items)
+    
+    # stamp + tally + aggregate
+
+    all_items.extend(items)
+    per_rooftop_counts[subscription_id] += eligible_count
+    
+    # logs: show both API total and eligible after filter
+    log.info("Eligible opportunities (upType in %s) for %s: %d/%d",
+             ",".join(sorted(ELIGIBLE_UPTYPES)), subscription_id, eligible_count, raw_count)
+
+# per-rooftop + total logs (opportunity counts)
+for dk in sorted(per_rooftop_counts):
+    log.info("Opportunities fetched for %s: %d", dk, per_rooftop_counts[dk])
+log.info("Total opportunities fetched: %d", len(all_items))
+
+if not all_items:
+    log.info("No opportunities. Exiting.")
+    raise SystemExit(0)

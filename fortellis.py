@@ -7,6 +7,9 @@ import json
 import time
 import logging
 
+from dotenv import load_dotenv
+load_dotenv()
+
 LOG_LEVEL = os.getenv("APP_LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO),
                     format="%(asctime)s %(levelname)s %(message)s")
@@ -29,12 +32,37 @@ def _log_txn_compact(level, *, method, url, headers, status, duration_ms, reques
         msg += f" note={note}"
     log.log(level, msg)
 
+import uuid
 
+def _headers_get(subscription_id: str, token: str) -> dict:
+    return {
+        "Authorization": f"Bearer {token}",       # ensure token is raw (no 'Bearer ' prefix in var)
+        "Subscription-Id": subscription_id,
+        "Accept": "application/json",
+        "Request-Id": str(uuid.uuid4()),
+    }
+
+def _clean_token(tok: str) -> str:
+    tok = (tok or "").strip()
+    if tok.lower().startswith("bearer "):
+        tok = tok.split(None, 1)[1]
+    return tok
+
+def _headers_post(subscription_id: str, token: str) -> dict:
+    t = _clean_token(token)
+    return {
+        "Authorization": f"Bearer {t}",
+        "Subscription-Id": subscription_id,
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Request-Id": str(uuid.uuid4()),
+    }
 
 BASE_URL = os.getenv("FORTELLIS_BASE_URL", "https://api.fortellis.io")  # prod default
 LEADS_BASE = "/cdk/sales/elead/v1/leads"
 OPPS_BASE        = "/sales/v2/elead/opportunities"   
 ACTIVITIES_BASE  = "/sales/v1/elead/activities" 
+ACTIVITIES_SEARCH = "/cdk/sales/elead/v1/activity-history/search"
 CUSTOMERS_BASE  = "/cdk/sales/elead/v1/customers"
 REFDATA_BASE     = "/cdk/sales/elead/v1/reference-data" # if you call product reference data via CRM
 MESSAGING_BASE   = "/cdk/sales/elead/v1/messaging"      # if you call CRM Post Messaging
@@ -45,6 +73,68 @@ TOKEN_URL = os.getenv(
     "FORTELLIS_TOKEN_URL",
     f"https://identity.fortellis.io/oauth2/{AUTH_SERVER_ID}/v1/token"
 )
+
+def set_opportunity_inactive(token: str, subscription_id: str, opportunity_id: str,
+                             sub_status: str = "Not In Market", comments: str = "Marked inactive by Patti"):
+    """
+    Mark an eLead opportunity as inactive using Fortellis Sales V2 API.
+    sub_status examples: "Not In Market", "Purchased Elsewhere", etc.
+    """
+    url = f"https://api.fortellis.io/sales/v2/elead/opportunities/{opportunity_id}/set-inactive"
+    payload = {
+        "opportunityId": opportunity_id,
+        "inactiveSubStatus": sub_status,
+        "comments": comments,
+    }
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Subscription-Id": subscription_id,
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+    try:
+        t0 = datetime.now(timezone.utc)
+        resp = requests.post(url, headers=headers, json=payload, timeout=10)
+        dur_ms = int((datetime.now(timezone.utc) - t0).total_seconds() * 1000)
+        _log_txn_compact(
+            logging.INFO,
+            method="POST", url=url, headers=headers,
+            status=resp.status_code, duration_ms=dur_ms,
+            request_id=headers.get("Request-Id", "auto"),
+            note="set inactive"
+        )
+        if resp.status_code not in (200, 204):
+            log.warning("set_opportunity_inactive failed: %s %s", resp.status_code, resp.text)
+        return resp
+    except Exception as e:
+        log.warning("Fortellis set_opportunity_inactive error: %s", e)
+        return None
+
+def set_opportunity_substatus(token: str, subscription_id: str, opportunity_id: str,
+                              sub_status: str = "Appointment Set"):
+    """
+    Update eLead opportunity subStatus (e.g., 'Appointment Set').
+    POST /sales/v2/elead/opportunities/{opportunityId}/subStatus/update
+    """
+    url = f"https://api.fortellis.io/sales/v2/elead/opportunities/{opportunity_id}/subStatus/update"
+    payload = {"subStatus": sub_status}
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Subscription-Id": subscription_id,
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+    t0 = datetime.now(timezone.utc)
+    resp = requests.post(url, headers=headers, json=payload, timeout=10)
+    dur_ms = int((datetime.now(timezone.utc) - t0).total_seconds() * 1000)
+    _log_txn_compact(logging.INFO, method="POST", url=url, headers=headers,
+                     status=resp.status_code, duration_ms=dur_ms,
+                     request_id=headers.get("Request-Id", "auto"),
+                     note=f"subStatus→{sub_status}")
+    if resp.status_code not in (200, 204):
+        log.warning("set_opportunity_substatus failed: %s %s", resp.status_code, getattr(resp, "text", ""))
+    return resp
 
 
 def get_token(dealer_key: str):
@@ -157,8 +247,28 @@ def _since_iso(minutes: int | None = 30) -> str:
     dt = datetime.now(timezone.utc) - timedelta(minutes=minutes or 30)
     return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
-# make sure at top of fortellis.py:
-# import requests
+def get_activity_history_v1(token, subscription_id, opportunity_id, customer_id, page=1, size=100):
+    url = "https://api.fortellis.io/cdk/sales/elead/v1/activity-history/search"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Subscription-Id": subscription_id,
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+    params = {
+        "opportunityId": opportunity_id,
+        "customerId": customer_id,
+        "pageNumber": page,
+        "pageSize": size,
+    }
+    t0 = datetime.now(timezone.utc)
+    resp = requests.get(url, headers=headers, params=params, timeout=10)
+    dur_ms = int((datetime.now(timezone.utc) - t0).total_seconds() * 1000)
+    _log_txn_compact(logging.INFO, method="ActivityHistory GET", url=url, headers=headers,
+                     status=resp.status_code, duration_ms=dur_ms, request_id=headers.get("Request-Id", "auto"))
+    resp.raise_for_status()
+    return resp.json()
+
 
 def get_recent_opportunities(token, dealer_key, since_minutes=360, page=1, page_size=100):
     url = f"{BASE_URL}{OPPS_BASE}/searchDelta"  # OPPS_BASE == "/sales/v2/elead/opportunities"
@@ -196,15 +306,12 @@ def get_recent_opportunities(token, dealer_key, since_minutes=360, page=1, page_
 
 
 
-def send_opportunity_email_activity(token,
-                                    dealer_key,
-                                    opportunity_id,
-                                    sender,
-                                    recipients,
-                                    carbon_copies,
-                                    subject,
-                                    body_html,
-                                    rooftop_name: str = None):
+from typing import Optional
+
+def send_opportunity_email_activity(token, subscription_id, opportunity_id,
+                                    *, sender, recipients, carbon_copies,
+                                    subject, body_html, rooftop_name,
+                                    reply_to_activity_id: Optional[str] = None):
     """
     Send an email via Opportunities POST /sendEmail.
 
@@ -214,7 +321,7 @@ def send_opportunity_email_activity(token,
         (b) ensure the subject mentions the rooftop.
     """
     url = f"{BASE_URL}{OPPS_BASE}/sendEmail"
-
+    dealer_key = subscription_id
     # Normalize lists
     recipients = recipients if isinstance(recipients, list) else ([recipients] if recipients else [])
     carbon_copies = carbon_copies or []
@@ -250,20 +357,59 @@ def send_opportunity_email_activity(token,
             "body": body,
             "isHtml": True
         }
+      
     }
 
+    # Thread the reply if we have the inbound activity id
+    if reply_to_activity_id:
+        # Fortellis/eLeads threading key; if your client expects a different key name,
+        # also include it below.
+        payload["replyToActivityId"] = reply_to_activity_id
+        # Some tenants use a different field name; harmless to send both:
+        payload["inReplyToActivityId"] = reply_to_activity_id
+
+    if reply_to_activity_id:
+        log.info("Fortellis: sending REPLY in-thread to activity_id=%s", reply_to_activity_id)
+    else:
+        log.info("Fortellis: sending NEW outbound (no reply_to_activity_id)")
+    
     return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
 
 
-
-
-def add_opportunity_comment(token, dealer_key, opportunity_id, comment_text):
-    url = f"{BASE_URL}{OPPS_BASE}/comment"
-    payload = {
+def add_opportunity_comment(token: str, subscription_id: str, opportunity_id: str, comment_html: str):
+    """
+    POST /sales/v2/elead/opportunities/comment
+    Auto-refreshes token once on 401 and logs correlation id on failure.
+    """
+    url = f"{BASE_URL}/sales/v2/elead/opportunities/comment"
+    body = {
         "opportunityId": opportunity_id,
-        "comment": comment_text
+        "comment": comment_html
     }
-    return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
+
+    # 1st attempt
+    resp = requests.post(url, headers=_headers_post(subscription_id, token), json=body, timeout=30)
+
+    # Retry once on 401 with a fresh token for this sub-id
+    if resp.status_code == 401:
+        try:
+            from fortellis import get_token
+            try:
+                fresh = get_token(subscription_id, force_refresh=True)
+            except TypeError:
+                fresh = get_token(subscription_id)
+            resp = requests.post(url, headers=_headers_post(subscription_id, fresh), json=body, timeout=30)
+        except Exception as e:
+            log.error("Token refresh failed (comment) for sub %s: %s", subscription_id, e)
+
+    if resp.status_code >= 400:
+        corr = resp.headers.get("x-correlation-id")
+        log.error(
+            "POST %s status=%s corr=%s sub=%s body_preview=%s",
+            url, resp.status_code, corr, subscription_id, (resp.text or "")[:200]
+        )
+    resp.raise_for_status()
+    return resp.json() if resp.text else {}
 
 
 def add_vehicle_sought(token, dealer_key, opportunity_id,
@@ -304,6 +450,7 @@ def _coerce_activity_type(value):
         "Task": 3,
         "Call": 1,
         "Appointment": 2,
+        "Note": 37
         # note: we intentionally drop "Send Email/Letter"
     }
     if label in BUILTIN:
@@ -364,17 +511,71 @@ def complete_activity(
     return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
 
 
-def search_activities_by_opportunity(opportunity_id, token, dealer_key, page=1, page_size=10):
-    url = f"{BASE_URL}{ACTIVITIES_BASE}/search"
-    payload = {
-        "filters": [{"field": "opportunityId", "operator": "eq", "value": opportunity_id}],
-        "sort": [{"field": "createdDate", "direction": "desc"}],
-        "page": page,
-        "pageSize": page_size
+def search_activities_by_opportunity(opportunity_id, token, dealer_key, page=1, page_size=10, customer_id=None):
+    if not opportunity_id:
+        raise ValueError("opportunity_id is required")
+
+    url = f"{BASE_URL}{ACTIVITIES_SEARCH}"  # "/cdk/sales/elead/v1/activity-history/search"
+    params = {
+        "opportunityId": opportunity_id,
+        "pageNumber": page,
+        "pageSize": page_size,
     }
-    resp = requests.post(url, headers=_headers(dealer_key, token), json=payload)
+    if customer_id:
+        params["customerId"] = customer_id
+
+    # First attempt (GET; no Content-Type)
+    resp = requests.get(url, headers=_headers_get(dealer_key, token), params=params, timeout=30)
+
+    # If the token is stale or wrong for this rooftop, refresh once and retry
+    if resp.status_code == 401:
+        try:
+            from fortellis import get_token
+            try:
+                fresh = get_token(dealer_key, force_refresh=True)
+            except TypeError:
+                fresh = get_token(dealer_key)
+            resp = requests.get(url, headers=_headers_get(dealer_key, fresh), params=params, timeout=30)
+        except Exception as e:
+            # don't hide the original 401; just log it if you have a logger
+            pass
+
+    # Helpful diagnostics on failure (corr id mirrors Postman)
+    if resp.status_code >= 400:
+        corr = resp.headers.get("x-correlation-id")
+        try:
+            log.error("ActivityHistory search failed: %s corr=%s body=%s",
+                      resp.status_code, corr, (resp.text or "")[:400])
+        except Exception:
+            pass
     resp.raise_for_status()
-    return resp.json().get("items", [])
+
+    data = resp.json()
+    # Some tenants return a flat object with arrays; others wrap items—be tolerant:
+    return data.get("items") or data.get("activities") or data.get("completedActivities") or []
+
+
+
+def get_activities(opportunity_id, customer_id, token, dealer_key):
+    url = f"{BASE_URL}{ACTIVITIES_SEARCH}"
+    params = {
+        "opportunityId": opportunity_id,
+        "customerId":   customer_id,   # your tenant requires this
+        "pageNumber":   1,
+        "pageSize":     100,
+    }
+
+    # TEMP debug
+    try:
+        log.info("ActivityHistory GET %s params=%s", url, params)
+    except Exception:
+        pass
+
+    resp = requests.get(url, headers=_headers(dealer_key, token), params=params, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+
 
 
 def get_activity_by_url(url, token, dealer_key):

@@ -1,0 +1,501 @@
+{
+    "_subscription_id": "7a05ce2c-cf00-4748-b841-45b3442665a7",
+    "opportunityId": "9a4b3395-1ab5-f011-814f-00505690ec8c",
+    "activityId": null,
+    "links": [
+        {
+            "rel": "create",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities",
+            "method": "POST",
+            "title": "Create Opportunity"
+        },
+        {
+            "rel": "self",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/9a4b3395-1ab5-f011-814f-00505690ec8c",
+            "method": "GET",
+            "title": "Get Opportunity"
+        },
+        {
+            "rel": "comment",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/comment",
+            "method": "POST",
+            "title": "Add Comment"
+        },
+        {
+            "rel": "email",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/sendEmail",
+            "method": "POST",
+            "title": "Send Email"
+        },
+        {
+            "rel": "tradein",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/tradein",
+            "method": "POST",
+            "title": "Add Trade-In"
+        },
+        {
+            "rel": "vehiclesought",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/vehicleSought",
+            "method": "POST",
+            "title": "Add Vehicle Sought"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/reassignPrimarySalesperson",
+            "method": "POST",
+            "title": "Reassign Primary Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/9a4b3395-1ab5-f011-814f-00505690ec8c/salesteam/add",
+            "method": "POST",
+            "title": "Add Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/9a4b3395-1ab5-f011-814f-00505690ec8c/salesteam/remove",
+            "method": "POST",
+            "title": "Remove Salesperson"
+        },
+        {
+            "rel": "substatus",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/9a4b3395-1ab5-f011-814f-00505690ec8c/subStatus/update",
+            "method": "POST",
+            "title": "Update SubStatus"
+        },
+        {
+            "rel": "inactive",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/9a4b3395-1ab5-f011-814f-00505690ec8c/set-inactive",
+            "method": "POST",
+            "title": "Set Opportunity Inactive"
+        }
+    ],
+    "source": "CarNow",
+    "upType": "Internet",
+    "soughtVehicles": [
+        {
+            "id": "9b4b3395-1ab5-f011-814f-00505690ec8c",
+            "isNew": false,
+            "yearFrom": 2024,
+            "yearTo": 2024,
+            "make": "Mazda",
+            "model": "MX-5 Miata RF",
+            "trim": "Club (M6) 2dr Convertible",
+            "vin": "JM1NDAL7XR0600112",
+            "stockNumber": "SJ00112",
+            "isPrimary": true
+        }
+    ],
+    "salesTeam": [
+        {
+            "id": "6f9407e7-1459-f011-814d-00505690ec8c",
+            "firstName": "Manny",
+            "lastName": "Zecena",
+            "isPrimary": true,
+            "isPositionPrimary": true,
+            "positionName": "Salesperson",
+            "positionCode": "S",
+            "links": []
+        }
+    ],
+    "tradeIns": null,
+    "createdBy": null,
+    "updated_at": "2025-10-30T16:06:20.427038",
+    "customer": {
+        "id": "984b3395-1ab5-f011-814f-00505690ec8c",
+        "isBusiness": false,
+        "firstName": "Kevin",
+        "lastName": "NoLastName124159865",
+        "emails": [
+            {
+                "address": "kyo8845@gmail.com",
+                "emailType": "Personal",
+                "doNotEmail": false,
+                "isPreferred": true
+            }
+        ],
+        "address": {
+            "city": "SAN DIEGO",
+            "state": "CA",
+            "zip": "92101",
+            "country": "US"
+        },
+        "privacySettings": [
+            {
+                "name": "CCPADoNotContact",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotShare",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotSell",
+                "value": "False"
+            }
+        ],
+        "links": [
+            {
+                "rel": "self",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/984b3395-1ab5-f011-814f-00505690ec8c",
+                "method": "GET",
+                "title": "Fetch Customer"
+            },
+            {
+                "rel": "create",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers",
+                "method": "POST",
+                "title": "Create Customer"
+            },
+            {
+                "rel": "update",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/984b3395-1ab5-f011-814f-00505690ec8c",
+                "method": "POST",
+                "title": "Update Customer"
+            }
+        ]
+    },
+    "created_at": "2025-10-30T16:06:20.427038",
+    "isActive": true,
+    "scheduledActivities": [
+        {
+            "activityId": "d1fee9da-1ab5-f011-814f-00505690ec8c",
+            "activityName": "Call #2",
+            "activityType": 2,
+            "dueDate": "2025-10-30T22:00:00Z",
+            "assignedTo": "Zecena, M",
+            "comments": ""
+        },
+        {
+            "activityId": "9e4b3395-1ab5-f011-814f-00505690ec8c",
+            "activityName": "BDC Virtual Immediate Call",
+            "activityType": 2,
+            "dueDate": "2025-11-01T22:57:07.783Z",
+            "assignedTo": "Alcontin, A",
+            "comments": ""
+        }
+    ],
+    "completedActivities": [
+        {
+            "activityId": "99a2e1d4-1ab5-f011-814f-00505690ec8c",
+            "activityName": "Email #1",
+            "activityType": 3,
+            "completedDate": "2025-10-29T20:59:06Z",
+            "outcome": "Call #2",
+            "completedBy": "Zecena, M",
+            "comments": "<i>Thank you for your inquiry - Tustin Mazda</i>",
+            "category": "Completed"
+        },
+        {
+            "activityId": "8fa2e1d4-1ab5-f011-814f-00505690ec8c",
+            "activityName": "Text #1",
+            "activityType": 48,
+            "completedDate": "2025-10-29T20:58:56Z",
+            "outcome": "Email #1",
+            "completedBy": "Zecena, M",
+            "comments": "",
+            "category": "Completed"
+        },
+        {
+            "activityId": "9d4b3395-1ab5-f011-814f-00505690ec8c",
+            "activityName": "Call # 1",
+            "activityType": 2,
+            "completedDate": "2025-10-29T20:58:51Z",
+            "outcome": "Text #1",
+            "completedBy": "Zecena, M",
+            "comments": "",
+            "category": "Completed"
+        },
+        {
+            "activityId": "9c4b3395-1ab5-f011-814f-00505690ec8c",
+            "activityName": "Internet Up",
+            "activityType": 13,
+            "completedDate": "2025-10-29T20:57:07.783Z",
+            "outcome": "Auto Response",
+            "completedBy": "Zecena, M",
+            "comments": "<i>Mazda ADF XML Lead</i><br />[03:46pm] Tustin Mazda: Thank you for choosing Tustin Mazda![03:46pm] Tustin Mazda: Are you interested in this 2024 Mazda MX-5 Miata RF today?[03:46pm] Kevin NoLastName124159865: Yes[03:46pm] Tustin Mazda: It appears this vehicle is available but please keep in mind, some vehicles listed online may be in-transit or pre-sold.[03:46pm] Tustin Mazda: Please provide us with your name and best form of contact and we will reach out to you and confirm this vehicle's availability as soon as possible.[03:46pm] Tustin Mazda: Is there anything else we can assist you with today?Transcript: http://app.carnow.com/da/pvEHIx7D7sd8418m",
+            "category": "Completed"
+        }
+    ],
+    "followUP_date": "2025-10-31T16:06:20.427038",
+    "followUP_count": 0,
+    "messages": [
+        {
+            "msgFrom": "patti",
+            "subject": "Yes",
+            "body": "Hi Kevin,\n\nThank you for your response! I'm glad to hear you're interested in the <a href=\"https://www.missionviejokia.com/used-inventory/?make=Mazda&model=MX-5 Miata RF\">2024 Mazda MX-5 Miata RF Club (M6) 2dr Convertible</a>. This model offers a thrilling driving experience with its sporty design and exceptional handling, making it a perfect choice for anyone who loves the open road.\n\nManny Zecena is here to assist you with any questions you may have or to set up a test drive. Would you like to schedule a visit to see this fantastic vehicle in person? You can also reserve your time instantly here: Schedule Your Visit.\n\nPlease let us know a convenient time for you, or you can instantly reserve your time here: <{LegacySalesApptSchLink}>\n\n\nPatti\nTustin Mazda\n28 Auto Center Dr, Tustin, CA 92782",
+            "date": "2025-10-30T16:15:23.028233"
+        }
+    ],
+    "alreadyProcessedActivities": {
+        "9c4b3395-1ab5-f011-814f-00505690ec8c": {
+            "id": "9c4b3395-1ab5-f011-814f-00505690ec8c",
+            "activityType": "Internet Up",
+            "category": "Completed",
+            "name": "Internet Up",
+            "completedDate": "2025-10-29T22:57:07.783Z",
+            "dueDate": "2025-10-29T22:57:00Z",
+            "outcome": "Auto Response",
+            "createdBy": "Zecena, Manny",
+            "assignedTo": "Zecena, Manny",
+            "completedBy": "Zecena, Manny",
+            "opportunityId": "9a4b3395-1ab5-f011-814f-00505690ec8c",
+            "upType": "Internet",
+            "source": "CarNow",
+            "subSource": "CarNow - Sales",
+            "createdByUserId": "6f9407e7-1459-f011-814d-00505690ec8c",
+            "assignedToUserId": "6f9407e7-1459-f011-814d-00505690ec8c",
+            "completedByUserId": "6f9407e7-1459-f011-814d-00505690ec8c",
+            "message": {
+                "date": "2025-10-29T22:57:07Z",
+                "from": "starlead@eleadcrm.com",
+                "to": "starlead@eleadcrm.com",
+                "subject": "Mazda ADF XML Lead",
+                "body": "<adf>\r\n\t<prospect status=\"new\">\r\n\t\t<id source=\"Mazda Digital\">a83b4657-c03a-4a0a-9bbd-61a213c283f9</id>\r\n    \r\n    <id sequence=\"2\" source=\"CarNow\">C124159865</id>\r\n<id sequence=\"3\" source=\"sdSessionId\">0dfc7c57-ee0f-4067-b822-ea16330b8bd2</id>\r\n\r\n    <requestdate>2025-10-29T22:56:59</requestdate>\r\n\t\t<vehicle interest=\"buy\" status=\"cpo\">\r\n  <year>2024</year>\r\n  <make>Mazda</make>\r\n  <model>MX-5 Miata RF</model>\r\n  <vin>JM1NDAL7XR0600112</vin>\r\n  <stock>SJ00112</stock>\r\n  <trim>Club</trim>\r\n</vehicle>\r\n\t\t\r\n\t\t<customer>\r\n\t\t\t<contact primarycontact=\"1\">\r\n\t\t\t\t<name type=\"individual\" part=\"first\">Kevin</name>\r\n\t\t\t\t<name type=\"individual\" part=\"last\">NoLastName124159865</name>\r\n\t\t\t\t<email>KYO8845@GMAIL.COM</email>\r\n\t\t\t\t<phone type=\"voice\" time=\"evening\"></phone>\r\n\t\t\t\t<phone type=\"voice\" time=\"day\"></phone>\r\n\t\t\t\t<phone type=\"cellphone\"></phone>\r\n\t\t\t\t<address type=\"home\">\r\n\t\t\t\t\t<street line=\"1\"></street>\r\n\t\t\t\t\t<street line=\"2\"></street>\r\n\t\t\t\t\t<city>SAN DIEGO</city>\r\n\t\t\t\t\t<regioncode>CA</regioncode>\r\n\t\t\t\t\t<postalcode>92101</postalcode>\r\n\t\t\t\t</address>\r\n\t\t\t</contact>\r\n\t\t\t<timeframe>\r\n\t\t\t\t<description></description>\r\n\t\t\t</timeframe>\r\n\t\t\t<comments><![CDATA[[03:46pm] Tustin Mazda: Thank you for choosing Tustin Mazda![03:46pm] Tustin Mazda: Are you interested in this 2024 Mazda MX-5 Miata RF today?[03:46pm] Kevin NoLastName124159865: Yes[03:46pm] Tustin Mazda: It appears this vehicle is available but please keep in mind, some vehicles listed online may be in-transit or pre-sold.[03:46pm] Tustin Mazda: Please provide us with your name and best form of contact and we will reach out to you and confirm this vehicle's availability as soon as possible.[03:46pm] Tustin Mazda: Is there anything else we can assist you with today?\r\nTranscript: http://app.carnow.com/da/pvEHIx7D7sd8418m \r\n]]></comments>\r\n\t\t</customer>\r\n\t\t<vendor>\r\n\t\t\t<id source=\"Mazda Digital\">42066</id>\r\n\t\t\t<vendorname>TUSTIN MAZDA</vendorname>\r\n\t\t\t<contact>\r\n\t\t\t\t<name type=\"business\" part=\"full\">TUSTIN MAZDA</name>\r\n\t\t\t\t<email></email>\r\n\t\t\t\t<phone type=\"voice\">7148326222</phone>\r\n\t\t\t\t<address>\r\n\t\t\t\t\t<street line=\"1\">28A AUTO CENTER DRIVE</street>\r\n\t\t\t\t\t<city>TUSTIN</city>\r\n\t\t\t\t\t<regioncode>CA</regioncode>\r\n\t\t\t\t\t<postalcode>92782</postalcode>\r\n\t\t\t\t</address>\r\n\t\t\t</contact>\r\n\t\t</vendor>\r\n\t\t<provider>\r\n\t\t\t<name type=\"business\" part=\"full\">CarNow - Sales</name>\r\n\t\t\t<service>Mazda Digital</service>\r\n\t\t\t<url></url>\r\n\t\t</provider>\r\n\t</prospect>\r\n</adf>"
+            },
+            "links": []
+        }
+    },
+    "checkedDict": {
+        "is_sales_contacted": false,
+        "patti_already_contacted": false,
+        "last_msg_by": null
+    },
+    "firstActivity": {
+        "activityId": "9c4b3395-1ab5-f011-814f-00505690ec8c",
+        "activityName": "Internet Up",
+        "activityType": 13,
+        "completedDate": "2025-10-29T20:57:07.783Z",
+        "outcome": "Auto Response",
+        "completedBy": "Zecena, M",
+        "comments": "<i>Mazda ADF XML Lead</i><br />[03:46pm] Tustin Mazda: Thank you for choosing Tustin Mazda![03:46pm] Tustin Mazda: Are you interested in this 2024 Mazda MX-5 Miata RF today?[03:46pm] Kevin NoLastName124159865: Yes[03:46pm] Tustin Mazda: It appears this vehicle is available but please keep in mind, some vehicles listed online may be in-transit or pre-sold.[03:46pm] Tustin Mazda: Please provide us with your name and best form of contact and we will reach out to you and confirm this vehicle's availability as soon as possible.[03:46pm] Tustin Mazda: Is there anything else we can assist you with today?Transcript: http://app.carnow.com/da/pvEHIx7D7sd8418m",
+        "category": "Completed"
+    },
+    "firstActivityFull": {
+        "id": "9c4b3395-1ab5-f011-814f-00505690ec8c",
+        "activityType": "Internet Up",
+        "category": "Completed",
+        "name": "Internet Up",
+        "completedDate": "2025-10-29T22:57:07.783Z",
+        "dueDate": "2025-10-29T22:57:00Z",
+        "outcome": "Auto Response",
+        "createdBy": "Zecena, Manny",
+        "assignedTo": "Zecena, Manny",
+        "completedBy": "Zecena, Manny",
+        "opportunityId": "9a4b3395-1ab5-f011-814f-00505690ec8c",
+        "upType": "Internet",
+        "source": "CarNow",
+        "subSource": "CarNow - Sales",
+        "createdByUserId": "6f9407e7-1459-f011-814d-00505690ec8c",
+        "assignedToUserId": "6f9407e7-1459-f011-814d-00505690ec8c",
+        "completedByUserId": "6f9407e7-1459-f011-814d-00505690ec8c",
+        "message": {
+            "date": "2025-10-29T22:57:07Z",
+            "from": "starlead@eleadcrm.com",
+            "to": "starlead@eleadcrm.com",
+            "subject": "Mazda ADF XML Lead",
+            "body": "<adf>\r\n\t<prospect status=\"new\">\r\n\t\t<id source=\"Mazda Digital\">a83b4657-c03a-4a0a-9bbd-61a213c283f9</id>\r\n    \r\n    <id sequence=\"2\" source=\"CarNow\">C124159865</id>\r\n<id sequence=\"3\" source=\"sdSessionId\">0dfc7c57-ee0f-4067-b822-ea16330b8bd2</id>\r\n\r\n    <requestdate>2025-10-29T22:56:59</requestdate>\r\n\t\t<vehicle interest=\"buy\" status=\"cpo\">\r\n  <year>2024</year>\r\n  <make>Mazda</make>\r\n  <model>MX-5 Miata RF</model>\r\n  <vin>JM1NDAL7XR0600112</vin>\r\n  <stock>SJ00112</stock>\r\n  <trim>Club</trim>\r\n</vehicle>\r\n\t\t\r\n\t\t<customer>\r\n\t\t\t<contact primarycontact=\"1\">\r\n\t\t\t\t<name type=\"individual\" part=\"first\">Kevin</name>\r\n\t\t\t\t<name type=\"individual\" part=\"last\">NoLastName124159865</name>\r\n\t\t\t\t<email>KYO8845@GMAIL.COM</email>\r\n\t\t\t\t<phone type=\"voice\" time=\"evening\"></phone>\r\n\t\t\t\t<phone type=\"voice\" time=\"day\"></phone>\r\n\t\t\t\t<phone type=\"cellphone\"></phone>\r\n\t\t\t\t<address type=\"home\">\r\n\t\t\t\t\t<street line=\"1\"></street>\r\n\t\t\t\t\t<street line=\"2\"></street>\r\n\t\t\t\t\t<city>SAN DIEGO</city>\r\n\t\t\t\t\t<regioncode>CA</regioncode>\r\n\t\t\t\t\t<postalcode>92101</postalcode>\r\n\t\t\t\t</address>\r\n\t\t\t</contact>\r\n\t\t\t<timeframe>\r\n\t\t\t\t<description></description>\r\n\t\t\t</timeframe>\r\n\t\t\t<comments><![CDATA[[03:46pm] Tustin Mazda: Thank you for choosing Tustin Mazda![03:46pm] Tustin Mazda: Are you interested in this 2024 Mazda MX-5 Miata RF today?[03:46pm] Kevin NoLastName124159865: Yes[03:46pm] Tustin Mazda: It appears this vehicle is available but please keep in mind, some vehicles listed online may be in-transit or pre-sold.[03:46pm] Tustin Mazda: Please provide us with your name and best form of contact and we will reach out to you and confirm this vehicle's availability as soon as possible.[03:46pm] Tustin Mazda: Is there anything else we can assist you with today?\r\nTranscript: http://app.carnow.com/da/pvEHIx7D7sd8418m \r\n]]></comments>\r\n\t\t</customer>\r\n\t\t<vendor>\r\n\t\t\t<id source=\"Mazda Digital\">42066</id>\r\n\t\t\t<vendorname>TUSTIN MAZDA</vendorname>\r\n\t\t\t<contact>\r\n\t\t\t\t<name type=\"business\" part=\"full\">TUSTIN MAZDA</name>\r\n\t\t\t\t<email></email>\r\n\t\t\t\t<phone type=\"voice\">7148326222</phone>\r\n\t\t\t\t<address>\r\n\t\t\t\t\t<street line=\"1\">28A AUTO CENTER DRIVE</street>\r\n\t\t\t\t\t<city>TUSTIN</city>\r\n\t\t\t\t\t<regioncode>CA</regioncode>\r\n\t\t\t\t\t<postalcode>92782</postalcode>\r\n\t\t\t\t</address>\r\n\t\t\t</contact>\r\n\t\t</vendor>\r\n\t\t<provider>\r\n\t\t\t<name type=\"business\" part=\"full\">CarNow - Sales</name>\r\n\t\t\t<service>Mazda Digital</service>\r\n\t\t\t<url></url>\r\n\t\t</provider>\r\n\t</prospect>\r\n</adf>"
+        },
+        "links": []
+    },
+    "firstActivityAdfDict": {
+        "adf": {
+            "prospect": {
+                "@attributes": {
+                    "status": "new"
+                },
+                "id": [
+                    {
+                        "@attributes": {
+                            "source": "Mazda Digital"
+                        },
+                        "#text": "a83b4657-c03a-4a0a-9bbd-61a213c283f9"
+                    },
+                    {
+                        "@attributes": {
+                            "sequence": "2",
+                            "source": "CarNow"
+                        },
+                        "#text": "C124159865"
+                    },
+                    {
+                        "@attributes": {
+                            "sequence": "3",
+                            "source": "sdSessionId"
+                        },
+                        "#text": "0dfc7c57-ee0f-4067-b822-ea16330b8bd2"
+                    }
+                ],
+                "requestdate": {
+                    "#text": "2025-10-29T22:56:59"
+                },
+                "vehicle": {
+                    "@attributes": {
+                        "interest": "buy",
+                        "status": "cpo"
+                    },
+                    "year": {
+                        "#text": "2024"
+                    },
+                    "make": {
+                        "#text": "Mazda"
+                    },
+                    "model": {
+                        "#text": "MX-5 Miata RF"
+                    },
+                    "vin": {
+                        "#text": "JM1NDAL7XR0600112"
+                    },
+                    "stock": {
+                        "#text": "SJ00112"
+                    },
+                    "trim": {
+                        "#text": "Club"
+                    }
+                },
+                "customer": {
+                    "contact": {
+                        "@attributes": {
+                            "primarycontact": "1"
+                        },
+                        "name": [
+                            {
+                                "@attributes": {
+                                    "type": "individual",
+                                    "part": "first"
+                                },
+                                "#text": "Kevin"
+                            },
+                            {
+                                "@attributes": {
+                                    "type": "individual",
+                                    "part": "last"
+                                },
+                                "#text": "NoLastName124159865"
+                            }
+                        ],
+                        "email": {
+                            "#text": "KYO8845@GMAIL.COM"
+                        },
+                        "phone": [
+                            {
+                                "@attributes": {
+                                    "type": "voice",
+                                    "time": "evening"
+                                }
+                            },
+                            {
+                                "@attributes": {
+                                    "type": "voice",
+                                    "time": "day"
+                                }
+                            },
+                            {
+                                "@attributes": {
+                                    "type": "cellphone"
+                                }
+                            }
+                        ],
+                        "address": {
+                            "@attributes": {
+                                "type": "home"
+                            },
+                            "street": [
+                                {
+                                    "@attributes": {
+                                        "line": "1"
+                                    }
+                                },
+                                {
+                                    "@attributes": {
+                                        "line": "2"
+                                    }
+                                }
+                            ],
+                            "city": {
+                                "#text": "SAN DIEGO"
+                            },
+                            "regioncode": {
+                                "#text": "CA"
+                            },
+                            "postalcode": {
+                                "#text": "92101"
+                            }
+                        }
+                    },
+                    "timeframe": {
+                        "description": {}
+                    },
+                    "comments": {
+                        "#text": "[03:46pm] Tustin Mazda: Thank you for choosing Tustin Mazda![03:46pm] Tustin Mazda: Are you interested in this 2024 Mazda MX-5 Miata RF today?[03:46pm] Kevin NoLastName124159865: Yes[03:46pm] Tustin Mazda: It appears this vehicle is available but please keep in mind, some vehicles listed online may be in-transit or pre-sold.[03:46pm] Tustin Mazda: Please provide us with your name and best form of contact and we will reach out to you and confirm this vehicle's availability as soon as possible.[03:46pm] Tustin Mazda: Is there anything else we can assist you with today?\nTranscript: http://app.carnow.com/da/pvEHIx7D7sd8418m"
+                    }
+                },
+                "vendor": {
+                    "id": {
+                        "@attributes": {
+                            "source": "Mazda Digital"
+                        },
+                        "#text": "42066"
+                    },
+                    "vendorname": {
+                        "#text": "TUSTIN MAZDA"
+                    },
+                    "contact": {
+                        "name": {
+                            "@attributes": {
+                                "type": "business",
+                                "part": "full"
+                            },
+                            "#text": "TUSTIN MAZDA"
+                        },
+                        "email": {},
+                        "phone": {
+                            "@attributes": {
+                                "type": "voice"
+                            },
+                            "#text": "7148326222"
+                        },
+                        "address": {
+                            "street": {
+                                "@attributes": {
+                                    "line": "1"
+                                },
+                                "#text": "28A AUTO CENTER DRIVE"
+                            },
+                            "city": {
+                                "#text": "TUSTIN"
+                            },
+                            "regioncode": {
+                                "#text": "CA"
+                            },
+                            "postalcode": {
+                                "#text": "92782"
+                            }
+                        }
+                    }
+                },
+                "provider": {
+                    "name": {
+                        "@attributes": {
+                            "type": "business",
+                            "part": "full"
+                        },
+                        "#text": "CarNow - Sales"
+                    },
+                    "service": {
+                        "#text": "Mazda Digital"
+                    },
+                    "url": {}
+                }
+            }
+        }
+    },
+    "inquiry_text_body": "[03:46pm] Tustin Mazda: Thank you for choosing Tustin Mazda![03:46pm] Tustin Mazda: Are you interested in this 2024 Mazda MX-5 Miata RF today?[03:46pm] Kevin NoLastName124159865: Yes[03:46pm] Tustin Mazda: It appears this vehicle is available but please keep in mind, some vehicles listed online may be in-transit or pre-sold.[03:46pm] Tustin Mazda: Please provide us with your name and best form of contact and we will reach out to you and confirm this vehicle's availability as soon as possible.[03:46pm] Tustin Mazda: Is there anything else we can assist you with today?\nTranscript: http://app.carnow.com/da/pvEHIx7D7sd8418m",
+    "customerFirstMsgDict": {
+        "customerMsg": "Yes",
+        "isCustomerMsg": true,
+        "class": "others",
+        "notes": "The customer has expressed interest in the vehicle."
+    },
+    "body_html": "Hi Kevin,\n\nThank you for your response! I'm glad to hear you're interested in the <a href=\"https://www.missionviejokia.com/used-inventory/?make=Mazda&model=MX-5 Miata RF\">2024 Mazda MX-5 Miata RF Club (M6) 2dr Convertible</a>. This model offers a thrilling driving experience with its sporty design and exceptional handling, making it a perfect choice for anyone who loves the open road.\n\nManny Zecena is here to assist you with any questions you may have or to set up a test drive. Would you like to schedule a visit to see this fantastic vehicle in person? You can also reserve your time instantly here: Schedule Your Visit.\n\nPlease let us know a convenient time for you, or you can instantly reserve your time here: <{LegacySalesApptSchLink}>\n\n\nPatti\nTustin Mazda\n28 Auto Center Dr, Tustin, CA 92782"
+}

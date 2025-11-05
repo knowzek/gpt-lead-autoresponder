@@ -1,0 +1,662 @@
+{
+    "_subscription_id": "a4efeb74-2289-43d5-9814-1049fd35e894",
+    "opportunityId": "0763b7ba-cdab-f011-814f-00505690ec8c",
+    "activityId": null,
+    "links": [
+        {
+            "rel": "create",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities",
+            "method": "POST",
+            "title": "Create Opportunity"
+        },
+        {
+            "rel": "self",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/0763b7ba-cdab-f011-814f-00505690ec8c",
+            "method": "GET",
+            "title": "Get Opportunity"
+        },
+        {
+            "rel": "comment",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/comment",
+            "method": "POST",
+            "title": "Add Comment"
+        },
+        {
+            "rel": "email",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/sendEmail",
+            "method": "POST",
+            "title": "Send Email"
+        },
+        {
+            "rel": "tradein",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/tradein",
+            "method": "POST",
+            "title": "Add Trade-In"
+        },
+        {
+            "rel": "vehiclesought",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/vehicleSought",
+            "method": "POST",
+            "title": "Add Vehicle Sought"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/reassignPrimarySalesperson",
+            "method": "POST",
+            "title": "Reassign Primary Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/0763b7ba-cdab-f011-814f-00505690ec8c/salesteam/add",
+            "method": "POST",
+            "title": "Add Salesperson"
+        },
+        {
+            "rel": "salesperson",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/0763b7ba-cdab-f011-814f-00505690ec8c/salesteam/remove",
+            "method": "POST",
+            "title": "Remove Salesperson"
+        },
+        {
+            "rel": "substatus",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/0763b7ba-cdab-f011-814f-00505690ec8c/subStatus/update",
+            "method": "POST",
+            "title": "Update SubStatus"
+        },
+        {
+            "rel": "inactive",
+            "href": "https://api.fortellis.io/sales/v2/elead/opportunities/0763b7ba-cdab-f011-814f-00505690ec8c/set-inactive",
+            "method": "POST",
+            "title": "Set Opportunity Inactive"
+        }
+    ],
+    "source": "TrueCar",
+    "upType": "Internet",
+    "soughtVehicles": [
+        {
+            "id": "0863b7ba-cdab-f011-814f-00505690ec8c",
+            "isNew": false,
+            "yearFrom": 2019,
+            "yearTo": 2019,
+            "make": "Chevrolet",
+            "model": "Suburban",
+            "trim": "LT 4x4",
+            "vin": "1GNSKHKC2KR354844",
+            "stockNumber": "K680625A",
+            "isPrimary": true
+        }
+    ],
+    "salesTeam": [
+        {
+            "id": "2089ffe5-3ef5-ef11-814d-00505690ec8c",
+            "firstName": "Ashley",
+            "lastName": "Madrigal",
+            "isPrimary": true,
+            "isPositionPrimary": true,
+            "positionName": "Salesperson",
+            "positionCode": "S",
+            "links": []
+        },
+        {
+            "id": "d206c2f7-f219-ef11-b0d2-00505690dca3",
+            "firstName": "Roan",
+            "lastName": "Maqui",
+            "isPrimary": false,
+            "isPositionPrimary": true,
+            "positionName": "BDC Agent",
+            "positionCode": "BDC",
+            "links": []
+        }
+    ],
+    "customer": {
+        "id": "0663b7ba-cdab-f011-814f-00505690ec8c",
+        "isBusiness": false,
+        "firstName": "Lindsey",
+        "middleName": "",
+        "lastName": "McCabe",
+        "nickname": "",
+        "emails": [
+            {
+                "address": "juliansmomma2007@gmail.com",
+                "emailType": "Personal",
+                "doNotEmail": false,
+                "isPreferred": true
+            }
+        ],
+        "phones": [
+            {
+                "number": "(840) 356-6531",
+                "phoneType": "Home",
+                "preferredTimeToContact": "Day",
+                "doNotCall": false,
+                "doNotText": true,
+                "preferCall": false,
+                "preferText": false,
+                "onDoNotCallRegistry": false
+            },
+            {
+                "number": "(840) 356-6531",
+                "phoneType": "Cellular",
+                "preferredTimeToContact": "Evening",
+                "doNotCall": false,
+                "doNotText": true,
+                "preferCall": false,
+                "preferText": false,
+                "onDoNotCallRegistry": false
+            }
+        ],
+        "address": {
+            "addressLine1": "711 Ramona Ave",
+            "addressLine2": "",
+            "city": "Corona",
+            "state": "CA",
+            "zip": "92879",
+            "country": "US",
+            "county": "RIVERSIDE CO",
+            "doNotMail": false,
+            "isPreferred": false
+        },
+        "privacySettings": [
+            {
+                "name": "CCPADoNotContact",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotShare",
+                "value": "False"
+            },
+            {
+                "name": "CCPADoNotSell",
+                "value": "False"
+            }
+        ],
+        "links": [
+            {
+                "rel": "self",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/0663b7ba-cdab-f011-814f-00505690ec8c",
+                "method": "GET",
+                "title": "Fetch Customer"
+            },
+            {
+                "rel": "create",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers",
+                "method": "POST",
+                "title": "Create Customer"
+            },
+            {
+                "rel": "update",
+                "href": "https://api.fortellis.io/sales/v1/elead/customers/0663b7ba-cdab-f011-814f-00505690ec8c",
+                "method": "POST",
+                "title": "Update Customer"
+            }
+        ]
+    },
+    "tradeIns": null,
+    "createdBy": null,
+    "created_at": "2025-10-18",
+    "updated_at": "2025-10-20",
+    "isActive": true,
+    "completedActivities": [
+        {
+            "activityId": "3e71f0e3-5aac-f011-814f-00505690ec8c",
+            "comments": "said she realized they are not ready financially.",
+            "activityName": "Note",
+            "activityType": 37,
+            "category": "Completed",
+            "completedDate": "2025-10-18T17:44:43.757Z",
+            "outcome": "Completed",
+            "completedBy": "Madrigal, A"
+        },
+        {
+            "activityId": "3a5cc636-8b66-ea11-a977-005056b72b57",
+            "comments": "Absolutely, take care !",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T17:36:16Z",
+            "outcome": "Completed",
+            "completedBy": "Madrigal, A"
+        },
+        {
+            "activityId": "2e5cc636-8b66-ea11-a977-005056b72b57",
+            "comments": "Thank you so much ",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T17:33:12Z",
+            "outcome": "Completed",
+            "completedBy": "System"
+        },
+        {
+            "activityId": "8a09ac36-8b66-ea11-a977-005056b72b57",
+            "comments": "????? to “?I understand. Please dont hesitate to reach out when you are ready. 👍?”?",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T17:33:06Z",
+            "outcome": "Completed",
+            "completedBy": "System"
+        },
+        {
+            "activityId": "b918ac36-8b66-ea11-a977-005056b72b57",
+            "comments": "I understand. Please dont hesitate to reach out when you are ready. 👍",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T17:31:22Z",
+            "outcome": "Completed",
+            "completedBy": "Madrigal, A"
+        },
+        {
+            "activityId": "1b5cc636-8b66-ea11-a977-005056b72b57",
+            "comments": "Yes no longer, financially we are not as ready as I thought ",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T17:30:05Z",
+            "outcome": "Completed",
+            "completedBy": "System"
+        },
+        {
+            "activityId": "90c9a936-8b66-ea11-a977-005056b72b57",
+            "comments": "You are no longer interested in the Suburban?",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T17:18:19Z",
+            "outcome": "Completed",
+            "completedBy": "Madrigal, A"
+        },
+        {
+            "activityId": "c415e659-8b66-ea11-a977-005056b72b57",
+            "comments": "Im so sorry ill have to pass. But I do thank you for your time ",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T16:46:59Z",
+            "outcome": "Completed",
+            "completedBy": "System"
+        },
+        {
+            "activityId": "77be2d36-8b66-ea11-a977-005056b72b57",
+            "comments": "Okay, please do . Tomorrow we are open 10am-6pm.",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T15:26:52Z",
+            "outcome": "Completed",
+            "completedBy": "Madrigal, A"
+        },
+        {
+            "activityId": "5f733236-8b66-ea11-a977-005056b72b57",
+            "comments": "Im not able today however ill keep in touch ",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T15:25:23Z",
+            "outcome": "Completed",
+            "completedBy": "System"
+        },
+        {
+            "activityId": "761981d0-46ac-f011-814f-00505690ec8c",
+            "comments": "possibly looking to come in today ",
+            "activityName": "Note",
+            "activityType": 37,
+            "category": "Completed",
+            "completedDate": "2025-10-18T15:21:10.33Z",
+            "outcome": "Completed",
+            "completedBy": "Madrigal, A"
+        },
+        {
+            "activityId": "d5c02d36-8b66-ea11-a977-005056b72b57",
+            "comments": "Okay great, yes please let me know when you plan to come by so I can get the car pulled up for you :) Have a good day at work!",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T15:20:52Z",
+            "outcome": "Completed",
+            "completedBy": "Madrigal, A"
+        },
+        {
+            "activityId": "e0f22836-8b66-ea11-a977-005056b72b57",
+            "comments": "Good morning yes, let me get back to you this afternoon im at work at the moment however I am very interested in this vehicle ",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:42:53Z",
+            "outcome": "Completed",
+            "completedBy": "System"
+        },
+        {
+            "activityId": "a65a8037-8b66-ea11-a977-005056b72b57",
+            "comments": "Hi Lindsey, this is Ashley at Mission Viejo Kia. I see you are interested in the 2019 Chevy Suburban on our lot. Are you available to come by sometime today with your offer? STOP to unsubscribe or HELP for support. Msg freq. varies, msg&data rates may apply.",
+            "activityName": "Text Message",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:19:34Z",
+            "outcome": "Completed",
+            "completedBy": "Madrigal, A"
+        },
+        {
+            "activityId": "7b3d7c0f-3eac-f011-814f-00505690ec8c",
+            "comments": "",
+            "activityName": "Text #1",
+            "activityType": 48,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:18:35Z",
+            "outcome": "Email #1",
+            "completedBy": "Madrigal, A"
+        },
+        {
+            "activityId": "0c63b7ba-cdab-f011-814f-00505690ec8c",
+            "comments": "(Left Message)",
+            "activityName": "Call # 1",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:18:29Z",
+            "outcome": "Text #1",
+            "completedBy": "Madrigal, A"
+        },
+        {
+            "activityId": "a7ea7309-3eac-f011-814f-00505690ec8c",
+            "comments": "<i>RE: Your recent inquiry</i>",
+            "activityName": "Manual Email",
+            "activityType": 3,
+            "category": "Completed",
+            "completedDate": "2025-10-18T14:18:14.87Z",
+            "outcome": "Completed",
+            "completedBy": "Madrigal, A"
+        },
+        {
+            "activityId": "1caeae09-ceab-f011-814f-00505690ec8c",
+            "comments": "View conversation https://assistant.crmaiva.ai/conversation?id=b1bfd20a43abc343c2da6bb64ffda2044pfoC&viewonly=true; Reply as assistant https://assistant.crmaiva.ai/conversation?id=b1bfd20a43abc343c2da6bb64ffda2044pfoC&; Stop communication: https://unsubscribe.crmaiva.ai/crm/mission-viejo-kia/juliansmomma2007@gmail.com/b1bfd20a43abc343c2da6bb64ffda2044pfoC?; *EMAIL*; Assistant says:; Hello Lindsey,; It's Sierra Brooks from Patterson Mission Viejo Kia.; Thank you for getting in touch.; The 2019 Chevrolet Suburban you are looking into is available at the moment.; If you'd like to schedule an appointment, simply choose a day and time, and I'll arrange it for you. Alternatively, would you like us to call your number, 840-356-6531, before you schedule an appointment?; 2019 Chevrolet Suburban    $26,828    VIN: 1GNSKHKC2KR354844    Stock #: K680625A; Best Regards,; Sierra Brooks; Online Relations Assistant; Thank you for considering Mission Viejo Kia! Here’s why you’ll love; 1. Exceptional Service: Our approachable, stress-free sales experience, facilitated by a dedicated single contact person, ensures a seamless car-buying journey. Look at our impressive  4.9-star  rating on Google Reviews to see what our customers are saying!; 2. Vast Inventory: Choose from a wide range of new and pre-owned Kia models.; 3. Competitive Pricing: Enjoy great deals and flexible financing options tailored to your needs.; 4. Certified Pre-Owned: Get peace of mind with our rigorously inspected CPO vehicl",
+            "activityName": "Note",
+            "activityType": 37,
+            "category": "Completed",
+            "completedDate": "2025-10-18T00:57:27Z",
+            "outcome": "Completed",
+            "completedBy": "Leads, M"
+        },
+        {
+            "activityId": "c359b9f9-cdab-f011-814f-00505690ec8c",
+            "comments": "Sales AI email/text sent. Clock stopped.",
+            "activityName": "Phone Call",
+            "activityType": 2,
+            "category": "Completed",
+            "completedDate": "2025-10-18T00:57:00Z",
+            "outcome": "Completed",
+            "completedBy": "Leads, M"
+        },
+        {
+            "activityId": "0b63b7ba-cdab-f011-814f-00505690ec8c",
+            "comments": "<i>TrueCar / PNC: New Customer Inquiry</i><br />*** DEALER PORTAL ***; https://dealerportal.truecar.com/dfe/prospects/MX8TX6RKX5?_xt=1&utm_source=crm&utm_medium=deeplink&utm_campaign=384578",
+            "activityName": "Internet Up",
+            "activityType": 13,
+            "category": "Completed",
+            "completedDate": "2025-10-18T00:54:00Z",
+            "outcome": "Auto Response",
+            "completedBy": "Leads, M"
+        }
+    ],
+    "scheduledActivities": [
+        {
+            "activityId": "ca1b8315-3eac-f011-814f-00505690ec8c",
+            "comments": "",
+            "dueDate": "2025-10-21T16:30:00Z",
+            "activityName": "Email #1",
+            "activityType": 3,
+            "assignedTo": "Madrigal, A"
+        },
+        {
+            "activityId": "0d63b7ba-cdab-f011-814f-00505690ec8c",
+            "comments": "",
+            "dueDate": "2025-10-23T02:00:00Z",
+            "activityName": "BDC Virtual Immediate Call",
+            "activityType": 2,
+            "assignedTo": "Maqui, R"
+        }
+    ],
+    "firstActivity": {
+        "id": "0b63b7ba-cdab-f011-814f-00505690ec8c",
+        "activityType": "Internet Up",
+        "category": "Completed",
+        "name": "Internet Up",
+        "completedDate": "2025-10-18T02:54:00Z",
+        "dueDate": "2025-10-18T04:54:00Z",
+        "outcome": "Auto Response",
+        "createdBy": "Leads, MVK Bucket",
+        "assignedTo": "Leads, MVK Bucket",
+        "completedBy": "Leads, MVK Bucket",
+        "opportunityId": "0763b7ba-cdab-f011-814f-00505690ec8c",
+        "upType": "Internet",
+        "source": "TrueCar",
+        "subSource": "New TrueCar/PNC Auto Buying Customer Inquiry",
+        "createdByUserId": "1ac48ebf-2354-ef11-814a-00505690043e",
+        "assignedToUserId": "1ac48ebf-2354-ef11-814a-00505690043e",
+        "completedByUserId": "1ac48ebf-2354-ef11-814a-00505690043e",
+        "message": {
+            "date": "2025-10-18T02:54:12Z",
+            "from": "pnc@leads.truecarmail.com",
+            "to": "sales@missionviejokia.edealerhub.com",
+            "subject": "TrueCar / PNC: New Customer Inquiry",
+            "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<?ADF version=\"1.0\"?><adf>\r\n  <prospect>\r\n    <id source=\"TrueCar Lead ID\">1142904505</id>\r\n    <requestdate>2025-10-17T19:54:00-07:00</requestdate>\r\n    <vehicle interest=\"buy\" status=\"used\">\r\n      <id source=\"model code\">CK15906</id>\r\n      <year>2019</year>\r\n      <make>Chevrolet</make>\r\n      <model>Suburban</model>\r\n      <vin>1GNSKHKC2KR354844</vin>\r\n      <stock>K680625A</stock>\r\n      <trim>LT</trim>\r\n      <doors>4</doors>\r\n      <bodystyle>SUV</bodystyle>\r\n      <transmission>Automatic</transmission>\r\n      <odometer units=\"mi\">85255</odometer>\r\n      <colorcombination>\r\n        <interiorcolor>Jet Black</interiorcolor>\r\n        <exteriorcolor>Summit White</exteriorcolor>\r\n        <preference>1</preference>\r\n      </colorcombination>\r\n      <price type=\"quote\">26828.0</price>\r\n      <pricecomments>\r\n        <![CDATA[]]>\r\n      </pricecomments>\r\n      <finance>\r\n        <method>finance</method>\r\n        <amount>1.0</amount>\r\n      </finance>\r\n    </vehicle>\r\n    <customer>\r\n      <contact>\r\n        <name part=\"first\">Lindsey</name>\r\n        <name part=\"last\">Mccabe</name>\r\n        <email preferredcontact=\"0\">juliansmomma2007@gmail.com</email>\r\n        <phone preferredcontact=\"0\" time=\"nopreference\" type=\"voice\">(840) 356-6531</phone>\r\n        <address>\r\n          <street line=\"1\">711 Ramona Ave</street>\r\n          <city>Corona</city>\r\n          <regioncode>CA</regioncode>\r\n          <postalcode>92879</postalcode>\r\n          <country/>\r\n        </address>\r\n      </contact>\r\n      <comments>\r\n        <![CDATA[*** DEALER PORTAL *** <br /> https://dealerportal.truecar.com/dfe/prospects/MX8TX6RKX5?_xt=1&utm_source=crm&utm_medium=deeplink&utm_campaign=384578]]>\r\n      </comments>\r\n    </customer>\r\n    <vendor>\r\n      <id source=\"0:ADF XML Email\"/>\r\n      <id source=\"AdditionalEmails\">Steveh@pattersonautos.com</id>\r\n      <id source=\"DealerId\">384578</id>\r\n      <vendorname>Mission Viejo Kia</vendorname>\r\n      <contact>\r\n        <name part=\"full\" type=\"individual\">Alex Chung</name>\r\n        <email preferredcontact=\"0\">sales@missionviejokia.edealerhub.com</email>\r\n        <phone preferredcontact=\"0\" time=\"nopreference\" type=\"voice\"/>\r\n        <address>\r\n          <street line=\"1\">28802 Marguerite Pkwy</street>\r\n          <city>Mission Viejo</city>\r\n          <regioncode>CA</regioncode>\r\n          <postalcode>92692</postalcode>\r\n        </address>\r\n      </contact>\r\n    </vendor>\r\n    <provider>\r\n      <name part=\"full\">TrueCar/PNC</name>\r\n      <service>New TrueCar/PNC Auto Buying Customer Inquiry</service>\r\n      <leadtype>internet</leadtype>\r\n    </provider>\r\n  </prospect>\r\n</adf>"
+        },
+        "links": [],
+        "adfDict": {
+            "adf": {
+                "prospect": {
+                    "id": {
+                        "@attributes": {
+                            "source": "TrueCar Lead ID"
+                        },
+                        "#text": "1142904505"
+                    },
+                    "requestdate": {
+                        "#text": "2025-10-17T19:54:00-07:00"
+                    },
+                    "vehicle": {
+                        "@attributes": {
+                            "interest": "buy",
+                            "status": "used"
+                        },
+                        "id": {
+                            "@attributes": {
+                                "source": "model code"
+                            },
+                            "#text": "CK15906"
+                        },
+                        "year": {
+                            "#text": "2019"
+                        },
+                        "make": {
+                            "#text": "Chevrolet"
+                        },
+                        "model": {
+                            "#text": "Suburban"
+                        },
+                        "vin": {
+                            "#text": "1GNSKHKC2KR354844"
+                        },
+                        "stock": {
+                            "#text": "K680625A"
+                        },
+                        "trim": {
+                            "#text": "LT"
+                        },
+                        "doors": {
+                            "#text": "4"
+                        },
+                        "bodystyle": {
+                            "#text": "SUV"
+                        },
+                        "transmission": {
+                            "#text": "Automatic"
+                        },
+                        "odometer": {
+                            "@attributes": {
+                                "units": "mi"
+                            },
+                            "#text": "85255"
+                        },
+                        "colorcombination": {
+                            "interiorcolor": {
+                                "#text": "Jet Black"
+                            },
+                            "exteriorcolor": {
+                                "#text": "Summit White"
+                            },
+                            "preference": {
+                                "#text": "1"
+                            }
+                        },
+                        "price": {
+                            "@attributes": {
+                                "type": "quote"
+                            },
+                            "#text": "26828.0"
+                        },
+                        "pricecomments": {},
+                        "finance": {
+                            "method": {
+                                "#text": "finance"
+                            },
+                            "amount": {
+                                "#text": "1.0"
+                            }
+                        }
+                    },
+                    "customer": {
+                        "contact": {
+                            "name": [
+                                {
+                                    "@attributes": {
+                                        "part": "first"
+                                    },
+                                    "#text": "Lindsey"
+                                },
+                                {
+                                    "@attributes": {
+                                        "part": "last"
+                                    },
+                                    "#text": "Mccabe"
+                                }
+                            ],
+                            "email": {
+                                "@attributes": {
+                                    "preferredcontact": "0"
+                                },
+                                "#text": "juliansmomma2007@gmail.com"
+                            },
+                            "phone": {
+                                "@attributes": {
+                                    "preferredcontact": "0",
+                                    "time": "nopreference",
+                                    "type": "voice"
+                                },
+                                "#text": "(840) 356-6531"
+                            },
+                            "address": {
+                                "street": {
+                                    "@attributes": {
+                                        "line": "1"
+                                    },
+                                    "#text": "711 Ramona Ave"
+                                },
+                                "city": {
+                                    "#text": "Corona"
+                                },
+                                "regioncode": {
+                                    "#text": "CA"
+                                },
+                                "postalcode": {
+                                    "#text": "92879"
+                                },
+                                "country": {}
+                            }
+                        },
+                        "comments": {
+                            "#text": "*** DEALER PORTAL *** <br /> https://dealerportal.truecar.com/dfe/prospects/MX8TX6RKX5?_xt=1&utm_source=crm&utm_medium=deeplink&utm_campaign=384578"
+                        }
+                    },
+                    "vendor": {
+                        "id": [
+                            {
+                                "@attributes": {
+                                    "source": "0:ADF XML Email"
+                                }
+                            },
+                            {
+                                "@attributes": {
+                                    "source": "AdditionalEmails"
+                                },
+                                "#text": "Steveh@pattersonautos.com"
+                            },
+                            {
+                                "@attributes": {
+                                    "source": "DealerId"
+                                },
+                                "#text": "384578"
+                            }
+                        ],
+                        "vendorname": {
+                            "#text": "Mission Viejo Kia"
+                        },
+                        "contact": {
+                            "name": {
+                                "@attributes": {
+                                    "part": "full",
+                                    "type": "individual"
+                                },
+                                "#text": "Alex Chung"
+                            },
+                            "email": {
+                                "@attributes": {
+                                    "preferredcontact": "0"
+                                },
+                                "#text": "sales@missionviejokia.edealerhub.com"
+                            },
+                            "phone": {
+                                "@attributes": {
+                                    "preferredcontact": "0",
+                                    "time": "nopreference",
+                                    "type": "voice"
+                                }
+                            },
+                            "address": {
+                                "street": {
+                                    "@attributes": {
+                                        "line": "1"
+                                    },
+                                    "#text": "28802 Marguerite Pkwy"
+                                },
+                                "city": {
+                                    "#text": "Mission Viejo"
+                                },
+                                "regioncode": {
+                                    "#text": "CA"
+                                },
+                                "postalcode": {
+                                    "#text": "92692"
+                                }
+                            }
+                        }
+                    },
+                    "provider": {
+                        "name": {
+                            "@attributes": {
+                                "part": "full"
+                            },
+                            "#text": "TrueCar/PNC"
+                        },
+                        "service": {
+                            "#text": "New TrueCar/PNC Auto Buying Customer Inquiry"
+                        },
+                        "leadtype": {
+                            "#text": "internet"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
