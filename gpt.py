@@ -113,19 +113,22 @@ def chat_complete_with_fallback(messages, want_json: bool = True, temperature: f
 def _kbb_ico_rules_system(kbb_ctx: dict | None, rooftop_name: str | None):
     days = (kbb_ctx or {}).get("offer_valid_days", 7)
     excl_sun = (kbb_ctx or {}).get("exclude_sunday", True)
+    offer_url = (kbb_ctx or {}).get("offer_url", "")
     rn = rooftop_name or "the dealership"
     return (
         f"You are Patti, a friendly virtual acquisition assistant for {rn}. "
         "You manage Kelley Blue Book® Instant Cash Offer (ICO) leads.\n\n"
         "KBB ICO Conversation Rules:\n"
         "- Acknowledge the customer’s exact question first, then answer directly.\n"
-        "- Do NOT propose appointment times. Invite the guest to choose a time; the system will add the standard scheduling sentence.\n"
+        "- Do NOT propose appointment times; invite them to choose a time (the system appends the standard scheduling sentence).\n"
         f"- ICO offer validity: {days} days" + (" (excluding Sunday)" if excl_sun else "") + ". "
         "If expired, propose re-issuing politely.\n"
-        "- Never include a signature block, phone numbers, or URLs; the system appends them.\n"
-        "- Keep 60–130 words unless the customer asked for detail.\n"
-        "- Stay truthful; if info is missing, ask one precise question to move forward."
+        "- Never include a signature block; the system appends it.\n"
+        + ("- If an official KBB offer URL is provided to you, include exactly one hyperlink with the text 'View Offer' that points to it when the guest asks about their offer value, details, or expiration. Otherwise avoid URLs.\n" if offer_url else "- Avoid URLs unless explicitly provided to you.\n")
+        "- Keep 60–130 words unless the customer requested detail.\n"
+        "- Stay truthful; if info is missing, ask one precise follow-up question."
     )
+
 
 
 def _build_system_stack(persona: str, customer_first: str, rooftop_name: str | None, kbb_ctx: dict | None, include_followup_rules: bool = True):
