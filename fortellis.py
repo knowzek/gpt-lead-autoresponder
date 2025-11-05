@@ -306,15 +306,12 @@ def get_recent_opportunities(token, dealer_key, since_minutes=360, page=1, page_
 
 
 
-def send_opportunity_email_activity(token,
-                                    dealer_key,
-                                    opportunity_id,
-                                    sender,
-                                    recipients,
-                                    carbon_copies,
-                                    subject,
-                                    body_html,
-                                    rooftop_name: str = None):
+from typing import Optional
+
+def send_opportunity_email_activity(token, subscription_id, opportunity_id,
+                                    *, sender, recipients, carbon_copies,
+                                    subject, body_html, rooftop_name,
+                                    reply_to_activity_id: Optional[str] = None):
     """
     Send an email via Opportunities POST /sendEmail.
 
@@ -360,8 +357,22 @@ def send_opportunity_email_activity(token,
             "body": body,
             "isHtml": True
         }
+      
     }
 
+    # Thread the reply if we have the inbound activity id
+    if reply_to_activity_id:
+        # Fortellis/eLeads threading key; if your client expects a different key name,
+        # also include it below.
+        payload["replyToActivityId"] = reply_to_activity_id
+        # Some tenants use a different field name; harmless to send both:
+        payload["inReplyToActivityId"] = reply_to_activity_id
+
+    if reply_to_activity_id:
+        log.info("Fortellis: sending REPLY in-thread to activity_id=%s", reply_to_activity_id)
+    else:
+        log.info("Fortellis: sending NEW outbound (no reply_to_activity_id)")
+    
     return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
 
 
