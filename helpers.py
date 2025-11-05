@@ -7,49 +7,70 @@ from datetime import datetime
 import urllib.parse, base64
 from datetime import datetime, timedelta, timezone
 
-_KBB_AMOUNT_RE = re.compile(r'(?i)\b(?:offer\s*amount|kbb\s*(?:ico)?\s*amount)\s*:\s*\$?\s*([0-9][0-9,]+)')
-_KBB_LINK_RE   = re.compile(r'(?i)\boffer\s*link\s*:\s*(https?://\S+)')
+# --- KBB Offer extractors -------------------------------------------------
 
-def get_kbb_offer_context_simple(opp: dict) -> dict:
-    """
-    Pull KBB offer facts from:
-      - opp["comments"] (e.g., "Offer Amount: $7,524. Offer Link: https://…")
-      - opp["tradeIns"][0] (year/make/model/vin)
-    Returns dict with keys: amount_usd, offer_url, vehicle, year, make, model, vin
-    """
-    ctx = {}
+_OFFER_URL_RE = re.compile(r'Offer\s*Link:\s*(https?://[^\s;<"]+)', re.I)
+_OFFER_AMT_RE = re.compile(r'Offer\s*Amount:\s*\$?\s*([\d,]+(?:\.\d{2})?)', re.I)
+_OFFER_ID_RE  = re.compile(r'OfferID=([a-f0-9-]{36})', re.I)
 
-    # 1) parse comments blob
-    comments = (opp or {}).get("comments") or ""
-    if comments:
-        m_amt = _KBB_AMOUNT_RE.search(comments)
-        if m_amt:
-            try:
-                ctx["amount_usd"] = f"${int(m_amt.group(1).replace(',', '')):,}"
-            except Exception:
-                pass
-        m_link = _KBB_LINK_RE.search(comments)
-        if m_link:
-            ctx["offer_url"] = m_link.group(1).strip().rstrip(").,;")
+def _scan_text_for_offer(text: str) -> dict:
+    if not text:
+        return {}
+    url = None; amt = None; oid = None
+    m = _OFFER_URL_RE.search(text);  url = m.group(1).strip() if m else None
+    m = _OFFER_AMT_RE.search(text);  amt = f"${m.group(1)}".replace("$$","$") if m else None
+    if url:
+        m = _OFFER_ID_RE.search(url); oid = m.group(1) if m else None
+    out = {}
+    if url: out["offer_url"] = url
+    if amt: out["amount_usd"] = amt
+    if oid: out["offer_id"] = oid
+    return out
 
-    # 2) first trade-in record for vehicle basics
-    ti = ((opp or {}).get("tradeIns") or [])
-    if ti and isinstance(ti, list):
-        t0 = ti[0] or {}
-        ctx["year"]  = t0.get("year")
-        ctx["make"]  = t0.get("make")
-        ctx["model"] = t0.get("model")
-        ctx["vin"]   = t0.get("vin")
-        if any(ctx.get(k) for k in ("year","make","model")):
-            ctx["vehicle"] = " ".join(str(ctx.get(k,"")).strip() for k in ("year","make","model") if ctx.get(k)).strip()
+def get_kbb_offer_context_simple(opportunity: dict) -> dict:
+    """Returns {'offer_url','amount_usd','offer_id','vehicle'} if found."""
+    memo = opportunity.get("_kbb_offer_ctx") or {}
+    if memo.get("offer_url"):
+        return memo
 
-    # prune empties
-    return {k: v for k, v in ctx.items() if v}
+    completed = (opportunity.get("completedActivities")
+                 or (opportunity.get("activityHistory") or {}).get("completedActivities")
+                 or [])
+    texts = []
+    for a in completed:
+        texts.append((a.get("comments") or "") + " " + (a.get("notes") or ""))
+        msg = a.get("message") or {}
+        texts.append((msg.get("body") or "") + " " + (msg.get("subject") or ""))
 
-def wants_kbb_value(text: str) -> bool:
-    t = (text or "").lower()
-    return any(k in t for k in ("value","offer","amount","quote","kbb","instant cash")) \
-        and any(k in t for k in ("what","how much","remind","tell","value","$","amount"))
+    found = {}
+    for t in texts:
+        bits = _scan_text_for_offer(t)
+        if bits:
+            found.update(bits)
+            if found.get("offer_url"): break
+
+    ti = (opportunity.get("tradeIns") or [{}])[0] if (opportunity.get("tradeIns") or []) else {}
+    veh = " ".join(filter(None, [str(ti.get("year") or "").strip(),
+                                 str(ti.get("make") or "").strip(),
+                                 str(ti.get("model") or "").strip()])).strip()
+    if veh:
+        found["vehicle"] = veh
+
+    opportunity["_kbb_offer_ctx"] = found
+    return found
+
+def build_kbb_ctx(opportunity: dict) -> dict:
+    """Small, consistent payload we can hand to run_gpt."""
+    facts = get_kbb_offer_context_simple(opportunity)
+    return {
+        "offer_valid_days": 7,
+        "exclude_sunday": True,
+        "offer_url": facts.get("offer_url") or "",
+        "amount_usd": facts.get("amount_usd") or "",
+        "vehicle": facts.get("vehicle") or ""
+    }
+
+
 
 
 def rewrite_sched_cta_for_booked(body_html: str) -> str:
