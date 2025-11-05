@@ -151,10 +151,14 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
     
     for op in opp_items:
         up_type = (op.get("upType") or "").lower()
-        if up_type not in ELIGIBLE_UPTYPES:
-            continue  # skip showroom/phone/etc.
-    
-        if not _is_assigned_to_kristin_doc(op):
+        is_kbb = _is_kbb_ico_new_active(op)
+        
+        # Keep your normal upType gate for non-KBB, but allow KBB ICO through even if ELIGIBLE_UPTYPES is stricter
+        if (not is_kbb) and (up_type not in ELIGIBLE_UPTYPES):
+            continue
+        
+        # Previously we only processed Kristin-assigned opps; now also allow KBB ICO new/active/campaign opps
+        if (not _is_assigned_to_kristin_doc(op)) and (not is_kbb):
             continue
     
         # one canonical id everywhere
