@@ -17,7 +17,6 @@ import os
 TEST_TO = os.getenv("TEST_TO", "pattiautoresponder@gmail.com")
 import logging
 log = logging.getLogger(__name__)
-
 import re as _re
 from textwrap import dedent as _dd
 from rooftops import ROOFTOP_INFO
@@ -27,7 +26,7 @@ import zoneinfo as _zi
 
 from html import unescape as _unesc
 
-from rooftops import ROOFTOP_INFO as _RTI
+#from rooftops import ROOFTOP_INFO as _RTI
 
 def _patch_address_placeholders(html: str, rooftop_name: str) -> str:
     addr = ((_RTI.get(rooftop_name) or {}).get("address") or "").strip()
@@ -101,7 +100,6 @@ def append_soft_schedule_sentence(body_html: str, rooftop_name: str) -> str:
         return body_html
 
     # Resolve the href (real scheduler if configured; else Legacy token so CRM swaps it)
-    from rooftops import ROOFTOP_INFO
     rt = (ROOFTOP_INFO.get(rooftop_name) or {})
     href = rt.get("booking_link") or rt.get("scheduler_url") or "<{LegacySalesApptSchLink}>"
 
@@ -400,7 +398,6 @@ def _has_new_read_email_since(acts: list[dict], since_dt):
     return False
 
 def build_patti_footer(rooftop_name: str) -> str:
-    from rooftops import ROOFTOP_INFO
     rt = (ROOFTOP_INFO.get(rooftop_name) or {})
 
     img_url      = rt.get("signature_img") or "https://content.energage.com/company-images/RP684/RP684_photo_017ebf8affe24118ae205078849a8f51_orig.jpg"
@@ -1501,7 +1498,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         return state, action_taken
 
     # Rooftop info
-    from rooftops import ROOFTOP_INFO
+
     rooftop_addr = ((ROOFTOP_INFO.get(rooftop_name, {}) or {}).get("address") or "")
 
     # Salesperson (primary)
