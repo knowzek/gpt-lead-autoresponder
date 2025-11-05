@@ -404,7 +404,7 @@ def _has_new_read_email_since(acts: list[dict], since_dt):
 def build_patti_footer(rooftop_name: str) -> str:
     rt = (ROOFTOP_INFO.get(rooftop_name) or {})
 
-    img_url      = rt.get("signature_img") or "https://content.energage.com/company-images/RP684/RP684_photo_017ebf8affe24118ae205078849a8f51_orig.jpg"
+    img_url      = rt.get("signature_img") or "https://www.pattersonautos.com/blogs/7684/wp-content/uploads/2025/11/image.png"
     patti_email  = rt.get("patti_email")   or "patti@pattersonautos.com"
     dealer_site  = (rt.get("website") or "https://www.pattersonautos.com").rstrip("/")
     dealer_addr  = rt.get("address")       or ""
