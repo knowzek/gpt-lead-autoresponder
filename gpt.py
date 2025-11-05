@@ -399,8 +399,9 @@ def run_gpt(prompt: str,
             persona: str = "sales",
             kbb_ctx: dict | None = None):
 
+    reply = {}
+                
     rooftop_addr = _get_rooftop_address(rooftop_name)
-
     addr_msg = None
     if rooftop_addr:
         addr_msg = {
@@ -417,9 +418,10 @@ def run_gpt(prompt: str,
         kbb_ctx=kbb_ctx,
         include_followup_rules=(persona != "kbb_ico")
     )
-
-    if addr_msg:
-        system_msgs.insert(0, addr_msg)   # make sure the address is available to the model
+                
+    messages = system_msgs + [
+        {"role": "user", "content": prompt}
+    ]
 
     if prevMessages:
         messages = system_msgs + [
