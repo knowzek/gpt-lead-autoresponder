@@ -114,13 +114,20 @@ def append_soft_schedule_sentence(body_html: str, rooftop_name: str) -> str:
     return f"<p>{body_html.strip()}</p>{soft_line}" if body_html.strip() else soft_line
 
 
+def _norm_iso_utc(x):
+    try:
+        dt = _dt.fromisoformat(str(x).replace("Z", "+00:00")).astimezone(_tz.utc)
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    except Exception:
+        return None
+
 def _short_circuit_if_booked(opportunity, acts_live, state,
                              *, token, subscription_id, rooftop_name, SAFE_MODE, rooftop_sender):
     """
     If we see a 'Customer Scheduled Appointment':
-      - If it’s NEW: send confirmation + flip subStatus, persist state → return (True, True)
-      - If it’s the SAME one we already handled: do nothing → return (True, False)
-    If no appointment found: return (False, False)
+      - NEW: send confirmation + flip subStatus, persist state → (True, True)
+      - SAME: do nothing (no mode flip) → (True, False)
+    If none found: (False, False)
     """
     opp_id      = opportunity.get("opportunityId") or opportunity.get("id")
     customer_id = (opportunity.get("customer") or {}).get("id")
@@ -131,21 +138,19 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
         opp_id=opp_id, customer_id=customer_id
     )
 
-    # ES-backed guard: if we already handled this appt_id, skip
-    if (opportunity.get("_kbb_state") or {}).get("last_appt_activity_id") == appt_id:
+    # 1) Nothing booked → no short-circuit and DO NOT touch state
+    if not (appt_id and appt_due_iso):
+        return (False, False)
+
+    # 2) Idempotency via ES: same appt we've already handled → skip resend (no mode flip)
+    st = (opportunity.get("_kbb_state") or {})
+    already_done = (st.get("last_appt_activity_id") == appt_id) and \
+                   (st.get("appt_due_utc") == _norm_iso_utc(appt_due_iso))
+    if already_done:
         log.info("KBB ICO: appointment already acknowledged via ES (id=%s) → skip re-send", appt_id)
-        state["mode"] = "scheduled"
-        opportunity["_kbb_state"] = state
         return (True, False)
 
-    log.info("KBB ICO: booked-appt scan → id=%s due=%s", appt_id, appt_due_iso)
-    if not (appt_id and appt_due_iso):
-        return (False, False)  # no short-circuit
-
-    # ✅ ignore the same appointment we've already handled
-    if state.get("last_appt_activity_id") == appt_id:
-        log.info("KBB ICO: appointment already acknowledged (id=%s) → skip re-send", appt_id)
-        return (True, False)  # handled, no send
+    log.info("KBB ICO: booked-appt NEW → id=%s due=%s", appt_id, appt_due_iso)
 
     # Format time
     try:
@@ -158,29 +163,27 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
         due_dt_iso_utc = dt_local.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     else:
         appt_human     = str(appt_due_iso)
-        due_dt_iso_utc = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        due_dt_iso_utc = _norm_iso_utc(appt_due_iso) or _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     # Deterministic thanks email
     cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
     subject = f"Re: Appointment confirmed for {appt_human}"
-    
-    # Build Add-to-Calendar links (30-min default; adjust if needed)
+
     rt = (ROOFTOP_INFO.get(rooftop_name) or {})
     summary     = f"{rooftop_name} – KBB Inspection"
     location    = rt.get("address") or rooftop_name
     description = "15–20 minute in-person inspection to finalize your Kelley Blue Book® Instant Cash Offer."
     links       = build_calendar_links(summary, description, location, due_dt_iso_utc, duration_min=30)
-    
+
     add_to_cal_html = f"""
       <p style="margin:16px 0 8px 0;">Add to calendar:</p>
       <p>
-        <a href=\"{links['google']}\">Google</a> &nbsp;|&nbsp;
-        <a href=\"{links['outlook']}\">Outlook</a> &nbsp;|&nbsp;
-        <a href=\"{links['yahoo']}\">Yahoo</a>
+        <a href="{links['google']}">Google</a> &nbsp;|&nbsp;
+        <a href="{links['outlook']}">Outlook</a> &nbsp;|&nbsp;
+        <a href="{links['yahoo']}">Yahoo</a>
       </p>
     """.strip()
 
-    
     body_html = f"""
         <p>Hi {cust_first},</p>
         <p>Thanks for booking — we’ll see you on <strong>{appt_human}</strong> at {rooftop_name}.</p>
@@ -228,8 +231,9 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
         log.info("SubStatus update response: %s", getattr(resp, "status_code", "n/a"))
     except Exception as e:
         log.warning("set_opportunity_substatus failed: %s", e)
-    
-    return (True, True)  # handled, and we DID send
+
+    return (True, True)
+
 
 
 def _latest_read_email_id(acts: list[dict]) -> str | None:
