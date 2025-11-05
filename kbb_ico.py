@@ -1298,6 +1298,9 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             messages history (python list of dicts):
             {opportunity.get('messages', [])}
             """
+
+            from helpers import build_kbb_ctx
+            kbb_ctx = build_kbb_ctx(opportunity)
             
             reply = run_gpt(
                 prompt,
@@ -1305,7 +1308,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 rooftop_name=rooftop_name,
                 prevMessages=True,
                 persona="kbb_ico",
-                kbb_ctx={"offer_valid_days": 7, "exclude_sunday": True},
+                kbb_ctx=kbb_ctx
             )
             
             subject   = (reply.get("subject") or reply_subject or "Re:").strip()
@@ -1411,7 +1414,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             rooftop_name=rooftop_name,
             prevMessages=True,
             persona="kbb_ico",
-            kbb_ctx={"offer_valid_days": 7, "exclude_sunday": True},
+            kbb_ctx=kbb_ctx,
         )
     
         # 3) Build final body
@@ -1505,13 +1508,18 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     {opportunity.get('messages', [])}
                     """
 
+                    from helpers import build_kbb_ctx
+
+                    # Build a fully armed context (adds offer_url, amount_usd, vehicle)
+                    kbb_ctx = build_kbb_ctx(opportunity)
+                    
                     reply = run_gpt(
                         prompt,
                         customer_name=cust_first,
                         rooftop_name=rooftop_name,
                         prevMessages=True,
                         persona="kbb_ico",
-                        kbb_ctx={"offer_valid_days": 7, "exclude_sunday": True},
+                        kbb_ctx=kbb_ctx,
                     )
 
                     subject   = reply.get("subject") or "Still interested in your Instant Cash Offer?"
