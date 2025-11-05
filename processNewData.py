@@ -498,7 +498,9 @@ def processHit(hit):
 
 
     # === Vehicle & SRP link =============================================
-    soughtVehicles = opportunity.get('soughtVehicles', [])
+    soughtVehicles = opportunity.get('soughtVehicles') or []
+    if not isinstance(soughtVehicles, list):
+        soughtVehicles = []
     vehicleObj = None
     for vehicle in soughtVehicles:
         if not vehicle.get('isPrimary'):
@@ -506,11 +508,14 @@ def processHit(hit):
         vehicleObj = vehicle
         break
 
-    make  = vehicleObj.get("make", "")
-    model = vehicleObj.get("model", "")
-    year  = vehicleObj.get("yearFrom", "")
-    trim  = vehicleObj.get("trim", "")
-    stock = vehicleObj.get("stockNumber", "")
+    if not vehicleObj:
+        vehicleObj = (soughtVehicles[0] if soughtVehicles and isinstance(soughtVehicles[0], dict) else {})
+
+    make  = str(vehicleObj.get("make") or "")
+    model = str(vehicleObj.get("model") or "")
+    year  = str(vehicleObj.get("yearFrom") or vehicleObj.get("year") or "")
+    trim  = str(vehicleObj.get("trim") or "")
+    stock = str(vehicleObj.get("stockNumber") or "")
 
     vehicle_str = f"{year} {make} {model} {trim}".strip() or "one of our vehicles"
     base_url = DEALERSHIP_URL_MAP.get(dealership)
