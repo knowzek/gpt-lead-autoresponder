@@ -1194,7 +1194,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 }]
             # also persist for future cycles
             opportunity["messages"] = msgs
-
+            
             if False:  # KBB price shortcut — disabled
                 # === Deterministic KBB value shortcut (if customer asks for their offer amount) ===
                 from helpers import get_kbb_offer_context_simple, wants_kbb_value
@@ -1288,6 +1288,86 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     action_taken = True
                     opportunity["_kbb_state"] = state
                     return state, action_taken
+            
+            # ===== NEW: send the normal GPT convo reply =====
+            cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
+            
+            prompt = compose_kbb_convo_body(rooftop_name, cust_first, inquiry_text or "")
+            prompt += f"""
+            
+            messages history (python list of dicts):
+            {opportunity.get('messages', [])}
+            """
+            
+            reply = run_gpt(
+                prompt,
+                customer_name=cust_first,
+                rooftop_name=rooftop_name,
+                prevMessages=True,
+                persona="kbb_ico",
+                kbb_ctx={"offer_valid_days": 7, "exclude_sunday": True},
+            )
+            
+            subject   = (reply.get("subject") or reply_subject or "Re:").strip()
+            body_html = (reply.get("body") or "").strip()
+            
+            # Normalize + scheduling CTA behavior
+            body_html = normalize_patti_body(body_html)
+            body_html = _patch_address_placeholders(body_html, rooftop_name)
+            
+            is_scheduled = state.get("mode") == "scheduled" or _has_upcoming_appt(acts_live, state)
+            if is_scheduled:
+                from helpers import rewrite_sched_cta_for_booked
+                body_html = rewrite_sched_cta_for_booked(body_html)
+            else:
+                body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+            
+            body_html = _PREFS_RE.sub("", body_html).strip()
+            body_html = body_html + build_patti_footer(rooftop_name)
+            if not subject.lower().startswith("re:"):
+                subject = "Re: " + subject
+            
+            # Resolve recipient
+            cust = (opportunity.get("customer") or {})
+            email = cust.get("emailAddress") or ((cust.get("emails") or [{}])[0].get("address")) \
+                    or (opportunity.get("_lead", {}) or {}).get("email_address")
+            recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
+            if not recipients:
+                log.warning("No recipient; skip send for opp=%s", opp_id)
+                opportunity["_kbb_state"] = state
+                return state, action_taken
+            
+            # Reply in-thread to the selected inbound
+            send_opportunity_email_activity(
+                token, subscription_id, opp_id,
+                sender=rooftop_sender,
+                recipients=receptors if (email and not SAFE_MODE) else [TEST_TO],  # <-- keep same list name if you use 'recipients'
+                carbon_copies=[],
+                subject=reply_subject,              # keep inbound thread subject
+                body_html=body_html,
+                rooftop_name=rooftop_name,
+                reply_to_activity_id=selected_inbound_id  # <-- from above
+            )
+            
+            # Persist compact thread memo
+            now_iso = _dt.now(_tz.utc).isoformat()
+            _thread_body = re.sub(r"<[^>]+>", " ", body_html)
+            _thread_body = re.sub(r"\s+", " ", _thread_body).strip()
+            
+            msgs = opportunity.get("messages", []) or []
+            msgs.append({
+                "msgFrom": "patti",
+                "subject": reply_subject.replace("Re: ", ""),
+                "body": _thread_body,
+                "date": now_iso
+            })
+            opportunity["messages"] = msgs
+            
+            state["last_agent_msg_at"] = now_iso
+            state["mode"] = "convo"
+            opportunity["_kbb_state"] = state
+            return state, True
+
                 
     # If we were scheduled at the start of this run, reply immediately (no nudge/template).
     if scheduled_active_now and selected_inbound_id:
