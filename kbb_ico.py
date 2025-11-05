@@ -1341,7 +1341,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             send_opportunity_email_activity(
                 token, subscription_id, opp_id,
                 sender=rooftop_sender,
-                recipients=recipients,  if (email and not SAFE_MODE) else [TEST_TO],  # <-- keep same list name if you use 'recipients'
+                recipients=recipients,
                 carbon_copies=[],
                 subject=reply_subject,              # keep inbound thread subject
                 body_html=body_html,
