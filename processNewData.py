@@ -77,14 +77,26 @@ def is_active_opp(opportunity: dict) -> bool:
     # Fallback on status text
     return status in {"open", "active", "in progress"}
 
+def _get_lc(doc: dict, *keys):
+    """Return the first present key's value lowercased/stripped, else ''."""
+    for k in keys:
+        if k in doc and doc[k] is not None:
+            return str(doc[k]).strip().lower()
+    return ""
+
 def _is_kbb_ico_new_active(doc: dict) -> bool:
-    def _v(key):
-        return (str((doc.get(key) or "")).strip().lower())
+    source    = _get_lc(doc, "source")
+    status    = _get_lc(doc, "status")
+    substatus = _get_lc(doc, "subStatus", "substatus")  # ← read both
+    uptype    = _get_lc(doc, "upType", "uptype")        # ← read both
+    
+    print("KBB detect →", {"source": source, "status": status, "substatus": substatus, "uptype": uptype})
+
     return (
-        _v("source") == "kbb instant cash offer" and
-        _v("status") == "active" and
-        _v("substatus") == "new" and
-        _v("uptype") == "campaign"
+        source == "kbb instant cash offer" and
+        status == "active" and
+        substatus == "new" and
+        uptype == "campaign"
     )
 
 
