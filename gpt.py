@@ -455,15 +455,12 @@ def run_gpt(prompt: str,
     messages = system_msgs + [
         {"role": "user", "content": prompt}
     ]
-
-    # Single chat completion call with fallback logic
+    
     model_used, resp = chat_complete_with_fallback(messages, want_json=True, temperature=0.6)
-
     text = _safe_extract_text(resp)
     if not text:
         log.warning("OpenAI returned empty content (model=%s). Using fallback template.", model_used)
-
-    # --- Make sure we ALWAYS have subject/body ---
+    
     fallback_rooftop = rooftop_name or "Patterson Auto Group"
     default_subject = f"Your vehicle inquiry with {fallback_rooftop}"
     default_body_leadin = (
@@ -471,19 +468,18 @@ def run_gpt(prompt: str,
         "Thanks for your inquiry! I’m happy to help with details, availability, and next steps. "
         "Let me know any preferences on trim, color, or timing and I’ll get everything lined up."
     )
-
+    
     reply = _ensure_reply_dict(text, default_subject, default_body_leadin)
-
     if not reply or not reply.get("body"):
         log.warning("Model text (truncated): %r", (text or '')[:120])
-
+    
     # --- Rooftop substitutions ---
     if rooftop_name:
         if reply.get("subject"):
             reply["subject"] = reply["subject"].replace("Patterson Auto Group", rooftop_name)
         if reply.get("body"):
             reply["body"] = reply["body"].replace("Patterson Auto Group", rooftop_name)
-
+    
     # --- First-name personalization ---
     if customer_name and reply.get("body"):
         reply["body"] = (
@@ -491,42 +487,34 @@ def run_gpt(prompt: str,
             .replace("[Guest's Name]", customer_name)
             .replace("[Guest’s Name]", customer_name)
         )
-        
-        # --- Append dynamic schedule link + closing signature ---
-        if rooftop_name:
-            body = (reply.get("body") or "")
-        
-            # Remove stray/duplicate schedule lines and raw tokens the model might have added
-            body = re.sub(r"(?im)^\s*schedule appointment\s*$", "", body)
-            body = re.sub(r"(?i)<\{LegacySalesApptSchLink\}>", "", body)
-            # If you still want to suppress duplicate 'looking forward...' sentences, keep the next line.
-            # It removes extra "Looking forward to ..." lines but leaves other closers intact.
-            if persona != "kbb_ico":
-                body = re.sub(r"(?im)^\s*looking forward to[^\n]*\n?", "", body)
-        
-            # ✅ Your exact sentence (token renders as the 'Schedule Appointment' link text)
-            schedule_sentence = (
-                "Please let us know a convenient time for you, or you can instantly reserve your time here: "
-                "<{LegacySalesApptSchLink}>"
-            )
-        
-            signature_lines = ["", "Patti", rooftop_name]
-            if rooftop_addr:
-                signature_lines.append(rooftop_addr)
-        
-            reply["body"] = (
-                body.rstrip()
-                + "\n\n"
-                + schedule_sentence
-                + "\n\n"
-                + "\n".join(signature_lines)
-            )
-        
-        reply['messages'] = messages
-
-        log.debug("OpenAI model_used=%s, chars=%d", model_used, len(text or ""))
     
+    # --- Append dynamic schedule link + closing signature (skip for KBB persona) ---
+    if rooftop_name and persona != "kbb_ico":
+        body = (reply.get("body") or "")
+        body = re.sub(r"(?im)^\s*schedule appointment\s*$", "", body)
+        body = re.sub(r"(?i)<\{LegacySalesApptSchLink\}>", "", body)
+        body = re.sub(r"(?im)^\s*looking forward to[^\n]*\n?", "", body)
+    
+        schedule_sentence = (
+            "Please let us know a convenient time for you, or you can instantly reserve your time here: "
+            "<{LegacySalesApptSchLink}>"
+        )
+        signature_lines = ["", "Patti", rooftop_name]
+        if rooftop_addr:
+            signature_lines.append(rooftop_addr)
+    
+        reply["body"] = (
+            body.rstrip()
+            + "\n\n"
+            + schedule_sentence
+            + "\n\n"
+            + "\n".join(signature_lines)
+        )
+    
+    reply["messages"] = messages
+    log.debug("OpenAI model_used=%s, chars=%d", model_used, len(text or ""))
     return reply
+
 
 
 # those for first inquery if exist
