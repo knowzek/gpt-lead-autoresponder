@@ -77,12 +77,34 @@ def is_active_opp(opportunity: dict) -> bool:
     # Fallback on status text
     return status in {"open", "active", "in progress"}
 
-def _get_lc(doc: dict, *keys):
-    """Return the first present key's value lowercased/stripped, else ''."""
+
+def _lc(x):
+    return str(x).strip().lower() if x is not None else ""
+
+def _first_present_lc(doc, *keys):
     for k in keys:
-        if k in doc and doc[k] is not None:
-            return str(doc[k]).strip().lower()
+        if doc and k in doc and doc[k] is not None:
+            return _lc(doc[k])
     return ""
+
+def _kbb_flags_from(opportunity_doc: dict, fresh_opp: dict | None) -> dict:
+    # prefer fresh_opp fields, fall back to opportunity doc
+    src  = _first_present_lc(fresh_opp, "source")    or _first_present_lc(opportunity_doc, "source")
+    st   = _first_present_lc(fresh_opp, "status")    or _first_present_lc(opportunity_doc, "status")
+    sub  = (_first_present_lc(fresh_opp, "subStatus", "substatus")
+            or _first_present_lc(opportunity_doc, "subStatus", "substatus"))
+    upt  = (_first_present_lc(fresh_opp, "upType", "uptype")
+            or _first_present_lc(opportunity_doc, "upType", "uptype"))
+    return {"source": src, "status": st, "substatus": sub, "uptype": upt}
+
+def _is_kbb_ico(doc_flags: dict) -> bool:
+    return (
+        doc_flags["source"] == "kbb instant cash offer" and
+        doc_flags["status"] == "active" and
+        doc_flags["substatus"] == "new" and
+        doc_flags["uptype"] == "campaign"
+    )
+
 
 def _is_kbb_ico_new_active(doc: dict) -> bool:
     source    = _get_lc(doc, "source")
@@ -423,7 +445,10 @@ def processHit(hit):
         return
 
     # === Persona routing: treat KBB ICO opps as KBB ICO (regardless of assignment) ===
-    if _is_kbb_ico_new_active(opportunity):
+    flags = _kbb_flags_from(opportunity, fresh_opp)
+    log.info("KBB detect → %s", flags)
+    
+    if _is_kbb_ico(flags):
         # Lead age (7-day window logic can use this inside kbb_ico)
         lead_age_days = 0
         created_raw = (
