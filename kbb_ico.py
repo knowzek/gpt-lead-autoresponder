@@ -156,7 +156,7 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
         return out
 
     
-    current_appt_ids = _appt_ids_from(acts_live)
+    current_appt_ids = _appt_ids_from(acts_lfive)
     
     prev_id  = (state or {}).get("last_appt_activity_id")
     prev_due = (state or {}).get("appt_due_utc")
@@ -278,6 +278,12 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
         log.warning("No recipient; skip send for opp=%s", opp_id)
         return (True, False)  # handled, but no send
 
+    # choose id safely (handles reschedule reconcile paths)
+    try:
+        chosen_appt_id = new_id if (("new_id" in locals()) and new_id) else appt_id
+    except NameError:
+        chosen_appt_id = appt_id
+
     # --- PERSIST FIRST so re-runs short-circuit even if send fails ---
     now_iso = _dt.now(_tz.utc).isoformat()
     state["mode"]                  = "scheduled"
@@ -288,6 +294,8 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
     state["last_agent_msg_at"]     = now_iso
     # (do NOT set last_confirm* until send succeeds)
     opportunity["_kbb_state"]      = state
+    
+    # Persist state to ES (pre-send) — MAKE THIS FAIL-HARD
     try:
         from esQuerys import esClient
         from es_resilient import es_update_with_retry
@@ -295,11 +303,17 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
             esClient,
             index="opportunities",
             id=opp_id,
-            doc={"_kbb_state": state},
+            doc={"_kbb_state": state}
         )
         log.info("Persisted _kbb_state to ES for opp=%s (pre-send confirm)", opp_id)
     except Exception as e:
-        log.warning("ES persist of _kbb_state failed (pre-send confirm): %s", e)
+        log.error(
+            "❌ Pre-send persist FAILED for opp=%s: %s — aborting confirmation send to avoid loops",
+            opp_id, e
+        )
+        # Do NOT send the email if we couldn't persist idempotency markers
+        return state, False
+
 
     # Flip CRM subStatus → Appointment Set (appointment exists regardless of email)
     try:
