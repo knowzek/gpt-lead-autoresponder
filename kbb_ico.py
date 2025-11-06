@@ -400,7 +400,7 @@ def _find_new_customer_scheduled_appt(acts_live, state, *, token=None, subscript
         for a in items or []:
             raw_name = a.get("activityName") or a.get("name")
             nm = str(raw_name).strip().lower() if raw_name is not None else ""
-            if "customer scheduled appointment" in name:
+            if ("customer scheduled appointment" in nm) or ("customer scheduled" in nm):
                 aid = str(a.get("activityId") or a.get("id") or "")
                 if aid and aid != last_seen:
                     due = a.get("dueDate") or a.get("completedDate") or a.get("activityDate")
