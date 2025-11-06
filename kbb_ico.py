@@ -143,9 +143,12 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
         return (False, False)
 
     # 2) Idempotency via ES: same appt we've already handled → skip resend (no mode flip)
-    st = (opportunity.get("_kbb_state") or {})
+    st = state or {}
+    new_due_norm = _norm_iso_utc(appt_due_iso)
+    
+    # strict match (id AND exact due) …
     already_done = (st.get("last_appt_activity_id") == appt_id) and \
-                   (st.get("appt_due_utc") == _norm_iso_utc(appt_due_iso))
+                   (st.get("appt_due_utc") == new_due_norm)
     if already_done:
         log.info("KBB ICO: appointment already acknowledged via ES (id=%s) → skip re-send", appt_id)
         return (True, False)
@@ -223,6 +226,13 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
     state["nudge_count"]           = 0
     state["last_agent_msg_at"]     = _dt.now(_tz.utc).isoformat()
     opportunity["_kbb_state"] = state
+
+    # persist to ES 
+    try:
+        from es_resilient import es_update_with_retry
+        es_update_with_retry(index="opportunities", id=opp_id, doc={"_kbb_state": state})
+    except Exception as e:
+        log.warning("ES persist of _kbb_state failed: %s", e)
 
     # Flip CRM subStatus → Appointment Set
     try:
@@ -681,8 +691,10 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     opp_id = opportunity.get("opportunityId") or opportunity.get("id")
     created_iso = opportunity.get("createdDate") or opportunity.get("created_on")
 
-    # Load state (from tagged comments) and normalize defaults
-    state = _load_state_from_comments(opportunity)
+    # ES-only state (no comments)
+    state = dict(opportunity.get("_kbb_state") or {})
+    opportunity["_kbb_state"] = state  # use the same dict everywhere
+
     state.setdefault("mode", "cadence")
     state.setdefault("last_template_day_sent", None)
     state.setdefault("last_template_sent_at", None)
