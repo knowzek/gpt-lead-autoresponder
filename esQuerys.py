@@ -57,37 +57,45 @@ def getNewDataByDate(date="2025-10-30"):
 
     query = {
         "bool": {
-            "should": [
-                {"range": {"updated_at": {"gte": f"{date}T00:00:00"}}},
-                {"range": {"created_at": {"gte": date, "format": "yyyy-MM-dd"}}},
-            ],
-            "minimum_should_match": 1,
-            "filter": [
+            "must": [
                 {"term": {"isActive": True}},
-
-                # ⬇️ Replaces the old nested(...) block
                 {
                     "bool": {
                         "should": [
-                            # match any of your emails on ANY object in salesTeam
-                            {"terms": {"salesTeam.email.keyword": salesperson_emails}},
-
-                            # OR (first AND last) — non-nested; acceptable for now
+                            {"range": {"updated_at": {"gte": f"{date}T00:00:00"}}},
+                            {"range": {"created_at": {"gte": date, "format": "yyyy-MM-dd"}}},
+                        ],
+                        "minimum_should_match": 1
+                    }
+                },
+                # 👇 Routing block: allow either Kristin assignment OR KBB ICO source
+                {
+                    "bool": {
+                        "should": [
+                            # Kristin by email(s)
+                            {"terms": {"salesTeam.email.keyword": [
+                                "knowzek@pattersonautos.com",
+                                "knowzek@gmail.com",
+                            ]}},
+                            # Kristin by first/last
                             {
                                 "bool": {
                                     "must": [
-                                        {"term": {"salesTeam.firstName.keyword": salesperson_first}},
-                                        {"term": {"salesTeam.lastName.keyword":  salesperson_last}},
+                                        {"term": {"salesTeam.firstName.keyword": "Kristin"}},
+                                        {"term": {"salesTeam.lastName.keyword":  "Nowzek"}},
                                     ]
                                 }
                             },
+                            # ✅ Exact KBB ICO source
+                            {"term": {"source.keyword": "KBB Instant Cash Offer"}},
                         ],
-                        "minimum_should_match": 1,
+                        "minimum_should_match": 1
                     }
-                },
-            ],
+                }
+            ]
         }
     }
+
 
     try:
         res = esClient.search(index=ELASTIC_INDEX, query=query, size=1000)
