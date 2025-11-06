@@ -545,7 +545,7 @@ def processHit(hit):
                     add_opportunity_comment(tok, subscription_id, opportunityId, note_txt)
     
         except Exception as e:
-            log.error("KBB ICO handler failed for opp %s: %s", opportunityId, e)
+            log.exception("KBB ICO handler failed for opp %s: %s", opportunityId, e)
     
         # Do not fall through to general flow
         wJson(opportunity, f"jsons/process/{opportunityId}.json")
