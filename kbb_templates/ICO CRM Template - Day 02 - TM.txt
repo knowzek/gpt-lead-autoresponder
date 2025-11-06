@@ -251,11 +251,11 @@ Following up on your Kelley Blue Book&#174; Instant Cash Offer. Ready to finaliz
 <h1 style="margin: 0 0 10px; font-size: 25px; line-height: 30px; color: #000000; font-weight: normal;">Your Instant Cash Offer Final Step...</h1>
 <p style="margin: 0 0 10px;">Hello <{CustFirstName}>,<br>
 <br>
-As a follow-up to yesterday's email, <{DealershipName}> is a Kelley Blue Book&#174; Instant Cash Offer Participating Dealer. This allows us to provide our customers a transparent and pressure-free experience to either trade-in or sell their vehicle. Our vehicle inspection is brief.
+As a follow-up to yesterday's email, <{DealershipName}> is a Kelley Blue Book&#174; Instant Cash Offer Participating Dealer. This allows us to provide our customers a transparent and pressure-free experience to either trade-in or sell their vehicle. 
 <br><br>
 You can anticipate maybe 15-20 minutes to confirm everything. After which, you can choose to either sell us your <{TradeModel}> for the finalized offer or apply it towards the purchase of another vehicle.
 <br><br>
-<strong>As I mentioned, it's important that we perform the vehicle inspection within the next 7 days (not including Sunday) to confirm all information.</strong> Is there a specific day and time that works best for you during that window?
+<strong>As I mentioned, it's important that we validate your offer within the next 7 days (not including Sunday) to confirm all information.</strong> Is there a specific day and time that works best for you during that window?
 <br><br>
 Thank you in advance for your reply,
 <br><br>
