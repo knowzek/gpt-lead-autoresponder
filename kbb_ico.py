@@ -838,7 +838,11 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     
     # keep a single shared dict reference everywhere
     opportunity["_kbb_state"] = state
-
+    
+    if state.get("email_blocked_do_not_email"):
+        log.info("Email blocked (DoNotEmail) → skipping all cadence emails for opp=%s", opp_id)
+        opportunity["_kbb_state"] = state
+        return state, False
 
     action_taken = False
     selected_inbound_id = None
@@ -1749,8 +1753,13 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         opportunity["_kbb_state"] = state
         return state, action_taken
 
-    # Rooftop info
+    # Define effective_day early (fix NameError)
+    effective_day = plan.get("day")
+    if effective_day is None:
+        # fallback to whatever you call it upstream
+        effective_day = template_day
 
+    # Rooftop info
     rooftop_addr = ((ROOFTOP_INFO.get(rooftop_name, {}) or {}).get("address") or "")
 
     # Salesperson (primary)
@@ -1803,17 +1812,72 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         email_addr = cust.get("emailAddress") or ""
     recipients = [email_addr] if (email_addr and not SAFE_MODE) else [TEST_TO]
 
-    send_opportunity_email_activity(
-        token, subscription_id, opp_id,
-        sender=rooftop_sender,
-        recipients=recipients, carbon_copies=[],
-        subject=subject, body_html=body_html, rooftop_name=rooftop_name
-    )
+    # Guard: no recipient → skip send cleanly
+    if not recipients or not recipients[0]:
+        log.warning("No recipient; skip cadence email for opp=%s", opp_id)
+        opportunity["_kbb_state"] = state
+        return state, action_taken
 
-    # Persist idempotency for cadence sends
+    # 1) Persist cadence step BEFORE send so we don’t re-send on next run
+    now_iso = _dt.now(_tz.utc).isoformat()
     state["last_template_day_sent"] = effective_day
-    state["last_template_sent_at"]  = _dt.now(_tz.utc).isoformat()
-    state["last_agent_msg_at"]      = _dt.now(_tz.utc).isoformat()
+    state["last_template_sent_at"]  = now_iso
+    opportunity["_kbb_state"] = state
+    try:
+        from esQuerys import esClient
+        from es_resilient import es_update_with_retry
+        es_update_with_retry(esClient, index="opportunities", id=opp_id, doc={"_kbb_state": state})
+        log.info("Persisted _kbb_state pre-template send for opp=%s (day=%s)", opp_id, effective_day)
+    except Exception as e:
+        log.warning("ES persist failed (pre-template send): %s", e)
+
+    # 2) Try to send, but swallow DoNotEmail so we don’t crash or loop
+    try:
+        send_opportunity_email_activity(
+            token, subscription_id, opp_id,
+            sender=rooftop_sender,
+            recipients=recipients, carbon_copies=[],
+            subject=subject, body_html=body_html, rooftop_name=rooftop_name
+        )
+        # success → update last_agent_msg_at
+        state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
+        opportunity["_kbb_state"] = state
+        try:
+            es_update_with_retry(esClient, index="opportunities", id=opp_id, doc={"_kbb_state": state})
+        except Exception:
+            pass
+
+    except Exception as e:
+        resp = getattr(e, "response", None)
+        body = ""
+        if resp is not None:
+            try:
+                body = resp.json()
+            except Exception:
+                body = resp.text
+        s = str(body)
+
+        if "SendEmailInvalidRecipient" in s and "DoNotEmail" in s:
+            log.warning("DoNotEmail → skipping cadence email for opp %s", opp_id)
+            state["email_blocked_do_not_email"] = True
+            opportunity["_kbb_state"] = state
+            try:
+                es_update_with_retry(esClient, index="opportunities", id=opp_id, doc={"_kbb_state": state})
+            except Exception:
+                pass
+            # Optional: note in CRM for human follow-up by phone/text
+            try:
+                from fortellis import add_opportunity_comment
+                add_opportunity_comment(
+                    token, subscription_id, opp_id,
+                    comment="Auto-email not sent: customer is marked DoNotEmail. Recommend phone/text follow-up."
+                )
+            except Exception as ee:
+                log.warning("Failed to add DoNotEmail comment: %s", ee)
+            # do not re-raise; proceed so we can create phone/text task below if enabled
+        else:
+            log.error("Cadence send failed for opp %s: %s", opp_id, e)
+            # state was persisted pre-send; do not re-raise to avoid loops
 
     # Phone/Text tasks (unchanged)
     if ALLOW_TEXTING and plan.get("create_text_task", False) and _customer_has_text_consent(opportunity):
@@ -1823,6 +1887,12 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             activity_name="KBB ICO: Text Task", activity_type=15,
             comments=f"Auto-scheduled per ICO Day {effective_day}."
         )
+
+    # Done with this cadence step
+    action_taken = True
+    opportunity["_kbb_state"] = state
+    return state, action_taken
+
     if plan.get("create_phone_task", True):
         schedule_activity(
             token, subscription_id, opp_id,
