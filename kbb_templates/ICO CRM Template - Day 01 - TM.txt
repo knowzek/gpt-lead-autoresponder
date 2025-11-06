@@ -223,7 +223,7 @@ To complete the Kelley Blue Book&#174; Instant Cash Offer for your <{TradeModel}
 <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="margin: auto;" class="email-container">
 <!-- Email Header : BEGIN -->
 <tr>
-  <td align="center" valign="top" style="background-color:#FFFFFF; padding:20px 0;">
+  <td align="center" valign="top" style="background-color:#FFFFFF; padding:0px 0;">
     <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
       <tr>
         <td align="center">
