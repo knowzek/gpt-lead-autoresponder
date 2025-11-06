@@ -245,6 +245,7 @@ def checkActivities(opportunity, currDate, rooftop_name):
 
                     try:
                         from fortellis import set_opportunity_inactive
+                   
                         set_opportunity_inactive(
                             token,
                             subscription_id,
@@ -408,25 +409,35 @@ def processHit(hit):
 
     customer_name = customer.get("firstName") or "there"
 
-    # getting primary sales person
-    salesTeam = opportunity.get('salesTeam', [])
+    # --- Getting primary salesperson (robust) ---
+    salesTeam = opportunity.get("salesTeam") or []
+    if not isinstance(salesTeam, list):
+        salesTeam = []
+    
     salesPersonObj = None
     for sales in salesTeam:
-        if not sales.get('isPrimary'):
+        if not isinstance(sales, dict):
             continue
-        salesPersonObj = sales
-        break
-
+        if str(sales.get("isPrimary")).lower() in ("true", "1", "yes"):
+            salesPersonObj = sales
+            break
+    
+    # fallback if nothing found
+    if not isinstance(salesPersonObj, dict):
+        log.warning("No valid primary salesperson found for opp_id=%s", opportunity.get("id"))
+        salesPersonObj = (salesTeam[0] if salesTeam and isinstance(salesTeam[0], dict) else {})
+    
     first_name = (salesPersonObj.get("firstName") or "").strip()
     last_name  = (salesPersonObj.get("lastName") or "").strip()
-    full_name  = (first_name + " " + last_name).strip()
-
+    full_name  = (f"{first_name} {last_name}").strip()
+    
     salesperson = (
         SALES_PERSON_MAP.get(first_name)
         or SALES_PERSON_MAP.get(full_name)
         or full_name
         or "our team"
     )
+
 
     source = opportunity.get("source", "")
     sub_source = opportunity.get("subSource", "")
