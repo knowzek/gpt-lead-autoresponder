@@ -65,8 +65,19 @@ def _kbb_flags_from(opportunity_doc: dict, fresh_opp: dict | None) -> dict:
             or _first_present_lc(opportunity_doc, "upType", "uptype"))
     return {"source": src, "status": st, "substatus": sub, "uptype": upt}
 
-def _is_exact_kbb_ico_flags(flags: dict) -> bool:
-    return (flags["source"] == "kbb instant cash offer")
+_KBB_SOURCES = {
+    "kbb instant cash offer",
+    "kbb servicedrive",
+    "kbb service drive",
+}
+
+def _is_exact_kbb_source(val) -> bool:
+    return (val or "").strip().lower() in _KBB_SOURCES
+
+def _is_exact_kbb_ico_flags(flags: dict | None, es_doc: dict | None = None) -> bool:
+    src_fortellis = ((flags or {}).get("source") or "").strip()
+    src_es        = ((es_doc or {}).get("source") or "").strip()
+    return _is_exact_kbb_source(src_fortellis) or _is_exact_kbb_source(src_es)
 
 
 STATE_KEYS = ("mode", "last_template_day_sent", "nudge_count",
@@ -454,28 +465,28 @@ def processHit(hit):
             })
         return
     
-    # === KBB routing  ===
+    # === KBB routing ===
     flags = _kbb_flags_from(opportunity, fresh_opp)
     log.info("KBB detect → %s", flags)
     
-    # Early eligibility gate: pass if Kristin-assigned OR exact KBB ICO
-    if not (_is_assigned_to_kristin(opportunity) or _is_exact_kbb_ico_flags(flags)):
-        log.info("Skip opp %s (neither Kristin-assigned nor exact KBB ICO)", opportunityId)
+    # Early eligibility gate: pass if Kristin-assigned OR exact KBB (ICO/ServiceDrive)
+    if not (_is_assigned_to_kristin(opportunity) or _is_exact_kbb_ico_flags(flags, opportunity)):
+        log.info("Skip opp %s (neither Kristin-assigned nor exact KBB source)", opportunityId)
         return
     
-    # Persona routing for exact KBB
-    if _is_exact_kbb_ico_flags(flags):
+    # Persona routing for exact KBB (ICO/ServiceDrive)
+    if _is_exact_kbb_ico_flags(flags, opportunity):
         # Lead age (safe default)
         lead_age_days = 0
         created_raw = (
             opportunity.get("createdDate")
             or opportunity.get("created_at")
-            or (opportunity.get("firstActivity", {}) or {}).get("completedDate")
+            or (opportunity.get("firstActivity") or {}).get("completedDate")
         )
         try:
             if created_raw:
-                created_dt = datetime.fromisoformat(str(created_raw).replace("Z", "+00:00"))
-                lead_age_days = (datetime.now(timezone.utc) - created_dt).days
+                created_dt = _dt.fromisoformat(str(created_raw).replace("Z", "+00:00"))
+                lead_age_days = (_dt.now(_tz.utc) - created_dt).days
         except Exception:
             pass
     
