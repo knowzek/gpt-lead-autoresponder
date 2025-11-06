@@ -32,23 +32,39 @@ from html import unescape as _unesc
 
 def _list_scheduled_appts(acts_live) -> list[dict]:
     """
-    Return a flat list of scheduled 'Appointment' activities.
-    Handles dict- or list-shaped responses.
+    Return a flat list of *scheduled* Appointment activities from either a dict or a list.
+    We treat anything whose name contains 'appointment' (case-insensitive) or activityType==2
+    or activityType string equals 'appointment' as an appointment.
+    We skip items marked completed/cancelled.
     """
-    items = []
     if isinstance(acts_live, dict):
-        items = acts_live.get("scheduledActivities") or []
+        items = (acts_live.get("scheduledActivities")
+                 or acts_live.get("items")
+                 or acts_live.get("activities")
+                 or [])
     elif isinstance(acts_live, list):
         items = acts_live
     else:
         return []
+
     out = []
     for a in items:
         nm = (a.get("activityName") or a.get("name") or "").strip().lower()
-        at = str(a.get("activityType") or "").strip()
-        if (nm == "appointment") or (at == "2") or (at == 2) or ("customer scheduled appointment" in nm):
+        at = (a.get("activityType") or "")
+        at_str = str(at).strip().lower()
+
+        # Treat these as "not scheduled"
+        cat   = (a.get("category") or "").strip().lower()     # often "Completed" for done items
+        stat  = (a.get("status")   or "").strip().lower()
+        done  = (cat == "completed") or ("complete" in cat) or ("cancel" in stat)
+
+        is_appt_name = ("appointment" in nm)  # <— catches "kbb ico appointment", "customer scheduled appointment", etc.
+        is_appt_type = (at == 2) or (at_str == "2") or (at_str == "appointment")
+
+        if (is_appt_name or is_appt_type) and not done:
             out.append(a)
     return out
+
 
 def _cancel_other_appointments(token, subscription_id, acts_live, keep_id: str, opp_id: str):
     """
@@ -448,46 +464,74 @@ def _has_upcoming_appt(acts_live: list[dict], state: dict) -> bool:
 def _find_new_customer_scheduled_appt(acts_live, state, *, token=None, subscription_id=None,
                                       opp_id=None, customer_id=None):
     """
-    Return (activity_id, due_iso) for a new 'Customer Scheduled Appointment'.
-    Falls back to fetching activity-history directly if the provided object
-    doesn't expose the scheduled bucket.
+    Return (activity_id, due_iso) for a *new* scheduled appointment we haven't handled.
+    Prefers items with a future dueDate; falls back to the latest dueDate otherwise.
     """
     last_seen = (state or {}).get("last_appt_activity_id")
+    now_utc = _dt.now(_tz.utc)
 
-    def _scan(items):
+    def _best(items):
+        candidates = []
         for a in items or []:
-            name = (a.get("activityName") or a.get("name") or "").strip().lower()
-            if "customer scheduled appointment" in name:
-                aid = str(a.get("activityId") or a.get("id") or "")
-                if aid and aid != last_seen:
-                    due = a.get("dueDate") or a.get("completedDate") or a.get("activityDate")
-                    return aid, due
-        return None, None
+            aid = str(a.get("activityId") or a.get("id") or "").strip()
+            if not aid or (last_seen and aid == last_seen):
+                continue
 
-    # 1) If dict with scheduledActivities
+            nm = (a.get("activityName") or a.get("name") or "").strip().lower()
+            at = (a.get("activityType") or "")
+            at_str = str(at).strip().lower()
+
+            # same permissive detection as _list_scheduled_appts
+            is_appt = ("appointment" in nm) or (at == 2) or (at_str in ("2", "appointment"))
+            if not is_appt:
+                continue
+
+            due = (a.get("dueDate") or a.get("completedDate") or a.get("activityDate"))
+            try:
+                due_dt = _dt.fromisoformat(str(due).replace("Z", "+00:00"))
+            except Exception:
+                due_dt = None
+
+            # Skip obviously completed/cancelled
+            cat  = (a.get("category") or "").strip().lower()
+            stat = (a.get("status") or "").strip().lower()
+            if (cat == "completed") or ("complete" in cat) or ("cancel" in stat):
+                continue
+
+            # Prefer future; keep a tuple for sorting
+            is_future = (due_dt is not None and due_dt > now_utc)
+            candidates.append((is_future, (due_dt or now_utc), aid, due))
+
+        if not candidates:
+            return None, None
+
+        # Sort: future first (True > False), then newest due_dt
+        candidates.sort(key=lambda t: (t[0], t[1]), reverse=True)
+        _, _, aid, due = candidates[0]
+        return aid, due
+
+    # 1) Try what we already have
     if isinstance(acts_live, dict):
-        appt_id, due = _scan(acts_live.get("scheduledActivities") or [])
+        appt_id, due = _best(acts_live.get("scheduledActivities") or acts_live.get("items") or [])
         if appt_id:
             return appt_id, due
-
-    # 2) If list (flat), just scan it
     if isinstance(acts_live, list):
-        appt_id, due = _scan(acts_live)
+        appt_id, due = _best(acts_live)
         if appt_id:
             return appt_id, due
 
-    # 3) Fallback: pull a fresh activity-history so we can see scheduledActivities for sure
+    # 2) Fallback: live activity-history call
     try:
-        from fortellis import get_activity_history_v1  # you'll add this small wrapper if not present
-        fresh = get_activity_history_v1(token, subscription_id, opp_id, customer_id)
-        appt_id, due = _scan((fresh or {}).get("scheduledActivities") or [])
+        from fortellis import get_activity_history_v1
+        fresh = get_activity_history_v1(token, subscription_id, opp_id, customer_id) or {}
+        items = (fresh.get("scheduledActivities") or fresh.get("items") or [])
+        appt_id, due = _best(items)
         if appt_id:
             return appt_id, due
     except Exception as e:
         log.warning("KBB ICO: fallback activity-history fetch failed: %s", e)
 
     return None, None
-
 
 
 
