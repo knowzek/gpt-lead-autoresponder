@@ -142,14 +142,19 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
     def _appt_ids_from(acts):
         out = set()
         for a in (acts or []):
-            t = (a.get("activityType") or a.get("type") or "").strip()
-            n = (a.get("activityName") or a.get("name") or "").strip().lower()
-            # tighten if you need: require both name+type to match your "Customer Scheduled Appointment"
-            if "appointment" in t.lower() or "appointment" in n:
+            raw_type = a.get("activityType", a.get("type"))
+            raw_name = a.get("activityName", a.get("name"))
+    
+            t = str(raw_type).strip().lower() if raw_type is not None else ""
+            n = str(raw_name).strip().lower() if raw_name is not None else ""
+    
+            # match either the type *name* you might see OR the label text
+            if ("appointment" in t) or ("appointment" in n):
                 aid = a.get("activityId") or a.get("id")
                 if aid:
                     out.add(str(aid))
         return out
+
     
     current_appt_ids = _appt_ids_from(acts_live)
     
@@ -354,9 +359,10 @@ def _has_upcoming_appt(acts_live: list[dict], state: dict) -> bool:
 
     # A) Use live activities (most reliable)
     for a in acts_live or []:
-        nm = (a.get("activityName") or a.get("name") or "").strip().lower()
-        t  = str(a.get("activityType") or "").strip()
-        cat = (a.get("category") or "").strip().lower()
+        raw_name = a.get("activityName") or a.get("name")
+        nm = str(raw_name).strip().lower() if raw_name is not None else ""
+        t = str(a.get("activityType") or a.get("type") or "").strip().lower()
+        cat = str(a.get("category") or "").strip().lower()
         due = a.get("dueDate") or a.get("completedDate") or a.get("activityDate")
         try:
             due_dt = _dt.fromisoformat(str(due).replace("Z", "+00:00"))
@@ -392,7 +398,8 @@ def _find_new_customer_scheduled_appt(acts_live, state, *, token=None, subscript
 
     def _scan(items):
         for a in items or []:
-            name = (a.get("activityName") or a.get("name") or "").strip().lower()
+            raw_name = a.get("activityName") or a.get("name")
+            nm = str(raw_name).strip().lower() if raw_name is not None else ""
             if "customer scheduled appointment" in name:
                 aid = str(a.get("activityId") or a.get("id") or "")
                 if aid and aid != last_seen:
@@ -1152,15 +1159,21 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             send_opportunity_email_activity(
                 token, subscription_id, opp_id,
                 sender=rooftop_sender,
-                recipients=receptors, carbon_copies=[],
+                recipients=recipients, carbon_copies=[],
                 subject=subject, body_html=body_html, rooftop_name=rooftop_name
             )
         
             # --- Persist scheduled state so future runs short-circuit ---
             now_iso = _dt.now(_tz.utc).isoformat()
-            # if you captured a new_id from _find_new_customer_scheduled_appt above, prefer it
-            state["last_appt_activity_id"]  = state.get("last_appt_activity_id") or new_id or appt_id
+            # Prefer a freshly discovered appointment id if you captured it above
+            # new_id may be defined earlier when you refetched acts; guard it:
+            try:
+                chosen_appt_id = new_id if new_id else appt_id
+            except NameError:
+                chosen_appt_id = appt_id
+        
             state["mode"]                   = "scheduled"
+            state["last_appt_activity_id"]  = chosen_appt_id
             state["appt_due_utc"]           = due_dt_iso_utc
             state["appt_due_local"]         = appt_human
             state["last_confirmed_due_utc"] = due_dt_iso_utc
@@ -1194,6 +1207,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 log.warning("set_opportunity_substatus failed: %s", e)
         
             return state, action_taken
+
 
 
         # ---------- NORMAL GPT CONVO ----------
