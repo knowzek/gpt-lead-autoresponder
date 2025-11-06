@@ -145,8 +145,16 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
     # 2) Idempotency via ES: same appt we've already handled → skip resend (no mode flip)
     st = state or {}
     new_due_norm = _norm_iso_utc(appt_due_iso)
-    
-    # strict match (id AND exact due) …
+
+    # 🧠 Add this debug log BEFORE the skip logic
+    log.info(
+        "Idempotency check → prev_id=%r prev_due=%r :: new_id=%r new_due=%r",
+        st.get("last_appt_activity_id"),
+        st.get("appt_due_utc"),
+        appt_id,
+        new_due_norm,
+    )
+
     already_done = (st.get("last_appt_activity_id") == appt_id) and \
                    (st.get("appt_due_utc") == new_due_norm)
     if already_done:
