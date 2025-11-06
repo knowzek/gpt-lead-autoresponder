@@ -1294,6 +1294,8 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     except Exception as e:
                         log.warning("Reschedule follow-up handling failed: %s", e)
                     # === RESCHEDULE HANDLING AFTER PATTI-CREATED APPOINTMENT (END) ===
+                except Exception as e:
+                    log.warning("KBB ICO: failed to auto-schedule proposed time: %s", e)
 
         # === COMPOSE + SEND ================================================
         cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
