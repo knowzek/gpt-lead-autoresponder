@@ -27,6 +27,9 @@ from fortellis import (
     get_activities
 )
 
+def _is_exact_kbb_ico(src: str | None) -> bool:
+    return (str(src or "").strip().lower() == "kbb instant cash offer")
+
 def _is_kbb_ico_new_active(doc: dict) -> bool:
     """True if this opp matches KBB ICO: Source=KBB Instant Cash Offer, Status=Active, SubStatus=New, upType=Campaign."""
     def _v(key):
@@ -151,13 +154,13 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
     
     for op in opp_items:
         up_type = (op.get("upType") or "").lower()
-        is_kbb = _is_kbb_ico_new_active(op)
-        
-        # Keep your normal upType gate for non-KBB, but allow KBB ICO through even if ELIGIBLE_UPTYPES is stricter
+        is_kbb = _is_exact_kbb_ico(op.get("source"))   # ← exact match only
+    
+        # Keep normal upType gate for non-KBB; allow KBB ICO through regardless
         if (not is_kbb) and (up_type not in ELIGIBLE_UPTYPES):
             continue
-        
-        # Previously we only processed Kristin-assigned opps; now also allow KBB ICO new/active/campaign opps
+    
+        # Previously only Kristin-assigned; now also allow exact KBB ICO
         if (not _is_assigned_to_kristin_doc(op)) and (not is_kbb):
             continue
     
@@ -166,27 +169,51 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
         if not opp_id:
             continue
     
-        # build base doc (ISO timestamps)
-        curr_iso = _dt.now(_tz.utc).isoformat()
+        # base doc
+        now_iso = datetime.now(_tz.utc).isoformat()
         customerID = (op.get("customer") or {}).get("id")
-        customerData = (op.get("customer") or {}) or {}
     
-        docToIndex = {
-            "_subscription_id": subscription_id,
-            "id": opp_id,
-            "opportunityId": opp_id,
-            "links": op.get("links", []),
-            "source": op.get("source"),
-            "upType": op.get("upType"),
-            "soughtVehicles": op.get("soughtVehicles"),
-            "salesTeam": op.get("salesTeam"),
-            "tradeIns": op.get("tradeIns"),
-            "createdBy": op.get("createdBy"),
-            "customer": customerData,
-            "updated_at": curr_iso,
-            "createdDate": (op.get("createdDate") or op.get("created_on")),
-            "updatedDate": op.get("updatedDate"),
-        }
+        # ensure we have a dict to populate
+        docToIndex = {}
+
+        docToIndex["opportunityId"] = opp_id
+        docToIndex["id"] = opp_id                     # keep both, your processor checks either
+        docToIndex["source"] = op.get("source")       # <-- REQUIRED for KBB routing flags
+        docToIndex["_subscription_id"] = subscription_id  # used later when fetching activities, etc.
+    
+        # always present for processor
+        docToIndex.setdefault("messages", [])
+        docToIndex.setdefault("checkedDict", {
+            "patti_already_contacted": False,
+            "last_msg_by": None,
+            "is_sales_contacted": False
+        })
+        docToIndex.setdefault("isActive", True)
+        docToIndex.setdefault("status", op.get("status") or "Active")
+        docToIndex.setdefault("subStatus", op.get("subStatus") or "New")
+        docToIndex.setdefault("substatus", docToIndex["subStatus"])  # alias
+        docToIndex.setdefault("upType", op.get("upType"))
+        docToIndex.setdefault("uptype", op.get("upType"))            # alias
+        docToIndex["updated_at"] = now_iso
+        docToIndex.setdefault("created_at", now_iso)
+    
+        # KBB: exact match only
+        if is_kbb:
+            docToIndex["followUP_date"] = now_iso  # due now (so Day 0 runs)
+            docToIndex.setdefault("_kbb_state", {
+                "mode": "cadence",
+                "last_template_day_sent": None,
+                "last_template_sent_at": None,
+                "last_customer_msg_at": None,
+                "last_agent_msg_at": None,
+                "nudge_count": 0,
+                "last_inbound_activity_id": None,
+                "last_appt_activity_id": None,
+                "appt_due_utc": None,
+                "appt_due_local": None
+            })
+        else:
+            docToIndex["followUP_date"] = (datetime.now(_tz.utc) + timedelta(days=1)).isoformat()
     
         # Single, safe upsert (no HEAD)
         resp = es_upsert_with_retry(
@@ -212,30 +239,25 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
                 log.warning("get_activities failed opp_id=%s err=%s", opp_id, e)
     
             init_doc = {
-                "customer": docToIndex["customer"],
+                "customer": docToIndex.get("customer"),
                 "completedActivities": completedActivities,
-                "scheduledActivities": [],            # seed empty if you don’t have these yet
+                "scheduledActivities": [],
                 "messages": [],
                 "alreadyProcessedActivities": {},
                 "checkedDict": {
                     "is_sales_contacted": False,
                     "patti_already_contacted": False,
-                    "last_msg_by": None,
-                },
-                "isActive": True,
-                "followUP_count": 0,
-                "followUP_date": (_dt.now(_tz.utc) + _td(days=1)).isoformat(),
-                "created_at": curr_iso,               # keep ISO, not datetime object
-                "updated_at": _dt.now(_tz.utc).isoformat(),
+                    "last_msg_by": None
+                }
             }
-            es_upsert_with_retry(esClient, index="opportunities", id=opp_id, document=init_doc)
+            es_upsert_with_retry(  # ← write the init fields too
+                esClient, index="opportunities", id=opp_id, document=init_doc
+            )
     
         # keep what we’re sending for logging/return
         items.append(docToIndex)
 
-
         # exit()
-
     
     eligible_count = len(items)
     
