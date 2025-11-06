@@ -227,15 +227,20 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
     state["last_agent_msg_at"]     = _dt.now(_tz.utc).isoformat()
     opportunity["_kbb_state"] = state
 
-    # persist to ES so the very next run sees the scheduled state
+    # --- persist to ES so next poll sees 'scheduled' and skips re-send ---
     try:
-        from es_resilient import es_upsert_with_retry, es_update_with_retry
-        # whichever helper you actually have—prefer an upsert/update that does partial doc update
-        es_update_with_retry(index="opportunities", id=opp_id, doc={"_kbb_state": state})
-        # optionally force a refresh during debugging:
-        # es_update_with_retry(index="opportunities", id=opp_id, doc={"_kbb_state": state}, refresh=True)
+        from esQuerys import esClient                   # <-- ES client
+        from es_resilient import es_update_with_retry   # <-- wrapper requires 'es' first
+        es_update_with_retry(
+            esClient,
+            index="opportunities",
+            id=opp_id,
+            doc={"_kbb_state": state}                   # partial update
+        )
+        log.info("Persisted _kbb_state to ES for opp=%s", opp_id)
     except Exception as e:
-        log.warning("ES persist of _kbb_state failed: %s", e)
+        log.warning("ES persist of _kbb_state failed (post-confirm): %s", e)
+
 
     # Flip CRM subStatus → Appointment Set
     try:
@@ -1090,6 +1095,20 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
             #_save_state_comment(token, subscription_id, opp_id, state)
             action_taken = True
+
+        try:
+            from esQuerys import esClient
+            from es_resilient import es_update_with_retry
+            es_update_with_retry(
+                esClient,
+                index="opportunities",
+                id=opp_id,
+                doc={"_kbb_state": state}
+            )
+            log.info("Persisted _kbb_state to ES for opp=%s (auto-schedule confirm)", opp_id)
+        except Exception as e:
+            log.warning("ES persist of _kbb_state failed (auto-schedule): %s", e)
+
 
             # Flip CRM subStatus → Appointment Set
             try:
