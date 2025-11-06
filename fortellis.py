@@ -32,7 +32,26 @@ def _log_txn_compact(level, *, method, url, headers, status, duration_ms, reques
         msg += f" note={note}"
     log.log(level, msg)
 
-import uuid
+def cancel_activity(token: str, dealer_key: str, activity_id: str, reason: str | None = None):
+    """
+    Sets an existing activity's status to Cancelled.
+    """
+    url = f"https://api.fortellis.io/cdk/sales/elead/v1/activities/{activity_id}"
+    payload = {
+        "status": "Cancelled"
+    }
+    if reason:
+        payload["comments"] = (reason[:900] + "…") if len(reason or "") > 900 else reason
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Subscription-Id": dealer_key,
+        "Content-Type": "application/json"
+    }
+    resp = requests.patch(url, json=payload, headers=headers, timeout=20)
+    resp.raise_for_status()
+    return resp
+
 
 def _headers_get(subscription_id: str, token: str) -> dict:
     return {
