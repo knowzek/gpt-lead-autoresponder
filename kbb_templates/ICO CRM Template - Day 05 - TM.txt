@@ -223,11 +223,25 @@ Following up on your Kelley Blue Book&#174; Instant Cash Offer. Ready to finaliz
 <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="margin: auto;" class="email-container">
 <!-- Email Header : BEGIN -->
 <tr>
-<td style="background-color: #FFFFFF; padding: 20px 0; text-align: center">
-<a href="https://www.kbb.com/instant-cash-offer/W/54278195/43A6F9B8-DB6C-48C0-A360-F658B2176E3E/" target="blank"><img src="https://kbbico.info/wp/wp-content/email/dealer/tustinmazdacom.png" max-width="100%" max-height="100%" alt="Tustin Mazda" border="0" style="height: auto; background: #; font-family: sans-serif; font-size: 15px; line-height: 15px; color: #555555;"></a>
-</td>
+  <td align="center" valign="top" style="background-color:#FFFFFF; padding:0px 0;">
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+      <tr>
+        <td align="center">
+          <a href="https://www.kbb.com/instant-cash-offer/W/54278195/43A6F9B8-DB6C-48C0-A360-F658B2176E3E/" target="_blank" style="text-decoration:none;">
+            <img src="https://www.pattersonautos.com/blogs/7684/wp-content/uploads/2025/11/image.png"
+                 width="300"
+                 border="0"
+                 alt="Tustin Mazda"
+                 style="display:block; margin:0 auto; height:auto; max-width:100%;">
+          </a>
+        </td>
+      </tr>
+    </table>
+  </td>
 </tr>
 <!-- Email Header : END -->
+
+
 
 
 <!-- 1 Column Text + Button : BEGIN -->
@@ -247,11 +261,53 @@ And again, we do these all the time. It should be very quick and easy for you. I
 <br><br>
 Thank you in advance for your reply,
 <br><br>
-<{SalesPersonName:S}><br>
-<{DealershipName}><br>
-<{SalespersonPhone:S}><br>
-<{SalespersonEmailAddress:S}><br>
-<{DealershipAddress}><br></p>
+<!-- Patti signature (hard-coded, 600px, fully linked) -->
+<table role="presentation" width="600" border="0" cellspacing="0" cellpadding="0" align="center" style="margin-top:18px;">
+  <tr>
+    <!-- LEFT: logo, clickable -->
+    <td class="stack-column" width="280" valign="top" align="left" style="padding-right:16px;">
+      <a href="https://www.tustinmazda.com" target="_blank" style="text-decoration:none;">
+        <img src="https://www.pattersonautos.com/blogs/7684/wp-content/uploads/2025/11/image.png"
+             alt="Patterson Autos • Your KBB Buying Center"
+             width="280" border="0" style="display:block; height:auto;">
+      </a>
+    </td>
+
+    <!-- RIGHT: contact details -->
+    <td class="stack-column" width="304" valign="top" align="left" style="font-family:Arial, Helvetica, sans-serif; color:#222;">
+      <div style="font-size:13px; line-height:20px; font-weight:bold;">Patti</div>
+      <div style="font-size:12px; line-height:18px; color:#666; margin:2px 0 8px;">
+        Virtual Assistant at 
+        <a href="https://www.tustinmazda.com" target="_blank" style="color:#0066cc; text-decoration:none;">
+          Tustin Mazda
+        </a>
+      </div>
+
+      <div style="font-size:13px; line-height:20px;">
+        <div><strong>Email:</strong> <a href="mailto:patti@pattersonautos.com" style="color:#0066cc; text-decoration:none;">patti@pattersonautos.com</a></div>
+        <div><strong>Website:</strong> <a href="https://www.pattersonautos.com" style="color:#0066cc; text-decoration:none;">www.pattersonautos.com</a></div>
+      </div>
+
+      <div style="font-size:13px; line-height:20px; margin-top:10px; color:#333;">
+        <div>
+          <a href="https://www.tustinmazda.com" target="_blank" style="color:#0066cc; text-decoration:none; font-weight:bold;">
+            Tustin Mazda
+          </a>
+        </div>
+        <div>
+          <a href="https://www.google.com/maps?q=28+Auto+Center+Dr,+Tustin,+CA+92782"
+             target="_blank"
+             style="color:#0066cc; text-decoration:none;">
+             28 Auto Center Dr, Tustin, CA 92782
+          </a>
+        </div>
+      </div>
+    </td>
+  </tr>
+</table>
+<!-- /Patti signature -->
+
+</p>
 
 </td>
 </tr>
@@ -291,4 +347,5 @@ Thank you in advance for your reply,
 </center>
 </body>
 </html>
+
 
