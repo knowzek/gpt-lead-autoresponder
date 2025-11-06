@@ -318,12 +318,7 @@ def processHit(hit):
         opportunity : dict = hit['_source']
     except:
         opportunity : dict = hit
-        
-    # ✅ Process if assigned to Kristin OR matches KBB ICO (Active/New/Campaign)
-    if not (_is_assigned_to_kristin(opportunity) or _is_kbb_ico_new_active(opportunity)):
-        log.info("Skip opp %s (neither Kristin-assigned nor KBB ICO Active/New/Campaign)",
-                 opportunity.get('opportunityId'))
-        return
+    
 
     if not opportunity.get('isActive', True):
         print("pass...")
@@ -459,16 +454,16 @@ def processHit(hit):
             })
         return
     
-    # === KBB routing (REPLACE the old _is_kbb_ico(...) logic with this) ===
+    # === KBB routing  ===
     flags = _kbb_flags_from(opportunity, fresh_opp)
     log.info("KBB detect → %s", flags)
     
-    # Early eligibility gate: process only if Kristin-assigned OR exact KBB ICO
+    # Early eligibility gate: pass if Kristin-assigned OR exact KBB ICO
     if not (_is_assigned_to_kristin(opportunity) or _is_exact_kbb_ico_flags(flags)):
         log.info("Skip opp %s (neither Kristin-assigned nor exact KBB ICO)", opportunityId)
         return
     
-    # Persona routing: exact match only
+    # Persona routing for exact KBB
     if _is_exact_kbb_ico_flags(flags):
         # Lead age (safe default)
         lead_age_days = 0
