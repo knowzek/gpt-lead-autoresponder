@@ -478,7 +478,7 @@ def schedule_activity(
         "opportunityId": opportunity_id,
         "dueDate": due_dt_iso_utc,
         "activityName": activity_name,
-        "activityType": _coerce_activity_type(activity_type),
+        "activityType": "Appointment",
         "comments": comments or ""
     }
     return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
