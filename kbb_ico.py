@@ -1128,8 +1128,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 {add_to_cal_html}
                 <p>Please bring your title, ID, and keys. If you need to change your time, use this link: <{{LegacySalesApptSchLink}}></p>
             """.strip()
-
-
+        
             # Normalize + footer + subject guard (no extra CTA here)
             body_html = normalize_patti_body(body_html)
             body_html = _patch_address_placeholders(body_html, rooftop_name)
@@ -1137,7 +1136,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             body_html = body_html + build_patti_footer(rooftop_name)
             if not subject.lower().startswith("re:"):
                 subject = "Re: " + subject
-
+        
             # Resolve recipient
             cust = (opportunity.get("customer") or {})
             email = cust.get("emailAddress") or ((cust.get("emails") or [{}])[0].get("address"))
@@ -1148,47 +1147,54 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 log.warning("No recipient; skip send for opp=%s", opp_id)
                 opportunity["_kbb_state"] = state
                 return state, action_taken
-
+        
+            # Send the confirmation
             send_opportunity_email_activity(
                 token, subscription_id, opp_id,
                 sender=rooftop_sender,
-                recipients=recipients, carbon_copies=[],
+                recipients=receptors, carbon_copies=[],
                 subject=subject, body_html=body_html, rooftop_name=rooftop_name
             )
+        
+            # --- Persist scheduled state so future runs short-circuit ---
+            now_iso = _dt.now(_tz.utc).isoformat()
+            # if you captured a new_id from _find_new_customer_scheduled_appt above, prefer it
+            state["last_appt_activity_id"]  = state.get("last_appt_activity_id") or new_id or appt_id
+            state["mode"]                   = "scheduled"
+            state["appt_due_utc"]           = due_dt_iso_utc
+            state["appt_due_local"]         = appt_human
+            state["last_confirmed_due_utc"] = due_dt_iso_utc
+            state["last_confirm_sent_at"]   = now_iso
+            state["last_agent_msg_at"]      = now_iso
+            state["nudge_count"]            = 0
+            opportunity["_kbb_state"]       = state
+        
+            # ES persist
+            try:
+                from esQuerys import esClient
+                from es_resilient import es_update_with_retry
+                es_update_with_retry(
+                    esClient,
+                    index="opportunities",
+                    id=opp_id,
+                    doc={"_kbb_state": state}
+                )
+                log.info("Persisted _kbb_state to ES for opp=%s (auto-schedule confirm)", opp_id)
+            except Exception as e:
+                log.warning("ES persist of _kbb_state failed (auto-schedule): %s", e)
+        
+            action_taken = True
+        
+            # Flip CRM subStatus → Appointment Set
+            try:
+                from fortellis import set_opportunity_substatus
+                resp = set_opportunity_substatus(token, subscription_id, opp_id, sub_status="Appointment Set")
+                log.info("SubStatus update response: %s", getattr(resp, "status_code", "n/a"))
+            except Exception as e:
+                log.warning("set_opportunity_substatus failed: %s", e)
+        
+            return state, action_taken
 
-            # Persist scheduled state so future runs short-circuit
-            state["mode"] = "scheduled"
-            state["appt_due_utc"]   = due_dt_iso_utc
-            state["appt_due_local"] = appt_human
-            state["nudge_count"]    = 0
-            state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
-            state["last_confirmed_due_utc"] = due_dt_iso_utc   # NEW
-            state["last_confirm_sent_at"]   = now_iso          # NEW
-
-        try:
-            from esQuerys import esClient
-            from es_resilient import es_update_with_retry
-            es_update_with_retry(
-                esClient,
-                index="opportunities",
-                id=opp_id,
-                doc={"_kbb_state": state}
-            )
-            log.info("Persisted _kbb_state to ES for opp=%s (auto-schedule confirm)", opp_id)
-        except Exception as e:
-            log.warning("ES persist of _kbb_state failed (auto-schedule): %s", e)
-            
-        action_taken = True
-
-        # Flip CRM subStatus → Appointment Set
-        try:
-            from fortellis import set_opportunity_substatus
-            resp = set_opportunity_substatus(token, subscription_id, opp_id, sub_status="Appointment Set")
-            log.info("SubStatus update response: %s", getattr(resp, "status_code", "n/a"))
-        except Exception as e:
-            log.warning("set_opportunity_substatus failed: %s", e)
-        opportunity["_kbb_state"] = state
-        return state, action_taken
 
         # ---------- NORMAL GPT CONVO ----------
         else:
