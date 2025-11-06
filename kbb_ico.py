@@ -156,7 +156,7 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
         return out
 
     
-    current_appt_ids = _appt_ids_from(acts_lfive)
+    current_appt_ids = _appt_ids_from(acts_live)
     
     prev_id  = (state or {}).get("last_appt_activity_id")
     prev_due = (state or {}).get("appt_due_utc")
