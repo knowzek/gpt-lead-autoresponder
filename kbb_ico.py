@@ -66,7 +66,9 @@ def _cancel_other_appointments(token, subscription_id, acts_live, keep_id: str, 
         except Exception as e:
             log.warning("Cancel prior appointment failed id=%s: %s", aid, e)
 
-def _send_rescheduled_confirmation(opportunity, rooftop_name, appt_human, token, subscription_id, opp_id, SAFE_MODE, rooftop_sender):
+def _send_rescheduled_confirmation(opportunity, rooftop_name, appt_human,
+                                   token, subscription_id, opp_id, SAFE_MODE, rooftop_sender,
+                                   due_dt_iso_utc: str | None = None):
     """
     Sends the slightly modified 'rescheduled' confirmation email.
     """
@@ -74,9 +76,17 @@ def _send_rescheduled_confirmation(opportunity, rooftop_name, appt_human, token,
     from helpers import build_calendar_links
 
     rt = (ROOFTOP_INFO.get(rooftop_name) or {})
-    cust     = (opportunity.get("customer") or {})
+    cust = (opportunity.get("customer") or {})
     cust_first = (cust.get("firstName") or "there")
-    location  = rt.get("address") or rooftop_name
+    location = rt.get("address") or rooftop_name
+
+    # Build real calendar links if we have UTC, else safe dummies
+    if due_dt_iso_utc:
+        summary = f"{rooftop_name} – KBB Inspection"
+        description = "15–20 minute in-person inspection to finalize your Kelley Blue Book® Instant Cash Offer."
+        links = build_calendar_links(summary, description, location, due_dt_iso_utc, duration_min=30)
+    else:
+        links = {"google": "#", "outlook": "#", "yahoo": "#"}
 
     subject = f"Re: Appointment rescheduled for {appt_human}"
     body_html = f"""
@@ -110,6 +120,7 @@ def _send_rescheduled_confirmation(opportunity, rooftop_name, appt_human, token,
         subject=subject, body_html=body_html, rooftop_name=rooftop_name
     )
     return True
+
 
 
 def _patch_address_placeholders(html: str, rooftop_name: str) -> str:
@@ -272,7 +283,8 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
         try:
             sent = _send_rescheduled_confirmation(
                 opportunity, rooftop_name, appt_human,
-                token, subscription_id, opp_id, SAFE_MODE, rooftop_sender
+                token, subscription_id, opp_id, SAFE_MODE, rooftop_sender,
+                due_dt_iso_utc=due_dt_iso_utc
             )
             if sent:
                 # 3) Persist state like normal and exit early
@@ -937,6 +949,51 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 appt_human = str(appt_due_iso)
                 due_dt_iso_utc = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+            # === RESCHEDULE DETECT/CANCEL + RESCHEDULED CONFIRMATION (BEGIN) ===
+            prev_id = (state or {}).get("last_appt_activity_id")
+            is_reschedule = bool(prev_id) and (str(prev_id) != str(appt_id))
+
+            if is_reschedule:
+                try:
+                    _cancel_other_appointments(
+                        token, subscription_id,
+                        acts_live,
+                        keep_id=str(appt_id),
+                        opp_id=str(opp_id)
+                    )
+                    log.info("Reschedule (booking-link) detected (old=%s new=%s) — cancelled prior.", prev_id, appt_id)
+                except Exception as e:
+                    log.warning("Cancel prior appointment(s) failed: %s", e)
+
+                try:
+                    sent = _send_rescheduled_confirmation(
+                        opportunity, rooftop_name, appt_human,
+                        token, subscription_id, opp_id, SAFE_MODE, rooftop_sender,
+                        due_dt_iso_utc=due_dt_iso_utc
+                    )
+                    if sent:
+                        state["mode"]                  = "scheduled"
+                        state["last_appt_activity_id"] = str(appt_id)
+                        state["appt_due_utc"]          = due_dt_iso_utc
+                        state["appt_due_local"]        = appt_human
+                        state["nudge_count"]           = 0
+                        state["last_agent_msg_at"]     = _dt.now(_tz.utc).isoformat()
+                        opportunity["_kbb_state"]      = state
+
+                        # SubStatus consistency
+                        try:
+                            from fortellis import set_opportunity_substatus
+                            set_opportunity_substatus(token, subscription_id, opp_id, sub_status="Appointment Set")
+                        except Exception as e:
+                            log.warning("set_opportunity_substatus failed: %s", e)
+
+                        action_taken = True
+                        return state, action_taken  # don't send normal confirmation too
+                except Exception as e:
+                    log.warning("Rescheduled confirmation send failed (fallback to normal): %s", e)
+            # === RESCHEDULE DETECT/CANCEL + RESCHEDULED CONFIRMATION (END) ===
+
+
             # Compose a deterministic “thanks for booking” email (no GPT)
             cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
             subject = f"Re: Appointment confirmed for {appt_human}"
@@ -1212,7 +1269,8 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                             try:
                                 sent = _send_rescheduled_confirmation(
                                     opportunity, rooftop_name, appt_human,
-                                    token, subscription_id, opp_id, SAFE_MODE, rooftop_sender
+                                    token, subscription_id, opp_id, SAFE_MODE, rooftop_sender,
+                                    due_dt_iso_utc=due_dt_iso_utc
                                 )
                                 if sent:
                                     # 3) Persist + exit EARLY (skip normal confirmation)
