@@ -750,8 +750,8 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         token=token, subscription_id=subscription_id,
         rooftop_name=rooftop_name, SAFE_MODE=SAFE_MODE, rooftop_sender=rooftop_sender
     )
-    if handled:
-        action_taken = action_taken or did_send
+    if handled and did_send:
+        action_taken = True
         opportunity["_kbb_state"] = state
         return state, action_taken
 
