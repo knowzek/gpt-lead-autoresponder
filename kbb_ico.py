@@ -142,13 +142,13 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
     def _appt_ids_from(acts):
         out = set()
         for a in (acts or []):
-            raw_type = a.get("activityType", a.get("type"))
-            raw_name = a.get("activityName", a.get("name"))
+            raw_type = a.get("activityType") or a.get("type")
+            raw_name = a.get("activityName") or a.get("name")
     
             t = str(raw_type).strip().lower() if raw_type is not None else ""
             n = str(raw_name).strip().lower() if raw_name is not None else ""
     
-            # match either the type *name* you might see OR the label text
+            # Match either the type *name* or the activity label text
             if ("appointment" in t) or ("appointment" in n):
                 aid = a.get("activityId") or a.get("id")
                 if aid:
