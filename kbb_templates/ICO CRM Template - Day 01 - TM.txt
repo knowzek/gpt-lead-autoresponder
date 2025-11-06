@@ -248,7 +248,7 @@ To complete the Kelley Blue Book&#174; Instant Cash Offer for your <{TradeModel}
 <td style="background-color: #ffffff;">
 <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
 <tr>
-<td style="padding: 20px; font-family: sans-serif; font-size: 15px; line-height: 20px; color: #000000;">
+<td style="padding: 0px; font-family: sans-serif; font-size: 15px; line-height: 20px; color: #000000;">
 <h1 style="margin: 0 0 10px; font-size: 25px; line-height: 30px; color: #000000; font-weight: normal;">Your Instant Cash Offer Final Step...</h1>
 <p style="margin: 0 0 10px;">
   Hello <{CustFirstName}>,<br><br>
@@ -263,18 +263,20 @@ To complete the Kelley Blue Book&#174; Instant Cash Offer for your <{TradeModel}
 <p>Please let us know a convenient time for you, or you can instantly reserve your time here:</p>
 <p><{LegacySalesApptSchLink}></p>
 
-<!-- Patti signature (hard-coded) -->
-<table role="presentation" width="650" border="0" cellspacing="0" cellpadding="0" align="left" style="margin-top:18px;">
+<!-- Patti signature (hard-coded, 600px, with clickable logo + Google Maps link) -->
+<table role="presentation" width="600" border="0" cellspacing="0" cellpadding="0" align="center" style="margin-top:18px;">
   <tr>
-    <!-- LEFT: graphic -->
-    <td width="300" valign="top" align="left" style="padding-right:16px;">
-      <img src="https://www.pattersonautos.com/blogs/7684/wp-content/uploads/2025/11/image.png"
-           alt="Patterson Autos • Your KBB Buying Center"
-           width="300" border="0" style="display:block; height:auto;">
+    <!-- LEFT: logo, now clickable -->
+    <td class="stack-column" width="280" valign="top" align="left" style="padding-right:16px;">
+      <a href="https://www.tustinmazda.com" target="_blank" style="text-decoration:none;">
+        <img src="https://www.pattersonautos.com/blogs/7684/wp-content/uploads/2025/11/image.png"
+             alt="Patterson Autos • Your KBB Buying Center"
+             width="280" border="0" style="display:block; height:auto;">
+      </a>
     </td>
 
     <!-- RIGHT: contact details -->
-    <td width="350" valign="top" align="left" style="font-family:Arial, Helvetica, sans-serif; color:#222;">
+    <td class="stack-column" width="304" valign="top" align="left" style="font-family:Arial, Helvetica, sans-serif; color:#222;">
       <div style="font-size:13px; line-height:20px; font-weight:bold;">Patti</div>
       <div style="font-size:12px; line-height:18px; color:#666; margin:2px 0 8px;">
         Virtual Assistant at Tustin Mazda
@@ -282,17 +284,24 @@ To complete the Kelley Blue Book&#174; Instant Cash Offer for your <{TradeModel}
 
       <div style="font-size:13px; line-height:20px;">
         <div><strong>Email:</strong> <a href="mailto:patti@pattersonautos.com" style="color:#0066cc; text-decoration:none;">patti@pattersonautos.com</a></div>
-        <div><strong>Website:</strong> <a href="https://www.pattersonautos.com" style="color:#0066cc; text-decoration:none;">www.pattersonautos.com</a></div>
+        <div><strong>Website:</strong> <a href="https://www.tustinmazda.com" style="color:#0066cc; text-decoration:none;">www.tustinmazda.com</a></div>
       </div>
 
       <div style="font-size:13px; line-height:20px; margin-top:10px; color:#333;">
         <div>Tustin Mazda</div>
-        <div>28 Auto Center Dr, Tustin, CA 92782</div>
+        <div>
+          <a href="https://www.google.com/maps?q=28+Auto+Center+Dr,+Tustin,+CA+92782"
+             style="color:#0066cc; text-decoration:none;">
+             28 Auto Center Dr, Tustin, CA 92782
+          </a>
+        </div>
       </div>
     </td>
   </tr>
 </table>
 <!-- /Patti signature -->
+
+
 
 </td>
 </tr>
