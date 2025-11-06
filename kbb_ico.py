@@ -138,30 +138,84 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
         opp_id=opp_id, customer_id=customer_id
     )
 
+    # Build a quick index of current appointment activity ids returned by CRM
+    def _appt_ids_from(acts):
+        out = set()
+        for a in (acts or []):
+            t = (a.get("activityType") or a.get("type") or "").strip()
+            n = (a.get("activityName") or a.get("name") or "").strip().lower()
+            # tighten if you need: require both name+type to match your "Customer Scheduled Appointment"
+            if "appointment" in t.lower() or "appointment" in n:
+                aid = a.get("activityId") or a.get("id")
+                if aid:
+                    out.add(str(aid))
+        return out
+    
+    current_appt_ids = _appt_ids_from(acts_live)
+    
+    prev_id  = (state or {}).get("last_appt_activity_id")
+    prev_due = (state or {}).get("appt_due_utc")
+    
+    # If ES points to an appointment that no longer exists in CRM, reconcile silently.
+    if prev_id and prev_id not in current_appt_ids:
+        # If the due time matches the newly detected one, just update the id and skip send.
+        new_due_norm = _norm_iso_utc(appt_due_iso)
+        if prev_due and new_due_norm and prev_due == new_due_norm:
+            log.info("KBB ICO: reconciling stale ES appt id (%s → %s) for same due; no resend.",
+                     prev_id, appt_id)
+            state["last_appt_activity_id"] = appt_id
+            opportunity["_kbb_state"] = state
+            try:
+                from esQuerys import esClient
+                from es_resilient import es_update_with_retry
+                es_update_with_retry(esClient, index="opportunities", id=opp_id,
+                                     doc={"_kbb_state": state})
+            except Exception as e:
+                log.warning("ES persist of _kbb_state failed (reconcile): %s", e)
+            return (True, False)
+
+
     # 1) Nothing booked → no short-circuit and DO NOT touch state
     if not (appt_id and appt_due_iso):
         return (False, False)
 
-    # 2) Idempotency via ES: same appt we've already handled → skip resend (no mode flip)
     st = state or {}
     new_due_norm = _norm_iso_utc(appt_due_iso)
-
-    # 🧠 Add this debug log BEFORE the skip logic
+    
+    # Log for visibility
     log.info(
-        "Idempotency check → prev_id=%r prev_due=%r :: new_id=%r new_due=%r",
+        "Idempotency check → prev_id=%r prev_due=%r last_confirmed_due=%r :: new_id=%r new_due=%r",
         st.get("last_appt_activity_id"),
         st.get("appt_due_utc"),
+        st.get("last_confirmed_due_utc"),
         appt_id,
         new_due_norm,
     )
-
-    already_done = (st.get("last_appt_activity_id") == appt_id) and \
-                   (st.get("appt_due_utc") == new_due_norm)
+    
+    prev_id   = st.get("last_appt_activity_id")
+    prev_due  = st.get("appt_due_utc")
+    last_conf = st.get("last_confirmed_due_utc")
+    
+    same_id   = (prev_id and prev_id == appt_id)
+    same_due  = (prev_due and new_due_norm and prev_due == new_due_norm)
+    same_conf = (last_conf and new_due_norm and last_conf == new_due_norm)
+    
+    # small time jiggle tolerance
+    def _parse_utc(x):
+        try:
+            return _dt.fromisoformat(str(x).replace("Z","+00:00")).astimezone(_tz.utc)
+        except Exception:
+            return None
+    within_2m = False
+    pdt, ndt = _parse_utc(prev_due), _parse_utc(new_due_norm)
+    if pdt and ndt:
+        within_2m = abs((ndt - pdt).total_seconds()) <= 120
+    
+    already_done = same_id or same_due or same_conf or within_2m
     if already_done:
-        log.info("KBB ICO: appointment already acknowledged via ES (id=%s) → skip re-send", appt_id)
+        log.info("KBB ICO: already acknowledged (id or due matched; or last_confirmed_due matched) → skip resend")
         return (True, False)
 
-    log.info("KBB ICO: booked-appt NEW → id=%s due=%s", appt_id, appt_due_iso)
 
     # Format time
     try:
@@ -234,6 +288,10 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
     state["nudge_count"]           = 0
     state["last_agent_msg_at"]     = _dt.now(_tz.utc).isoformat()
     opportunity["_kbb_state"] = state
+    now_iso = _dt.now(_tz.utc).isoformat()
+    state["last_confirmed_due_utc"] = due_dt_iso_utc
+    state["last_confirm_sent_at"]   = now_iso
+    state["last_agent_msg_at"]      = now_iso
 
     # --- persist to ES so next poll sees 'scheduled' and skips re-send ---
     try:
@@ -720,9 +778,12 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     state.setdefault("last_appt_activity_id", None)
     state.setdefault("appt_due_utc", None)
     state.setdefault("appt_due_local", None)
+    state.setdefault("last_confirmed_due_utc", None)    # what we last confirmed to the customer
+    state.setdefault("last_confirm_sent_at", None)       # when we last sent a confirmation
     
     # keep a single shared dict reference everywhere
     opportunity["_kbb_state"] = state
+
 
     action_taken = False
     selected_inbound_id = None
@@ -1101,8 +1162,8 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             state["appt_due_local"] = appt_human
             state["nudge_count"]    = 0
             state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
-            #_save_state_comment(token, subscription_id, opp_id, state)
-            action_taken = True
+            state["last_confirmed_due_utc"] = due_dt_iso_utc   # NEW
+            state["last_confirm_sent_at"]   = now_iso          # NEW
 
         try:
             from esQuerys import esClient
@@ -1116,7 +1177,8 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             log.info("Persisted _kbb_state to ES for opp=%s (auto-schedule confirm)", opp_id)
         except Exception as e:
             log.warning("ES persist of _kbb_state failed (auto-schedule): %s", e)
-
+            
+        action_taken = True
 
             # Flip CRM subStatus → Appointment Set
             try:
