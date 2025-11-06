@@ -234,8 +234,6 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
 
     return (True, True)
 
-
-
 def _latest_read_email_id(acts: list[dict]) -> str | None:
     newest = None
     newest_dt = None
@@ -694,6 +692,10 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     state.setdefault("last_inbound_activity_id", None)
 
     action_taken = False
+    selected_inbound_id = None
+    reply_subject = "Re:"
+    from helpers import build_kbb_ctx
+    kbb_ctx = build_kbb_ctx(opportunity)
 
     # Before you compute mode/cadence, pull LIVE activities
     opp_id = opportunity.get("opportunityId") or opportunity.get("id")
@@ -748,8 +750,8 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         token=token, subscription_id=subscription_id,
         rooftop_name=rooftop_name, SAFE_MODE=SAFE_MODE, rooftop_sender=rooftop_sender
     )
-    if handled and did_send:
-        action_taken = True
+    if handled:
+        action_taken = action_taken or did_send
         opportunity["_kbb_state"] = state
         return state, action_taken
 
@@ -779,111 +781,6 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             opportunity["_kbb_state"] = state
             return state, action_taken
     # else: not scheduled and no upcoming appt → continue into normal detection/cadence logic
-
-
-
-    # === Detect customer-booked appointment via booking link (pre-convo) ===
-    appt_id, appt_due_iso = _find_new_customer_scheduled_appt(
-        acts_live, state,
-        token=token, subscription_id=subscription_id,
-        opp_id=opp_id, customer_id=customer_id
-    )
-    log.info("KBB ICO: booked-appt scan → id=%s due=%s", appt_id, appt_due_iso)
-    if appt_id and appt_due_iso:
-        try:
-            # Human time in local tz
-            try:
-                dt_local = _dt.fromisoformat(str(appt_due_iso).replace("Z", "+00:00"))
-            except Exception:
-                dt_local = None
-            if dt_local and dt_local.tzinfo:
-                appt_human = _fmt_local_human(dt_local, tz_name="America/Los_Angeles")
-                due_dt_iso_utc = dt_local.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-            else:
-                appt_human = str(appt_due_iso)
-                due_dt_iso_utc = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-            # Compose a deterministic “thanks for booking” email (no GPT)
-            cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
-            subject = f"Re: Appointment confirmed for {appt_human}"
-            
-            # Build Add-to-Calendar links (30-min default; adjust if needed)
-            rt = (ROOFTOP_INFO.get(rooftop_name) or {})
-            summary     = f"{rooftop_name} – KBB Inspection"
-            location    = rt.get("address") or rooftop_name
-            description = "15–20 minute in-person inspection to finalize your Kelley Blue Book® Instant Cash Offer."
-            links       = build_calendar_links(summary, description, location, due_dt_iso_utc, duration_min=30)
-            
-            add_to_cal_html = f"""
-              <p style="margin:16px 0 8px 0;">Add to calendar:</p>
-              <p>
-                <a href="{links['google']}">Google</a> &nbsp;|&nbsp;
-                <a href="{links['outlook']}">Outlook</a> &nbsp;|&nbsp;
-                <a href="{links['yahoo']}">Yahoo</a>
-              </p>
-            """.strip()
-            
-            body_html = f"""
-                <p>Hi {cust_first},</p>
-                <p>Thanks for booking — we’ll see you on <strong>{appt_human}</strong> at {rooftop_name}.</p>
-                {add_to_cal_html}
-                <p>Please bring your title, ID, and keys. If you need to change your time, use this link: <{{LegacySalesApptSchLink}}></p>
-            """.strip()
-
-            body_html = normalize_patti_body(body_html)
-            body_html = _patch_address_placeholders(body_html, rooftop_name)
-            body_html = _PREFS_RE.sub("", body_html).strip()
-            body_html = body_html + build_patti_footer(rooftop_name)
-            if not subject.lower().startswith("re:"):
-                subject = "Re: " + subject
-
-            # Resolve recipient
-            cust = (opportunity.get("customer") or {})
-            email = cust.get("emailAddress") or ((cust.get("emails") or [{}])[0].get("address"))
-            if not email:
-                email = (opportunity.get("_lead", {}) or {}).get("email_address")
-            recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
-            if not recipients:
-                log.warning("No recipient; skip send for opp=%s", opp_id)
-                opportunity["_kbb_state"] = state
-                return state, action_taken
-
-            send_opportunity_email_activity(
-                token, subscription_id, opp_id,
-                sender=rooftop_sender,
-                recipients=recipients, carbon_copies=[],
-                subject=subject, body_html=body_html, rooftop_name=rooftop_name
-            )
-
-            # Persist “scheduled” state so Patti stops nudges/templates
-            state["mode"] = "scheduled"
-            state["last_appt_activity_id"] = appt_id
-            state["appt_due_utc"] = due_dt_iso_utc
-            state["appt_due_local"] = appt_human
-            state["nudge_count"] = 0
-            state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
-            #_save_state_comment(token, subscription_id, opp_id, state)
-
-            # Flip CRM subStatus → Appointment Set
-            try:
-                from fortellis import set_opportunity_substatus
-                resp = set_opportunity_substatus(token, subscription_id, opp_id, sub_status="Appointment Set")
-                log.info("SubStatus update response: %s", getattr(resp, "status_code", "n/a"))
-            except Exception as e:
-                log.warning("set_opportunity_substatus failed: %s", e)
-            action_taken = True   
-            opportunity["_kbb_state"] = state
-            return state, action_taken  # stop here once we’ve handled the scheduled appointment
-
-        except Exception as e:
-            log.warning("Customer-booked appt handler failed: %s", e)
-            # fall through to normal flow if something goes wrong
-
-    # === If customer already declined earlier, stop everything ==============
-    if state.get("mode") == "closed_declined":
-        log.info("KBB ICO: declined → skip all outreach (opp=%s)", opp_id)
-        opportunity["_kbb_state"] = state
-        return state, action_taken
 
 
     ## NOTE: pass state into the detector so it can ignore already-seen inbounds
@@ -1038,6 +935,12 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     )
                     created_appt_ok = True
                     appt_human = _fmt_local_human(dt_local, tz_name="America/Los_Angeles")
+                    acts_after = _fetch_activities_live(opp_id, customer_id, token, subscription_id)
+                    new_id, _ = _find_new_customer_scheduled_appt(acts_after, state, token=token,
+                                                                  subscription_id=subscription_id,
+                                                                  opp_id=opp_id, customer_id=customer_id)
+                    if new_id:
+                        state["last_appt_activity_id"] = new_id
                 
                 except Exception as e:
                     log.warning("KBB ICO: failed to auto-schedule proposed time: %s", e)
