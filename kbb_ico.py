@@ -227,10 +227,13 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
     state["last_agent_msg_at"]     = _dt.now(_tz.utc).isoformat()
     opportunity["_kbb_state"] = state
 
-    # persist to ES 
+    # persist to ES so the very next run sees the scheduled state
     try:
-        from es_resilient import es_update_with_retry
+        from es_resilient import es_upsert_with_retry, es_update_with_retry
+        # whichever helper you actually have—prefer an upsert/update that does partial doc update
         es_update_with_retry(index="opportunities", id=opp_id, doc={"_kbb_state": state})
+        # optionally force a refresh during debugging:
+        # es_update_with_retry(index="opportunities", id=opp_id, doc={"_kbb_state": state}, refresh=True)
     except Exception as e:
         log.warning("ES persist of _kbb_state failed: %s", e)
 
@@ -693,8 +696,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
     # ES-only state (no comments)
     state = dict(opportunity.get("_kbb_state") or {})
-    opportunity["_kbb_state"] = state  # use the same dict everywhere
-
+    # normalize defaults without clobbering existing keys
     state.setdefault("mode", "cadence")
     state.setdefault("last_template_day_sent", None)
     state.setdefault("last_template_sent_at", None)
@@ -702,6 +704,12 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     state.setdefault("last_agent_msg_at", None)
     state.setdefault("nudge_count", 0)
     state.setdefault("last_inbound_activity_id", None)
+    state.setdefault("last_appt_activity_id", None)
+    state.setdefault("appt_due_utc", None)
+    state.setdefault("appt_due_local", None)
+    
+    # keep a single shared dict reference everywhere
+    opportunity["_kbb_state"] = state
 
     action_taken = False
     selected_inbound_id = None
