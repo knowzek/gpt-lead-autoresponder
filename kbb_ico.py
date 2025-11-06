@@ -278,42 +278,30 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
         log.warning("No recipient; skip send for opp=%s", opp_id)
         return (True, False)  # handled, but no send
 
-    send_opportunity_email_activity(
-        token, subscription_id, opp_id,
-        sender=rooftop_sender,
-        recipients=recipients, carbon_copies=[],
-        subject=subject, body_html=body_html, rooftop_name=rooftop_name
-    )
-
-    # Persist scheduled state so Patti stops nudges/templates
+    # --- PERSIST FIRST so re-runs short-circuit even if send fails ---
+    now_iso = _dt.now(_tz.utc).isoformat()
     state["mode"]                  = "scheduled"
     state["last_appt_activity_id"] = appt_id
     state["appt_due_utc"]          = due_dt_iso_utc
     state["appt_due_local"]        = appt_human
     state["nudge_count"]           = 0
-    state["last_agent_msg_at"]     = _dt.now(_tz.utc).isoformat()
-    opportunity["_kbb_state"] = state
-    now_iso = _dt.now(_tz.utc).isoformat()
-    state["last_confirmed_due_utc"] = due_dt_iso_utc
-    state["last_confirm_sent_at"]   = now_iso
-    state["last_agent_msg_at"]      = now_iso
-
-    # --- persist to ES so next poll sees 'scheduled' and skips re-send ---
+    state["last_agent_msg_at"]     = now_iso
+    # (do NOT set last_confirm* until send succeeds)
+    opportunity["_kbb_state"]      = state
     try:
-        from esQuerys import esClient                   # <-- ES client
-        from es_resilient import es_update_with_retry   # <-- wrapper requires 'es' first
+        from esQuerys import esClient
+        from es_resilient import es_update_with_retry
         es_update_with_retry(
             esClient,
             index="opportunities",
             id=opp_id,
-            doc={"_kbb_state": state}                   # partial update
+            doc={"_kbb_state": state},
         )
-        log.info("Persisted _kbb_state to ES for opp=%s", opp_id)
+        log.info("Persisted _kbb_state to ES for opp=%s (pre-send confirm)", opp_id)
     except Exception as e:
-        log.warning("ES persist of _kbb_state failed (post-confirm): %s", e)
+        log.warning("ES persist of _kbb_state failed (pre-send confirm): %s", e)
 
-
-    # Flip CRM subStatus → Appointment Set
+    # Flip CRM subStatus → Appointment Set (appointment exists regardless of email)
     try:
         from fortellis import set_opportunity_substatus
         resp = set_opportunity_substatus(token, subscription_id, opp_id, sub_status="Appointment Set")
@@ -321,7 +309,67 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
     except Exception as e:
         log.warning("set_opportunity_substatus failed: %s", e)
 
-    return (True, True)
+    # --- SEND with DoNotEmail handling ---
+    did_send = False
+    try:
+        send_opportunity_email_activity(
+            token, subscription_id, opp_id,
+            sender=rooftop_sender,
+            recipients=recipients,  
+            carbon_copies=[],
+            subject=subject, body_html=body_html, rooftop_name=rooftop_name
+        )
+        did_send = True
+        state["last_confirmed_due_utc"] = due_dt_iso_utc
+        state["last_confirm_sent_at"]   = _dt.now(_tz.utc).isoformat()
+        opportunity["_kbb_state"]       = state
+        try:
+            es_update_with_retry(
+                esClient,
+                index="opportunities",
+                id=opp_id,
+                doc={"_kbb_state": state},
+            )
+            log.info("Persisted _kbb_state to ES for opp=%s (post-send confirm)", opp_id)
+        except Exception as e:
+            log.warning("ES persist of _kbb_state failed (post-send confirm): %s", e)
+
+    except Exception as e:
+        # Detect Fortellis DoNotEmail 400 and swallow (state already persisted → no loop)
+        resp = getattr(e, "response", None)
+        body = ""
+        if resp is not None:
+            try:
+                body = resp.json()
+            except Exception:
+                body = resp.text
+        body_str = str(body)
+        if "SendEmailInvalidRecipient" in body_str and "DoNotEmail" in body_str:
+            log.warning("KBB ICO: DoNotEmail — skipping confirmation email for opp %s.", opp_id)
+            try:
+                from fortellis import add_opportunity_comment
+                add_opportunity_comment(
+                    token, subscription_id, opp_id,
+                    comment="Auto-confirmation not sent: customer marked DoNotEmail."
+                )
+            except Exception as ee:
+                log.warning("Failed to add DoNotEmail comment: %s", ee)
+        else:
+            log.error("Confirm send failed for opp %s: %s", opp_id, e)
+            state["last_confirm_error"] = body_str[:500]
+            state["last_confirm_attempt_at"] = _dt.now(_tz.utc).isoformat()
+            try:
+                es_update_with_retry(
+                    esClient,
+                    index="opportunities",
+                    id=opp_id,
+                    doc={"_kbb_state": state},
+                )
+            except Exception:
+                pass
+
+    return (True, did_send)
+
 
 def _latest_read_email_id(acts: list[dict]) -> str | None:
     newest = None
@@ -1154,35 +1202,24 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 log.warning("No recipient; skip send for opp=%s", opp_id)
                 opportunity["_kbb_state"] = state
                 return state, action_taken
-        
-            # Send the confirmation
-            send_opportunity_email_activity(
-                token, subscription_id, opp_id,
-                sender=rooftop_sender,
-                recipients=recipients, carbon_copies=[],
-                subject=subject, body_html=body_html, rooftop_name=rooftop_name
-            )
-        
-            # --- Persist scheduled state so future runs short-circuit ---
+
+            # --- PERSIST FIRST so re-runs short-circuit even if send fails ---
             now_iso = _dt.now(_tz.utc).isoformat()
-            # Prefer a freshly discovered appointment id if you captured it above
-            # new_id may be defined earlier when you refetched acts; guard it:
             try:
-                chosen_appt_id = new_id if new_id else appt_id
+                chosen_appt_id = new_id if (("new_id" in locals()) and new_id) else appt_id
             except NameError:
                 chosen_appt_id = appt_id
-        
-            state["mode"]                   = "scheduled"
-            state["last_appt_activity_id"]  = chosen_appt_id
-            state["appt_due_utc"]           = due_dt_iso_utc
-            state["appt_due_local"]         = appt_human
-            state["last_confirmed_due_utc"] = due_dt_iso_utc
-            state["last_confirm_sent_at"]   = now_iso
-            state["last_agent_msg_at"]      = now_iso
-            state["nudge_count"]            = 0
-            opportunity["_kbb_state"]       = state
-        
-            # ES persist
+
+            state["mode"]                  = "scheduled"
+            state["last_appt_activity_id"] = chosen_appt_id
+            state["appt_due_utc"]          = due_dt_iso_utc
+            state["appt_due_local"]        = appt_human
+            state["nudge_count"]           = 0
+            state["last_agent_msg_at"]     = now_iso
+            # (intentionally NOT setting last_confirm* yet — only after a successful send)
+            opportunity["_kbb_state"]      = state
+
+            # Persist state to ES (pre-send)
             try:
                 from esQuerys import esClient
                 from es_resilient import es_update_with_retry
@@ -1192,21 +1229,86 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     id=opp_id,
                     doc={"_kbb_state": state}
                 )
-                log.info("Persisted _kbb_state to ES for opp=%s (auto-schedule confirm)", opp_id)
+                log.info("Persisted _kbb_state to ES for opp=%s (pre-send confirm)", opp_id)
             except Exception as e:
-                log.warning("ES persist of _kbb_state failed (auto-schedule): %s", e)
-        
+                log.warning("ES persist of _kbb_state failed (pre-send confirm): %s", e)
+
+            # --- SEND with DoNotEmail handling ---
+            did_send = False
+            try:
+                send_opportunity_email_activity(
+                    token, subscription_id, opp_id,
+                    sender=rooftop_sender,
+                    recipients=recipients, carbon_copies=[],
+                    subject=subject, body_html=body_html, rooftop_name=rooftop_name
+                )
+                did_send = True
+
+                # Mark that we actually sent the confirmation
+                state["last_confirmed_due_utc"] = due_dt_iso_utc
+                state["last_confirm_sent_at"]   = _dt.now(_tz.utc).isoformat()
+                opportunity["_kbb_state"]       = state
+                try:
+                    es_update_with_retry(
+                        esClient,
+                        index="opportunities",
+                        id=opp_id,
+                        doc={"_kbb_state": state}
+                    )
+                    log.info("Persisted _kbb_state to ES for opp=%s (post-send confirm)", opp_id)
+                except Exception as e:
+                    log.warning("ES persist of _kbb_state failed (post-send confirm): %s", e)
+
+            except Exception as e:
+                # Detect Fortellis DoNotEmail 400 and swallow (we already persisted idempotency)
+                resp = getattr(e, "response", None)
+                body = ""
+                if resp is not None:
+                    try:
+                        body = resp.json()
+                    except Exception:
+                        body = resp.text
+                body_str = str(body)
+
+                if "SendEmailInvalidRecipient" in body_str and "DoNotEmail" in body_str:
+                    log.warning("KBB ICO: DoNotEmail — skipping confirmation email for opp %s.", opp_id)
+                    # Optional: add a CRM comment for human follow-up by phone/text
+                    try:
+                        from fortellis import add_opportunity_comment
+                        add_opportunity_comment(
+                            token, subscription_id, opp_id,
+                            comment="Auto-confirmation not sent: customer marked DoNotEmail."
+                        )
+                    except Exception as ee:
+                        log.warning("Failed to add DoNotEmail comment: %s", ee)
+                    # do not re-raise; state is already persisted → future runs will short-circuit
+                else:
+                    log.error("Confirm send failed for opp %s: %s", opp_id, e)
+                    state["last_confirm_error"] = (body_str[:500] if isinstance(body_str, str) else str(body)[:500])
+                    state["last_confirm_attempt_at"] = _dt.now(_tz.utc).isoformat()
+                    try:
+                        es_update_with_retry(
+                            esClient,
+                            index="opportunities",
+                            id=opp_id,
+                            doc={"_kbb_state": state}
+                        )
+                    except Exception:
+                        pass
+                    # do not re-raise: we still want to exit cleanly without retry loops
+
             action_taken = True
-        
-            # Flip CRM subStatus → Appointment Set
+
+            # Flip CRM subStatus → Appointment Set (even if email blocked, the appt exists)
             try:
                 from fortellis import set_opportunity_substatus
                 resp = set_opportunity_substatus(token, subscription_id, opp_id, sub_status="Appointment Set")
                 log.info("SubStatus update response: %s", getattr(resp, "status_code", "n/a"))
             except Exception as e:
                 log.warning("set_opportunity_substatus failed: %s", e)
-        
+
             return state, action_taken
+
 
 
 
