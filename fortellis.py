@@ -32,29 +32,51 @@ def _log_txn_compact(level, *, method, url, headers, status, duration_ms, reques
         msg += f" note={note}"
     log.log(level, msg)
 
+def _utc_now_iso():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
 def cancel_activity(token: str, dealer_key: str, activity_id: str, reason: str | None = None):
     """
-    Marks an activity as Cancelled and moves it out of Scheduled by setting category=Completed.
+    Move an activity out of Scheduled by marking it completed/cancelled.
+    Tries full payload first; falls back to minimal if tenant rejects extra fields.
     """
     import requests
 
     url = f"https://api.fortellis.io/cdk/sales/elead/v1/activities/{activity_id}"
-    payload = {
-        "category": "Completed",   # <-- this is the key to remove from Scheduled
-        "status": "Cancelled",
-        "outcome": "Cancelled",
-    }
-    if reason:
-        payload["comments"] = (reason[:900] + "…") if len(reason or "") > 900 else reason
-
     headers = {
         "Authorization": f"Bearer {token}",
         "Subscription-Id": dealer_key,
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
     }
-    resp = requests.patch(url, json=payload, headers=headers, timeout=20)
-    resp.raise_for_status()
-    return resp
+
+    base = {
+        "category": "Completed",           # <-- clears from Scheduled
+        "status": "Cancelled",
+        "outcome": "Cancelled",
+        "completedDate": _utc_now_iso(),   # <-- mirrors what you see in completed examples
+    }
+    if reason:
+        base["comments"] = (reason[:900] + "…") if len(reason) > 900 else reason
+
+    # First try: full payload
+    resp = requests.patch(url, json=base, headers=headers, timeout=20)
+    if resp.status_code < 400:
+        return resp
+
+    # Some orgs reject unknown/immutable fields. Fall back to minimal.
+    fallback = {
+        "category": "Completed",
+        "status": "Cancelled",
+        "completedDate": base["completedDate"],
+    }
+    if reason:
+        fallback["comments"] = base["comments"]
+
+    resp2 = requests.patch(url, json=fallback, headers=headers, timeout=20)
+    resp2.raise_for_status()
+    return resp2
+
 
 
 
