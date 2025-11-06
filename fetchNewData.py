@@ -27,8 +27,14 @@ from fortellis import (
     get_activities
 )
 
-def _is_exact_kbb_ico(src: str | None) -> bool:
-    return (str(src or "").strip().lower() == "kbb instant cash offer")
+# Accept both classic ICO and ServiceDrive variants
+_KBB_SOURCES = {
+    "kbb instant cash offer",
+    "kbb servicedrive",
+}
+
+def _is_exact_kbb_source(val) -> bool:
+    return (val or "").strip().lower() in _KBB_SOURCES
 
 def _is_kbb_ico_new_active(doc: dict) -> bool:
     """True if this opp matches KBB ICO: Source=KBB Instant Cash Offer, Status=Active, SubStatus=New, upType=Campaign."""
@@ -154,7 +160,7 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
     
     for op in opp_items:
         up_type = (op.get("upType") or "").lower()
-        is_kbb = _is_exact_kbb_ico(op.get("source"))   # ← exact match only
+        is_kbb = _is_exact_kbb_source(op.get("source"))
     
         # Keep normal upType gate for non-KBB; allow KBB ICO through regardless
         if (not is_kbb) and (up_type not in ELIGIBLE_UPTYPES):
