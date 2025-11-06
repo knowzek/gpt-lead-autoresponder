@@ -28,6 +28,90 @@ from html import unescape as _unesc
 
 #from rooftops import ROOFTOP_INFO as ROOFTOP_INFO
 
+# kbb_ico.py (new helpers)
+
+def _list_scheduled_appts(acts_live) -> list[dict]:
+    """
+    Return a flat list of scheduled 'Appointment' activities.
+    Handles dict- or list-shaped responses.
+    """
+    items = []
+    if isinstance(acts_live, dict):
+        items = acts_live.get("scheduledActivities") or []
+    elif isinstance(acts_live, list):
+        items = acts_live
+    else:
+        return []
+    out = []
+    for a in items:
+        nm = (a.get("activityName") or a.get("name") or "").strip().lower()
+        at = str(a.get("activityType") or "").strip()
+        if (nm == "appointment") or (at == "2") or (at == 2) or ("customer scheduled appointment" in nm):
+            out.append(a)
+    return out
+
+def _cancel_other_appointments(token, subscription_id, acts_live, keep_id: str, opp_id: str):
+    """
+    Cancel any *other* scheduled appointment on this opportunity except keep_id.
+    """
+    from fortellis import cancel_activity
+    for a in _list_scheduled_appts(acts_live):
+        aid = str(a.get("activityId") or a.get("id") or "")
+        if not aid or aid == keep_id:
+            continue
+        try:
+            reason = f"Superseded by a new appointment for opportunity {opp_id} — auto-cancel by Patti"
+            cancel_activity(token, subscription_id, aid, reason=reason)
+            log.info("Cancelled prior appointment id=%s (kept id=%s)", aid, keep_id)
+        except Exception as e:
+            log.warning("Cancel prior appointment failed id=%s: %s", aid, e)
+
+def _send_rescheduled_confirmation(opportunity, rooftop_name, appt_human, token, subscription_id, opp_id, SAFE_MODE, rooftop_sender):
+    """
+    Sends the slightly modified 'rescheduled' confirmation email.
+    """
+    from rooftops import ROOFTOP_INFO
+    from helpers import build_calendar_links
+
+    rt = (ROOFTOP_INFO.get(rooftop_name) or {})
+    cust     = (opportunity.get("customer") or {})
+    cust_first = (cust.get("firstName") or "there")
+    location  = rt.get("address") or rooftop_name
+
+    subject = f"Re: Appointment rescheduled for {appt_human}"
+    body_html = f"""
+        <p>Hi {cust_first},</p>
+        <p>Your appointment has been <strong>rescheduled</strong> for <strong>{appt_human}</strong> at {rooftop_name}.</p>
+        <p style="margin:16px 0 8px 0;">Add to calendar:</p>
+        <p>
+          <a href="{links['google']}">Google</a> &nbsp;|&nbsp;
+          <a href="{links['outlook']}">Outlook</a> &nbsp;|&nbsp;
+          <a href="{links['yahoo']}">Yahoo</a>
+        </p>
+        <p>Please bring your title, ID, and keys. If you need to change your time again, use this link: <{{LegacySalesApptSchLink}}></p>
+    """.strip()
+
+    body_html = normalize_patti_body(body_html)
+    body_html = _patch_address_placeholders(body_html, rooftop_name)
+    body_html = _PREFS_RE.sub("", body_html).strip()
+    body_html = body_html + build_patti_footer(rooftop_name)
+
+    email = cust.get("emailAddress") or ((cust.get("emails") or [{}])[0].get("address")) \
+            or (opportunity.get("_lead", {}) or {}).get("email_address")
+    recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
+    if not recipients:
+        log.warning("No recipient for rescheduled confirmation; opp=%s", opp_id)
+        return False
+
+    send_opportunity_email_activity(
+        token, subscription_id, opp_id,
+        sender=rooftop_sender,
+        recipients=recipients, carbon_copies=[],
+        subject=subject, body_html=body_html, rooftop_name=rooftop_name
+    )
+    return True
+
+
 def _patch_address_placeholders(html: str, rooftop_name: str) -> str:
     addr = ((ROOFTOP_INFO.get(rooftop_name) or {}).get("address") or "").strip()
     if not addr:
@@ -164,6 +248,56 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
     else:
         appt_human     = str(appt_due_iso)
         due_dt_iso_utc = _norm_iso_utc(appt_due_iso) or _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # === RESCHEDULE DETECT/CANCEL + RESCHEDULED CONFIRMATION (BEGIN) ===
+    # If this new appointment replaces a previous one, cancel the old and send the rescheduled copy.
+    prev_id = (state or {}).get("last_appt_activity_id")
+    is_reschedule = bool(prev_id) and (str(prev_id) != str(appt_id))
+
+    if is_reschedule:
+        # 1) Cancel any *other* scheduled appts (keep only this new one)
+        try:
+            _cancel_other_appointments(
+                token, subscription_id,
+                acts_live,
+                keep_id=str(appt_id),
+                opp_id=str(opp_id)
+            )
+            log.info("Reschedule detected (old=%s new=%s) — prior appointment(s) cancelled.",
+                     prev_id, appt_id)
+        except Exception as e:
+            log.warning("Reschedule cancel step failed: %s", e)
+
+        # 2) Send the *rescheduled* confirmation email (different copy)
+        try:
+            sent = _send_rescheduled_confirmation(
+                opportunity, rooftop_name, appt_human,
+                token, subscription_id, opp_id, SAFE_MODE, rooftop_sender
+            )
+            if sent:
+                # 3) Persist state like normal and exit early
+                state["mode"]                  = "scheduled"
+                state["last_appt_activity_id"] = str(appt_id)
+                state["appt_due_utc"]          = due_dt_iso_utc
+                state["appt_due_local"]        = appt_human
+                state["nudge_count"]           = 0
+                state["last_agent_msg_at"]     = _dt.now(_tz.utc).isoformat()
+                opportunity["_kbb_state"]      = state
+
+                # (optional) Flip substatus to "Appointment Set" for consistency
+                try:
+                    from fortellis import set_opportunity_substatus
+                    set_opportunity_substatus(token, subscription_id, opp_id, sub_status="Appointment Set")
+                except Exception as e:
+                    log.warning("set_opportunity_substatus failed: %s", e)
+
+                # IMPORTANT: Do not fall through to the normal confirmation.
+                return (True, True)
+        except Exception as e:
+            # If reschedule-send fails, we fall back to the normal confirmation below.
+            log.warning("Reschedule confirmation step failed (fallback to normal): %s", e)
+    # === RESCHEDULE DETECT/CANCEL + RESCHEDULED CONFIRMATION (END) ===
+    
 
     # Deterministic thanks email
     cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
@@ -1028,6 +1162,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                         due_dt_iso_utc = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
                         dt_local = _dt.fromisoformat(due_dt_iso_utc.replace("Z","+00:00")).astimezone(_tz.utc)
 
+
                     # Create the appointment activity
                     schedule_activity(
                         token, subscription_id, opp_id,
@@ -1038,10 +1173,69 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     )
                     created_appt_ok = True
                     appt_human = _fmt_local_human(dt_local, tz_name="America/Los_Angeles")
-                
-                except Exception as e:
-                    log.warning("KBB ICO: failed to auto-schedule proposed time: %s", e)
 
+                    # === RESCHEDULE HANDLING AFTER PATTI-CREATED APPOINTMENT (BEGIN) ===
+                    # We just created a NEW appointment via API (user asked to move time).
+                    # If an older appt exists in state, cancel it and send the "rescheduled" variant.
+                    try:
+                        customer_id = (opportunity.get("customer") or {}).get("id")
+                        try:
+                            acts_now = _fetch_activities_live(opp_id, customer_id, token, subscription_id)
+                        except Exception:
+                            acts_now = acts_live  # fallback
+
+                        # Find newest scheduled appt id to KEEP
+                        new_id, new_due_iso = _find_new_customer_scheduled_appt(
+                            acts_now, state,
+                            token=token, subscription_id=subscription_id,
+                            opp_id=opp_id, customer_id=customer_id
+                        )
+
+                        prev_id = (state or {}).get("last_appt_activity_id")
+                        is_reschedule = bool(prev_id) and new_id and (str(prev_id) != str(new_id))
+
+                        if is_reschedule:
+                            # 1) Cancel any *other* scheduled appts (keep the new one)
+                            try:
+                                _cancel_other_appointments(
+                                    token, subscription_id,
+                                    acts_now,
+                                    keep_id=str(new_id),
+                                    opp_id=str(opp_id)
+                                )
+                                log.info("Reschedule (Patti-created) detected (old=%s new=%s) — cancelled prior.",
+                                         prev_id, new_id)
+                            except Exception as e:
+                                log.warning("Cancel prior appointment(s) failed: %s", e)
+
+                            # 2) Send rescheduled confirmation (different copy)
+                            try:
+                                sent = _send_rescheduled_confirmation(
+                                    opportunity, rooftop_name, appt_human,
+                                    token, subscription_id, opp_id, SAFE_MODE, rooftop_sender
+                                )
+                                if sent:
+                                    # 3) Persist + exit EARLY (skip normal confirmation)
+                                    state["mode"]                  = "scheduled"
+                                    state["last_appt_activity_id"] = str(new_id)
+                                    state["appt_due_utc"]          = due_dt_iso_utc
+                                    state["appt_due_local"]        = appt_human
+                                    state["nudge_count"]           = 0
+                                    state["last_agent_msg_at"]     = _dt.now(_tz.utc).isoformat()
+                                    opportunity["_kbb_state"]      = state
+
+                                    try:
+                                        from fortellis import set_opportunity_substatus
+                                        set_opportunity_substatus(token, subscription_id, opp_id, sub_status="Appointment Set")
+                                    except Exception as e:
+                                        log.warning("set_opportunity_substatus failed: %s", e)
+
+                                    return state, True
+                            except Exception as e:
+                                log.warning("Rescheduled confirmation send failed; fallback to normal: %s", e)
+                    except Exception as e:
+                        log.warning("Reschedule follow-up handling failed: %s", e)
+                    # === RESCHEDULE HANDLING AFTER PATTI-CREATED APPOINTMENT (END) ===
 
         # === COMPOSE + SEND ================================================
         cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
