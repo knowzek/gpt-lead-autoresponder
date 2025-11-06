@@ -47,11 +47,27 @@ def is_exit_message(msg: str) -> bool:
     return any(k in msg_low for k in EXIT_KEYWORDS)
 
 
-# TODO:
-# add all actions to crm
-
 already_processed = get_names_in_dir("jsons/process")
 DEBUGMODE = os.getenv("DEBUGMODE", "1") == "1"
+
+def _lc(x): return str(x).strip().lower() if x is not None else ""
+def _first_present_lc(doc, *keys):
+    for k in keys:
+        if doc and k in doc and doc[k] is not None:
+            return _lc(doc[k])
+    return ""
+def _kbb_flags_from(opportunity_doc: dict, fresh_opp: dict | None) -> dict:
+    src  = _first_present_lc(fresh_opp, "source") or _first_present_lc(opportunity_doc, "source")
+    st   = _first_present_lc(fresh_opp, "status") or _first_present_lc(opportunity_doc, "status")
+    sub  = (_first_present_lc(fresh_opp, "subStatus", "substatus")
+            or _first_present_lc(opportunity_doc, "subStatus", "substatus"))
+    upt  = (_first_present_lc(fresh_opp, "upType", "uptype")
+            or _first_present_lc(opportunity_doc, "upType", "uptype"))
+    return {"source": src, "status": st, "substatus": sub, "uptype": upt}
+
+def _is_exact_kbb_ico_flags(flags: dict) -> bool:
+    return (flags["source"] == "kbb instant cash offer")
+
 
 STATE_KEYS = ("mode", "last_template_day_sent", "nudge_count",
               "last_customer_msg_at", "last_agent_msg_at")
@@ -422,38 +438,43 @@ def processHit(hit):
     )
     
     # 🔒 Fresh active-check from Fortellis (ES can be stale)
+
     try:
         tok_for_check = get_token(subscription_id) if not OFFLINE_MODE else None
         fresh_opp = get_opportunity(opportunityId, tok_for_check, subscription_id) if not OFFLINE_MODE else opportunity
     except Exception as e:
-        # If we can’t fetch the opp, skip gracefully and don’t risk writes
         log.warning("Skipping opp %s (get_opportunity failed): %s", opportunityId, str(e)[:200])
-        # Optional: mark in ES so we don’t keep retrying
         if not OFFLINE_MODE:
             es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc={
                 "patti": {"skip": True, "skip_reason": "get_opportunity_failed"}
             })
         return
-
+    
+    # keep this — we still skip inactive opps
     if not is_active_opp(fresh_opp):
         log.info("Skipping opp %s (inactive from Fortellis).", opportunityId)
-        # Mark in ES so future runs don’t retry
         if not OFFLINE_MODE:
             es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc={
                 "patti": {"skip": True, "skip_reason": "inactive_opportunity"}
             })
         return
-
-    # === Persona routing: treat KBB ICO opps as KBB ICO (regardless of assignment) ===
+    
+    # === KBB routing (REPLACE the old _is_kbb_ico(...) logic with this) ===
     flags = _kbb_flags_from(opportunity, fresh_opp)
     log.info("KBB detect → %s", flags)
     
-    if _is_kbb_ico(flags):
-        # Lead age (7-day window logic can use this inside kbb_ico)
+    # Early eligibility gate: process only if Kristin-assigned OR exact KBB ICO
+    if not (_is_assigned_to_kristin(opportunity) or _is_exact_kbb_ico_flags(flags)):
+        log.info("Skip opp %s (neither Kristin-assigned nor exact KBB ICO)", opportunityId)
+        return
+    
+    # Persona routing: exact match only
+    if _is_exact_kbb_ico_flags(flags):
+        # Lead age (safe default)
         lead_age_days = 0
         created_raw = (
             opportunity.get("createdDate")
-            or opportunity.get("created_at")               # ES-stamped when ingested
+            or opportunity.get("created_at")
             or (opportunity.get("firstActivity", {}) or {}).get("completedDate")
         )
         try:
@@ -462,22 +483,16 @@ def processHit(hit):
                 lead_age_days = (datetime.now(timezone.utc) - created_dt).days
         except Exception:
             pass
-
-        # For logs/visibility
-        src_join = f"{source} {sub_source}".strip().lower()
-        log.info("Persona route: mode=%s lead_age_days=%s src=%s",
-                 "kbb_ico", lead_age_days, (src_join[:120] if src_join else "<none>"))
-
+    
         # Try to surface any inquiry text we may already have; safe default to ""
         inquiry_text_safe = (opportunity.get("inquiry_text_body") or "").strip()
-
+    
         # Hand off to the KBB ICO flow (templates + stop-on-reply convo)
         try:
             tok = None
             if not OFFLINE_MODE:
                 tok = get_token(subscription_id)
-
-            # === persona logic ===
+    
             state, action_taken = process_kbb_ico_lead(
                 opportunity=opportunity,
                 lead_age_days=lead_age_days,
@@ -488,20 +503,13 @@ def processHit(hit):
                 SAFE_MODE=os.getenv("SAFE_MODE", "1") in ("1","true","True"),
                 rooftop_sender=rooftop_sender,
             )
-
-            # === 2b: only log a Note if we acted or the state changed ===
-            meta = opportunity.get("_patti_meta") or {}
-            prev_sig = meta.get("last_state_sig")
-
-            new_sig = _state_signature(state)  # uses your helper above
-
-            def _cooldown_ok(m: dict, seconds=1*60):
-                last_ts = m.get("last_note_epoch")
-                now = int(time.time())
-                return not last_ts or (now - int(last_ts)) >= seconds
-            
-            # Write exactly one state note per action
-            if action_taken and _cooldown_ok(meta):
+    
+            # Persist updates
+            if not OFFLINE_MODE:
+                es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+    
+            # Optional: write compact state note if we acted
+            if action_taken:
                 compact = {
                     "mode": state.get("mode"),
                     "last_template_day_sent": state.get("last_template_day_sent"),
@@ -514,22 +522,18 @@ def processHit(hit):
                     "appt_due_local": state.get("appt_due_local"),
                 }
                 note_txt = f"[PATTI_KBB_STATE] {json.dumps(compact, separators=(',',':'))}"
-            
                 if not OFFLINE_MODE:
                     add_opportunity_comment(tok, subscription_id, opportunityId, note_txt)
-            
-                meta.update({"last_note_epoch": int(time.time()), "last_state_sig": "acted"})
-                opportunity["_patti_meta"] = meta
-
+    
         except Exception as e:
             log.error("KBB ICO handler failed for opp %s: %s", opportunityId, e)
-
-
-        # Persist any updates (messages/state) and exit this hit
-        if not OFFLINE_MODE:
-            es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+    
+        # Do not fall through to general flow
         wJson(opportunity, f"jsons/process/{opportunityId}.json")
         return
+    
+    # === if we got here, proceed with your normal (non-KBB) flow ===
+
     # ===========================================================================
 
 
