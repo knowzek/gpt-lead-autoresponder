@@ -306,7 +306,7 @@ font-size: 17px !important;
 </table>
 <!-- /Patti signature -->
 
-
+</p>
 </td>
 </tr>
 </table>
