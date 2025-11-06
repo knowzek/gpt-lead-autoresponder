@@ -202,6 +202,8 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
         docToIndex.setdefault("uptype", op.get("upType"))            # alias
         docToIndex["updated_at"] = now_iso
         docToIndex.setdefault("created_at", now_iso)
+        docToIndex.setdefault("tradeIns", op.get("tradeIns") or [])
+        docToIndex.setdefault("salesTeam", op.get("salesTeam") or [])
     
         # KBB: exact match only
         if is_kbb:
