@@ -170,7 +170,7 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
             continue
     
         # base doc
-        now_iso = datetime.now(_tz.utc).isoformat()
+        now_iso = _dt.now(_tz.utc).isoformat()
         customerID = (op.get("customer") or {}).get("id")
     
         # ensure we have a dict to populate
@@ -213,7 +213,7 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
                 "appt_due_local": None
             })
         else:
-            docToIndex["followUP_date"] = (datetime.now(_tz.utc) + timedelta(days=1)).isoformat()
+            docToIndex["followUP_date"] = (_dt.now(_tz.utc) + _td(days=1)).isoformat()
     
         # Single, safe upsert (no HEAD)
         resp = es_upsert_with_retry(
