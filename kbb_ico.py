@@ -1180,15 +1180,15 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             
         action_taken = True
 
-            # Flip CRM subStatus → Appointment Set
-            try:
-                from fortellis import set_opportunity_substatus
-                resp = set_opportunity_substatus(token, subscription_id, opp_id, sub_status="Appointment Set")
-                log.info("SubStatus update response: %s", getattr(resp, "status_code", "n/a"))
-            except Exception as e:
-                log.warning("set_opportunity_substatus failed: %s", e)
-            opportunity["_kbb_state"] = state
-            return state, action_taken
+        # Flip CRM subStatus → Appointment Set
+        try:
+            from fortellis import set_opportunity_substatus
+            resp = set_opportunity_substatus(token, subscription_id, opp_id, sub_status="Appointment Set")
+            log.info("SubStatus update response: %s", getattr(resp, "status_code", "n/a"))
+        except Exception as e:
+            log.warning("set_opportunity_substatus failed: %s", e)
+        opportunity["_kbb_state"] = state
+        return state, action_taken
 
         # ---------- NORMAL GPT CONVO ----------
         else:
