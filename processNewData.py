@@ -17,6 +17,7 @@ import re
 import logging
 import hashlib, json, time
 from uuid import uuid4
+import uuid
 
 from fortellis import get_activities, get_token, get_activity_by_id_v1, get_opportunity
 from fortellis import get_activities, get_token, get_activity_by_id_v1, get_opportunity, add_opportunity_comment
@@ -25,7 +26,8 @@ from fortellis import get_activities, get_token, get_activity_by_id_v1, get_oppo
 #from fortellis import get_vehicle_inventory_xml  
 from inventory_matcher import recommend_from_xml
 
-from datetime import datetime, timedelta, timezone
+# from datetime import datetime, timedelta, timezone
+from datetime import datetime as _dt, timedelta as _td, timezone as _tz
 import os
 from dotenv import load_dotenv
 load_dotenv()
@@ -310,7 +312,7 @@ def checkActivities(opportunity, currDate, rooftop_name):
             # mark processed to avoid repeat handling
             opportunity.setdefault('alreadyProcessedActivities', {})[activityId] = fullAct
             
-            nextDate = currDate + timedelta(hours=24)   # or use a constant
+            nextDate = currDate + _td(hours=24)   # or use a constant
             opportunity['followUP_date'] = nextDate.isoformat()
             opportunity['followUP_count'] = 0
 
@@ -318,7 +320,7 @@ def checkActivities(opportunity, currDate, rooftop_name):
 
 
 def processHit(hit):
-    currDate = datetime.now()
+    currDate = _dt.now()
 
     # remove later
     global already_processed
@@ -377,7 +379,7 @@ def processHit(hit):
     if isinstance(activities, list):
         activities = {"scheduledActivities": [], "completedActivities": activities}
 
-    currDate = datetime.now()
+    currDate = _dt.now()
     docToUpdate = {
         "scheduledActivities": activities.get("scheduledActivities", []),
         "completedActivities": activities.get("completedActivities", []),
@@ -598,7 +600,7 @@ def processHit(hit):
                 firstActivityMessageBody = (msg.get("body") or newest.get("notes") or "").strip()
     
                 # Create an offline "full" act so the rest of the code can store it
-                import uuid, datetime as _dt
+                
                 firstActivityFull = {
                     "activityId": newest.get("activityId") or newest.get("id") or f"offline-{uuid.uuid4().hex[:8]}",
                     "completedDate": newest.get("completedDate") or _dt.datetime.utcnow().isoformat() + "Z",
@@ -836,7 +838,7 @@ def processHit(hit):
             ]
         opportunity['checkedDict']['patti_already_contacted'] = True
         opportunity['checkedDict']['last_msg_by'] = "patti"
-        nextDate = currDate + timedelta(hours=24)   # or use your cadence
+        nextDate = currDate + _td(hours=24)   # or use your cadence
         opportunity['followUP_date'] = nextDate.isoformat()
         opportunity['followUP_count'] = 0
         if not OFFLINE_MODE:
@@ -846,7 +848,7 @@ def processHit(hit):
         checkActivities(opportunity, currDate, rooftop_name)
 
     fud = opportunity.get('followUP_date')
-    followUP_date = datetime.fromisoformat(fud) if isinstance(fud, str) else (fud if isinstance(fud, datetime) else currDate)
+    followUP_date = _dt.fromisoformat(fud) if isinstance(fud, str) else (fud if isinstance(fud, _dt) else currDate)
     followUP_count = opportunity['followUP_count']
 
     last_by = (opportunity.get('checkedDict') or {}).get('last_msg_by', '')
@@ -891,7 +893,7 @@ def processHit(hit):
         # TODO: fix in which line
         opportunity['checkedDict']['last_msg_by'] = "patti"
 
-        nextDate = currDate + timedelta(days=1)
+        nextDate = currDate + _td(days=1)
         opportunity['followUP_date'] = nextDate.isoformat()
         opportunity['followUP_count'] += 1
         if not OFFLINE_MODE:
@@ -909,7 +911,7 @@ if __name__ == "__main__":
     if not OFFLINE_MODE:
         # Start date = now - LOOKBACK_DAYS (UTC), formatted YYYY-MM-DD
         
-        start_date = (datetime.now(timezone.utc) - timedelta(days=LOOKBACK_DAYS)).date().isoformat()
+        start_date = (_dt.now(_tz.utc) - _td(days=LOOKBACK_DAYS)).date().isoformat()
         log.info("ES lookback start_date=%s (last %s days)", start_date, LOOKBACK_DAYS)
 
         data = getNewDataByDate(start_date)
