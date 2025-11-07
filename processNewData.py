@@ -493,7 +493,7 @@ def processHit(hit):
         lead_age_days = 0
         created_raw = (
             opportunity.get("dateIn")  
-            opportunity.get("createdDate")
+            or opportunity.get("createdDate")
             or opportunity.get("created_at")
             or (opportunity.get("firstActivity") or {}).get("completedDate")
         )
