@@ -911,6 +911,20 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 pass
             break
 
+    # --- DEBUG: state after merge + last send times ---
+    try:
+        log.info(
+            "KBB day debug A → opp=%s mode=%s last_day=%s last_sent=%s last_agent=%s",
+            opp_id,
+            state.get("mode"),
+            state.get("last_template_day_sent"),
+            state.get("last_template_sent_at"),
+            state.get("last_agent_msg_at"),
+        )
+    except Exception as _e:
+        log.warning("KBB day debug A failed: %s", _e)
+    # --- /DEBUG --
+
     # 🔁 HYDRATE last send time from live activities (BEFORE day math / duplicate guard)
     if not state.get("last_template_sent_at"):
         def _is_completed_send(act):
@@ -1760,6 +1774,18 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     state["mode"] = "cadence"
     #_save_state_comment(token, subscription_id, opp_id, state)
 
+    # --- DEBUG: inputs to day-pick ---
+    try:
+        log.info(
+            "KBB day debug B → opp=%s created_iso=%r lead_age_days(param)=%s",
+            opp_id,
+            created_iso,
+            lead_age_days,
+        )
+    except Exception as _e:
+        log.warning("KBB day debug B failed: %s", _e)
+    # --- /DEBUG ---
+
     # Offer-window override (if expired, jump to Day 08/09 track)
     expired = _ico_offer_expired(created_iso, exclude_sunday=True)
     effective_day = max(1, (lead_age_days or 0) + 1)
@@ -1775,6 +1801,19 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         log.info("KBB ICO: skipping Day %s (already sent)", effective_day)
         opportunity["_kbb_state"] = state
         return state, action_taken
+
+    
+    # --- DEBUG: result of day-pick & duplicate check ---
+    try:
+        log.info(
+            "KBB day debug C → opp=%s effective_day=%s skipping_dup=%s",
+            opp_id,
+            effective_day,
+            state.get("last_template_day_sent") == effective_day
+        )
+    except Exception as _e:
+        log.warning("KBB day debug C failed: %s", _e)
+    # --- /DEBUG ---
 
     # Subject/template selection zone (keep this early)
     tpl_key = plan.get("email_template_day")
