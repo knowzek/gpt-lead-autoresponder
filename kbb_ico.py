@@ -911,6 +911,23 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 pass
             break
 
+    # 🔁 HYDRATE last send time from live activities (BEFORE day math / duplicate guard)
+    if not state.get("last_template_sent_at"):
+        def _is_completed_send(act):
+            name = (act.get("activityName") or act.get("name") or "")
+            cat  = (act.get("category") or "").strip()
+            return name.startswith("Fortellis - Send Email") and cat == "Completed"
+
+        sent = [a for a in (acts_live or []) if _is_completed_send(a)]
+        if sent:
+            last_sent = max(sent, key=lambda x: x.get("completedDate") or "")
+            # ensure at least Day 1 is recorded; don't downgrade if already >1
+            state["last_template_day_sent"] = max(1, (state.get("last_template_day_sent") or 0))
+            state["last_template_sent_at"]  = last_sent.get("completedDate")
+            # keep agent timestamp aligned if missing
+            state.setdefault("last_agent_msg_at", last_sent.get("completedDate"))
+
+
     # ✅ Always short-circuit if a new customer-booked appointment exists
     handled, did_send = _short_circuit_if_booked(
         opportunity, acts_live, state,
