@@ -431,7 +431,7 @@ def _has_upcoming_appt(acts_live: list[dict], state: dict) -> bool:
         except Exception:
             due_dt = None
 
-        is_appt = (nm == "appointment") or (t == "2") or (t == 2)
+        is_appt = (nm == "appointment") or (t == "7") or (t == 7)
         not_completed = cat != "completed"
 
         if is_appt and due_dt and due_dt > now_utc and not_completed:
