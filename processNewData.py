@@ -486,6 +486,45 @@ def processHit(hit):
     if not (_is_assigned_to_kristin(opportunity) or _is_exact_kbb_ico_flags(flags, opportunity)):
         log.info("Skip opp %s (neither Kristin-assigned nor exact KBB source)", opportunityId)
         return
+
+    # --- BEGIN: ensure dateIn is present for cadence math ---
+    def _parse_iso_safe(s):
+        try:
+            return _dt.fromisoformat(str(s).replace("Z", "+00:00"))
+        except Exception:
+            return None
+    
+    def _to_iso_utc(dt):
+        return dt.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+    # Only derive if Fortellis didn't include dateIn
+    if not opportunity.get("dateIn"):
+        acts = activity_history or {}  # <-- replace with your actual variable name if different
+        comp = acts.get("completedActivities") or []
+        sched = acts.get("scheduledActivities") or []
+    
+        candidates = []
+        fa_dt = _parse_iso_safe(((opportunity.get("firstActivity") or {}).get("completedDate")))
+        if fa_dt: candidates.append(fa_dt)
+    
+        for a in comp:
+            adt = _parse_iso_safe(a.get("completedDate") or a.get("activityDate"))
+            if adt: candidates.append(adt)
+    
+        for a in sched:
+            due = _parse_iso_safe(a.get("dueDate") or a.get("dueDateTime"))
+            if due and due <= _dt.now(_tz.utc):
+                candidates.append(due)
+    
+        if candidates:
+            derived_datein_dt = min(candidates)
+            opportunity["dateIn"] = _to_iso_utc(derived_datein_dt)
+            log.info(
+                "KBB dateIn derived → %s (opp=%s)",
+                opportunity["dateIn"],
+                opportunity.get("opportunityId") or opportunity.get("id")
+            )
+    # --- END: ensure dateIn is present for cadence math ---
     
     # Persona routing for exact KBB (ICO/ServiceDrive)
     if _is_exact_kbb_ico_flags(flags, opportunity):
