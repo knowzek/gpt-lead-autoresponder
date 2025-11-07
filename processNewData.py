@@ -503,7 +503,32 @@ def processHit(hit):
                 lead_age_days = (_dt.now(_tz.utc) - created_dt).days
         except Exception:
             pass
-    
+
+        # --- DEBUG: lead-age source + math ---
+        try:
+            # Identify which field actually supplied created_raw
+            if opportunity.get("dateIn"):
+                _age_src = "dateIn"
+            elif opportunity.get("createdDate"):
+                _age_src = "createdDate"
+            elif opportunity.get("created_at"):
+                _age_src = "created_at"
+            elif (opportunity.get("firstActivity") or {}).get("completedDate"):
+                _age_src = "firstActivity.completedDate"
+            else:
+                _age_src = "None"
+        
+            log.info(
+                "KBB age calc → src=%s created_raw=%r lead_age_days=%s opp=%s",
+                _age_src,
+                created_raw,
+                lead_age_days,
+                opportunity.get("opportunityId") or opportunity.get("id")
+            )
+        except Exception as _e:
+            log.warning("KBB age calc debug failed: %s", _e)
+        # --- /DEBUG ---
+
         # Try to surface any inquiry text we may already have; safe default to ""
         inquiry_text_safe = (opportunity.get("inquiry_text_body") or "").strip()
     
