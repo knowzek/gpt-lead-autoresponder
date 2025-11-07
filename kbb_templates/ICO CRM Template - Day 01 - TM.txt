@@ -253,14 +253,12 @@ To complete the Kelley Blue Book&#174; Instant Cash Offer for your <{TradeModel}
 <p style="margin: 0 0 10px;">
   Hello <{CustFirstName}>,<br><br>
   My name is Patti, and I'm with the Acquisition Team at <{DealershipName}>. 
-  We've received the details of the Kelley Blue Book&#174; Instant Cash Offer for your 
+  We've received the details of the Kelley Blue Book Instant Cash Offer for your 
   <{TradeYear}> <{TradeModel}>.
   <br><br>
-  The offer is <strong>only valid for a period of 7 days</strong> (not including Sunday), 
-  so our next step is to coordinate a 15-20 minute in-person appointment to validate your offer during that window 
-  that works with your availability so that we can finish it up and get you your payment.
+  The offer is <strong>only valid for 7 days</strong> (not including Sunday). Our next step is to schedule a 15–20 minute in-person appointment to verify the offer at a time that works best for you so we can finalize everything and get you your payment.
 </p>
-<p>Please let us know a convenient time for you, or you can instantly reserve your time here:</p>
+<p>Please let us know what time works best, or you can instantly reserve an appointment here:</p>
 <p><{LegacySalesApptSchLink}></p>
 
 <!-- Patti signature (hard-coded, 600px, fully linked) -->
