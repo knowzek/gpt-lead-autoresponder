@@ -487,7 +487,7 @@ def processHit(hit):
         log.info("Skip opp %s (neither Kristin-assigned nor exact KBB source)", opportunityId)
         return
 
-    # --- BEGIN: ensure dateIn is present for cadence math ---
+    # --- BEGIN: ensure dateIn is present for cadence math (no external vars required) ---
     def _parse_iso_safe(s):
         try:
             return _dt.fromisoformat(str(s).replace("Z", "+00:00"))
@@ -497,23 +497,40 @@ def processHit(hit):
     def _to_iso_utc(dt):
         return dt.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     
-    # Only derive if Fortellis didn't include dateIn
     if not opportunity.get("dateIn"):
-        acts = activity_history or {}  # <-- replace with your actual variable name if different
-        comp = acts.get("completedActivities") or []
-        sched = acts.get("scheduledActivities") or []
+        # Try to use a locally available activity history dict if present; otherwise fall back to fields on the opp.
+        acts = None
+        try:
+            acts = activity_history  # optional; only if you actually have this in scope
+        except NameError:
+            acts = None
+    
+        # Pull completed/scheduled from the best available source
+        if isinstance(acts, dict):
+            comp  = acts.get("completedActivities")  or []
+            sched = acts.get("scheduledActivities")  or []
+        else:
+            comp  = opportunity.get("completedActivities")  or []
+            sched = opportunity.get("scheduledActivities")  or []
     
         candidates = []
-        fa_dt = _parse_iso_safe(((opportunity.get("firstActivity") or {}).get("completedDate")))
-        if fa_dt: candidates.append(fa_dt)
     
+        # 1) firstActivity.completedDate if present on the opp
+        fa_dt = _parse_iso_safe(((opportunity.get("firstActivity") or {}).get("completedDate")))
+        if fa_dt:
+            candidates.append(fa_dt)
+    
+        # 2) earliest completed activity timestamp
         for a in comp:
             adt = _parse_iso_safe(a.get("completedDate") or a.get("activityDate"))
-            if adt: candidates.append(adt)
+            if adt:
+                candidates.append(adt)
     
+        # 3) earliest scheduled dueDate that's already in the past (as a last resort)
+        now_utc = _dt.now(_tz.utc)
         for a in sched:
             due = _parse_iso_safe(a.get("dueDate") or a.get("dueDateTime"))
-            if due and due <= _dt.now(_tz.utc):
+            if due and due <= now_utc:
                 candidates.append(due)
     
         if candidates:
@@ -525,6 +542,7 @@ def processHit(hit):
                 opportunity.get("opportunityId") or opportunity.get("id")
             )
     # --- END: ensure dateIn is present for cadence math ---
+
     
     # Persona routing for exact KBB (ICO/ServiceDrive)
     if _is_exact_kbb_ico_flags(flags, opportunity):
