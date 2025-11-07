@@ -1759,19 +1759,17 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         opportunity["_kbb_state"] = state
         return state, action_taken
 
-    # Load email template
+    # Subject/template selection zone (keep this early)
     tpl_key = plan.get("email_template_day")
     html = TEMPLATES.get(tpl_key)
     if not html:
         log.warning("KBB ICO: missing template for day key=%r", tpl_key)
         opportunity["_kbb_state"] = state
         return state, action_taken
+    
+    # Use the plan's explicit day if present; otherwise KEEP prior effective_day
+    effective_day = plan.get("day") or effective_day
 
-    # Define effective_day early (fix NameError)
-    effective_day = plan.get("day")
-    if effective_day is None:
-        # fallback to whatever you call it upstream
-        effective_day = template_day
 
     # Rooftop info
     rooftop_addr = ((ROOFTOP_INFO.get(rooftop_name, {}) or {}).get("address") or "")
