@@ -2,7 +2,7 @@
 
 CADENCE = {
     1:  {"email_template_day": 1,  "subject": "It's Time to Finalize Your Instant Cash Offer", "create_phone_task": False, "create_text_task": False},
-    2:  {"email_template_day": 2,  "subject": "We'll Come to You to Finalize Your Instant Cash Offer", "create_phone_task": False, "create_text_task": False},
+    2:  {"email_template_day": 2,  "subject": "Let's Finalize Your KBB Instant Cash Offer", "create_phone_task": False, "create_text_task": False},
     5:  {"email_template_day": 5,  "subject": "Hurry! Your Instant Cash Offer Expires Soon", "create_phone_task": False, "create_text_task": False},
     6:  {"email_template_day": 6,  "subject": "There's Still Time to Finalize Your Instant Cash Offer", "create_phone_task": False, "create_text_task": False},
     7:  {"email_template_day": 7,  "subject": "Last Day to Finalize Your Instant Cash Offer", "create_phone_task": False, "create_text_task": False},
