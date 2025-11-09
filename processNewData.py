@@ -461,22 +461,68 @@ def processHit(hit):
     try:
         tok_for_check = get_token(subscription_id) if not OFFLINE_MODE else None
         fresh_opp = get_opportunity(opportunityId, tok_for_check, subscription_id) if not OFFLINE_MODE else opportunity
-    except Exception as e:
-        log.warning("Skipping opp %s (get_opportunity failed): %s", opportunityId, str(e)[:200])
+        # Clear any prior transient_error now that the fetch succeeded
         if not OFFLINE_MODE:
-            es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc={
-                "patti": {"skip": True, "skip_reason": "get_opportunity_failed"}
-            })
+            es_update_with_retry(
+                esClient,
+                index="opportunities",
+                id=opportunityId,
+                doc={"patti": {"transient_error": None}}
+            )
+
+    except Exception as e:
+        # Downgrade to a transient error so we retry next run (no hard skip)
+        log.warning("Transient get_opportunity failure for %s: %s", opportunityId, str(e)[:200])
+        if not OFFLINE_MODE:
+            # increment a lightweight failure counter using what we already have in memory
+            prev = (opportunity.get("patti") or {}).get("transient_error") or {}
+            fail_count = (prev.get("count") or 0) + 1
+            es_update_with_retry(
+                esClient,
+                index="opportunities",
+                id=opportunityId,
+                doc={
+                    "patti": {
+                        "transient_error": {
+                            "code": "get_opportunity_failed",
+                            "message": str(e)[:200],
+                            "at": _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                            "count": fail_count
+                        },
+                        # make sure we are NOT marking as a permanent skip
+                        "skip": False,
+                        "skip_reason": None
+                    }
+                }
+            )
+        # We can’t proceed without fresh_opp; exit gracefully and let the next run retry.
         return
     
     # keep this — we still skip inactive opps
-    if not is_active_opp(fresh_opp):
-        log.info("Skipping opp %s (inactive from Fortellis).", opportunityId)
-        if not OFFLINE_MODE:
-            es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc={
-                "patti": {"skip": True, "skip_reason": "inactive_opportunity"}
-            })
-        return
+        if not is_active_opp(fresh_opp):
+            log.info("Skipping opp %s (inactive from Fortellis).", opportunityId)
+            if not OFFLINE_MODE:
+                es_update_with_retry(
+                    esClient,
+                    index="opportunities",
+                    id=opportunityId,
+                    doc={
+                        "patti": {
+                            "skip": True,
+                            "skip_reason": "inactive_opportunity",
+                            # clear any transient flag since this is a definitive state
+                            "transient_error": None,
+                            "inactive_at": _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                            "inactive_snapshot": {
+                                "status": fresh_opp.get("status"),
+                                "subStatus": fresh_opp.get("subStatus"),
+                                "isActive": fresh_opp.get("isActive")
+                            }
+                        }
+                    }
+                )
+            return
+
     
     # === KBB routing ===
     flags = _kbb_flags_from(opportunity, fresh_opp)
