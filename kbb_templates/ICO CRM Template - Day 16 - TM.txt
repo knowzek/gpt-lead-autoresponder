@@ -251,12 +251,26 @@ Are you ready for your next vehicle? If so, <{DealershipName}> wants to buy your
 
 <!-- 1 Column Text + Button : BEGIN -->
 <tr>
-<td style="background-color: #ffffff;">
-<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-<tr>
-<td style="padding: 20px; font-family: sans-serif; font-size: 15px; line-height: 20px; color: #555555;">
-<h1 style="margin: 0 0 10px; font-size: 18px; line-height: 30px; color: #333333; font-weight: normal;"><strong><center><{DealershipName}> Still Wants Your Car!</center></strong></h1>
-<p style="margin: 0 0 10px;">Whether you buy a vehicle from us or not, we would still like to buy yours! Either as an outright purchase or as a trade-in towards your next car, we are very interested in acquiring your vehicle.<br><br>The timing couldn't be better! The demand for quality used cars is very high right now. And as a Kelley Blue Book&#174; Instant Cash Offer Participating Dealer, we make it easy! We provide our customers with a simple, transparent process to get an actual cash offer for their car.<br><br>Interested in getting your next vehicle? Get started by getting your up-to-date Kelley Blue Book&#174; Instant Cash Offer* now.</p>
+  <td style="background-color:#ffffff;padding:20px;color:#000000;font-size:15px;line-height:22px;">
+    <h1 style="margin:0 0 15px;font-size:22px;line-height:26px;color:#000000;font-weight:normal;text-align:center;">
+      We’re Still Interested in Your Vehicle
+    </h1>
+
+    <p style="margin:0 0 10px;">Hi <strong><{CustFirstName}></strong>,</p>
+
+    <p style="margin:0 0 10px;">
+      The demand for quality used cars is still high, and <strong><{DealershipName}></strong> is actively buying vehicles like your <strong><{TradeModel}></strong>.
+    </p>
+
+    <p style="margin:0 0 10px;">
+      Whether you’re trading in or selling outright, your KBB Offer makes it easy — just a quick visit to finalize the inspection.
+    </p>
+
+    <p style="margin:0 0 10px;">Choose a time that works best for you:</p>
+
+    <p style="margin:0 0 20px;"><{LegacySalesApptSchLink}></p>
+
+    <p style="margin:0 0 10px;">Talk soon,<br>Patti</p>
 
 <!-- Patti signature (hard-coded, 600px, fully linked) -->
 <table role="presentation" width="600" border="0" cellspacing="0" cellpadding="0" align="center" style="margin-top:18px;">
@@ -475,5 +489,6 @@ Are you ready for your next vehicle? If so, <{DealershipName}> wants to buy your
 </center>
 </body>
 </html>
+
 
 
