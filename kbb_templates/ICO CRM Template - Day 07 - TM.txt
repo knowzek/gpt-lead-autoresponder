@@ -264,6 +264,17 @@ Urgent! Today is the FINAL day that your Kelley Blue Book&#174; Instant Cash Off
   </td>
 </tr>
 
+<!-- Patti signature (hard-coded, 600px, fully linked) -->
+<table role="presentation" width="600" border="0" cellspacing="0" cellpadding="0" align="center" style="margin-top:18px;">
+  <tr>
+    <!-- LEFT: logo, clickable -->
+    <td class="stack-column" width="280" valign="top" align="left" style="padding-right:16px;">
+      <a href="https://www.tustinmazda.com" target="_blank" style="text-decoration:none;">
+        <img src="https://www.pattersonautos.com/blogs/7684/wp-content/uploads/2025/11/image.png"
+             alt="Patterson Autos • Your KBB Buying Center"
+             width="280" border="0" style="display:block; height:auto;">
+      </a>
+    </td>
 
     <!-- RIGHT: contact details -->
     <td class="stack-column" width="304" valign="top" align="left" style="font-family:Arial, Helvetica, sans-serif; color:#222;">
@@ -337,6 +348,7 @@ Urgent! Today is the FINAL day that your Kelley Blue Book&#174; Instant Cash Off
 </center>
 </body>
 </html>
+
 
 
 
