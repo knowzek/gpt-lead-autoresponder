@@ -240,20 +240,29 @@ Your Kelley Blue Book&#174; Instant Cash Offer has expired, but we'd still like 
 
 <!-- 1 Column Text : BEGIN -->
 <tr>
-<td style="background-color: #ffffff;">
-<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-<tr>
-<td style="padding: 20px; font-family: sans-serif; font-size: 15px; line-height: 20px; color: #555555;">
-<h1 style="margin: 0 0 10px; font-size: 25px; line-height: 30px; color: #333333; font-weight: normal;">We're Still Interested In Your <{TradeModel}></h1>
-<p style="margin: 0 0 10px;">Hello <{CustFirstName}>,<br>
-<br>
-My name is <{SalesPersonName:SM}>, I'm the Inventory Manager at <{DealershipName}>. One of the benefits to our dealership for being a Kelley Blue Book&#174; Instant Cash Offer Participating Dealer is the opportunity it provides us to identify vehicles that fulfill our own inventory needs.
-<br><br>
-I'd like to invite you to get an up-to-date Kelley Blue Book&#174; Instant Cash Offer for your <{TradeYear}> <{TradeModel}>. Once you have your up-to-date offer, our acquisition team will coordinate with you to schedule an in-person inspection to validate the offer amount.
-<br><br>
-Would you be available during the week or would the weekend be best to meet for the brief in-person inspection?
-<br><br>
-Thank you in advance for your reply,
+  <td style="background-color:#ffffff;padding:20px;color:#000000;font-size:15px;line-height:22px;">
+    <h1 style="margin:0 0 15px;font-size:22px;line-height:26px;color:#000000;font-weight:normal;text-align:center;">
+      Your KBB Offer Has Expired — Let’s Get You a New One
+    </h1>
+
+    <p style="margin:0 0 10px;">Hi <strong><{CustFirstName}></strong>,</p>
+
+    <p style="margin:0 0 10px;">
+      Your Kelley Blue Book® Instant Cash Offer for your <strong><{TradeModel}></strong> has officially expired,
+      but getting a new one only takes a few minutes — and I can help you start right where you left off.
+    </p>
+
+    <p style="margin:0 0 10px;">
+      Once we reissue your offer, we can complete the quick 15-minute inspection here at <strong><{DealershipName}></strong>
+      and get you your updated value right away.
+    </p>
+
+    <p style="margin:0 0 10px;">Use the link below to start again when it’s convenient for you:</p>
+
+    <p style="margin:0 0 20px;"><{LegacySalesApptSchLink}></p>
+
+    <p style="margin:0 0 10px;">Talk soon,<br>Patti</p>
+
 <br><br>
 <!-- Patti signature (hard-coded, 600px, fully linked) -->
 <table role="presentation" width="600" border="0" cellspacing="0" cellpadding="0" align="center" style="margin-top:18px;">
@@ -389,5 +398,6 @@ Thank you in advance for your reply,
 </center>
 </body>
 </html>
+
 
 
