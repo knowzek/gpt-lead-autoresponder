@@ -267,6 +267,7 @@ Urgent! Your Kelley Blue Book&#174; Instant Cash Offer expires soon. To complete
 </tr>
 
 
+
 <br><br>
 <!-- Patti signature (hard-coded, 600px, fully linked) -->
 <table role="presentation" width="600" border="0" cellspacing="0" cellpadding="0" align="center" style="margin-top:18px;">
@@ -351,6 +352,7 @@ Urgent! Your Kelley Blue Book&#174; Instant Cash Offer expires soon. To complete
 </center>
 </body>
 </html>
+
 
 
 
