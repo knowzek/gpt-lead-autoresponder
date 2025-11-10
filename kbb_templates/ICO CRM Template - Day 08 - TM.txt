@@ -243,16 +243,24 @@ Your Kelley Blue Book&#174; Instant Cash Offer has expired, but we'd still like 
 
 <!-- 1 Column Text : BEGIN -->
 <tr>
-<td style="background-color: #ffffff;">
-<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-<tr>
-<td style="padding: 20px; font-family: sans-serif; font-size: 15px; line-height: 20px; color: #555555;">
-<h1 style="margin: 0 0 10px; font-size: 25px; line-height: 30px; color: #333333; font-weight: normal;">Oops, Your Instant Cash Offer Expired</h1>
-<p style="margin: 0 0 10px;">Hello <{CustFirstName}>,<br>
-<br>
-The Kelley Blue Book&#174; Instant Cash Offer on your <{TradeYear}> <{TradeModel}> has expired, but <{DealershipName}> would still like an opportunity to buy your vehicle!
-<br><br>
-When is your earliest availability to meet for an in-person vehicle inspection? Are weekends best or would during the work week be more convenient?
+  <td style="background-color:#ffffff;padding:20px;color:#000000;font-size:15px;line-height:22px;">
+    <h1 style="margin:0 0 15px;font-size:22px;line-height:26px;color:#000000;font-weight:normal;text-align:center;">
+      Quick Reminder About Your KBB Offer
+    </h1>
+
+    <p style="margin:0 0 10px;">Hi <strong><{CustFirstName}></strong>,</p>
+
+    <p style="margin:0 0 10px;">
+      I wanted to make sure you didn’t miss your chance to complete the Kelley Blue Book® Instant Cash Offer on your <strong><{TradeModel}></strong>.
+      We can get you in and out in one short visit here at <strong><{DealershipName}></strong>.
+    </p>
+
+    <p style="margin:0 0 10px;">Here’s the link to reserve your spot:</p>
+
+    <p style="margin:0 0 20px;"><{LegacySalesApptSchLink}></p>
+
+    <p style="margin:0 0 10px;">Thanks again,<br>Patti</p>
+
 <br><br>
 <!-- Patti signature (hard-coded, 600px, fully linked) -->
 <table role="presentation" width="600" border="0" cellspacing="0" cellpadding="0" align="center" style="margin-top:18px;">
@@ -391,5 +399,6 @@ When is your earliest availability to meet for an in-person vehicle inspection? 
 </center>
 </body>
 </html>
+
 
 
