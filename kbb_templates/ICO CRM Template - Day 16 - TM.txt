@@ -263,7 +263,7 @@ Are you ready for your next vehicle? If so, <{DealershipName}> wants to buy your
     </p>
 
     <p style="margin:0 0 10px;">
-      Whether you’re trading in or selling outright, your KBB Offer makes it easy — just a quick visit to finalize the inspection.
+      Whether you’re trading in or selling outright, your KBB Offer makes it easy — just a quick visit to finalize the offer.
     </p>
 
     <p style="margin:0 0 10px;">Choose a time that works best for you:</p>
@@ -489,6 +489,7 @@ Are you ready for your next vehicle? If so, <{DealershipName}> wants to buy your
 </center>
 </body>
 </html>
+
 
 
 
