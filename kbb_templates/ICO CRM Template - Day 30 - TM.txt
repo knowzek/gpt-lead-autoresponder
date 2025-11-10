@@ -247,18 +247,26 @@ Fluctuations on the used car market have driven values up considerably over the 
 
 <!-- 1 Column Text : BEGIN -->
 <tr>
-<td style="background-color: #ffffff;">
-<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-<tr>
-<td style="padding: 20px; font-family: sans-serif; font-size: 15px; line-height: 20px; color: #555555;">
-<h1 style="margin: 0 0 10px; font-size: 25px; line-height: 30px; color: #333333; font-weight: normal;">The Used Car Market Has Changed!</h1>
-<p style="margin: 0 0 10px;">Hello <{CustFirstName}>,<br>
-<br>
-Market conditions and the resulting inventory demands have <strong>dramatically fluctuated</strong> over the last 30 days since the Kelley Blue Book&#174; Instant Cash Offer was submitted for your <{TradeModel}>. I wanted to reach out and see if we can generate an up-to-date offer for you. We'd just need to have a brief conversation, just so I can update the vehicle mileage and see if there have been any relevant changes to the condition of your car.
-<br><br>
-Is there a convenient time and number to reach you?
-<br><br>
-Thank you in advance for your reply,
+  <td style="background-color:#ffffff;padding:20px;color:#000000;font-size:15px;line-height:22px;">
+    <h1 style="margin:0 0 15px;font-size:22px;line-height:26px;color:#000000;font-weight:normal;text-align:center;">
+      Still Thinking About Selling Your Car?
+    </h1>
+
+    <p style="margin:0 0 10px;">Hi <strong><{CustFirstName}></strong>,</p>
+
+    <p style="margin:0 0 10px;">
+      I just wanted to check if you’re still thinking about selling your <strong><{TradeModel}></strong>.
+      If you’d like, we can re-issue your Kelley Blue Book® Instant Cash Offer and schedule a quick 15-minute visit here at <strong><{DealershipName}></strong>.
+    </p>
+
+    <p style="margin:0 0 10px;">Use the link below to pick a time that works best for you:</p>
+
+    <p style="margin:0 0 20px;"><{LegacySalesApptSchLink}></p>
+
+    <p style="margin:0 0 10px;">All the best,<br>Patti</p>
+  </td>
+</tr>
+
 <br><br>
 <!-- Patti signature (hard-coded, 600px, fully linked) -->
 <table role="presentation" width="600" border="0" cellspacing="0" cellpadding="0" align="center" style="margin-top:18px;">
@@ -393,5 +401,6 @@ Thank you in advance for your reply,
 </center>
 </body>
 </html>
+
 
 
