@@ -244,28 +244,26 @@ Urgent! Today is the FINAL day that your Kelley Blue Book&#174; Instant Cash Off
 
 <!-- 1 Column Text + Button : BEGIN -->
 <tr>
-<td style="background-color: #ffffff;">
-<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-<tr>
-<td style="padding: 20px; font-family: sans-serif; font-size: 15px; line-height: 20px; color: #000000;">
-<h1 style="margin: 0 0 10px; font-size: 25px; line-height: 30px; color: #000000; font-weight: normal;">Urgent: Your Instant Cash Offer Expires Today</h1>
-<p style="margin: 0 0 10px;">Hello <{CustFirstName}>,<br>
-<br>
-We have only one remaining step, which is for us to complete the free mechanical inspection. This should be a brief 15-20 minute in-person inspection, during which we can validate the condition together. At that point, you can either apply your offer towards a vehicle purchase or simply sell the vehicle to our dealership.
-<br><br>
-Thank you in advance for your reply,
-<br><br>
-<!-- Patti signature (hard-coded, 600px, fully linked) -->
-<table role="presentation" width="600" border="0" cellspacing="0" cellpadding="0" align="center" style="margin-top:18px;">
-  <tr>
-    <!-- LEFT: logo, clickable -->
-    <td class="stack-column" width="280" valign="top" align="left" style="padding-right:16px;">
-      <a href="https://www.tustinmazda.com" target="_blank" style="text-decoration:none;">
-        <img src="https://www.pattersonautos.com/blogs/7684/wp-content/uploads/2025/11/image.png"
-             alt="Patterson Autos • Your KBB Buying Center"
-             width="280" border="0" style="display:block; height:auto;">
-      </a>
-    </td>
+  <td style="background-color:#ffffff;padding:20px;color:#000000;font-size:15px;line-height:22px;">
+    <h1 style="margin:0 0 15px;font-size:22px;line-height:26px;color:#000000;font-weight:normal;text-align:center;">
+      Time’s Running Out on Your Offer
+    </h1>
+
+    <p style="margin:0 0 10px;">Hi <strong><{CustFirstName}></strong>,</p>
+
+    <p style="margin:0 0 10px;">
+      Your Kelley Blue Book® Instant Cash Offer for your <strong><{TradeModel}></strong> is set to expire soon.
+      If you’d still like to redeem it, let’s get you scheduled before it lapses — the process is quick and easy at <strong><{DealershipName}></strong>.
+    </p>
+
+    <p style="margin:0 0 10px;">Choose your preferred time below:</p>
+
+    <p style="margin:0 0 20px;"><{LegacySalesApptSchLink}></p>
+
+    <p style="margin:0 0 10px;">Best,<br>Patti</p>
+  </td>
+</tr>
+
 
     <!-- RIGHT: contact details -->
     <td class="stack-column" width="304" valign="top" align="left" style="font-family:Arial, Helvetica, sans-serif; color:#222;">
@@ -339,5 +337,6 @@ Thank you in advance for your reply,
 </center>
 </body>
 </html>
+
 
 
