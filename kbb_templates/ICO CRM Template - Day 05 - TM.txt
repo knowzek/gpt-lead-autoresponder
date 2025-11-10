@@ -260,9 +260,6 @@ Following up on your Kelley Blue Book&#174; Instant Cash Offer. Ready to finaliz
     <p style="margin:0 0 20px;"><{LegacySalesApptSchLink}></p>
 
     <p style="margin:0 0 10px;">Thanks,<br>Patti</p>
-  </td>
-</tr>
-
 
 <br><br>
 <!-- Patti signature (hard-coded, 600px, fully linked) -->
@@ -351,6 +348,7 @@ Following up on your Kelley Blue Book&#174; Instant Cash Offer. Ready to finaliz
 </center>
 </body>
 </html>
+
 
 
 
