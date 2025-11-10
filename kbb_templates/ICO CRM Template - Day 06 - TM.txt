@@ -263,10 +263,6 @@ Urgent! Your Kelley Blue Book&#174; Instant Cash Offer expires soon. To complete
     <p style="margin:0 0 20px;"><{LegacySalesApptSchLink}></p>
 
     <p style="margin:0 0 10px;">Talk soon,<br>Patti</p>
-  </td>
-</tr>
-
-
 
 <br><br>
 <!-- Patti signature (hard-coded, 600px, fully linked) -->
@@ -352,6 +348,7 @@ Urgent! Your Kelley Blue Book&#174; Instant Cash Offer expires soon. To complete
 </center>
 </body>
 </html>
+
 
 
 
