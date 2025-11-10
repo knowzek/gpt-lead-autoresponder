@@ -252,7 +252,7 @@ Following up on your Kelley Blue Book&#174; Instant Cash Offer. Ready to finaliz
 
     <p style="margin:0 0 10px;">
       We’re still holding your Kelley Blue Book® Instant Cash Offer for your <strong>&lt;{TradeModel}&gt;</strong>.
-      The next step is easy — just a quick 15-minute stop here at <strong>&lt;{DealershipName}&gt;</strong> to confirm everything and cut your check.
+      The next step is easy - just a quick 15-minute stop here at <strong>&lt;{DealershipName}&gt;</strong> to confirm everything and cut your check.
     </p>
 
     <p style="margin:0 0 10px;">
@@ -352,6 +352,7 @@ Following up on your Kelley Blue Book&#174; Instant Cash Offer. Ready to finaliz
 </center>
 </body>
 </html>
+
 
 
 
