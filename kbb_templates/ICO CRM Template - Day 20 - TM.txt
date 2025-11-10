@@ -243,18 +243,27 @@ Could you update me on your interest in trading or selling your vehicle? If you 
 
 <!-- 1 Column Text : BEGIN -->
 <tr>
-<td style="background-color: #ffffff;">
-<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-<tr>
-<td style="padding: 20px; font-family: sans-serif; font-size: 15px; line-height: 20px; color: #555555;">
-<h1 style="margin: 0 0 10px; font-size: 25px; line-height: 30px; color: #333333; font-weight: normal;">Used Car Values Are Shifting</h1>
-<p style="margin: 0 0 10px;">Hello <{CustFirstName}>,<br>
-<br>
-I just wanted to reach out regarding the recent Kelley Blue Book&#174; Instant Cash Offer that was run on your <{TradeYear}> <{TradeModel}>. I'm curious what your timeline is for replacing or selling it?
-<br><br>
-If you're still interested in replacing or selling the <{TradeModel}> outright, it's important that we keep you updated with relevant information regarding any changes to market conditions and inventory needs that could affect its value. But, obviously, I want to make sure such information is still useful to you. Please advise.
-<br><br>
-Thank you in advance for your reply,
+  <td style="background-color:#ffffff;padding:20px;color:#000000;font-size:15px;line-height:22px;">
+    <h1 style="margin:0 0 15px;font-size:22px;line-height:26px;color:#000000;font-weight:normal;text-align:center;">
+      Let’s Revisit Your KBB Offer
+    </h1>
+
+    <p style="margin:0 0 10px;">Hi <strong><{CustFirstName}></strong>,</p>
+
+    <p style="margin:0 0 10px;">
+      Just following up on your Kelley Blue Book® Instant Cash Offer for your <strong><{TradeModel}></strong>.
+      The used-car market changes quickly, and it might be a great time to review your offer again.
+    </p>
+
+    <p style="margin:0 0 10px;">
+      I’d be happy to update your offer and schedule a quick visit at <strong><{DealershipName}></strong>.
+    </p>
+
+    <p style="margin:0 0 20px;"><{LegacySalesApptSchLink}></p>
+
+    <p style="margin:0 0 10px;">Best,<br>Patti</p>
+
+
 <br><br>
 <!-- Patti signature (hard-coded, 600px, fully linked) -->
 <table role="presentation" width="600" border="0" cellspacing="0" cellpadding="0" align="center" style="margin-top:18px;">
@@ -389,5 +398,6 @@ Thank you in advance for your reply,
 </center>
 </body>
 </html>
+
 
 
