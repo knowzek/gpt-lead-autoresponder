@@ -248,25 +248,24 @@ Urgent! Your Kelley Blue Book&#174; Instant Cash Offer expires soon. To complete
 <tr>
   <td style="background-color:#ffffff;padding:20px;color:#000000;font-size:15px;line-height:22px;">
     <h1 style="margin:0 0 15px;font-size:22px;line-height:26px;color:#000000;font-weight:normal;text-align:center;">
-      Your KBB Offer is Still Active
+      Your KBB Offer Is Still Active
     </h1>
 
-    <p style="margin:0 0 10px;">Hi <strong>&lt;{CustFirstName}&gt;</strong>,</p>
+    <p style="margin:0 0 10px;">Hi <strong><{CustFirstName}></strong>,</p>
 
     <p style="margin:0 0 10px;">
-      Just a quick reminder - your Kelley Blue Book® Instant Cash Offer for your <strong>&lt;{TradeModel}&gt;</strong> is still good for a few more days.
-      We can wrap things up right here at <strong>&lt;{DealershipName}&gt;</strong> in about 15 minutes.
+      Just a quick reminder - your Kelley Blue Book® Instant Cash Offer for your <strong><{TradeModel}></strong> is still good for a few more days.
+      We can wrap things up right here at <strong><{DealershipName}></strong> in about 15 minutes.
     </p>
 
-    <p style="margin:0 0 10px;">
-      Let’s pick a time that works for you:
-    </p>
+    <p style="margin:0 0 10px;">Let’s pick a time that works for you:</p>
 
-    <p style="margin:0 0 20px;">&lt;{LegacySalesApptSchLink}&gt;</p>
+    <p style="margin:0 0 20px;"><{LegacySalesApptSchLink}></p>
 
     <p style="margin:0 0 10px;">Talk soon,<br>Patti</p>
   </td>
 </tr>
+
 
 <br><br>
 <!-- Patti signature (hard-coded, 600px, fully linked) -->
@@ -352,6 +351,7 @@ Urgent! Your Kelley Blue Book&#174; Instant Cash Offer expires soon. To complete
 </center>
 </body>
 </html>
+
 
 
 
