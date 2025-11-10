@@ -246,18 +246,28 @@ Urgent! Your Kelley Blue Book&#174; Instant Cash Offer expires soon. To complete
 
 <!-- 1 Column Text + Button : BEGIN -->
 <tr>
-<td style="background-color: #ffffff;">
-<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-<tr>
-<td style="padding: 20px; font-family: sans-serif; font-size: 15px; line-height: 20px; color: #000000;">
-<h1 style="margin: 0 0 10px; font-size: 25px; line-height: 30px; color: #000000; font-weight: normal;">You're Nearly There</h1>
-<p style="margin: 0 0 10px;">Hello <{CustFirstName}>,<br>
-<br>
-We still have time to finalize the Kelley Blue Book Instant Cash Offer on your <{TradeYear}> <{TradeModel}>, but we need to act quickly.
-<br><br>
-Would you be available to coordinate an in-person inspection today? Or, would tomorrow work best for the offer validation?
-<br><br>
-If you have any concerns or questions that are preventing you from taking the next step, please reach out.
+  <td style="background-color:#ffffff;padding:20px;color:#000000;font-size:15px;line-height:22px;">
+    <h1 style="margin:0 0 15px;font-size:22px;line-height:26px;color:#000000;font-weight:normal;text-align:center;">
+      Your KBB Offer is Still Active
+    </h1>
+
+    <p style="margin:0 0 10px;">Hi <strong>&lt;{CustFirstName}&gt;</strong>,</p>
+
+    <p style="margin:0 0 10px;">
+      Just a quick reminder - your Kelley Blue Book® Instant Cash Offer for your <strong>&lt;{TradeModel}&gt;</strong> is still good for a few more days.
+      We can wrap things up right here at <strong>&lt;{DealershipName}&gt;</strong> in about 15 minutes.
+    </p>
+
+    <p style="margin:0 0 10px;">
+      Let’s pick a time that works for you:
+    </p>
+
+    <p style="margin:0 0 20px;">&lt;{LegacySalesApptSchLink}&gt;</p>
+
+    <p style="margin:0 0 10px;">Talk soon,<br>Patti</p>
+  </td>
+</tr>
+
 <br><br>
 <!-- Patti signature (hard-coded, 600px, fully linked) -->
 <table role="presentation" width="600" border="0" cellspacing="0" cellpadding="0" align="center" style="margin-top:18px;">
@@ -342,5 +352,6 @@ If you have any concerns or questions that are preventing you from taking the ne
 </center>
 </body>
 </html>
+
 
 
