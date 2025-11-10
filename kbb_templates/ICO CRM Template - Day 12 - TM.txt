@@ -243,18 +243,24 @@ We value your feedback regarding your experience with the Kelley Blue Book&#174;
 
 <!-- 1 Column Text : BEGIN -->
 <tr>
-<td style="background-color: #ffffff;">
-<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-<tr>
-<td style="padding: 20px; font-family: sans-serif; font-size: 15px; line-height: 20px; color: #555555;">
-<h1 style="margin: 0 0 10px; font-size: 25px; line-height: 30px; color: #333333; font-weight: normal;">Your Feedback is Appreciated</h1>
-<p style="margin: 0 0 10px;">Hello <{CustFirstName}>,<br>
-<br>
-A little over a week ago you received a Kelley Blue Book&#174; Instant Cash Offer on your <{TradeYear}> <{TradeModel}>. If I could ask you, what kept you from moving forward with the offer from Kelley Blue Book?
-<br><br>
-Was it the amount received for the offer? The time required to setup an in-person validation? Kelley Blue Book and <{DealershipName}> value your feedback, and I want to make sure I don't miss an opportunity to answer any questions regarding the Kelley Blue Book&#174; Instant Cash Offer process!
-<br><br>
-Thank you in advance for your reply,
+  <td style="background-color:#ffffff;padding:20px;color:#000000;font-size:15px;line-height:22px;">
+    <h1 style="margin:0 0 15px;font-size:22px;line-height:26px;color:#000000;font-weight:normal;text-align:center;">
+      Can I Ask a Quick Favor?
+    </h1>
+
+    <p style="margin:0 0 10px;">Hi <strong><{CustFirstName}></strong>,</p>
+
+    <p style="margin:0 0 10px;">
+      You received a Kelley Blue Book® Instant Cash Offer for your <strong><{TradeModel}></strong> a little while ago,
+      and I’d love to hear what kept you from finishing the process.
+    </p>
+
+    <p style="margin:0 0 10px;">
+      Was it timing, the offer amount, or something else? Your feedback really helps us improve the experience for future guests.
+    </p>
+
+    <p style="margin:0 0 10px;">Thanks for taking a moment to share,<br>Patti</p>
+
 <br><br>
 <!-- Patti signature (hard-coded, 600px, fully linked) -->
 <table role="presentation" width="600" border="0" cellspacing="0" cellpadding="0" align="center" style="margin-top:18px;">
@@ -389,5 +395,6 @@ Thank you in advance for your reply,
 </center>
 </body>
 </html>
+
 
 
