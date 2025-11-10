@@ -261,8 +261,7 @@ Urgent! Today is the FINAL day that your Kelley Blue Book&#174; Instant Cash Off
     <p style="margin:0 0 20px;"><{LegacySalesApptSchLink}></p>
 
     <p style="margin:0 0 10px;">Best,<br>Patti</p>
-  </td>
-</tr>
+
 
 <!-- Patti signature (hard-coded, 600px, fully linked) -->
 <table role="presentation" width="600" border="0" cellspacing="0" cellpadding="0" align="center" style="margin-top:18px;">
@@ -312,6 +311,8 @@ Urgent! Today is the FINAL day that your Kelley Blue Book&#174; Instant Cash Off
 
 </td>
 </tr>
+</td>
+</tr>
 
 </table>
 </td>
@@ -348,6 +349,7 @@ Urgent! Today is the FINAL day that your Kelley Blue Book&#174; Instant Cash Off
 </center>
 </body>
 </html>
+
 
 
 
