@@ -904,6 +904,14 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     
     # keep a single shared dict reference everywhere
     opportunity["_kbb_state"] = state
+    
+    # --- safety inits to avoid UnboundLocalError on non-scheduling paths ---
+    created_appt_ok = False     # whether we created an appt this turn
+    appt_human      = None      # nice human-readable time (only if parsed)
+    due_dt_iso_utc  = None      # ISO UTC for scheduling, if parsed
+    new_id          = None      # activityId returned by schedule_activity
+    # -----------------------------------------------------------------------
+
 
     # --- detect customer opt-out message ---
     state.setdefault("last_optout_seen_at", None)
