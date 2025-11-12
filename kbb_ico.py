@@ -53,6 +53,30 @@ def _is_decline(text: str) -> bool:
     return bool(_DECLINE_RE.search(text or ""))
 
 
+
+def _is_optout_text(t: str) -> bool:
+    t = (t or "").lower()
+    return any(kw in t for kw in (
+        "stop emailing me", "stop email", "do not email", "don't email",
+        "unsubscribe", "remove me", "no further contact",
+        "stop contacting", "opt out", "opt-out", "optout", "cease and desist"
+    ))
+
+def _latest_customer_optout(opportunity):
+    """
+    Return (found: bool, ts_iso: str|None, txt: str|None) for the newest customer msg
+    that contains an opt-out phrase, regardless of what came after.
+    """
+    msgs = (opportunity.get("messages") or [])
+    latest = None
+    for m in reversed(msgs):
+        if m.get("msgFrom") == "customer" and _is_optout_text(m.get("body")):
+            # use message date if present, else None
+            latest = (True, m.get("date"), m.get("body"))
+            break
+    return latest or (False, None, None)
+
+
 _GMAIL_QUOTE_RE = _re.compile(r'(?is)<div[^>]*class="gmail_quote[^"]*"[^>]*>.*$', _re.M)
 _BLOCKQUOTE_RE  = _re.compile(r'(?is)<blockquote[^>]*>.*$', _re.M)
 _TAGS_RE        = _re.compile(r'(?is)<[^>]+>')
@@ -862,6 +886,22 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     # keep a single shared dict reference everywhere
     opportunity["_kbb_state"] = state
 
+    # --- detect customer opt-out message ---
+    state.setdefault("last_optout_seen_at", None)
+    found_optout, optout_ts, optout_txt = _latest_customer_optout(opportunity)
+    
+    # also consider the inquiry_text (sometimes we only get that)
+    found_optout = found_optout or _is_optout_text(inquiry_text)
+    
+    declined = False
+    if found_optout:
+        if not state["last_optout_seen_at"] or (optout_ts and optout_ts > state["last_optout_seen_at"]):
+            declined = True
+            state["last_optout_seen_at"] = optout_ts or state["last_optout_seen_at"]
+            log.info("Detected opt-out text from customer at %s: %r", optout_ts, optout_txt)
+
+
+
     # [#1] HARD STOP: if this opp is declined/inactive/closed or email is blocked, do nothing
     checked = (opportunity.get("checkedDict") or {})
     already_declined    = (checked.get("exit_type") == "customer_declined")
@@ -1062,10 +1102,12 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
         log.info("KBB ICO: replying to inbound id=%s; snippet=%r",
             selected_inbound_id, (inquiry_text or "")[:120])
-
         
         # Initialize a safe default subject for all paths
         reply_subject = "Re:"
+        
+        # Keep what you already computed earlier
+        declined_optout = bool(declined)  # preserve earlier decision
         
         if selected_inbound_id:
             try:
@@ -1085,22 +1127,20 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 # Body (only overwrite inquiry_text if we actually extracted something)
                 latest_body_raw = ((full.get("message") or {}).get("body") or "").strip()
                 latest_body = _top_reply_only(latest_body_raw)
-                
+        
                 if not latest_body:
-                    # Fallback: do a lighter clean so we don’t lose the new message entirely
                     import re as _re2
                     _TAGS = _re2.compile(r"<[^>]+>")
                     _WS   = _re2.compile(r"\s+")
                     light = _WS.sub(" ", _TAGS.sub(" ", latest_body_raw)).strip()
                     if light:
                         latest_body = light
-                
+        
                 if latest_body:
                     inquiry_text = latest_body
                     log.info("KBB ICO: using inbound body (len=%d): %r", len(latest_body), latest_body[:120])
                 else:
                     log.info("KBB ICO: inbound had no usable body; keeping prior inquiry_text.")
-
             except Exception as e:
                 log.warning("Could not load inbound activity %s: %s", selected_inbound_id, e)
         else:
@@ -1110,17 +1150,24 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         if newest_read and newest_dt:
             state["last_inbound_activity_id"] = selected_inbound_id
             state["last_customer_msg_at"] = newest_dt.astimezone(_tz.utc).isoformat()
-            #_save_state_comment(token, subscription_id, opp_id, state)
-
-
-        # Detect decline from customer's top reply
-        declined = _is_decline(inquiry_text)
+        
+        # 🔐 Re-evaluate decline BUT never lose an earlier True
+        declined_from_classifier = False
+        try:
+            # your old classifier, if present
+            declined_from_classifier = _is_decline(inquiry_text)
+        except NameError:
+            pass
+        
+        declined = bool(
+            declined_optout                           # from earlier _latest_customer_optout()
+            or _is_optout_text(inquiry_text)          # raw text check on current body
+            or declined_from_classifier               # legacy classifier
+        )
+        
         if declined:
-            log.info("KBB ICO: decline detected in inbound: %r", inquiry_text[:120])
+            log.info("KBB ICO: decline detected in inbound: %r", (inquiry_text or "")[:120])
 
-        created_appt_ok = False
-        appt_human = None
-        dt_local = None
 
         if not declined:
             # === Attempt to auto-schedule if customer proposed a time ===
@@ -1285,7 +1332,10 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         
             # Resolve recipient
             cust = (opportunity.get("customer") or {})
-            email = cust.get("emailAddress") or ((cust.get("emails") or [{}])[0].get("address"))
+            # prefer the explicit customer.emails[].isPreferred if present
+            emails = cust.get("emails") or []
+            preferred = next((e for e in emails if e.get("isPreferred")), None)
+            email = cust.get("emailAddress") or (preferred or (emails[0] if emails else {})).get("address")
             if not email:
                 email = (opportunity.get("_lead", {}) or {}).get("email_address")
             recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
@@ -1293,14 +1343,14 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 log.warning("No recipient; skip send for opp=%s", opp_id)
                 opportunity["_kbb_state"] = state
                 return state, action_taken
-
+            
             # --- PERSIST FIRST so re-runs short-circuit even if send fails ---
             now_iso = _dt.now(_tz.utc).isoformat()
             try:
                 chosen_appt_id = new_id if (("new_id" in locals()) and new_id) else appt_id
             except NameError:
                 chosen_appt_id = appt_id
-
+            
             state["mode"]                  = "scheduled"
             state["last_appt_activity_id"] = chosen_appt_id
             state["appt_due_utc"]          = due_dt_iso_utc
@@ -1309,7 +1359,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             state["last_agent_msg_at"]     = now_iso
             # (intentionally NOT setting last_confirm* yet — only after a successful send)
             opportunity["_kbb_state"]      = state
-
+            
             # Persist state to ES (pre-send)
             try:
                 from esQuerys import esClient
@@ -1323,9 +1373,25 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 log.info("Persisted _kbb_state to ES for opp=%s (pre-send confirm)", opp_id)
             except Exception as e:
                 log.warning("ES persist of _kbb_state failed (pre-send confirm): %s", e)
-
+            
+            # ✅ Flip CRM subStatus → Appointment Set (record appt even if email is blocked)
+            try:
+                from fortellis import set_opportunity_substatus
+                resp = set_opportunity_substatus(token, subscription_id, opp_id, sub_status="Appointment Set")
+                log.info("SubStatus update response: %s", getattr(resp, "status_code", "n/a"))
+                action_taken = True
+            except Exception as e:
+                log.warning("set_opportunity_substatus failed: %s", e)
+            
             # --- SEND with DoNotEmail handling ---
             did_send = False
+            
+            # ✅ Choke point BEFORE any send
+            if not _can_email(state):
+                log.info("Email suppressed by state for opp=%s (booked-confirmation)", opp_id)
+                opportunity["_kbb_state"] = state
+                return state, action_taken  # we already recorded appt + substatus
+            
             try:
                 send_opportunity_email_activity(
                     token, subscription_id, opp_id,
@@ -1334,7 +1400,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     subject=subject, body_html=body_html, rooftop_name=rooftop_name
                 )
                 did_send = True
-
+            
                 # Mark that we actually sent the confirmation
                 state["last_confirmed_due_utc"] = due_dt_iso_utc
                 state["last_confirm_sent_at"]   = _dt.now(_tz.utc).isoformat()
@@ -1349,9 +1415,9 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     log.info("Persisted _kbb_state to ES for opp=%s (post-send confirm)", opp_id)
                 except Exception as e:
                     log.warning("ES persist of _kbb_state failed (post-send confirm): %s", e)
-
+            
             except Exception as e:
-                # Detect Fortellis DoNotEmail 400 and swallow (we already persisted idempotency)
+                # Detect Fortellis DoNotEmail 400 and swallow (idempotent)
                 resp = getattr(e, "response", None)
                 body = ""
                 if resp is not None:
@@ -1360,9 +1426,21 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     except Exception:
                         body = resp.text
                 body_str = str(body)
-
+            
                 if "SendEmailInvalidRecipient" in body_str and "DoNotEmail" in body_str:
                     log.warning("KBB ICO: DoNotEmail — skipping confirmation email for opp %s.", opp_id)
+                    # ✅ Set local suppression flag so future runs short-circuit
+                    state["email_blocked_do_not_email"] = True
+                    opportunity["_kbb_state"] = state
+                    try:
+                        es_update_with_retry(
+                            esClient,
+                            index="opportunities",
+                            id=opp_id,
+                            doc={"_kbb_state": state}
+                        )
+                    except Exception:
+                        pass
                     # Optional: add a CRM comment for human follow-up by phone/text
                     try:
                         from fortellis import add_opportunity_comment
@@ -1372,7 +1450,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                         )
                     except Exception as ee:
                         log.warning("Failed to add DoNotEmail comment: %s", ee)
-                    # do not re-raise; state is already persisted → future runs will short-circuit
+                    # no re-raise
                 else:
                     log.error("Confirm send failed for opp %s: %s", opp_id, e)
                     state["last_confirm_error"] = (body_str[:500] if isinstance(body_str, str) else str(body)[:500])
@@ -1386,19 +1464,10 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                         )
                     except Exception:
                         pass
-                    # do not re-raise: we still want to exit cleanly without retry loops
-
-            action_taken = True
-
-            # Flip CRM subStatus → Appointment Set (even if email blocked, the appt exists)
-            try:
-                from fortellis import set_opportunity_substatus
-                resp = set_opportunity_substatus(token, subscription_id, opp_id, sub_status="Appointment Set")
-                log.info("SubStatus update response: %s", getattr(resp, "status_code", "n/a"))
-            except Exception as e:
-                log.warning("set_opportunity_substatus failed: %s", e)
-
+                    # no re-raise
+            
             return state, action_taken
+
 
 
 
