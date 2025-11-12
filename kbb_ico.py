@@ -911,7 +911,6 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     
     # also consider the inquiry_text (sometimes we only get that)
     found_optout = found_optout or _is_optout_text(inquiry_text)
-
     
     declined = False
     if found_optout:
@@ -927,13 +926,16 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     
     # ✅ Immediately honor opt-out before anything else
     if declined:
+        log.info("DECLINE ENTER opp=%s mode_before=%s", opp_id, state.get("mode"))
         now_iso = _dt.now(_tz.utc).isoformat()
         state["mode"] = "closed_declined"
         state["nudge_count"] = 0
         state["last_agent_msg_at"] = now_iso
         state["email_blocked_do_not_email"] = True
         opportunity["_kbb_state"] = state
-    
+
+        log.debug("DECLINE ES-WRITE opp=%s payload_keys=%s", opp_id, ["_kbb_state","isActive","checkedDict"])
+
         # Persist to ES (also mark inactive + exit_type)
         try:
             from esQuerys import esClient
@@ -943,15 +945,21 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             checked["exit_reason"] = "Stop emailing me"
             es_update_with_retry(esClient, index="opportunities", id=opp_id,
                                  doc={"_kbb_state": state, "isActive": False, "checkedDict": checked})
+            log.info("DECLINE ES-OK opp=%s set isActive=False", opp_id)
+
         except Exception as e:
             log.warning("ES persist failed (global decline): %s", e)
     
         # Flip CRM to Not In Market + DoNotEmail on the customer
         try:
             from fortellis import set_opportunity_inactive, add_opportunity_comment, set_customer_do_not_email
+            log.debug("CRM INACTIVE CALL opp=%s sub_status=Not In Market", opp_id)
+
             set_opportunity_inactive(token, subscription_id, opp_id,
                                      sub_status="Not In Market",
                                      comments="Customer requested no further contact — set inactive by Patti")
+            log.info("CRM INACTIVE OK opp=%s status=%s", opp_id, getattr(resp, "status_code", "n/a"))
+
             add_opportunity_comment(token, subscription_id, opp_id,
                                     "Patti: Customer requested NO FURTHER CONTACT. Email/SMS suppressed; set to Not In Market.")
             cust = (opportunity.get("customer") or {})
