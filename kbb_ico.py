@@ -899,7 +899,46 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             declined = True
             state["last_optout_seen_at"] = optout_ts or state["last_optout_seen_at"]
             log.info("Detected opt-out text from customer at %s: %r", optout_ts, optout_txt)
-
+    
+    # ✅ Immediately honor opt-out before anything else
+    if declined:
+        now_iso = _dt.now(_tz.utc).isoformat()
+        state["mode"] = "closed_declined"
+        state["nudge_count"] = 0
+        state["last_agent_msg_at"] = now_iso
+        state["email_blocked_do_not_email"] = True
+        opportunity["_kbb_state"] = state
+    
+        # Persist to ES (also mark inactive + exit_type)
+        try:
+            from esQuerys import esClient
+            from es_resilient import es_update_with_retry
+            checked = dict(opportunity.get("checkedDict") or {})
+            checked["exit_type"] = "customer_declined"
+            checked["exit_reason"] = "Stop emailing me"
+            es_update_with_retry(esClient, index="opportunities", id=opp_id,
+                                 doc={"_kbb_state": state, "isActive": False, "checkedDict": checked})
+        except Exception as e:
+            log.warning("ES persist failed (global decline): %s", e)
+    
+        # Flip CRM to Not In Market + DoNotEmail on the customer
+        try:
+            from fortellis import set_opportunity_inactive, add_opportunity_comment, set_customer_do_not_email
+            set_opportunity_inactive(token, subscription_id, opp_id,
+                                     sub_status="Not In Market",
+                                     comments="Customer requested no further contact — set inactive by Patti")
+            add_opportunity_comment(token, subscription_id, opp_id,
+                                    "Patti: Customer requested NO FURTHER CONTACT. Email/SMS suppressed; set to Not In Market.")
+            cust = (opportunity.get("customer") or {})
+            customer_id = cust.get("id")
+            emails = cust.get("emails") or []
+            email_address = (next((e for e in emails if e.get("isPreferred")), emails[0]) if emails else {}).get("address")
+            if customer_id and email_address:
+                set_customer_do_not_email(token, subscription_id, customer_id, email_address, do_not=True)
+        except Exception as e:
+            log.warning("CRM inactive/DoNotEmail failed (global decline): %s", e)
+    
+        return state, True
 
 
     # [#1] HARD STOP: if this opp is declined/inactive/closed or email is blocked, do nothing
@@ -1994,6 +2033,12 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     # Guard: no recipient → skip send cleanly
     if not recipients or not recipients[0]:
         log.warning("No recipient; skip cadence email for opp=%s", opp_id)
+        opportunity["_kbb_state"] = state
+        return state, action_taken
+
+    # respect local suppression BEFORE marking anything sent
+    if not _can_email(state):
+        log.info("Email suppressed by state for opp=%s (cadence)", opp_id)
         opportunity["_kbb_state"] = state
         return state, action_taken
 
