@@ -914,10 +914,16 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     
     declined = False
     if found_optout:
-        if not state["last_optout_seen_at"] or (optout_ts and optout_ts > state["last_optout_seen_at"]):
+        # Trigger decline if we never processed an opt-out, OR if still active/unsuppressed
+        last_seen = state.get("last_optout_seen_at")
+        already_closed = state.get("mode") in {"closed_declined"} or state.get("email_blocked_do_not_email")
+        if (not last_seen or not already_closed):
             declined = True
-            state["last_optout_seen_at"] = optout_ts or state["last_optout_seen_at"]
-            log.info("Detected opt-out text from customer at %s: %r", optout_ts, optout_txt)
+            state["last_optout_seen_at"] = optout_ts or last_seen
+            log.info("Detected NEW or unresolved opt-out at %s: %r", optout_ts, optout_txt)
+        else:
+            log.debug("Opt-out previously handled (mode=%s); skipping reprocess.", state.get("mode"))
+
 
     log.debug(
         "KBB OPT-OUT check opp=%s found_optout=%s ts=%s declined=%s last_seen=%s",
