@@ -28,6 +28,9 @@ from html import unescape as _unesc
 
 #from rooftops import ROOFTOP_INFO as ROOFTOP_INFO
 
+def _can_email(state: dict) -> bool:
+    return not state.get("email_blocked_do_not_email") and state.get("mode") not in {"closed_declined"}
+
 def _patch_address_placeholders(html: str, rooftop_name: str) -> str:
     addr = ((ROOFTOP_INFO.get(rooftop_name) or {}).get("address") or "").strip()
     if not addr:
@@ -320,16 +323,22 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
         from fortellis import set_opportunity_substatus
         resp = set_opportunity_substatus(token, subscription_id, opp_id, sub_status="Appointment Set")
         log.info("SubStatus update response: %s", getattr(resp, "status_code", "n/a"))
+        action_taken = True  # we did update CRM even if we don’t send an email
     except Exception as e:
         log.warning("set_opportunity_substatus failed: %s", e)
 
     # --- SEND with DoNotEmail handling ---
     did_send = False
     try:
+        if not _can_email(state):
+            log.info("Email suppressed by state for opp=%s", opp_id)
+            opportunity["_kbb_state"] = state
+            return state, action_taken  # <— we DID act (substatus), just didn’t email
+
         send_opportunity_email_activity(
             token, subscription_id, opp_id,
             sender=rooftop_sender,
-            recipients=recipients,  
+            recipients=recipients,
             carbon_copies=[],
             subject=subject, body_html=body_html, rooftop_name=rooftop_name
         )
@@ -852,9 +861,21 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     
     # keep a single shared dict reference everywhere
     opportunity["_kbb_state"] = state
-    
-    if state.get("email_blocked_do_not_email"):
-        log.info("Email blocked (DoNotEmail) → skipping all cadence emails for opp=%s", opp_id)
+
+    # [#1] HARD STOP: if this opp is declined/inactive/closed or email is blocked, do nothing
+    checked = (opportunity.get("checkedDict") or {})
+    already_declined    = (checked.get("exit_type") == "customer_declined")
+    already_inactive    = (opportunity.get("isActive") is False)
+    already_closed_mode = (state.get("mode") == "closed_declined")
+    email_blocked       = bool(state.get("email_blocked_do_not_email"))
+
+    if already_declined or already_inactive or already_closed_mode or email_blocked:
+        log.info(
+            "KBB ICO: hard-stop (declined=%s inactive=%s closed_mode=%s blocked=%s) opp=%s",
+            already_declined, already_inactive, already_closed_mode, email_blocked, opp_id
+        )
+        # normalize the flag so future runs also short-circuit
+        state["email_blocked_do_not_email"] = True
         opportunity["_kbb_state"] = state
         return state, False
 
@@ -1147,64 +1168,85 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         # === COMPOSE + SEND ================================================
         cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
 
-        # ---------- DECLINED ----------
+        # ---------- DECLINED (opt-out) ----------
         if declined:
-            subject = reply_subject  # keep thread subject
-            body_html = f"""
-                <p>Hi {cust_first},</p>
-                <p>Thanks for letting me know — I’ve marked your Kelley Blue Book® Instant Cash Offer as not interested. We won’t send further emails.</p>
-                <p>If you change your mind later, just reply here and I can pick it back up.</p>
-            """.strip()
+            log.info("KBB ICO: decline/opt-out detected; suppressing ALL future sends for opp=%s", opp_id)
 
-            # Normalize (NO CTA) + footer + subject guard
-            body_html = normalize_patti_body(body_html)
-            body_html = _patch_address_placeholders(body_html, rooftop_name)
-            body_html = _PREFS_RE.sub("", body_html).strip()
-            body_html = body_html + build_patti_footer(rooftop_name)
-            if not subject.lower().startswith("re:"):
-                subject = "Re: " + subject
-
-            # 2) Resolve recipient + send
-            cust = (opportunity.get("customer") or {})
-            email = cust.get("emailAddress") or ((cust.get("emails") or [{}])[0].get("address"))
-            if not email:
-                email = (opportunity.get("_lead", {}) or {}).get("email_address")
-            recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
-            if not recipients:
-                log.warning("No recipient; skip send for opp=%s", opp_id)
-                opportunity["_kbb_state"] = state
-                return state, action_taken
-
-            send_opportunity_email_activity(
-                token, subscription_id, opp_id,
-                sender=rooftop_sender,
-                recipients=recipients, carbon_copies=[],
-                subject=subject, body_html=body_html, rooftop_name=rooftop_name
-            )
-
-            # 3) Save state BEFORE inactive
+            # Set local stop flags
+            now_iso = _dt.now(_tz.utc).isoformat()
             state["mode"] = "closed_declined"
             state["nudge_count"] = 0
-            state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
-            #try:
-            #    _save_state_comment(token, subscription_id, opp_id, state)
-            #except Exception as e:
-            #    log.warning("save_state_comment failed (pre-inactive): %s", e)
-
-            # 4) Inactivate LAST
-            try:
-                from fortellis import set_opportunity_inactive
-                resp = set_opportunity_inactive(
-                    token, subscription_id, opp_id,
-                    sub_status="Not In Market",
-                    comments="Customer declined — set inactive by Patti"
-                )
-                log.info("Set inactive response: %s", getattr(resp, "status_code", "n/a"))
-            except Exception as e:
-                log.warning("set_opportunity_inactive failed: %s", e)
-            action_taken = True
+            state["last_agent_msg_at"] = now_iso
+            state["email_blocked_do_not_email"] = True
             opportunity["_kbb_state"] = state
-            return state, action_taken  # important: stop here
+
+            # Persist to ES immediately so re-runs short-circuit deterministically
+            try:
+                from esQuerys import esClient
+                from es_resilient import es_update_with_retry  # if you use a wrapper; else use your existing helper
+            except Exception:
+                es_update_with_retry = None
+            
+            try:
+                if es_update_with_retry:
+                    # also persist an explicit exit marker in checkedDict
+                    checked = dict(opportunity.get("checkedDict") or {})
+                    checked["exit_type"] = "customer_declined"
+                    checked["exit_reason"] = "Stop emailing me"
+            
+                    es_update_with_retry(
+                        esClient,
+                        index="opportunities",
+                        id=opp_id,
+                        doc={"_kbb_state": state, "isActive": False, "checkedDict": checked}
+                    )
+            except Exception as e:
+                log.warning("ES persist failed (decline): %s", e)
+            
+            # Flip CRM opp → Not In Market (no send)
+            try:
+                from fortellis import set_opportunity_inactive, add_opportunity_comment
+                set_opportunity_inactive(
+                    token,
+                    subscription_id,
+                    opp_id,
+                    sub_status="Not In Market",
+                    comments="Customer requested no further contact — set inactive by Patti"
+                )
+                # Add a clear CRM note for the team
+                add_opportunity_comment(
+                    token, subscription_id, opp_id,
+                    "Patti: Customer requested NO FURTHER CONTACT. Email/SMS suppressed; "
+                    "opportunity set to Not In Market."
+                )
+            except Exception as e:
+                log.warning("CRM inactive/comment failed (decline): %s", e)
+            
+            # Also mark the customer record as DoNotEmail=True
+            try:
+                cust = (opportunity.get("customer") or {})
+                customer_id = cust.get("id")
+            
+                # choose preferred email if present, else first, else None
+                email_address = None
+                emails = cust.get("emails") or []
+                if emails:
+                    preferred = next((e for e in emails if e.get("isPreferred")), None)
+                    email_address = (preferred or emails[0]).get("address")
+            
+                if customer_id and email_address:
+                    from fortellis import set_customer_do_not_email
+                    set_customer_do_not_email(token, subscription_id, customer_id, email_address, do_not=True)
+                    log.info("Customer marked DoNotEmail in CRM for opp=%s (email=%s)", opp_id, email_address)
+                else:
+                    log.warning("Cannot set DoNotEmail: missing customer_id or email (opp=%s)", opp_id)
+            except Exception as e:
+                log.warning("Failed to mark customer DoNotEmail in CRM: %s", e)
+            
+            action_taken = True
+            return state, action_taken  # important: stop here (no email)
+
+
 
         # ---------- APPOINTMENT CONFIRMATION ----------
         elif created_appt_ok and appt_human:
