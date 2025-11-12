@@ -74,6 +74,43 @@ TOKEN_URL = os.getenv(
     f"https://identity.fortellis.io/oauth2/{AUTH_SERVER_ID}/v1/token"
 )
 
+def set_customer_do_not_email(token, subscription_id, customer_id, email_address, do_not=True):
+    """
+    Marks the given customer email as DoNotEmail=True via Fortellis Customers API.
+    """
+    import requests
+    from common import get_fortellis_headers
+
+    url = f"https://api.fortellis.io/sales/v2/elead/customers/{customer_id}"
+    headers = get_fortellis_headers(token, subscription_id)
+
+    # Fetch full customer record first (so we can preserve other emails)
+    resp = requests.get(url, headers=headers)
+    resp.raise_for_status()
+    cust = resp.json()
+
+    emails = cust.get("emails") or []
+    for e in emails:
+        if e.get("address", "").lower() == email_address.lower():
+            e["doNotEmail"] = do_not
+            break
+    else:
+        # If we didn't find it, append a new email entry
+        emails.append({
+            "address": email_address,
+            "emailType": "Personal",
+            "doNotEmail": do_not,
+            "isPreferred": True
+        })
+
+    cust["emails"] = emails
+
+    patch_resp = requests.put(url, headers=headers, json=cust)
+    log_msg = f"set_customer_do_not_email({email_address}) status={patch_resp.status_code}"
+    print(log_msg)
+    return patch_resp
+
+
 def set_opportunity_inactive(token: str, subscription_id: str, opportunity_id: str,
                              sub_status: str = "Not In Market", comments: str = "Marked inactive by Patti"):
     """
