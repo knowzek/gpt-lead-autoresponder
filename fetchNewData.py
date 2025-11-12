@@ -162,9 +162,6 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
         up_type = (op.get("upType") or "").lower()
         is_kbb = _is_exact_kbb_source(op.get("source"))
 
-        if not op.get("source") == "KBB Instant Cash Offer":
-            continue
-    
         # Keep normal upType gate for non-KBB; allow KBB ICO through regardless
         if (not is_kbb) and (up_type not in ELIGIBLE_UPTYPES):
             continue
