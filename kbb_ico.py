@@ -17,6 +17,7 @@ import os
 TEST_TO = os.getenv("TEST_TO", "pattiautoresponder@gmail.com")
 import logging
 log = logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
 import re as _re
 from textwrap import dedent as _dd
 from rooftops import ROOFTOP_INFO
@@ -27,6 +28,24 @@ import zoneinfo as _zi
 from html import unescape as _unesc
 
 #from rooftops import ROOFTOP_INFO as ROOFTOP_INFO
+
+def _es_debug_update(esClient, index, id, doc, tag=""):
+    try:
+        log.debug("[ES%s] update start id=%s doc_keys=%s", f":{tag}" if tag else "", id, list(doc.keys()))
+        from es_resilient import es_update_with_retry as _esu
+        r = _esu(esClient, index=index, id=id, doc=doc)
+        log.debug("[ES%s] update via es_update_with_retry OK id=%s", f":{tag}" if tag else "", id)
+        return r
+    except Exception as e1:
+        log.warning("[ES%s] es_update_with_retry failed, falling back: %s", f":{tag}" if tag else "", e1)
+        try:
+            r2 = esClient.update(index=index, id=id, body={"doc": doc, "doc_as_upsert": True})
+            log.debug("[ES%s] direct update OK id=%s result=%s", f":{tag}" if tag else "", id, getattr(r2, "result", "n/a"))
+            return r2
+        except Exception as e2:
+            log.error("[ES%s] direct update failed id=%s error=%s", f":{tag}" if tag else "", id, e2)
+            raise
+
 
 def _can_email(state: dict) -> bool:
     return not state.get("email_blocked_do_not_email") and state.get("mode") not in {"closed_declined"}
@@ -892,6 +911,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     
     # also consider the inquiry_text (sometimes we only get that)
     found_optout = found_optout or _is_optout_text(inquiry_text)
+
     
     declined = False
     if found_optout:
@@ -899,6 +919,11 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             declined = True
             state["last_optout_seen_at"] = optout_ts or state["last_optout_seen_at"]
             log.info("Detected opt-out text from customer at %s: %r", optout_ts, optout_txt)
+
+    log.debug(
+        "KBB OPT-OUT check opp=%s found_optout=%s ts=%s declined=%s last_seen=%s",
+        opp_id, bool(found_optout), optout_ts, bool(declined), state.get("last_optout_seen_at")
+    )
     
     # ✅ Immediately honor opt-out before anything else
     if declined:
