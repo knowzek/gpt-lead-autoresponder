@@ -534,14 +534,14 @@ def _find_new_customer_scheduled_appt(acts_live, state, *, token=None, subscript
             return appt_id, due
 
     # 3) Fallback: pull a fresh activity-history so we can see scheduledActivities for sure
-    try:
-        from fortellis import get_activity_history_v1  # you'll add this small wrapper if not present
-        fresh = get_activity_history_v1(token, subscription_id, opp_id, customer_id)
-        appt_id, due = _scan((fresh or {}).get("scheduledActivities") or [])
-        if appt_id:
-            return appt_id, due
-    except Exception as e:
-        log.warning("KBB ICO: fallback activity-history fetch failed: %s", e)
+    # try:
+    #    from fortellis import get_activity_history_v1  # you'll add this small wrapper if not present
+    #    fresh = get_activity_history_v1(token, subscription_id, opp_id, customer_id)
+    #    appt_id, due = _scan((fresh or {}).get("scheduledActivities") or [])
+    #    if appt_id:
+    #        return appt_id, due
+    #except Exception as e:
+    #    log.warning("KBB ICO: fallback activity-history fetch failed: %s", e)
 
     return None, None
 
@@ -809,10 +809,22 @@ def _save_state_comment(token, subscription_id, opportunity_id, state: dict):
     #add_opportunity_comment(token, subscription_id, opportunity_id, payload)
 
 
-def customer_has_replied(opportunity: dict, token: str, subscription_id: str, state: dict | None = None):
+def customer_has_replied(
+    opportunity: dict,
+    token: str,
+    subscription_id: str,
+    state: dict | None = None,
+    acts: list[dict] | dict | None = None,   # NEW optional arg
+):
     """
     Returns (has_replied, last_customer_ts_iso, last_inbound_activity_id)
-    Only returns True for a *new* inbound since the state's last seen inbound id/timestamp.
+
+    Only returns True for a *new* inbound since the state's last seen
+    inbound id/timestamp.
+
+    If `acts` is provided, it must be the same structure returned by
+    search_activities_by_opportunity (list or dict); in that case we
+    will NOT make an extra API call.
     """
     state = state or {}
     last_seen_ts = (state.get("last_customer_msg_at") or "").strip()
@@ -825,13 +837,16 @@ def customer_has_replied(opportunity: dict, token: str, subscription_id: str, st
         log.error("customer_has_replied: missing opportunity_id")
         return False, None, None
 
-    acts = search_activities_by_opportunity(
-        opportunity_id=opportunity_id,
-        token=token,
-        dealer_key=subscription_id,
-        page=1, page_size=200,
-        customer_id=customer_id or None,
-    ) or []
+    # ✅ Only hit Fortellis if caller didn’t pass a snapshot
+    if acts is None:
+        acts = search_activities_by_opportunity(
+            opportunity_id=opportunity_id,
+            token=token,
+            dealer_key=subscription_id,
+            page=1,
+            page_size=200,
+            customer_id=customer_id or None,
+        ) or []
 
     # Some orgs return dict shapes; normalize to list if so
     if isinstance(acts, dict):
@@ -877,7 +892,6 @@ def customer_has_replied(opportunity: dict, token: str, subscription_id: str, st
         return True, (ats or None), (aid or None)
 
     return False, None, None
-
 
 
 
@@ -1155,8 +1169,11 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             state["last_inbound_activity_id"] = last_inbound_id
         #_save_state_comment(token, subscription_id, opp_id, state)
 
-        # --- REFRESH activities so we don't use a stale snapshot ---
-        acts_now = _fetch_activities_live(opp_id, customer_id, token, subscription_id)
+        # Only refetch if we actually sent something new in this run
+        if action_taken:
+            acts_now = _fetch_activities_live(opp_id, customer_id, token, subscription_id)
+        else:
+            acts_now = acts_live
     
         def _newest_read_after(acts, floor_dt):
             newest = None
