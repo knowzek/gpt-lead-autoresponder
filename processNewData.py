@@ -180,36 +180,37 @@ def checkActivities(opportunity, currDate, rooftop_name):
         activities = opportunity.get('completedActivities', [])
     activities = sortActivities(activities)
     
-    alreadyProcessedActivities =opportunity.get('alreadyProcessedActivities', {})
+    alreadyProcessedActivities = opportunity.get('alreadyProcessedActivities', {})
     checkedDict = opportunity.get('checkedDict', {})
     subscription_id = opportunity.get('_subscription_id')
     messages = opportunity.get("messages", [])
     customerInfo = opportunity.get('customer', {})
 
-    token = None
+    # Get a single token for this function, if needed
+    if OFFLINE_MODE or DEBUGMODE:
+        token = None
+    else:
+        token = get_token(subscription_id)
 
     for act in activities:
         activityId = act.get("activityId")
         if activityId in alreadyProcessedActivities:
             continue
-    
-        if not token and not DEBUGMODE and not OFFLINE_MODE:
-            token = get_token(subscription_id)
-        
+
         comments = (act.get("comments") or "")
         activityName = (act.get("activityName") or "").strip().lower()
         activityType = act.get("activityType")
-    
+
         # 1) Our sentinel in any prior comment?
         if PATTI_FIRST_REPLY_SENTINEL in comments:
             checkedDict["patti_already_contacted"] = True
             continue
-    
+
         if activityName == "read email" or activityType == 20:
             fullAct = act
             if not DEBUGMODE and not OFFLINE_MODE:
                 fullAct = get_activity_by_id_v1(activityId, token, subscription_id)
-    
+
             customerMsg = (fullAct.get('message') or {})
             customerMsgDict = {
                 "msgFrom": "customer",
@@ -341,6 +342,13 @@ def processHit(hit):
     subscription_id = opportunity['_subscription_id']
     opportunityId = opportunity['opportunityId']
 
+    # Reuse a single token for this whole processHit run
+    if OFFLINE_MODE:
+        token = None
+    else:
+        token = get_token(subscription_id)
+
+
     # --- Normalize testing arrays so live runs never use them for logic ---
     if OFFLINE_MODE:
         opp_messages = (opportunity.get("completedActivitiesTesting")
@@ -361,41 +369,6 @@ def processHit(hit):
     customerId = customer['id']
 
     print("opportunityId:", opportunityId)
-
-    
-
-    # ========= Getting new activites from fortellis =====
-
-    # print("opportunityId:", opportunityId)
-    
-    if OFFLINE_MODE:
-        local_completed = opportunity.get("completedActivitiesTesting", []) or []
-        activities = {"scheduledActivities": [], "completedActivities": local_completed}
-    else:
-        token = get_token(subscription_id)
-        activities = get_activities(opportunityId, customerId, token, subscription_id)
-
-
-    # Safety: if anything upstream handed us a list, coerce to the dict shape we expect
-    if isinstance(activities, list):
-        activities = {"scheduledActivities": [], "completedActivities": activities}
-
-    currDate = _dt.now()
-    docToUpdate = {
-        "scheduledActivities": activities.get("scheduledActivities", []),
-        "completedActivities": activities.get("completedActivities", []),
-        "updated_at": currDate
-    }
-    opportunity.update(docToUpdate)
-
-    # Ensure test arrays never land in ES in live mode
-    if not OFFLINE_MODE:
-        opportunity.pop("completedActivitiesTesting", None)
-        es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
-
-    # continue
-
-    # ====================================================
 
 
     # getting customer email & info
@@ -459,8 +432,9 @@ def processHit(hit):
     # 🔒 Fresh active-check from Fortellis (ES can be stale)
 
     try:
-        tok_for_check = get_token(subscription_id) if not OFFLINE_MODE else None
-        fresh_opp = get_opportunity(opportunityId, tok_for_check, subscription_id) if not OFFLINE_MODE else opportunity
+        # token was fetched once at the top of processHit
+        fresh_opp = get_opportunity(opportunityId, token, subscription_id) if not OFFLINE_MODE else opportunity
+
         # Clear any prior transient_error now that the fetch succeeded
         if not OFFLINE_MODE:
             es_update_with_retry(
@@ -469,6 +443,7 @@ def processHit(hit):
                 id=opportunityId,
                 doc={"patti": {"transient_error": None}}
             )
+
 
     except Exception as e:
         # Downgrade to a transient error so we retry next run (no hard skip)
@@ -499,29 +474,29 @@ def processHit(hit):
         return
     
     # keep this — we still skip inactive opps
-        if not is_active_opp(fresh_opp):
-            log.info("Skipping opp %s (inactive from Fortellis).", opportunityId)
-            if not OFFLINE_MODE:
-                es_update_with_retry(
-                    esClient,
-                    index="opportunities",
-                    id=opportunityId,
-                    doc={
-                        "patti": {
-                            "skip": True,
-                            "skip_reason": "inactive_opportunity",
-                            # clear any transient flag since this is a definitive state
-                            "transient_error": None,
-                            "inactive_at": _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                            "inactive_snapshot": {
-                                "status": fresh_opp.get("status"),
-                                "subStatus": fresh_opp.get("subStatus"),
-                                "isActive": fresh_opp.get("isActive")
-                            }
+    if not is_active_opp(fresh_opp):
+        log.info("Skipping opp %s (inactive from Fortellis).", opportunityId)
+        if not OFFLINE_MODE:
+            es_update_with_retry(
+                esClient,
+                index="opportunities",
+                id=opportunityId,
+                doc={
+                    "patti": {
+                        "skip": True,
+                        "skip_reason": "inactive_opportunity",
+                        # clear any transient flag since this is a definitive state
+                        "transient_error": None,
+                        "inactive_at": _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        "inactive_snapshot": {
+                            "status": fresh_opp.get("status"),
+                            "subStatus": fresh_opp.get("subStatus"),
+                            "isActive": fresh_opp.get("isActive")
                         }
                     }
-                )
-            return
+                }
+            )
+        return
 
     
     # === KBB routing ===
@@ -680,10 +655,34 @@ def processHit(hit):
         wJson(opportunity, f"jsons/process/{opportunityId}.json")
         return
     
-    # === if we got here, proceed with your normal (non-KBB) flow ===
+    # === if we got here, proceed with the normal (non-KBB) flow ===
 
-    # ===========================================================================
+    # ========= Getting new activities from Fortellis (NON-KBB only) =====
 
+    if OFFLINE_MODE:
+        local_completed = opportunity.get("completedActivitiesTesting", []) or []
+        activities = {"scheduledActivities": [], "completedActivities": local_completed}
+    else:
+        activities = get_activities(opportunityId, customerId, token, subscription_id)
+    
+    # Safety: if anything upstream handed us a list, coerce to the dict shape we expect
+    if isinstance(activities, list):
+        activities = {"scheduledActivities": [], "completedActivities": activities}
+    
+    currDate = _dt.now()
+    docToUpdate = {
+        "scheduledActivities": activities.get("scheduledActivities", []),
+        "completedActivities": activities.get("completedActivities", []),
+        "updated_at": currDate
+    }
+    opportunity.update(docToUpdate)
+    
+    if not OFFLINE_MODE:
+        opportunity.pop("completedActivitiesTesting", None)
+        es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+
+
+    # ====================================================
 
 
     # === Vehicle & SRP link =============================================
@@ -713,8 +712,6 @@ def processHit(hit):
 
     
     completedActivities = activities.get('completedActivities', [])
-    # completedActivities = opportunity.get('completedActivities', [])
-    # scheduledActivities = opportunity.get('scheduledActivities', [])
 
     patti_already_contacted = checkedDict.get('patti_already_contacted', False)
 
@@ -727,16 +724,13 @@ def processHit(hit):
             firstActivityFull = None  # define up front for both branches
     
             if not OFFLINE_MODE:
-                token = get_token(subscription_id)
                 firstActivityFull = get_activity_by_id_v1(firstActivity['activityId'], token, subscription_id)
                 firstActivityMessageBody = (firstActivityFull.get('message') or {}).get('body', '') or ''
             else:
                 # OFFLINE: derive a body from newest local activity
-                # Prefer the last completed activity we just built above
                 newest = (completedActivities[-1] if completedActivities else {}) or {}
                 msg = newest.get("message") or {}
     
-                # Some offline items only have 'notes'
                 firstActivityMessageBody = (msg.get("body") or newest.get("notes") or "").strip()
     
                 # Create an offline "full" act so the rest of the code can store it
