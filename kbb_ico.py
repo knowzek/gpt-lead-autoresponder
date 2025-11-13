@@ -986,7 +986,6 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             set_opportunity_inactive(token, subscription_id, opp_id,
                                      sub_status="Not In Market",
                                      comments="Customer requested no further contact — set inactive by Patti")
-            log.info("CRM INACTIVE OK opp=%s status=%s", opp_id, getattr(resp, "status_code", "n/a"))
 
             add_opportunity_comment(token, subscription_id, opp_id,
                                     "Patti: Customer requested NO FURTHER CONTACT. Email/SMS suppressed; set to Not In Market.")
@@ -1122,8 +1121,12 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     
     # === If appointment is booked/upcoming, pause cadence but still watch for inbound ===
     if state.get("mode") == "scheduled" or _has_upcoming_appt(acts_live, state):
-        has_reply, last_cust_ts, last_inbound_id = customer_has_replied(
-            opportunity, token, subscription_id, state
+        has_reply, last_cust_ts, last_inbound_activity_id = customer_has_replied(
+            opportunity,
+            token,
+            subscription_id,
+            state,
+            acts=acts_live,       
         )
         
         if has_reply and last_inbound_id and last_inbound_id != state.get("last_inbound_activity_id"):
@@ -1143,8 +1146,12 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
 
     ## NOTE: pass state into the detector so it can ignore already-seen inbounds
-    has_reply, last_cust_ts, last_inbound_id = customer_has_replied(
-        opportunity, token, subscription_id, state
+    has_reply, last_cust_ts, last_inbound_activity_id = customer_has_replied(
+        opportunity,
+        token,
+        subscription_id,
+        state,
+        acts=acts_live,          
     )
 
     # Only flip to convo when we truly have a new inbound with a timestamp
@@ -2167,7 +2174,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             log.error("Cadence send failed for opp %s: %s", opp_id, e)
             # state was persisted pre-send; do not re-raise to avoid loops
 
-    # Phone/Text tasks (unchanged)
+    # Phone/Text tasks 
     if ALLOW_TEXTING and plan.get("create_text_task", False) and _customer_has_text_consent(opportunity):
         schedule_activity(
             token, subscription_id, opp_id,
@@ -2175,12 +2182,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             activity_name="KBB ICO: Text Task", activity_type=15,
             comments=f"Auto-scheduled per ICO Day {effective_day}."
         )
-
-    # Done with this cadence step
-    action_taken = True
-    opportunity["_kbb_state"] = state
-    return state, action_taken
-
+        
     if plan.get("create_phone_task", True):
         schedule_activity(
             token, subscription_id, opp_id,
@@ -2188,6 +2190,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             activity_name="KBB ICO: Phone Task", activity_type=14,
             comments=f"Auto-scheduled per ICO Day {effective_day}."
         )
+ 
     action_taken = True  
     opportunity["_kbb_state"] = state
     return state, action_taken
