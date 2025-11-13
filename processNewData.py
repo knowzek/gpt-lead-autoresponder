@@ -348,6 +348,12 @@ def processHit(hit):
     else:
         token = get_token(subscription_id)
 
+    # EARLY SKIP: avoid API calls for opps already marked inactive
+    patti_meta = opportunity.get("patti") or {}
+    if patti_meta.get("skip") and patti_meta.get("skip_reason") == "inactive_opportunity":
+        log.info("Skipping opp %s (inactive_opportunity in ES).", opportunityId)
+        return
+
 
     # --- Normalize testing arrays so live runs never use them for logic ---
     if OFFLINE_MODE:
@@ -614,7 +620,7 @@ def processHit(hit):
         try:
             tok = None
             if not OFFLINE_MODE:
-                tok = get_token(subscription_id)
+                tok = token
     
             state, action_taken = process_kbb_ico_lead(
                 opportunity=opportunity,
@@ -1032,8 +1038,6 @@ def processHit(hit):
         opportunity['followUP_count'] += 1
         if not OFFLINE_MODE:
             es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
-
-    
     
     wJson(opportunity, f"jsons/process/{opportunityId}.json")
 
