@@ -28,7 +28,8 @@ from fortellis import (
     schedule_activity,
 )
 
-from patti_common import fmt_local_human
+from patti_common import fmt_local_human, normalize_patti_body, append_soft_schedule_sentence, rewrite_sched_cta_for_booked
+
 #from fortellis import get_vehicle_inventory_xml  
 from inventory_matcher import recommend_from_xml
 
@@ -1098,11 +1099,20 @@ def processHit(hit):
         subject   = response["subject"]
         body_html = response["body"]
 
-        body_html = re.sub(
-            r"(?is)(?:\n\s*)?patti\s*(?:\r?\n)+virtual assistant.*?$",
-            "",
-            body_html
-        )
+        # --- NEW: normalize Patti body + add the right schedule CTA ---
+        body_html = normalize_patti_body(body_html)
+
+        # Decide which CTA behavior to use based on appointment state
+        patti_meta = opportunity.get("patti") or {}
+        mode = patti_meta.get("mode")
+
+        if mode == "scheduled":
+            # Already booked – rewrite any schedule language to reschedule
+            body_html = rewrite_sched_cta_for_booked(body_html)
+        else:
+            # Not booked yet – ensure we add one clean schedule CTA
+            body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+
         from kbb_ico import _PREFS_RE
         body_html = _PREFS_RE.sub("", body_html).strip()
         opportunity["body_html"] = body_html
