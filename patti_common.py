@@ -1,4 +1,6 @@
 import re as _re
+from datetime import datetime as _dt
+import zoneinfo as _zi
 
 EXIT_KEYWORDS = [
     "not interested", "no longer interested", "bought elsewhere",
@@ -48,3 +50,17 @@ def _latest_customer_optout(opportunity):
             latest = (True, m.get("date"), m.get("body"))
             break
     return latest or (False, None, None)
+
+def fmt_local_human(dt: _dt, tz_name: str = "America/Los_Angeles") -> str:
+    """
+    Return 'Friday, Nov 14 at 12:00 PM' in the given timezone.
+    """
+    try:
+        z = _zi.ZoneInfo(tz_name)
+        local = dt.astimezone(z)
+    except Exception:
+        local = dt
+
+    time_str = local.strftime("%I:%M %p").lstrip("0")
+    return f"{local.strftime('%A')}, {local.strftime('%b')} {local.day} at {time_str}"
+
