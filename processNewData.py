@@ -12,17 +12,23 @@ from es_resilient import es_update_with_retry
 from esQuerys import getNewData, esClient, getNewDataByDate
 from rooftops import get_rooftop_info
 from constants import *
-from gpt import run_gpt, getCustomerMsgDict
+from gpt import run_gpt, getCustomerMsgDict, extract_appt_time
 import re
 import logging
 import hashlib, json, time
 from uuid import uuid4
 import uuid
 
-from fortellis import get_activities, get_token, get_activity_by_id_v1, get_opportunity
-from fortellis import get_activities, get_token, get_activity_by_id_v1, get_opportunity, add_opportunity_comment
+from fortellis import (
+    get_activities,
+    get_token,
+    get_activity_by_id_v1,
+    get_opportunity,
+    add_opportunity_comment,
+    schedule_activity,
+)
 
-
+from patti_common import fmt_local_human
 #from fortellis import get_vehicle_inventory_xml  
 from inventory_matcher import recommend_from_xml
 
@@ -951,6 +957,55 @@ def processHit(hit):
 
                 return
 
+            # --- Step 3: try to auto-schedule an appointment from the inquiry text ---
+            proposed = extract_appt_time(inquiry_text or "", tz="America/Los_Angeles")
+            appt_iso = (proposed.get("iso") or "").strip()
+            conf = float(proposed.get("confidence") or 0)
+
+            created_appt_ok = False
+            appt_human = None
+            due_dt_iso_utc = None
+
+            if appt_iso and conf >= 0.60:
+                try:
+                    # parse the local time and convert to UTC ISO
+                    dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
+                    due_dt_iso_utc = dt_local.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+                    schedule_activity(
+                        token,
+                        subscription_id,
+                        opportunityId,
+                        due_dt_iso_utc=due_dt_iso_utc,
+                        activity_name="Sales Appointment",
+                        activity_type="Appointment",
+                        comments=f"Auto-scheduled from customer email: {inquiry_text[:180]}",
+                    )
+                    created_appt_ok = True
+                    appt_human = fmt_local_human(dt_local)
+
+                    # 🔐 Store appointment state so future runs know this opp is scheduled
+                    patti_meta = opportunity.get("patti") or {}
+                    patti_meta["mode"] = "scheduled"
+                    patti_meta["appt_due_utc"] = due_dt_iso_utc
+                    opportunity["patti"] = patti_meta
+
+                    log.info(
+                        "✅ Auto-scheduled appointment for %s at %s (conf=%.2f)",
+                        opportunityId,
+                        appt_human,
+                        conf,
+                    )
+                except Exception as e:
+                    log.error(
+                        "Failed to auto-schedule appointment for %s (appt_iso=%r): %s",
+                        opportunityId,
+                        appt_iso,
+                        e,
+                    )
+
+
+
         # === Compose with GPT ===============================================
         fallback_mode = not inquiry_text or inquiry_text.strip().lower() in ["", "request a quote", "interested", "info", "information", "looking"]
 
@@ -992,6 +1047,20 @@ def processHit(hit):
 
         Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
         """
+            
+        # --- NEW: if Patti auto-scheduled an appointment, tell GPT to confirm it ---
+        if created_appt_ok and appt_human:
+            prompt += f"""
+
+    IMPORTANT APPOINTMENT CONTEXT (do not skip):
+    - The guest proposed a time and Patti already scheduled a dealership appointment for {appt_human}.
+    
+    In your email:
+    - Clearly confirm that date and time in plain language.
+    - Thank them for scheduling.
+    - Invite them to reply if they need to adjust the time or have any questions.
+    - Do NOT ask them to pick a time; the appointment is already scheduled. Focus on confirming it.
+    """
             
         # === Inventory recommendations =====================================
 
@@ -1067,57 +1136,81 @@ def processHit(hit):
         # handle follow-ups messages
         checkActivities(opportunity, currDate, rooftop_name)
 
-    fud = opportunity.get('followUP_date')
-    followUP_date = _dt.fromisoformat(fud) if isinstance(fud, str) else (fud if isinstance(fud, _dt) else currDate)
-    followUP_count = opportunity['followUP_count']
+        fud = opportunity.get('followUP_date')
+        followUP_date = _dt.fromisoformat(fud) if isinstance(fud, str) else (fud if isinstance(fud, _dt) else currDate)
+        followUP_count = opportunity['followUP_count']
+    
+        # --- NEW: Step 4 — pause cadence if there is an upcoming appointment ---
+        patti_meta = opportunity.get("patti") or {}
+        appt_due_utc = patti_meta.get("appt_due_utc")
+        if appt_due_utc:
+            try:
+                appt_dt = _dt.fromisoformat(str(appt_due_utc).replace("Z", "+00:00"))
+                now_utc = _dt.now(_tz.utc)
+                if appt_dt > now_utc:
+                    log.info(
+                        "⏸ Skipping cadence follow-up for %s — appointment already scheduled at %s",
+                        opportunityId,
+                        appt_dt.isoformat(),
+                    )
+                    wJson(opportunity, f"jsons/process/{opportunityId}.json")
+                    return
+            except Exception as e:
+                log.warning(
+                    "Failed to parse appt_due_utc %r for %s: %s",
+                    appt_due_utc,
+                    opportunityId,
+                    e,
+                )
+    
+        last_by = (opportunity.get('checkedDict') or {}).get('last_msg_by', '')
+        if followUP_date <= currDate and followUP_count > 3:
+            opportunity['isActive'] = False
+            if not OFFLINE_MODE:
+                es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+            wJson(opportunity, f"jsons/process/{opportunityId}.json")
+            return
+        elif followUP_date <= currDate:
+            messages = opportunity['messages']
+            prompt = f"""
+            generate next patti reply which is a follow-up message, ... messages between patti and the customer (python list of dicts):
+            {messages}
+            """
+            response = run_gpt(
+                prompt,
+                customer_name,
+                rooftop_name,
+                prevMessages=True,
+            )
 
-    last_by = (opportunity.get('checkedDict') or {}).get('last_msg_by', '')
-    if followUP_date <= currDate and followUP_count > 3:
-        opportunity['isActive'] = False
-        if not OFFLINE_MODE:
-            es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity) 
-        wJson(opportunity, f"jsons/process/{opportunityId}.json")
-        return
-    elif followUP_date <= currDate:
-        messages = opportunity['messages']
-        prompt = f"""
-        generate next patti reply which is a follow-up message, here is the current messages between patti and the customer (python list of dicts):
-        {messages}
-        """
-        response = run_gpt(
-        prompt,
-        customer_name,
-        rooftop_name,
-        prevMessages= True)
+            subject   = response["subject"]
+            body_html = response["body"]
 
-        subject   = response["subject"]
-        body_html = response["body"]
+            body_html = re.sub(
+                r"(?is)(?:\n\s*)?patti\s*(?:\r?\n)+virtual assistant.*?$",
+                "",
+                body_html
+            )
 
-        body_html = re.sub(
-            r"(?is)(?:\n\s*)?patti\s*(?:\r?\n)+virtual assistant.*?$",
-            "",
-            body_html
-        )
+            opportunity['messages'].append(
+                {
+                    "msgFrom": "patti",
+                    "subject": subject,
+                    "body": body_html,
+                    "date": currDate,
+                    "action": response.get("action"),
+                    "notes": response.get("notes")
+                }
+            )
 
-        opportunity['messages'].append(
-            {
-                "msgFrom": "patti",
-                "subject": subject,
-                "body": body_html,
-                "date": currDate,
-                "action": response.get("action"),
-                "notes": response.get("notes")
-            }
-        )
+            # TODO: fix in which line
+            opportunity['checkedDict']['last_msg_by'] = "patti"
 
-        # TODO: fix in which line
-        opportunity['checkedDict']['last_msg_by'] = "patti"
-
-        nextDate = currDate + _td(days=1)
-        opportunity['followUP_date'] = nextDate.isoformat()
-        opportunity['followUP_count'] += 1
-        if not OFFLINE_MODE:
-            es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+            nextDate = currDate + _td(days=1)
+            opportunity['followUP_date'] = nextDate.isoformat()
+            opportunity['followUP_count'] += 1
+            if not OFFLINE_MODE:
+                es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
     
     wJson(opportunity, f"jsons/process/{opportunityId}.json")
 
