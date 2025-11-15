@@ -789,7 +789,8 @@ def processHit(hit):
                 
                 firstActivityFull = {
                     "activityId": newest.get("activityId") or newest.get("id") or f"offline-{uuid.uuid4().hex[:8]}",
-                    "completedDate": newest.get("completedDate") or _dt.datetime.utcnow().isoformat() + "Z",
+                    "completedDate": newest.get("completedDate")
+                        or _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                     "message": {"subject": newest.get("subject", ""), "body": firstActivityMessageBody},
                     "activityType": newest.get("activityType", 20),
                     "activityName": newest.get("activityName", "Read Email"),
