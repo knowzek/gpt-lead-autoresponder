@@ -226,38 +226,66 @@ def checkActivities(opportunity, currDate, rooftop_name):
             checkedDict["last_msg_by"] = "customer"
             opportunity['checkedDict'] = checkedDict  # ensure persisted even if it was missing
             
-            # 🚫 Early-exit check — stop if customer declined
+            # 🚫 Unified opt-out / decline check — stop if customer declined
+            from patti_common import _is_optout_text, _is_decline
+
             customer_body = (customerMsg.get('body') or '').strip()
-            if is_exit_message(customer_body):
+            if _is_optout_text(customer_body) or _is_decline(customer_body):
                 log.info("Customer opted out or declined interest. Marking opportunity inactive.")
                 opportunity['isActive'] = False
-                checkedDict['exit_reason'] = customer_body[:120]
+                checkedDict['exit_reason'] = customer_body[:250]
                 checkedDict['exit_type'] = "customer_declined"
                 opportunity['checkedDict'] = checkedDict
-            
+
                 # mark this activity as processed so we don't re-handle it next run
                 opportunity.setdefault('alreadyProcessedActivities', {})[activityId] = fullAct
-            
+
                 if not OFFLINE_MODE:
+                    # Add a clear exit comment in CRM
                     add_opportunity_comment(
-                        token, subscription_id, opportunity['opportunityId'],
-                        f"[Patti Exit] Customer indicated no interest: “{customer_body[:200]}”"
+                        token,
+                        subscription_id,
+                        opportunity['opportunityId'],
+                        f"[Patti Exit] Customer indicated no interest / opt-out: “{customer_body[:200]}”"
                     )
 
                     try:
-                        from fortellis import set_opportunity_inactive
-                   
+                        from fortellis import (
+                            set_opportunity_inactive,
+                            set_customer_do_not_email,
+                        )
+
+                        # Set opp to Not In Market
                         set_opportunity_inactive(
                             token,
                             subscription_id,
                             opportunity['opportunityId'],
                             sub_status="Not In Market",
-                            comments="Customer declined — set inactive by Patti"
+                            comments="Customer declined — set inactive by Patti",
                         )
+
+                        # Mirror KBB behavior: mark customer as Do Not Email
+                        cust = (opportunity.get("customer") or {})
+                        customer_id = cust.get("id")
+                        emails = cust.get("emails") or []
+                        email_address = (
+                            next((e for e in emails if e.get("isPreferred")), emails[0])
+                            if emails else {}
+                        ).get("address")
+
+                        if customer_id and email_address:
+                            set_customer_do_not_email(
+                                token,
+                                subscription_id,
+                                customer_id,
+                                email_address,
+                                do_not=True,
+                            )
+
                     except Exception as e:
-                        log.warning("set_opportunity_inactive failed: %s", e)
-        
-                    # Optional: notify salesperson
+                        log.warning("CRM inactive/DoNotEmail failed (general decline): %s", e)
+
+                    # Optional: notify salesperson (keep existing behavior)
                     sales_team = opportunity.get('salesTeam', [])
                     if sales_team:
                         first_sales = sales_team[0]
@@ -268,15 +296,26 @@ def checkActivities(opportunity, currDate, rooftop_name):
                                 send_email(
                                     to=salesperson_email,
                                     subject="Patti stopped follow-up — customer declined",
-                                    body=f"The customer replied:\n\n{customer_body}\n\nPatti stopped follow-ups for this lead."
+                                    body=(
+                                        "The customer replied:\n\n"
+                                        f"{customer_body}\n\n"
+                                        "Patti stopped follow-ups for this lead."
+                                    ),
                                 )
                             except Exception as e:
                                 log.warning("Emailer failed: %s", e)
-            
-                    es_update_with_retry(esClient, index="opportunities", id=opportunity['opportunityId'], doc=opportunity)
-            
+
+                    # Persist to ES
+                    es_update_with_retry(
+                        esClient,
+                        index="opportunities",
+                        id=opportunity['opportunityId'],
+                        doc=opportunity,
+                    )
+
                 wJson(opportunity, f"jsons/process/{opportunity['opportunityId']}.json")
                 return
+
             
             # ✅ continue with GPT reply generation
             prompt = f"""
@@ -781,8 +820,6 @@ def processHit(hit):
             opportunity['firstActivityAdfDict'] = firstActivityAdfDict
             opportunity['inquiry_text_body'] = inquiry_text_body
 
-
-    
             customerFirstMsgDict: dict = getCustomerMsgDict(inquiry_text_body)
             opportunity['customerFirstMsgDict'] = customerFirstMsgDict
 
@@ -853,12 +890,55 @@ def processHit(hit):
             # Optional: log for debugging
             print(f"[SEED] Added seed customer message. len={len(conv)} act_id={act_id}")
 
-   
-
             try:
                 inquiry_text = customerFirstMsgDict.get('customerMsg', None)
             except:
                 pass
+
+            # --- unified opt-out check on the very first inbound ---
+            from patti_common import _is_optout_text, _is_decline
+
+            if inquiry_text and (_is_optout_text(inquiry_text) or _is_decline(inquiry_text)):
+                log.info("❌ Customer opted out on first message. Marking inactive.")
+
+                # make sure checkedDict exists
+                checkedDict = opportunity.get("checkedDict") or {}
+                checkedDict["exit_type"] = "customer_declined"
+                checkedDict["exit_reason"] = (inquiry_text or "")[:250]
+                opportunity["checkedDict"] = checkedDict
+                opportunity["isActive"] = False
+
+                # mark Patti as do-not-email for this opp
+                patti_meta = opportunity.get("patti") or {}
+                patti_meta["email_blocked_do_not_email"] = True
+                opportunity["patti"] = patti_meta
+
+                if not OFFLINE_MODE:
+                    # update ES
+                    es_update_with_retry(
+                        esClient,
+                        index="opportunities",
+                        id=opportunityId,
+                        doc=opportunity
+                    )
+
+                    # update CRM (best-effort)
+                    try:
+                        from fortellis import set_opportunity_inactive, set_customer_do_not_email
+                        set_opportunity_inactive(
+                            token,
+                            subscription_id,
+                            opportunityId,
+                            sub_status="Not In Market",
+                            comment="Customer opted out of communication."
+                        )
+                        set_customer_do_not_email(token, subscription_id, opportunityId)
+                    except Exception as e:
+                        log.error(f"Failed to set CRM inactive / do-not-email: {e}")
+
+                # persist local JSON + stop processing
+                wJson(opportunity, f"jsons/process/{opportunityId}.json")
+                return
 
             # TODO: check with kristin if need to add activity logic to crm that patti will not used here
             if customerFirstMsgDict.get('salesAlreadyContact', False):
