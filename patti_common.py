@@ -1,4 +1,7 @@
 import re as _re
+import re as _re2
+from rooftops import ROOFTOP_INFO
+
 from datetime import datetime as _dt
 import zoneinfo as _zi
 
@@ -63,4 +66,75 @@ def fmt_local_human(dt: _dt, tz_name: str = "America/Los_Angeles") -> str:
 
     time_str = local.strftime("%I:%M %p").lstrip("0")
     return f"{local.strftime('%A')}, {local.strftime('%b')} {local.day} at {time_str}"
+
+# Detect any existing booking token/link so we don't double-insert a CTA
+_SCHED_ANY_RE = _re2.compile(r'(?is)(LegacySalesApptSchLink|Schedule\s+Your\s+Visit</a>)')
+
+
+def normalize_patti_body(body_html: str) -> str:
+    """
+    Tidy GPT output: strip stray Patti signatures and collapse whitespace.
+    This is a simplified version of the KBB normalizer.
+    """
+    body_html = body_html or ""
+    # Strip any trailing Patti signature junk if GPT adds it
+    body_html = _re.sub(
+        r'(?is)(?:\n\s*)?patti\s*(?:<br/?>|\r?\n)+.*?$', 
+        '', 
+        body_html.strip()
+    )
+    # Collapse multiple blank lines
+    body_html = _re.sub(r'\n{2,}', '\n', body_html)
+    return body_html
+
+
+def append_soft_schedule_sentence(body_html: str, rooftop_name: str) -> str:
+    """
+    Add a single polite 'schedule your visit' line using LegacySalesApptSchLink
+    (or a real booking link if configured). If a schedule token/link already
+    exists, do nothing.
+    """
+    body_html = body_html or ""
+
+    # If they already have a booking token or scheduler link, skip
+    if _SCHED_ANY_RE.search(body_html):
+        return body_html
+
+    rt = (ROOFTOP_INFO.get(rooftop_name) or {})
+    href = (
+        rt.get("booking_link")
+        or rt.get("scheduler_url")
+        or "<{LegacySalesApptSchLink}>"
+    )
+
+    # Soft CTA text
+    soft_line = (
+        '<p>Let me know a time that works for you, or schedule directly here: '
+        f'{href}</p>'
+    )
+
+    # If body has <p> tags, just append; otherwise wrap it
+    if _re2.search(r'(?is)<p[^>]*>.*?</p>', body_html):
+        return body_html.rstrip() + soft_line
+
+    return f"<p>{body_html.strip()}</p>{soft_line}" if body_html.strip() else soft_line
+
+
+def rewrite_sched_cta_for_booked(body_html: str) -> str:
+    """
+    Very simple rewrite: if there is a 'schedule' CTA, rewrite it into
+    'reschedule' language for already-booked appointments.
+    """
+    body_html = body_html or ""
+    # Basic phrase swaps; you can refine this later
+    body_html = body_html.replace(
+        "schedule directly here",
+        "reschedule or confirm your visit here"
+    )
+    body_html = body_html.replace(
+        "Schedule Your Visit",
+        "Manage Your Visit"
+    )
+    return body_html
+
 
