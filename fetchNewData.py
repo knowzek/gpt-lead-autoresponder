@@ -138,9 +138,14 @@ def extract_adf_comment(adf_xml: str) -> str:
 all_items = []
 per_rooftop_counts = {sub_id: 0 for sub_id in SUB_MAP.values()}
 
+# TEMP: only fetch opps for these subscriptions while testing
+ALLOWED_SUBSCRIPTIONS = {
+    "7a05ce2c-cf00-4748-b841-45b3442665a7",
+    "c27d7f4f-4a4c-45c8-8154-a5de48421fc3",
+}
+
 for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
-    # remove later
-    if subscription_id != "7a05ce2c-cf00-4748-b841-45b3442665a7":
+    if subscription_id not in ALLOWED_SUBSCRIPTIONS:
         continue
 
     token = get_token(subscription_id) 
