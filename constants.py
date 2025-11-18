@@ -3,7 +3,6 @@ from helpers import rJson, wJson, _html_to_text
 from dotenv import load_dotenv
 load_dotenv()
 
-
 # === Modes & Safety ==================================================
 USE_EMAIL_MODE = False                              # legacy inbox mode off by default
 SAFE_MODE = os.getenv("PATTI_SAFE_MODE", "1") in ("1","true","True")  # blocks real customer emails
