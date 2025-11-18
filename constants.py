@@ -11,7 +11,7 @@ TEST_FROM = os.getenv("FORTELLIS_TEST_FROM", "sales@claycooleygenesisofmesquite.
 TEST_TO   = os.getenv("FORTELLIS_TEST_TO",   "rishabhrajendraprasad.shukla@cdk.com")
 
 MICKEY_EMAIL = os.getenv("MICKEY_EMAIL")  # proof recipient
-ELIGIBLE_UPTYPES = "Internet"
+ELIGIBLE_UPTYPES = {"internet"}
 PROOF_RECIPIENTS = [
     "knowzek@gmail.com",
     "mickeyt@the-dms.com",
