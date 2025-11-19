@@ -1101,24 +1101,31 @@ def processHit(hit):
         response  = run_gpt(prompt, customer_name, rooftop_name)
         subject   = response["subject"]
         body_html = response["body"]
-
-        # --- NEW: normalize Patti body + add the right schedule CTA ---
+        
+        # --- Normalize Patti body ---
         body_html = normalize_patti_body(body_html)
-
+        
+        # --- patch the rooftop/address placeholders ---
+        from kbb_ico import _patch_address_placeholders, build_patti_footer, _PREFS_RE
+        body_html = _patch_address_placeholders(body_html, rooftop_name)
+        
         # Decide which CTA behavior to use based on appointment state
         patti_meta = opportunity.get("patti") or {}
         mode = patti_meta.get("mode")
-
+        
         if mode == "scheduled":
-            # Already booked – rewrite any schedule language to reschedule
             body_html = rewrite_sched_cta_for_booked(body_html)
         else:
-            # Not booked yet – ensure we add one clean schedule CTA
             body_html = append_soft_schedule_sentence(body_html, rooftop_name)
-
-        from kbb_ico import _PREFS_RE
+        
+        # Strip GPT footer if added
         body_html = _PREFS_RE.sub("", body_html).strip()
+        
+        # --- add Patti’s signature/footer (same as KBB) ---
+        body_html = body_html + build_patti_footer(rooftop_name)
+        
         opportunity["body_html"] = body_html
+
 
         if "messages" in opportunity:
             opportunity['messages'].append(
