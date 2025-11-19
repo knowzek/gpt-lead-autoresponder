@@ -246,8 +246,18 @@ def checkActivities(opportunity, currDate, rooftop_name):
                 checkedDict['exit_type'] = "customer_declined"
                 opportunity['checkedDict'] = checkedDict
 
-                # mark this activity as processed so we don't re-handle it next run
-                opportunity.setdefault('alreadyProcessedActivities', {})[activityId] = fullAct
+                # mark this activity as processed with a minimal stub
+                apa = opportunity.get("alreadyProcessedActivities") or {}
+                if not isinstance(apa, dict):
+                    apa = {}
+                apa[activityId] = {
+                    "activityId": activityId,
+                    "completedDate": fullAct.get("completedDate"),
+                    "activityType": fullAct.get("activityType"),
+                    "activityName": fullAct.get("activityName"),
+                }
+                opportunity["alreadyProcessedActivities"] = apa
+
 
                 if not OFFLINE_MODE:
                     # Add a clear exit comment in CRM
