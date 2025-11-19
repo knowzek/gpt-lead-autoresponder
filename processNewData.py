@@ -8,6 +8,7 @@ from helpers import (
     sortActivities
 )
 from kbb_ico import process_kbb_ico_lead 
+from kbb_ico import _top_reply_only, _is_optout_text as _kbb_is_optout_text, _is_decline as _kbb_is_decline
 from es_resilient import es_update_with_retry
 from esQuerys import getNewData, esClient, getNewDataByDate
 from rooftops import get_rooftop_info
@@ -220,26 +221,35 @@ def checkActivities(opportunity, currDate, rooftop_name):
             if not DEBUGMODE and not OFFLINE_MODE:
                 fullAct = get_activity_by_id_v1(activityId, token, subscription_id)
 
-            customerMsg = (fullAct.get('message') or {})
+            customerMsg = (fullAct.get("message") or {})
+
+            # --- KBB-style normalization: top reply only + plain-text fallback ---
+            raw_body_html = (customerMsg.get("body") or "").strip()
+            customer_body = _top_reply_only(raw_body_html)
+
+            if not customer_body:
+                # Simple HTML → text fallback if _top_reply_only returns empty
+                import re as _re
+                no_tags = _re.sub(r"(?is)<[^>]+>", " ", raw_body_html)
+                customer_body = _re.sub(r"\s+", " ", no_tags).strip()
+
             customerMsgDict = {
                 "msgFrom": "customer",
-                "customerName": customerInfo.get('firstName'),
-                "subject": customerMsg.get('subject'),
-                "body": customerMsg.get('body'),
-                "date": fullAct.get('completedDate')
+                "customerName": customerInfo.get("firstName"),
+                "subject": customerMsg.get("subject"),
+                "body": customer_body,          # <-- use cleaned top-reply text
+                "date": fullAct.get("completedDate"),
             }
-            
+
             # append the customer's message to the thread
             opportunity.setdefault('messages', []).append(customerMsgDict)
             messages = opportunity['messages']
             checkedDict["last_msg_by"] = "customer"
             opportunity['checkedDict'] = checkedDict  # ensure persisted even if it was missing
             
-            # 🚫 Unified opt-out / decline check — stop if customer declined
-            from patti_common import _is_optout_text, _is_decline
+            # 🚫 Unified opt-out / decline check — re-use KBB logic on the CLEANED body
+            if _kbb_is_optout_text(customer_body) or _kbb_is_decline(customer_body):
 
-            customer_body = (customerMsg.get('body') or '').strip()
-            if _is_optout_text(customer_body) or _is_decline(customer_body):
                 log.info("Customer opted out or declined interest. Marking opportunity inactive.")
                 opportunity['isActive'] = False
                 checkedDict['exit_reason'] = customer_body[:250]
