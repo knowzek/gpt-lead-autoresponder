@@ -206,6 +206,17 @@ def _patti_persona_system():
         "Your tone matches our best team members: warm, professional, helpful, and never pushy."
     )
 
+def _tustin_kia_new_location_system():
+    return (
+        "New-location flavor for Tustin Kia:\n"
+        "- This is a newly opened Kia location with a beautiful, modern showroom.\n"
+        "- When it makes sense to invite the guest in, you may mention that this location just opened in mid-November and that you'd love to show them the new showroom.\n"
+        "- You can use language like 'we’re tailoring every deal to each customer’s needs' and 'your presence is your leverage' sparingly and naturally, not in every email.\n"
+        "- Only use this new-location language when suggesting an in-person visit, test drive, or appraisal; do not mention it in unrelated replies.\n"
+        "- Keep the tone confident, warm, and value-focused, similar to a top-performing salesperson at this store.\n"
+    )
+
+
 def _patti_rules_system(customer_first: str):
     return (
         "Objectives:\n"
@@ -425,6 +436,15 @@ def run_gpt(prompt: str,
         kbb_ctx=kbb_ctx,
         include_followup_rules=(persona != "kbb_ico")
     )
+
+    # --- Tustin Kia new-location flavor (subscription c27d7f4f...) ---
+    # That subscription maps to rooftop_name == "Tustin Kia" in rooftops.py.
+    if rooftop_name and rooftop_name.strip().lower() == "tustin kia":
+        system_msgs.append({
+            "role": "system",
+            "content": _tustin_kia_new_location_system(),
+        })
+
 
     if addr_msg:
         system_msgs.insert(0, addr_msg)   # make sure the address is available to the model
