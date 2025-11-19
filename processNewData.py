@@ -26,7 +26,9 @@ from fortellis import (
     get_opportunity,
     add_opportunity_comment,
     schedule_activity,
+    send_opportunity_email_activity,
 )
+
 
 from patti_common import fmt_local_human, normalize_patti_body, append_soft_schedule_sentence, rewrite_sched_cta_for_booked
 
@@ -1141,7 +1143,34 @@ def processHit(hit):
         nextDate = currDate + _td(hours=24)   # or use your cadence
         opportunity['followUP_date'] = nextDate.isoformat()
         opportunity['followUP_count'] = 0
+        
         if not OFFLINE_MODE:
+            try:
+                if customer_email:
+                    send_opportunity_email_activity(
+                        token,
+                        subscription_id,        # dealer_key
+                        opportunityId,
+                        sender=rooftop_sender,  # from rooftops.get_rooftop_info(...)
+                        recipients=[customer_email],
+                        carbon_copies=[],       # you can CC a manager here if you want later
+                        subject=subject,
+                        body_html=body_html,
+                        rooftop_name=rooftop_name,
+                    )
+                else:
+                    log.warning(
+                        "No customer_email for opp %s – cannot send Patti general lead email.",
+                        opportunityId,
+                    )
+            except Exception as e:
+                log.warning(
+                    "Failed to send Patti general lead email for opp %s: %s",
+                    opportunityId,
+                    e,
+                )
+
+            # Persist Patti state + messages into ES
             es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
     else:
         # handle follow-ups messages
