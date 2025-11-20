@@ -367,6 +367,31 @@ def checkActivities(opportunity, currDate, rooftop_name):
                 "",
                 body_html
             )
+
+            # --- Normalize Patti body & add CTA + footer (same as initial email) ---
+            from kbb_ico import _patch_address_placeholders, build_patti_footer, _PREFS_RE
+            
+            # Clean up paragraphs / bullets
+            body_html = normalize_patti_body(body_html)
+            
+            # Patch rooftop/address placeholders (e.g. LegacySalesApptSchLink, dealership name)
+            body_html = _patch_address_placeholders(body_html, rooftop_name)
+            
+            # Decide which CTA behavior to use based on appointment state
+            patti_meta = opportunity.get("patti") or {}
+            mode = patti_meta.get("mode")
+            
+            if mode == "scheduled":
+                body_html = rewrite_sched_cta_for_booked(body_html)
+            else:
+                body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+            
+            # Strip any extraneous prefs/unsubscribe footer GPT might add
+            body_html = _PREFS_RE.sub("", body_html).strip()
+            
+            # Add Patti’s signature/footer with the Tustin Kia logo
+            body_html = body_html + build_patti_footer(rooftop_name)
+
             
             opportunity['messages'].append({
                 "msgFrom": "patti",
