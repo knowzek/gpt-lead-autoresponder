@@ -268,73 +268,7 @@ def checkActivities(opportunity, currDate, rooftop_name):
                 }
                 opportunity["alreadyProcessedActivities"] = apa
 
-
                 if not OFFLINE_MODE:
-                    # Add a clear exit comment in CRM
-                    add_opportunity_comment(
-                        token,
-                        subscription_id,
-                        opportunity['opportunityId'],
-                        f"[Patti Exit] Customer indicated no interest / opt-out: “{customer_body[:200]}”"
-                    )
-
-                    try:
-                        from fortellis import (
-                            set_opportunity_inactive,
-                            set_customer_do_not_email,
-                        )
-
-                        # Set opp to Not In Market
-                        set_opportunity_inactive(
-                            token,
-                            subscription_id,
-                            opportunity['opportunityId'],
-                            sub_status="Not In Market",
-                            comments="Customer declined — set inactive by Patti",
-                        )
-
-                        # Mirror KBB behavior: mark customer as Do Not Email
-                        cust = (opportunity.get("customer") or {})
-                        customer_id = cust.get("id")
-                        emails = cust.get("emails") or []
-                        email_address = (
-                            next((e for e in emails if e.get("isPreferred")), emails[0])
-                            if emails else {}
-                        ).get("address")
-
-                        if customer_id and email_address:
-                            set_customer_do_not_email(
-                                token,
-                                subscription_id,
-                                customer_id,
-                                email_address,
-                                do_not=True,
-                            )
-
-                    except Exception as e:
-                        log.warning("CRM inactive/DoNotEmail failed (general decline): %s", e)
-
-                    # Optional: notify salesperson (keep existing behavior)
-                    sales_team = opportunity.get('salesTeam', [])
-                    if sales_team:
-                        first_sales = sales_team[0]
-                        salesperson_email = (first_sales.get('email') or "").strip()
-                        if salesperson_email:
-                            try:
-                                from emailer import send_email
-                                send_email(
-                                    to=salesperson_email,
-                                    subject="Patti stopped follow-up — customer declined",
-                                    body=(
-                                        "The customer replied:\n\n"
-                                        f"{customer_body}\n\n"
-                                        "Patti stopped follow-ups for this lead."
-                                    ),
-                                )
-                            except Exception as e:
-                                log.warning("Emailer failed: %s", e)
-
-                    # Persist to ES
                     es_update_with_retry(
                         esClient,
                         index="opportunities",
@@ -344,10 +278,89 @@ def checkActivities(opportunity, currDate, rooftop_name):
 
                 wJson(opportunity, f"jsons/process/{opportunity['opportunityId']}.json")
                 return
-
             
+            # --- Step 2: try to auto-schedule an appointment from this reply ---
+            created_appt_ok = False
+            appt_human = None
+            try:
+                # Skip if we already know about a future appointment
+                patti_meta = opportunity.get("patti") or {}
+                appt_due_utc = patti_meta.get("appt_due_utc")
+                already_scheduled = False
+                if appt_due_utc:
+                    try:
+                        appt_dt = _dt.fromisoformat(str(appt_due_utc).replace("Z", "+00:00"))
+                        if appt_dt > _dt.now(_tz.utc):
+                            already_scheduled = True
+                    except Exception:
+                        pass
+
+                appt_iso = ""
+                conf = 0.0
+                if not already_scheduled:
+                    proposed = extract_appt_time(customer_body or "", tz="America/Los_Angeles")
+                    appt_iso = (proposed.get("iso") or "").strip()
+                    conf = float(proposed.get("confidence") or 0.0)
+
+                if appt_iso and conf >= 0.60:
+                    try:
+                        dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
+                        due_dt_iso_utc = dt_local.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                        
+                        schedule_activity(
+                            token,
+                            subscription_id,
+                            opportunity['opportunityId'],
+                            due_dt_iso_utc=due_dt_iso_utc,
+                            activity_name="Sales Appointment",
+                            activity_type="Appointment",
+                            comments=f"Auto-scheduled from Patti based on customer reply: {customer_body[:200]}"
+                        )
+                        created_appt_ok = True
+                        appt_human = fmt_local_human(dt_local)
+                        
+                        patti_meta["mode"] = "scheduled"
+                        patti_meta["appt_due_utc"] = due_dt_iso_utc
+                        opportunity["patti"] = patti_meta
+                        
+                        log.info(
+                            "✅ Auto-scheduled appointment from reply for %s at %s (conf=%.2f)",
+                            opportunity['opportunityId'],
+                            appt_human,
+                            conf,
+                        )
+                    except Exception as e:
+                        log.error(
+                            "Failed to auto-schedule appointment from reply for %s (appt_iso=%r): %s",
+                            opportunity['opportunityId'],
+                            appt_iso,
+                            e,
+                        )
+            except Exception as e:
+                log.warning(
+                    "Reply-based appointment detection failed for %s: %s",
+                    opportunity.get('opportunityId'),
+                    e,
+                )
+
             # ✅ continue with GPT reply generation
-            prompt = f"""
+            if created_appt_ok and appt_human:
+                prompt = f"""
+            The customer and Patti have been emailing about a potential sales appointment.
+
+            Patti has just scheduled an appointment in the CRM based on the most recent customer reply.
+            Appointment time (local dealership time): {appt_human}.
+
+            Write Patti's next email reply using the messages list below. Patti should:
+            - Warmly confirm the appointment for {appt_human}
+            - Thank the customer and set expectations for the visit
+            - NOT ask the customer to choose a time again.
+
+            Here are the messages (Python list of dicts):
+            {messages}
+            """
+            else:
+                prompt = f"""
             generate next patti reply, here is the current messages between patti and the customer (python list of dicts):
             {messages}
             """
@@ -357,6 +370,7 @@ def checkActivities(opportunity, currDate, rooftop_name):
                 rooftop_name,
                 prevMessages=True
             )
+
             
             subject   = response["subject"]
             body_html = response["body"]
@@ -471,6 +485,73 @@ def checkActivities(opportunity, currDate, rooftop_name):
             # write debug json + stop processing this opp for this run
             wJson(opportunity, f"jsons/process/{opportunity['opportunityId']}.json")
             return
+
+def _derive_appointment_from_sched_activities(opportunity, tz_name="America/Los_Angeles"):
+    """Inspect scheduledActivities for a future appointment and, if found,
+    update opportunity['patti']['mode'] / ['appt_due_utc'] so Patti will
+    pause cadence nudges once an appointment is on the books.
+    Returns True if state was updated, False otherwise.
+    """
+    try:
+        sched = opportunity.get("scheduledActivities") or []
+        if not isinstance(sched, list):
+            return False
+
+        # If we already have a future appt_due_utc recorded, don't override it.
+        patti_meta = opportunity.get("patti") or {}
+        appt_due_utc = patti_meta.get("appt_due_utc")
+        if appt_due_utc:
+            try:
+                existing_dt = _dt.fromisoformat(str(appt_due_utc).replace("Z", "+00:00"))
+                if existing_dt > _dt.now(_tz.utc):
+                    return False
+            except Exception:
+                # fall through and allow re-deriving if parsing fails
+                pass
+
+        now_utc = _dt.now(_tz.utc)
+        candidates = []
+
+        for a in sched:
+            raw_name = (a.get("activityName") or a.get("name") or "").strip().lower()
+            t = a.get("activityType")
+            # Treat anything clearly labeled as an appointment as such
+            is_appt = ("appointment" in raw_name) or (t in (2, "2", "Appointment"))
+            if not is_appt:
+                continue
+
+            due_raw = a.get("dueDate") or a.get("completedDate") or a.get("activityDate")
+            if not due_raw:
+                continue
+            try:
+                due_dt = _dt.fromisoformat(str(due_raw).replace("Z", "+00:00"))
+            except Exception:
+                continue
+
+            if due_dt > now_utc:
+                candidates.append(due_dt)
+
+        if not candidates:
+            return False
+
+        # Use the earliest future appointment
+        due_dt = min(candidates)
+        due_dt_iso_utc = due_dt.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        patti_meta["mode"] = "scheduled"
+        patti_meta["appt_due_utc"] = due_dt_iso_utc
+        opportunity["patti"] = patti_meta
+
+        return True
+    except Exception as e:
+        # Never break the main job because of a best-effort helper
+        try:
+            log.warning("Failed to derive appointment from scheduledActivities for %s: %s",
+                        opportunity.get("opportunityId"), e)
+        except Exception:
+            pass
+        return False
+
 
 def processHit(hit):
     currDate = _dt.now()
@@ -833,10 +914,16 @@ def processHit(hit):
         "updated_at": currDate
     }
     opportunity.update(docToUpdate)
+
+    # Best-effort: if the CRM already has a future appointment scheduled
+    # (for example, via a booking link), mirror that into Patti's state so
+    # she pauses cadence nudges but continues to watch for replies.
+    _derive_appointment_from_sched_activities(opportunity)
     
     if not OFFLINE_MODE:
         opportunity.pop("completedActivitiesTesting", None)
         es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+
 
 
     # ====================================================
