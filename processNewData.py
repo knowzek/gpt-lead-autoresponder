@@ -321,7 +321,10 @@ def checkActivities(opportunity, currDate, rooftop_name):
                         
                         patti_meta["mode"] = "scheduled"
                         patti_meta["appt_due_utc"] = due_dt_iso_utc
+                        # GPT reply will confirm this, so mark to prevent duplicates.
+                        patti_meta["appt_confirm_email_sent"] = True
                         opportunity["patti"] = patti_meta
+
                         
                         log.info(
                             "✅ Auto-scheduled appointment from reply for %s at %s (conf=%.2f)",
@@ -515,18 +518,31 @@ def _derive_appointment_from_sched_activities(opportunity, tz_name="America/Los_
         for a in sched:
             raw_name = (a.get("activityName") or a.get("name") or "").strip().lower()
             t = a.get("activityType")
+
             # Treat anything clearly labeled as an appointment as such
-            is_appt = ("appointment" in raw_name) or (t in (2, "2", "Appointment"))
+            t_str = str(t).strip().lower() if t is not None else ""
+            is_appt = (
+                "appointment" in raw_name
+                or t_str in ("2", "appointment")
+            )
             if not is_appt:
                 continue
 
-            due_raw = a.get("dueDate") or a.get("completedDate") or a.get("activityDate")
+            # Many booking-link activities use dueDateTime / startDateTime
+            due_raw = (
+                a.get("dueDateTime")
+                or a.get("dueDate")
+                or a.get("startDateTime")
+                or a.get("activityDate")
+                or a.get("completedDate")
+            )
             if not due_raw:
                 continue
             try:
                 due_dt = _dt.fromisoformat(str(due_raw).replace("Z", "+00:00"))
             except Exception:
                 continue
+
 
             if due_dt > now_utc:
                 candidates.append(due_dt)
@@ -1200,7 +1216,11 @@ def processHit(hit):
                     patti_meta = opportunity.get("patti") or {}
                     patti_meta["mode"] = "scheduled"
                     patti_meta["appt_due_utc"] = due_dt_iso_utc
+                    # Patti will confirm this appointment in the outgoing email,
+                    # so mark the confirmation as sent to avoid duplicates later.
+                    patti_meta["appt_confirm_email_sent"] = True
                     opportunity["patti"] = patti_meta
+
 
                     log.info(
                         "✅ Auto-scheduled appointment for %s at %s (conf=%.2f)",
@@ -1391,6 +1411,129 @@ def processHit(hit):
         # handle follow-ups messages
         checkActivities(opportunity, currDate, rooftop_name)
 
+        # --- One-time confirmation for appointments booked via the online link ---
+        patti_meta = opportunity.get("patti") or {}
+        appt_due_utc = patti_meta.get("appt_due_utc")
+        appt_confirm_sent = patti_meta.get("appt_confirm_email_sent", False)
+
+        # If we see a scheduled appointment but Patti never confirmed it,
+        # assume it came from the booking link and send a confirmation now.
+        if appt_due_utc and not appt_confirm_sent:
+            try:
+                # Convert stored UTC ISO to local time for human-friendly text
+                appt_dt_utc = _dt.fromisoformat(str(appt_due_utc).replace("Z", "+00:00"))
+                # TODO: if you have per-rooftop timezones, swap this out
+                local_tz = _tz.timezone("America/Los_Angeles")
+                appt_dt_local = appt_dt_utc.astimezone(local_tz)
+                appt_human = fmt_local_human(appt_dt_local)
+            except Exception:
+                appt_human = appt_due_utc
+
+            messages = opportunity.get("messages") or []
+            prompt = f"""
+            The customer used the online booking link and there is now a scheduled
+            sales appointment in the CRM.
+
+            Appointment time (local dealership time): {appt_human}.
+
+            Write Patti's next email reply using the messages list below. Patti should:
+            - Warmly confirm the appointment for {appt_human}
+            - Thank the guest and set expectations for the visit
+            - NOT ask the customer to choose a time again.
+
+            Here are the messages (Python list of dicts):
+            {messages}
+            """
+
+            response = run_gpt(
+                prompt,
+                customer_name,
+                rooftop_name,
+                prevMessages=True
+            )
+            subject   = response["subject"]
+            body_html = response["body"]
+
+            # Normalize + patch + CTA + footer (same as other Patti emails)
+            body_html = normalize_patti_body(body_html)
+            from kbb_ico import _patch_address_placeholders, build_patti_footer, _PREFS_RE
+            body_html = _patch_address_placeholders(body_html, rooftop_name)
+
+            mode = patti_meta.get("mode")
+            if mode == "scheduled":
+                body_html = rewrite_sched_cta_for_booked(body_html)
+            else:
+                body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+
+            body_html = _PREFS_RE.sub("", body_html).strip()
+            body_html = body_html + build_patti_footer(rooftop_name)
+
+            # Append to thread
+            opportunity.setdefault("messages", []).append({
+                "msgFrom": "patti",
+                "subject": subject,
+                "body": body_html,
+                "date": currDate,
+                "action": response.get("action"),
+                "notes": response.get("notes"),
+            })
+
+            checkedDict["last_msg_by"] = "patti"
+            opportunity["checkedDict"] = checkedDict
+
+            # Mark confirmation as sent so we never do this twice
+            patti_meta["appt_confirm_email_sent"] = True
+            opportunity["patti"] = patti_meta
+
+            # Send email through Fortellis + persist
+            if not OFFLINE_MODE:
+                rt = get_rooftop_info(subscription_id)
+                rooftop_sender = rt.get("sender") or TEST_FROM
+
+                cust   = opportunity.get("customer") or {}
+                emails = cust.get("emails") or []
+                customer_email = None
+                for e in emails:
+                    if e.get("doNotEmail"):
+                        continue
+                    if e.get("isPreferred"):
+                        customer_email = e.get("address")
+                        break
+                if not customer_email and emails:
+                    customer_email = emails[0].get("address")
+
+                if customer_email:
+                    try:
+                        send_opportunity_email_activity(
+                            token,
+                            subscription_id,
+                            opportunity["opportunityId"],
+                            sender=rooftop_sender,
+                            recipients=[customer_email],
+                            carbon_copies=[],
+                            subject=subject,
+                            body_html=body_html,
+                            rooftop_name=rooftop_name,
+                        )
+                    except Exception as e:
+                        log.warning(
+                            "Failed to send Patti booking-link appt confirmation for opp %s: %s",
+                            opportunity["opportunityId"],
+                            e,
+                        )
+
+                es_update_with_retry(
+                    esClient,
+                    index="opportunities",
+                    id=opportunity["opportunityId"],
+                    doc=opportunity,
+                )
+
+            # Debug JSON + stop this run
+            wJson(opportunity, f"jsons/process/{opportunity['opportunityId']}.json")
+            return
+
+        
         fud = opportunity.get('followUP_date')
         followUP_date = _dt.fromisoformat(fud) if isinstance(fud, str) else (fud if isinstance(fud, _dt) else currDate)
         followUP_count = opportunity['followUP_count']
