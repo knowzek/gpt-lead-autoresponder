@@ -28,6 +28,7 @@ from fortellis import (
     add_opportunity_comment,
     schedule_activity,
     send_opportunity_email_activity,
+    set_opportunity_substatus,
 )
 
 
@@ -930,15 +931,32 @@ def processHit(hit):
         "updated_at": currDate
     }
     opportunity.update(docToUpdate)
-
+    
     # Best-effort: if the CRM already has a future appointment scheduled
     # (for example, via a booking link), mirror that into Patti's state so
     # she pauses cadence nudges but continues to watch for replies.
-    _derive_appointment_from_sched_activities(opportunity)
+    has_appt = _derive_appointment_from_sched_activities(opportunity)
+    
+    # NEW: if we now know there’s an appointment, flip the CRM substatus
+    if has_appt and not OFFLINE_MODE:
+        try:
+            resp = set_opportunity_substatus(
+                token,
+                subscription_id,
+                opportunityId,
+                sub_status="Appointment Set",
+            )
+            log.info(
+                "Non-KBB appt: SubStatus update response: %s",
+                getattr(resp, "status_code", "n/a"),
+            )
+        except Exception as e:
+            log.warning("Non-KBB appt: set_opportunity_substatus failed: %s", e)
     
     if not OFFLINE_MODE:
         opportunity.pop("completedActivitiesTesting", None)
         es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+
 
 
 
