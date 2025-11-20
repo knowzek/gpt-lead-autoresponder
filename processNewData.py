@@ -954,10 +954,22 @@ def processHit(hit):
     if base_url and (make and model):
         vehicle_str = f'<a href="{base_url}?make={make}&model={model}">{vehicle_str}</a>'
 
-    
     completedActivities = activities.get('completedActivities', [])
 
     patti_already_contacted = checkedDict.get('patti_already_contacted', False)
+
+    # 🔒 Extra safety: if we see any Fortellis send-email activities, 
+    # assume Patti has already contacted this lead at least once.
+    if not patti_already_contacted:
+        for act in completedActivities:
+            name = (act.get("activityName") or "").strip()
+            comments = (act.get("comments") or "").lower()
+            if name == "Fortellis - Send Email" and "sent via fortellis email service" in comments:
+                patti_already_contacted = True
+                checkedDict["patti_already_contacted"] = True
+                opportunity["checkedDict"] = checkedDict
+                break
+
 
     if not patti_already_contacted:
 
