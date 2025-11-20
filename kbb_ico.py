@@ -464,26 +464,37 @@ def _top_reply_only(html: str) -> str:
     # be conservative: cap length
     return s[:500]
 
-def _has_upcoming_appt(acts_live: list[dict], state: dict) -> bool:
+def _has_upcoming_appt(acts_live, state: dict) -> bool:
     """
     Returns True if there is an Appointment activity due in the future (not completed),
     or if state['mode']=='scheduled' and appt_due_utc is still in the future.
     """
     now_utc = _dt.now(_tz.utc)
 
-    # A) Use live activities (most reliable)
-    for a in acts_live or []:
+    # Normalize acts_live to a flat list
+    buckets = []
+    if isinstance(acts_live, dict):
+        for key in ("scheduledActivities", "activities", "items", "completedActivities"):
+            buckets.extend(acts_live.get(key) or [])
+    else:
+        buckets = acts_live or []
+
+    for a in buckets:
         raw_name = a.get("activityName") or a.get("name")
         nm = str(raw_name).strip().lower() if raw_name is not None else ""
-        t = str(a.get("activityType") or a.get("type") or "").strip().lower()
+
+        t_raw = a.get("activityType") or a.get("type")
+        t = str(t_raw).strip().lower() if t_raw is not None else ""
+
         cat = str(a.get("category") or "").strip().lower()
         due = a.get("dueDate") or a.get("completedDate") or a.get("activityDate")
+
         try:
             due_dt = _dt.fromisoformat(str(due).replace("Z", "+00:00"))
         except Exception:
             due_dt = None
 
-        is_appt = (nm == "appointment") or (t == "7") or (t == 7)
+        is_appt = ("appointment" in nm) or ("appointment" in t) or (t == "7") or (t == 7)
         not_completed = cat != "completed"
 
         if is_appt and due_dt and due_dt > now_utc and not_completed:
@@ -501,12 +512,12 @@ def _has_upcoming_appt(acts_live: list[dict], state: dict) -> bool:
 
     return False
 
+
 def _find_new_customer_scheduled_appt(acts_live, state, *, token=None, subscription_id=None,
                                       opp_id=None, customer_id=None):
     """
-    Return (activity_id, due_iso) for a new 'Customer Scheduled Appointment'.
-    Falls back to fetching activity-history directly if the provided object
-    doesn't expose the scheduled bucket.
+    Return (activity_id, due_iso) for a new 'Customer Scheduled Appointment' or any
+    scheduled Appointment-type activity that we haven't seen before.
     """
     last_seen = (state or {}).get("last_appt_activity_id")
 
@@ -514,38 +525,45 @@ def _find_new_customer_scheduled_appt(acts_live, state, *, token=None, subscript
         for a in items or []:
             raw_name = a.get("activityName") or a.get("name")
             nm = str(raw_name).strip().lower() if raw_name is not None else ""
-            if ("customer scheduled appointment" in nm) or ("customer scheduled" in nm):
-                aid = str(a.get("activityId") or a.get("id") or "")
-                if aid and aid != last_seen:
-                    due = a.get("dueDate") or a.get("completedDate") or a.get("activityDate")
-                    return aid, due
-        return None, None
 
-    # 1) If dict with scheduledActivities
+            t_raw = a.get("activityType") or a.get("type")
+            t = str(t_raw).strip().lower() if t_raw is not None else ""
+
+            cat = str(a.get("category") or "").strip().lower()
+
+            # Very specific match (what we expect CDK to use)
+            is_customer_sched = ("customer scheduled appointment" in nm) or ("customer scheduled" in nm)
+            # More generic safety net: any scheduled appointment-type activity
+            is_generic_appt = (("appointment" in nm) or ("appointment" in t)) and (cat == "scheduled")
+
+            if not (is_customer_sched or is_generic_appt):
+                continue
+
+            aid = str(a.get("activityId") or a.get("id") or "")
+            if not aid or aid == last_seen:
+                continue
+
+            due = a.get("dueDate") or a.get("completedDate") or a.get("activityDate")
+            return aid, due
+
+        return (None, None)
+
+    # 1) If dict-shaped (v1-style), scan multiple buckets
     if isinstance(acts_live, dict):
-        appt_id, due = _scan(acts_live.get("scheduledActivities") or [])
-        if appt_id:
-            return appt_id, due
+        for key in ("scheduledActivities", "items", "activities", "completedActivities"):
+            appt_id, due = _scan(acts_live.get(key) or [])
+            if appt_id:
+                return appt_id, due
 
-    # 2) If list (flat), just scan it
+    # 2) If list (search endpoint), just scan it
     if isinstance(acts_live, list):
         appt_id, due = _scan(acts_live)
         if appt_id:
             return appt_id, due
 
-    # 3) Fallback: pull a fresh activity-history so we can see scheduledActivities for sure
-    # try:
-    #    from fortellis import get_activity_history_v1  # you'll add this small wrapper if not present
-    #    fresh = get_activity_history_v1(token, subscription_id, opp_id, customer_id)
-    #    appt_id, due = _scan((fresh or {}).get("scheduledActivities") or [])
-    #    if appt_id:
-    #        return appt_id, due
-    #except Exception as e:
-    #    log.warning("KBB ICO: fallback activity-history fetch failed: %s", e)
+    # 3) (Optional future: fallback to explicit get_activities(...) if needed)
 
-    return None, None
-
-
+    return (None, None)
 
 
 def _fmt_local_human(dt: _dt, tz_name="America/Los_Angeles") -> str:
