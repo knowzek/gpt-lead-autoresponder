@@ -959,8 +959,14 @@ def processHit(hit):
                 or f"unknown-{uuid4().hex}"
             )
             
-            # Save this activity under that key
-            opportunity["alreadyProcessedActivities"][act_id] = firstActivityFull or firstActivity or {}
+            # Save ONLY a minimal stub for this activity
+            src = (firstActivityFull or firstActivity or {}) or {}
+            opportunity["alreadyProcessedActivities"][act_id] = {
+                "activityId": src.get("activityId") or src.get("id") or act_id,
+                "completedDate": src.get("completedDate"),
+                "activityType": src.get("activityType"),
+                "activityName": src.get("activityName"),
+            }
 
             # --- ensure the seeded customer message exists and is visible to the UI ---
 
