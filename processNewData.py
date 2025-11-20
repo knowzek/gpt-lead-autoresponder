@@ -358,9 +358,10 @@ def checkActivities(opportunity, currDate, rooftop_name):
                 prevMessages=True
             )
             
-            subject = response["subject"]
+            subject   = response["subject"]
             body_html = response["body"]
             
+            # strip any duplicated Patti signature the model added
             body_html = re.sub(
                 r"(?is)(?:\n\s*)?patti\s*(?:\r?\n)+virtual assistant.*?$",
                 "",
@@ -379,15 +380,72 @@ def checkActivities(opportunity, currDate, rooftop_name):
             checkedDict['last_msg_by'] = "patti"
             opportunity['checkedDict'] = checkedDict
             
-            # mark processed to avoid repeat handling
-            opportunity.setdefault('alreadyProcessedActivities', {})[activityId] = fullAct
+            # mark this Read Email activity as processed (stub only)
+            apa = opportunity.get("alreadyProcessedActivities") or {}
+            if not isinstance(apa, dict):
+                apa = {}
+            apa[activityId] = {
+                "activityId":   fullAct.get("id") or activityId,
+                "completedDate": fullAct.get("completedDate"),
+                "activityType":  fullAct.get("activityType"),
+                "activityName":  fullAct.get("activityName"),
+            }
+            opportunity["alreadyProcessedActivities"] = apa
             
-            nextDate = currDate + _td(hours=24)   # or use a constant
-            opportunity['followUP_date'] = nextDate.isoformat()
+            nextDate = currDate + _td(hours=24)
+            opportunity['followUP_date']  = nextDate.isoformat()
             opportunity['followUP_count'] = 0
-
-
-
+            
+            # 🔔 NEW: send the follow-up email + persist to ES, then stop
+            if not OFFLINE_MODE:
+                # figure out sender from rooftop
+                rt = get_rooftop_info(subscription_id)
+                rooftop_sender = rt.get("sender") or TEST_FROM
+            
+                # pick customer email (prefer preferred & not doNotEmail)
+                cust   = opportunity.get("customer") or {}
+                emails = cust.get("emails") or []
+                customer_email = None
+                for e in emails:
+                    if e.get("doNotEmail"):
+                        continue
+                    if e.get("isPreferred"):
+                        customer_email = e.get("address")
+                        break
+                if not customer_email and emails:
+                    customer_email = emails[0].get("address")
+            
+                if customer_email:
+                    try:
+                        send_opportunity_email_activity(
+                            token,
+                            subscription_id,
+                            opportunity["opportunityId"],
+                            sender=rooftop_sender,
+                            recipients=[customer_email],
+                            carbon_copies=[],
+                            subject=subject,
+                            body_html=body_html,
+                            rooftop_name=rooftop_name,
+                        )
+                    except Exception as e:
+                        log.warning(
+                            "Failed to send Patti follow-up email for opp %s: %s",
+                            opportunity["opportunityId"],
+                            e,
+                        )
+            
+                # persist updated opportunity (messages, followUP_date, etc.)
+                es_update_with_retry(
+                    esClient,
+                    index="opportunities",
+                    id=opportunity["opportunityId"],
+                    doc=opportunity,
+                )
+            
+            # write debug json + stop processing this opp for this run
+            wJson(opportunity, f"jsons/process/{opportunity['opportunityId']}.json")
+            return
 
 def processHit(hit):
     currDate = _dt.now()
