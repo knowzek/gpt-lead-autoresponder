@@ -10,7 +10,7 @@ from helpers import (
 from kbb_ico import process_kbb_ico_lead 
 from kbb_ico import _top_reply_only, _is_optout_text as _kbb_is_optout_text, _is_decline as _kbb_is_decline
 from es_resilient import es_update_with_retry
-from esQuerys import getNewData, esClient, getNewDataByDate
+from esQuerys import getNewData, esClient, getNewDataByDate, getDocByID
 from rooftops import get_rooftop_info
 from constants import *
 from gpt import run_gpt, getCustomerMsgDict, extract_appt_time
@@ -1647,18 +1647,44 @@ def processHit(hit):
 LOOKBACK_DAYS = int(os.getenv("ES_LOOKBACK_DAYS", "6"))
 
 if __name__ == "__main__":
-    if not OFFLINE_MODE:
-        # Start date = now - LOOKBACK_DAYS (UTC), formatted YYYY-MM-DD
-        
-        start_date = (_dt.now(_tz.utc) - _td(days=LOOKBACK_DAYS)).date().isoformat()
-        log.info("ES lookback start_date=%s (last %s days)", start_date, LOOKBACK_DAYS)
+    # Optional single-opportunity test switch:
+    # If TEST_OPPORTUNITY_ID is set, we only process that one opp and exit.
+    test_opp_id = os.getenv("TEST_OPPORTUNITY_ID", "").strip()
 
-        data = getNewDataByDate(start_date)
+    if test_opp_id:
+        log.info(
+            "TEST_OPPORTUNITY_ID=%s set; running single-opportunity test mode",
+            test_opp_id,
+        )
 
-        # Process ALL hits (no early exit)
-        for hit in data:
+        # Grab the document directly from ES
+        hit = getDocByID(test_opp_id)
+
+        if not hit.get("found"):
+            log.warning(
+                "TEST_OPPORTUNITY_ID %s not found in Elasticsearch index '%s'; exiting.",
+                test_opp_id,
+                os.getenv("ELASTIC_INDEX", "opportunities"),
+            )
+        else:
+            # getDocByID returns a doc like {"_index":..., "_id":..., "_source":{...}}
+            # processHit() already handles both hit['_source'] and bare dicts.
             processHit(hit)
-    # playground drives processHit() via Flask; nothing to run here when OFFLINE_MODE=1
+
+    else:
+        # Normal multi-opp behavior
+        if not OFFLINE_MODE:
+            # Start date = now - LOOKBACK_DAYS (UTC), formatted YYYY-MM-DD
+            start_date = (_dt.now(_tz.utc) - _td(days=LOOKBACK_DAYS)).date().isoformat()
+            log.info("ES lookback start_date=%s (last %s days)", start_date, LOOKBACK_DAYS)
+
+            data = getNewDataByDate(start_date)
+
+            # Process ALL hits (no early exit)
+            for hit in data:
+                processHit(hit)
+        # playground drives processHit() via Flask; nothing to run here when OFFLINE_MODE=1
+
 
     
 
