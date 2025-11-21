@@ -355,7 +355,7 @@ def send_opportunity_email_activity(token, subscription_id, opportunity_id,
     Send an email via Opportunities POST /sendEmail (Sales v2).
 
     Notes:
-      - Caller must pass a rooftop-specific sender (or alias).
+      - We don't hardcode 'from'. Caller must pass a rooftop-specific sender (or alias).
       - If rooftop_name is provided, we (a) scrub any 'Patterson Auto Group' and
         (b) ensure the subject mentions the rooftop.
     """
@@ -387,11 +387,11 @@ def send_opportunity_email_activity(token, subscription_id, opportunity_id,
         if rooftop_name not in subj:
             subj = f"{subj} | {rooftop_name}" if subj else f"Your vehicle inquiry with {rooftop_name}"
 
-    # ✅ Correct v2 /sendEmail payload using "message"
+    # Build v2 /sendEmail payload using "message" envelope
     payload = {
         "opportunityId": opportunity_id,
         "message": {
-            "from": sender,                  # caller supplies per-rooftop/alias
+            "from": sender,
             "recipients": recipients,
             "carbonCopies": carbon_copies,
             "subject": subj,
@@ -400,19 +400,32 @@ def send_opportunity_email_activity(token, subscription_id, opportunity_id,
         },
     }
 
-    # Optional threading for replies
+    # Thread the reply if we have the inbound activity id
     if reply_to_activity_id:
+        # Fortellis/eLead threading key; keep both top-level and nested for compatibility
         payload["message"]["replyToActivityId"] = reply_to_activity_id
+        payload["replyToActivityId"] = reply_to_activity_id
+        payload["inReplyToActivityId"] = reply_to_activity_id
 
-    try:
+    if reply_to_activity_id:
         log.info(
-            "Fortellis: sending NEW outbound (reply_to_activity_id=%s) dealer_key=%s opp=%s sender=%s recipients=%s",
+            "Fortellis: sending REPLY in-thread to activity_id=%s dealer_key=%s opp=%s sender=%s recipients=%s",
             reply_to_activity_id,
             dealer_key,
             opportunity_id,
             sender,
             recipients,
         )
+    else:
+        log.info(
+            "Fortellis: sending NEW outbound (no reply_to_activity_id) dealer_key=%s opp=%s sender=%s recipients=%s",
+            dealer_key,
+            opportunity_id,
+            sender,
+            recipients,
+        )
+
+    try:
         return post_and_wrap(
             "POST",
             url,
@@ -444,9 +457,6 @@ def send_opportunity_email_activity(token, subscription_id, opportunity_id,
         )
         # Re-raise so the caller's try/except can handle it (sent_ok=False)
         raise
-
-
-
 
 def add_opportunity_comment(token: str, subscription_id: str, opportunity_id: str, comment_html: str):
     """
