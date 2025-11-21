@@ -386,31 +386,45 @@ def send_opportunity_email_activity(token, subscription_id, opportunity_id,
 
     payload = {
         "opportunityId": opportunity_id,
-        "message": {
-            "from": sender,                  # caller supplies per-rooftop/alias
+        "sendType": "Outbound",
+        "sendParameters": {
+            "sender": sender,
             "recipients": recipients,
             "carbonCopies": carbon_copies,
             "subject": subj,
             "body": body,
             "isHtml": True
         }
-      
     }
 
-    # Thread the reply if we have the inbound activity id
-    if reply_to_activity_id:
-        # Fortellis/eLeads threading key; if your client expects a different key name,
-        # also include it below.
-        payload["replyToActivityId"] = reply_to_activity_id
-        # Some tenants use a different field name; harmless to send both:
-        payload["inReplyToActivityId"] = reply_to_activity_id
+    try:
+        return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
+    except requests.HTTPError as e:
+        # Log a compact view of what we tried to send so we can debug 500s
+        try:
+            payload_preview = json.dumps(
+                {
+                    "opportunityId": opportunity_id,
+                    "dealer_key": dealer_key,
+                    "sender": sender,
+                    "recipients": recipients,
+                    "subject": subj,
+                    "body_len": len(body or ""),
+                }
+            )[:500]
+        except Exception:
+            payload_preview = "unable-to-serialize-payload"
 
-    if reply_to_activity_id:
-        log.info("Fortellis: sending REPLY in-thread to activity_id=%s", reply_to_activity_id)
-    else:
-        log.info("Fortellis: sending NEW outbound (no reply_to_activity_id)")
-    
-    return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
+        log.warning(
+            "Fortellis: sendEmail failed dealer_key=%s opp=%s: %s payload_preview=%s",
+            dealer_key,
+            opportunity_id,
+            str(e),
+            payload_preview,
+        )
+        # Re-raise so the caller's try/except can handle it
+        raise
+
 
 
 def add_opportunity_comment(token: str, subscription_id: str, opportunity_id: str, comment_html: str):
