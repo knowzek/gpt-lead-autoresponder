@@ -386,15 +386,14 @@ def send_opportunity_email_activity(token, subscription_id, opportunity_id,
 
     payload = {
         "opportunityId": opportunity_id,
-        "sendType": "Outbound",
-        "sendParameters": {
-            "sender": sender,
+        "message": {
+            "from": sender,                  # caller supplies per-rooftop/alias
             "recipients": recipients,
             "carbonCopies": carbon_copies,
             "subject": subj,
             "body": body,
-            "isHtml": True
-        }
+            "isHtml": True,
+        },
     }
 
     try:
