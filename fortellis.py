@@ -403,8 +403,8 @@ def send_opportunity_email_activity(token, subscription_id, opportunity_id,
     # Thread the reply if we have the inbound activity id
     if reply_to_activity_id:
         # Fortellis/eLead threading key; keep both top-level and nested for compatibility
-        payload["message"]["replyToActivityId"] = reply_to_activity_id
-        #payload["replyToActivityId"] = reply_to_activity_id
+        #payload["message"]["replyToActivityId"] = reply_to_activity_id
+        payload["replyToActivityId"] = reply_to_activity_id
         payload["inReplyToActivityId"] = reply_to_activity_id
 
     if reply_to_activity_id:
