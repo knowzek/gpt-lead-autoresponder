@@ -1371,60 +1371,72 @@ def processHit(hit):
         body_html = body_html + build_patti_footer(rooftop_name)
         
         opportunity["body_html"] = body_html
-
-
-        if "messages" in opportunity:
-            opportunity['messages'].append(
-                {
-                    "msgFrom": "patti",
-                    "subject": subject,
-                    "body": body_html,
-                    "date": currDate
-                }
-            )
-        else:
-            opportunity['messages'] = [
-                {
-                    "msgFrom": "patti",
-                    "subject": subject,
-                    "body": body_html,
-                    "date": currDate
-                }
-            ]
-        opportunity['checkedDict']['patti_already_contacted'] = True
-        opportunity['checkedDict']['last_msg_by'] = "patti"
-        nextDate = currDate + _td(hours=24)   # or use your cadence
-        opportunity['followUP_date'] = nextDate.isoformat()
-        opportunity['followUP_count'] = 0
         
-        if not OFFLINE_MODE:
-            try:
-                if customer_email:
+        # Append message to opportunity log
+        msg_entry = {
+            "msgFrom": "patti",
+            "subject": subject,
+            "body": body_html,
+            "date": currDate
+        }
+        
+        if "messages" in opportunity:
+            opportunity["messages"].append(msg_entry)
+        else:
+            opportunity["messages"] = [msg_entry]
+        
+        # ---------------------------
+        #   FIX: Only mark as sent if actual success
+        # ---------------------------
+        sent_ok = False
+        
+        if OFFLINE_MODE:
+            sent_ok = True
+        else:
+            if customer_email:
+                try:
                     send_opportunity_email_activity(
                         token,
                         subscription_id,        # dealer_key
                         opportunityId,
-                        sender=rooftop_sender,  # from rooftops.get_rooftop_info(...)
+                        sender=rooftop_sender,
                         recipients=[customer_email],
-                        carbon_copies=[],       # you can CC a manager here if you want later
+                        carbon_copies=[],
                         subject=subject,
                         body_html=body_html,
                         rooftop_name=rooftop_name,
                     )
-                else:
+                    sent_ok = True   # <-- ONLY HERE DO WE MARK SUCCESS
+                except Exception as e:
                     log.warning(
-                        "No customer_email for opp %s – cannot send Patti general lead email.",
+                        "Failed to send Patti general lead email for opp %s: %s",
                         opportunityId,
+                        e,
                     )
-            except Exception as e:
+            else:
                 log.warning(
-                    "Failed to send Patti general lead email for opp %s: %s",
+                    "No customer_email for opp %s – cannot send Patti general lead email.",
                     opportunityId,
-                    e,
                 )
+        
+        # ---------------------------
+        #   Only update Patti's state IF sent_ok is True
+        # ---------------------------
+        if sent_ok:
+            opportunity['checkedDict']['patti_already_contacted'] = True
+            opportunity['checkedDict']['last_msg_by'] = "patti"
+            nextDate = currDate + _td(hours=24)
+            opportunity['followUP_date'] = nextDate.isoformat()
+            opportunity['followUP_count'] = 0
+        else:
+            log.warning(
+                "Did NOT mark Patti as contacted for opp %s because sendEmail failed.",
+                opportunityId,
+            )
+        
+        # Persist Patti state + messages into ES
+        es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
 
-            # Persist Patti state + messages into ES
-            es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
     else:
         # handle follow-ups messages
         checkActivities(opportunity, currDate, rooftop_name)
