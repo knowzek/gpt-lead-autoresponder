@@ -345,20 +345,23 @@ def get_recent_opportunities(token, dealer_key, since_minutes=360, page=1, page_
 
 from typing import Optional
 
+from typing import Optional
+
 def send_opportunity_email_activity(token, subscription_id, opportunity_id,
                                     *, sender, recipients, carbon_copies,
                                     subject, body_html, rooftop_name,
                                     reply_to_activity_id: Optional[str] = None):
     """
-    Send an email via Opportunities POST /sendEmail.
+    Send an email via Opportunities POST /sendEmail (Sales v2).
 
     Notes:
-      - We don't hardcode 'from'. Caller must pass a rooftop-specific sender (or alias).
+      - Caller must pass a rooftop-specific sender (or alias).
       - If rooftop_name is provided, we (a) scrub any 'Patterson Auto Group' and
         (b) ensure the subject mentions the rooftop.
     """
     url = f"{BASE_URL}{OPPS_BASE}/sendEmail"
     dealer_key = subscription_id
+
     # Normalize lists
     recipients = recipients if isinstance(recipients, list) else ([recipients] if recipients else [])
     carbon_copies = carbon_copies or []
@@ -384,6 +387,7 @@ def send_opportunity_email_activity(token, subscription_id, opportunity_id,
         if rooftop_name not in subj:
             subj = f"{subj} | {rooftop_name}" if subj else f"Your vehicle inquiry with {rooftop_name}"
 
+    # ✅ Correct v2 /sendEmail payload using "message"
     payload = {
         "opportunityId": opportunity_id,
         "message": {
@@ -396,10 +400,27 @@ def send_opportunity_email_activity(token, subscription_id, opportunity_id,
         },
     }
 
+    # Optional threading for replies
+    if reply_to_activity_id:
+        payload["message"]["replyToActivityId"] = reply_to_activity_id
+
     try:
-        return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
+        log.info(
+            "Fortellis: sending NEW outbound (reply_to_activity_id=%s) dealer_key=%s opp=%s sender=%s recipients=%s",
+            reply_to_activity_id,
+            dealer_key,
+            opportunity_id,
+            sender,
+            recipients,
+        )
+        return post_and_wrap(
+            "POST",
+            url,
+            headers=_headers(dealer_key, token),
+            json=payload,
+        )
     except requests.HTTPError as e:
-        # Log a compact view of what we tried to send so we can debug 500s
+        # Log a compact view of what we tried to send so we can debug 4xx/5xx
         try:
             payload_preview = json.dumps(
                 {
@@ -418,11 +439,12 @@ def send_opportunity_email_activity(token, subscription_id, opportunity_id,
             "Fortellis: sendEmail failed dealer_key=%s opp=%s: %s payload_preview=%s",
             dealer_key,
             opportunity_id,
-            str(e),
+            repr(e),
             payload_preview,
         )
-        # Re-raise so the caller's try/except can handle it
+        # Re-raise so the caller's try/except can handle it (sent_ok=False)
         raise
+
 
 
 
