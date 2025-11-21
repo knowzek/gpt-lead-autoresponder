@@ -1564,16 +1564,25 @@ def processHit(hit):
             return
 
         
+        # -- followUP_date normalization --
         fud = opportunity.get("followUP_date")
-        if isinstance(fud, str):
-            followUP_date = _dt.fromisoformat(fud)
-        elif isinstance(fud, _dt):
-            followUP_date = fud
-        else:
-            # No follow-up date yet → treat as "due now"
-            followUP_date = currDate
         
-        # Default to 0 if not present (older opps / never-touched leads)
+        if isinstance(fud, str):
+            # Convert ISO → datetime
+            dt = _dt.fromisoformat(fud)
+        elif isinstance(fud, _dt):
+            dt = fud
+        else:
+            # No previous follow-up → due now
+            dt = currDate
+        
+        # Make it timezone-aware (UTC)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=_tz.utc)
+        
+        followUP_date = dt
+        
+        # -- followUP_count normalization --
         followUP_count = int(opportunity.get("followUP_count") or 0)
 
     
