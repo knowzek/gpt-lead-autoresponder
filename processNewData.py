@@ -571,7 +571,7 @@ def _derive_appointment_from_sched_activities(opportunity, tz_name="America/Los_
 
 
 def processHit(hit):
-    currDate = _dt.now()
+    currDate = _dt.now(_tz.utc)
 
     # remove later
     global already_processed
@@ -924,7 +924,7 @@ def processHit(hit):
     if isinstance(activities, list):
         activities = {"scheduledActivities": [], "completedActivities": activities}
     
-    currDate = _dt.now()
+    currDate = _dt.now(_tz.utc)
     docToUpdate = {
         "scheduledActivities": activities.get("scheduledActivities", []),
         "completedActivities": activities.get("completedActivities", []),
