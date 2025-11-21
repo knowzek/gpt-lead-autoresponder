@@ -1564,9 +1564,18 @@ def processHit(hit):
             return
 
         
-        fud = opportunity.get('followUP_date')
-        followUP_date = _dt.fromisoformat(fud) if isinstance(fud, str) else (fud if isinstance(fud, _dt) else currDate)
-        followUP_count = opportunity['followUP_count']
+        fud = opportunity.get("followUP_date")
+        if isinstance(fud, str):
+            followUP_date = _dt.fromisoformat(fud)
+        elif isinstance(fud, _dt):
+            followUP_date = fud
+        else:
+            # No follow-up date yet → treat as "due now"
+            followUP_date = currDate
+        
+        # Default to 0 if not present (older opps / never-touched leads)
+        followUP_count = int(opportunity.get("followUP_count") or 0)
+
     
         # --- NEW: Step 4 — pause cadence if there is an upcoming appointment ---
         patti_meta = opportunity.get("patti") or {}
