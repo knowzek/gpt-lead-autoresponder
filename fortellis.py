@@ -74,68 +74,129 @@ TOKEN_URL = os.getenv(
     f"https://identity.fortellis.io/oauth2/{AUTH_SERVER_ID}/v1/token"
 )
 
-def get_activities_via_sales_history(token, subscription_id, opportunity_id):
-    """
-    Replace CDK Activity History with Sales v1 activities.history/byOpportunityId.
+ACTIVITY_TYPE_MAP = {
+    "attend meeting": 1,
+    "phone call": 2,
+    "send email": 3,
+    "other": 5,
+    "appointment": 7,
+    "send letter": 12,
+    "send email/letter": 14,
+    "inbound email": 20,            # This is what CDK calls “Read Email”
+    "leadlink up": 21,
+    "service reminder": 27,
+    "lease reminder": 28,
+    "confirm appointment": 34,
+    "auto response": 36,
+    "note": 37,
+    "inbound call": 38,
+    "duplicate lead": 40,
+    "brochure": 41,
+    "parts up": 42,
+    "service appt up": 43,
+    "miscellaneous sold": 44,
+    "directcall": 45,
+    "ivr": 46,
+    "directmail": 47,
+    "text message": 48,
+    "service appointment": 49,
+    "delivery appointment": 50,
+    "miscellaneous appointment": 51,
+    "credit application": 53,
+    "appraisal integration": 54,
+    "birthday/anniv survey": 56,
+    "ace email": 57,
+    "alert sent": 59,
+    "data enrichment": 60,
+    "in market notification": 63,
+    "appraisal appointment": 65,
+    "service plus survey": 66,
+    "livestream": 67,
+    "credit soft pull": 68,
+    "bulk text message": 69,
 
-    Returns the same shape your existing code expects:
-      {
-        "scheduledActivities": [...],
-        "completedActivities": [...]
-      }
+    # Also add missing ones from CDK Activity History:
+    "internet up": 13,              
+}
+
+def normalize_activity_item(it: dict) -> dict:
     """
+    Converts Sales v1 activityHistory items to Patti-safe format:
+    - Always returns numeric activityType (or omits the field)
+    - Avoids ES type errors
+    """
+
+    raw_type = it.get("activityType")
+    mapped_type = None
+
+    # Already numeric → good
+    if isinstance(raw_type, int):
+        mapped_type = raw_type
+    # String → map using ACTIVITY_TYPE_MAP
+    elif isinstance(raw_type, str):
+        mapped_type = ACTIVITY_TYPE_MAP.get(raw_type.strip().lower())
+
+    base = {
+        "activityId": it.get("id"),
+        "activityName": it.get("name"),
+        "dueDate": it.get("dueDate"),
+        "completedDate": it.get("completedDate"),
+        "outcome": it.get("outcome"),
+        "assignedTo": it.get("assignedTo"),
+    }
+
+    # Only include numeric activityType:
+    if mapped_type is not None:
+        base["activityType"] = mapped_type
+
+    return base
+
+
+
+def get_activities(opportunity_id, customer_id, token, dealer_key):
+    """
+    Replace expensive CDK Activity History with Sales v1 activities.history/byOpportunityId.
+    Returns:
+        {
+            "scheduledActivities": [...],
+            "completedActivities": [...]
+        }
+    """
+
     url = f"{BASE_URL}/sales/v1/elead/activities/history/byOpportunityId/{opportunity_id}"
-    headers = _headers(subscription_id, token)
-    t0 = datetime.now(timezone.utc)
-    resp = requests.get(url, headers=headers, timeout=10)
-    dur_ms = int((datetime.now(timezone.utc) - t0).total_seconds() * 1000)
-    _log_txn_compact(
-        logging.INFO,
-        method="GET",
-        url=url,
-        headers=_mask_headers(headers),
-        status=resp.status_code,
-        duration_ms=dur_ms,
-        request_id=headers.get("Request-Id", "auto"),
-        note="sales-v1-activities-history"
-    )
+    headers = _headers(dealer_key, token)
+
+    resp = requests.get(url, headers=headers, timeout=30)
+
+    # Retry once on 401
+    if resp.status_code == 401:
+        fresh = get_token(dealer_key, force_refresh=True)
+        resp = requests.get(url, headers=_headers(dealer_key, fresh), timeout=30)
+
     resp.raise_for_status()
     data = resp.json() or {}
-    items = data.get("items") or []
+
+    items = data.get("items", []) or []
 
     scheduled = []
     completed = []
 
     for it in items:
-        act_id   = it.get("id")
-        name     = it.get("name") or ""
-        cat      = (it.get("category") or "").strip().lower()  # "scheduled" / "completed"
-        outcome  = (it.get("outcome") or "").strip().lower()
-        due      = it.get("dueDate")
-        compdate = it.get("completedDate")
+        norm = normalize_activity_item(it)
 
-        # Normalize to your existing keys
-        base = {
-            "activityId": act_id,
-            "activityName": name,
-            "activityType": it.get("activityType"),  # we can coerce later if needed
-            "dueDate": due,
-            "completedDate": compdate,
-            "outcome": it.get("outcome"),
-            "assignedTo": it.get("assignedTo"),
-            # no comments here – we’ll rely on get_activity_by_id_v1 when needed
-        }
+        category = (it.get("category") or "").lower()
+        outcome = (it.get("outcome") or "").lower()
 
-        # Rough equivalent of CDK's scheduled vs completed split
-        if cat == "scheduled" or outcome in ("open", "in progress"):
-            scheduled.append(base)
+        if category == "scheduled" or outcome in ("open", "in progress"):
+            scheduled.append(norm)
         else:
-            completed.append(base)
+            completed.append(norm)
 
     return {
         "scheduledActivities": scheduled,
         "completedActivities": completed,
     }
+
 
 def set_customer_do_not_email(token, subscription_id, customer_id, email_address, do_not=True):
     """
