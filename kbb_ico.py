@@ -1171,14 +1171,15 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             acts=acts_live,       
         )
         
-        if has_reply and last_inbound_id and last_inbound_id != state.get("last_inbound_activity_id"):
+        if has_reply and last_inbound_activity_id and last_inbound_activity_id != state.get("last_inbound_activity_id"):
             log.info("KBB ICO: true customer reply after appointment → switch to convo mode")
             state["mode"] = "convo"
             state["nudge_count"] = 0
             if last_cust_ts:
                 state["last_customer_msg_at"] = last_cust_ts
-            state["last_inbound_activity_id"] = last_inbound_id
+            state["last_inbound_activity_id"] = last_inbound_activity_id
             # fall through to convo handling below
+
         else:
             log.info("KBB ICO: appointment active, no *new* inbound → stay quiet")
             state["mode"] = "scheduled"
@@ -1214,8 +1215,9 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         state["nudge_count"] = 0
         if has_reply and last_cust_ts:
             state["last_customer_msg_at"] = last_cust_ts
-        if last_inbound_id:
-            state["last_inbound_activity_id"] = last_inbound_id
+        if last_inbound_activity_id:
+            state["last_inbound_activity_id"] = last_inbound_activity_id
+
         #_save_state_comment(token, subscription_id, opp_id, state)
 
         # Only refetch if we actually sent something new in this run
@@ -1247,8 +1249,9 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         selected_inbound_id = None
         if newest_read:
             selected_inbound_id = str(newest_read.get("activityId") or newest_read.get("id") or "")
-        elif last_inbound_id:
-            selected_inbound_id = last_inbound_id
+        elif last_inbound_activity_id:
+            selected_inbound_id = last_inbound_activity_id
+
         else:
             selected_inbound_id = _latest_read_email_id(acts_now)  # use fresh not stale
 
