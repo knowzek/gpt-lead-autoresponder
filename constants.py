@@ -1,8 +1,8 @@
 import os
-
 from helpers import rJson, wJson, _html_to_text
 from dotenv import load_dotenv
 load_dotenv()
+
 
 # === Modes & Safety ==================================================
 USE_EMAIL_MODE = False                              # legacy inbox mode off by default
@@ -12,7 +12,7 @@ TEST_FROM = os.getenv("FORTELLIS_TEST_FROM", "sales@claycooleygenesisofmesquite.
 TEST_TO   = os.getenv("FORTELLIS_TEST_TO",   "rishabhrajendraprasad.shukla@cdk.com")
 
 MICKEY_EMAIL = os.getenv("MICKEY_EMAIL")  # proof recipient
-ELIGIBLE_UPTYPES = "Internet"
+ELIGIBLE_UPTYPES = {"internet up", "internet"}
 PROOF_RECIPIENTS = [
     "knowzek@gmail.com",
     "mickeyt@the-dms.com",

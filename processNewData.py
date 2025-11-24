@@ -8,20 +8,31 @@ from helpers import (
     sortActivities
 )
 from kbb_ico import process_kbb_ico_lead 
+from kbb_ico import _top_reply_only, _is_optout_text as _kbb_is_optout_text, _is_decline as _kbb_is_decline
 from es_resilient import es_update_with_retry
-from esQuerys import getNewData, esClient, getNewDataByDate
+from esQuerys import getNewData, esClient, getNewDataByDate, getDocByID
 from rooftops import get_rooftop_info
 from constants import *
-from gpt import run_gpt, getCustomerMsgDict
+from gpt import run_gpt, getCustomerMsgDict, extract_appt_time
 import re
 import logging
 import hashlib, json, time
 from uuid import uuid4
 import uuid
 
-from fortellis import get_activities, get_token, get_activity_by_id_v1, get_opportunity
-from fortellis import get_activities, get_token, get_activity_by_id_v1, get_opportunity, add_opportunity_comment
+from fortellis import (
+    get_activities,
+    get_token,
+    get_activity_by_id_v1,
+    get_opportunity,
+    add_opportunity_comment,
+    schedule_activity,
+    send_opportunity_email_activity,
+    set_opportunity_substatus,
+)
 
+
+from patti_common import fmt_local_human, normalize_patti_body, append_soft_schedule_sentence, rewrite_sched_cta_for_booked
 
 #from fortellis import get_vehicle_inventory_xml  
 from inventory_matcher import recommend_from_xml
@@ -211,75 +222,149 @@ def checkActivities(opportunity, currDate, rooftop_name):
             if not DEBUGMODE and not OFFLINE_MODE:
                 fullAct = get_activity_by_id_v1(activityId, token, subscription_id)
 
-            customerMsg = (fullAct.get('message') or {})
+            customerMsg = (fullAct.get("message") or {})
+
+            # --- KBB-style normalization: top reply only + plain-text fallback ---
+            raw_body_html = (customerMsg.get("body") or "").strip()
+            customer_body = _top_reply_only(raw_body_html)
+
+            if not customer_body:
+                # Simple HTML → text fallback if _top_reply_only returns empty
+                import re as _re
+                no_tags = _re.sub(r"(?is)<[^>]+>", " ", raw_body_html)
+                customer_body = _re.sub(r"\s+", " ", no_tags).strip()
+
             customerMsgDict = {
                 "msgFrom": "customer",
-                "customerName": customerInfo.get('firstName'),
-                "subject": customerMsg.get('subject'),
-                "body": customerMsg.get('body'),
-                "date": fullAct.get('completedDate')
+                "customerName": customerInfo.get("firstName"),
+                "subject": customerMsg.get("subject"),
+                "body": customer_body,          # <-- use cleaned top-reply text
+                "date": fullAct.get("completedDate"),
             }
-            
+
             # append the customer's message to the thread
             opportunity.setdefault('messages', []).append(customerMsgDict)
             messages = opportunity['messages']
             checkedDict["last_msg_by"] = "customer"
             opportunity['checkedDict'] = checkedDict  # ensure persisted even if it was missing
             
-            # 🚫 Early-exit check — stop if customer declined
-            customer_body = (customerMsg.get('body') or '').strip()
-            if is_exit_message(customer_body):
+            # 🚫 Unified opt-out / decline check — re-use KBB logic on the CLEANED body
+            if _kbb_is_optout_text(customer_body) or _kbb_is_decline(customer_body):
+
                 log.info("Customer opted out or declined interest. Marking opportunity inactive.")
                 opportunity['isActive'] = False
-                checkedDict['exit_reason'] = customer_body[:120]
+                checkedDict['exit_reason'] = customer_body[:250]
                 checkedDict['exit_type'] = "customer_declined"
                 opportunity['checkedDict'] = checkedDict
-            
-                # mark this activity as processed so we don't re-handle it next run
-                opportunity.setdefault('alreadyProcessedActivities', {})[activityId] = fullAct
-            
+
+                # mark this activity as processed with a minimal stub
+                apa = opportunity.get("alreadyProcessedActivities") or {}
+                if not isinstance(apa, dict):
+                    apa = {}
+                apa[activityId] = {
+                    "activityId": activityId,
+                    "completedDate": fullAct.get("completedDate"),
+                    "activityType": fullAct.get("activityType"),
+                    "activityName": fullAct.get("activityName"),
+                }
+                opportunity["alreadyProcessedActivities"] = apa
+
                 if not OFFLINE_MODE:
-                    add_opportunity_comment(
-                        token, subscription_id, opportunity['opportunityId'],
-                        f"[Patti Exit] Customer indicated no interest: “{customer_body[:200]}”"
+                    es_update_with_retry(
+                        esClient,
+                        index="opportunities",
+                        id=opportunity['opportunityId'],
+                        doc=opportunity,
                     )
 
-                    try:
-                        from fortellis import set_opportunity_inactive
-                   
-                        set_opportunity_inactive(
-                            token,
-                            subscription_id,
-                            opportunity['opportunityId'],
-                            sub_status="Not In Market",
-                            comments="Customer declined — set inactive by Patti"
-                        )
-                    except Exception as e:
-                        log.warning("set_opportunity_inactive failed: %s", e)
-        
-                    # Optional: notify salesperson
-                    sales_team = opportunity.get('salesTeam', [])
-                    if sales_team:
-                        first_sales = sales_team[0]
-                        salesperson_email = (first_sales.get('email') or "").strip()
-                        if salesperson_email:
-                            try:
-                                from emailer import send_email
-                                send_email(
-                                    to=salesperson_email,
-                                    subject="Patti stopped follow-up — customer declined",
-                                    body=f"The customer replied:\n\n{customer_body}\n\nPatti stopped follow-ups for this lead."
-                                )
-                            except Exception as e:
-                                log.warning("Emailer failed: %s", e)
-            
-                    es_update_with_retry(esClient, index="opportunities", id=opportunity['opportunityId'], doc=opportunity)
-            
                 wJson(opportunity, f"jsons/process/{opportunity['opportunityId']}.json")
                 return
             
+            # --- Step 2: try to auto-schedule an appointment from this reply ---
+            created_appt_ok = False
+            appt_human = None
+            try:
+                # Skip if we already know about a future appointment
+                patti_meta = opportunity.get("patti") or {}
+                appt_due_utc = patti_meta.get("appt_due_utc")
+                already_scheduled = False
+                if appt_due_utc:
+                    try:
+                        appt_dt = _dt.fromisoformat(str(appt_due_utc).replace("Z", "+00:00"))
+                        if appt_dt > _dt.now(_tz.utc):
+                            already_scheduled = True
+                    except Exception:
+                        pass
+
+                appt_iso = ""
+                conf = 0.0
+                if not already_scheduled:
+                    proposed = extract_appt_time(customer_body or "", tz="America/Los_Angeles")
+                    appt_iso = (proposed.get("iso") or "").strip()
+                    conf = float(proposed.get("confidence") or 0.0)
+
+                if appt_iso and conf >= 0.60:
+                    try:
+                        dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
+                        due_dt_iso_utc = dt_local.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                        
+                        schedule_activity(
+                            token,
+                            subscription_id,
+                            opportunity['opportunityId'],
+                            due_dt_iso_utc=due_dt_iso_utc,
+                            activity_name="Sales Appointment",
+                            activity_type="Appointment",
+                            comments=f"Auto-scheduled from Patti based on customer reply: {customer_body[:200]}"
+                        )
+                        created_appt_ok = True
+                        appt_human = fmt_local_human(dt_local)
+                        
+                        patti_meta["mode"] = "scheduled"
+                        patti_meta["appt_due_utc"] = due_dt_iso_utc
+                        # GPT reply will confirm this, so mark to prevent duplicates.
+                        patti_meta["appt_confirm_email_sent"] = True
+                        opportunity["patti"] = patti_meta
+
+                        
+                        log.info(
+                            "✅ Auto-scheduled appointment from reply for %s at %s (conf=%.2f)",
+                            opportunity['opportunityId'],
+                            appt_human,
+                            conf,
+                        )
+                    except Exception as e:
+                        log.error(
+                            "Failed to auto-schedule appointment from reply for %s (appt_iso=%r): %s",
+                            opportunity['opportunityId'],
+                            appt_iso,
+                            e,
+                        )
+            except Exception as e:
+                log.warning(
+                    "Reply-based appointment detection failed for %s: %s",
+                    opportunity.get('opportunityId'),
+                    e,
+                )
+
             # ✅ continue with GPT reply generation
-            prompt = f"""
+            if created_appt_ok and appt_human:
+                prompt = f"""
+            The customer and Patti have been emailing about a potential sales appointment.
+
+            Patti has just scheduled an appointment in the CRM based on the most recent customer reply.
+            Appointment time (local dealership time): {appt_human}.
+
+            Write Patti's next email reply using the messages list below. Patti should:
+            - Warmly confirm the appointment for {appt_human}
+            - Thank the customer and set expectations for the visit
+            - NOT ask the customer to choose a time again.
+
+            Here are the messages (Python list of dicts):
+            {messages}
+            """
+            else:
+                prompt = f"""
             generate next patti reply, here is the current messages between patti and the customer (python list of dicts):
             {messages}
             """
@@ -289,15 +374,42 @@ def checkActivities(opportunity, currDate, rooftop_name):
                 rooftop_name,
                 prevMessages=True
             )
+
             
-            subject = response["subject"]
+            subject   = response["subject"]
             body_html = response["body"]
             
+            # strip any duplicated Patti signature the model added
             body_html = re.sub(
                 r"(?is)(?:\n\s*)?patti\s*(?:\r?\n)+virtual assistant.*?$",
                 "",
                 body_html
             )
+
+            # --- Normalize Patti body & add CTA + footer (same as initial email) ---
+            from kbb_ico import _patch_address_placeholders, build_patti_footer, _PREFS_RE
+            
+            # Clean up paragraphs / bullets
+            body_html = normalize_patti_body(body_html)
+            
+            # Patch rooftop/address placeholders (e.g. LegacySalesApptSchLink, dealership name)
+            body_html = _patch_address_placeholders(body_html, rooftop_name)
+            
+            # Decide which CTA behavior to use based on appointment state
+            patti_meta = opportunity.get("patti") or {}
+            mode = patti_meta.get("mode")
+            
+            if mode == "scheduled":
+                body_html = rewrite_sched_cta_for_booked(body_html)
+            else:
+                body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+            
+            # Strip any extraneous prefs/unsubscribe footer GPT might add
+            body_html = _PREFS_RE.sub("", body_html).strip()
+            
+            # Add Patti’s signature/footer with the Tustin Kia logo
+            body_html = body_html + build_patti_footer(rooftop_name)
+
             
             opportunity['messages'].append({
                 "msgFrom": "patti",
@@ -311,18 +423,155 @@ def checkActivities(opportunity, currDate, rooftop_name):
             checkedDict['last_msg_by'] = "patti"
             opportunity['checkedDict'] = checkedDict
             
-            # mark processed to avoid repeat handling
-            opportunity.setdefault('alreadyProcessedActivities', {})[activityId] = fullAct
+            # mark this Read Email activity as processed (stub only)
+            apa = opportunity.get("alreadyProcessedActivities") or {}
+            if not isinstance(apa, dict):
+                apa = {}
+            apa[activityId] = {
+                "activityId":   fullAct.get("id") or activityId,
+                "completedDate": fullAct.get("completedDate"),
+                "activityType":  fullAct.get("activityType"),
+                "activityName":  fullAct.get("activityName"),
+            }
+            opportunity["alreadyProcessedActivities"] = apa
             
-            nextDate = currDate + _td(hours=24)   # or use a constant
-            opportunity['followUP_date'] = nextDate.isoformat()
+            nextDate = currDate + _td(hours=24)
+            opportunity['followUP_date']  = nextDate.isoformat()
             opportunity['followUP_count'] = 0
+            
+            # 🔔 NEW: send the follow-up email + persist to ES, then stop
+            if not OFFLINE_MODE:
+                # figure out sender from rooftop
+                rt = get_rooftop_info(subscription_id)
+                rooftop_sender = rt.get("sender") or TEST_FROM
+            
+                # pick customer email (prefer preferred & not doNotEmail)
+                cust   = opportunity.get("customer") or {}
+                emails = cust.get("emails") or []
+                customer_email = None
+                for e in emails:
+                    if e.get("doNotEmail"):
+                        continue
+                    if e.get("isPreferred"):
+                        customer_email = e.get("address")
+                        break
+                if not customer_email and emails:
+                    customer_email = emails[0].get("address")
+            
+                if customer_email:
+                    try:
+                        send_opportunity_email_activity(
+                            token,
+                            subscription_id,
+                            opportunity["opportunityId"],
+                            sender=rooftop_sender,
+                            recipients=[customer_email],
+                            carbon_copies=[],
+                            subject=subject,
+                            body_html=body_html,
+                            rooftop_name=rooftop_name,
+                        )
+                    except Exception as e:
+                        log.warning(
+                            "Failed to send Patti follow-up email for opp %s: %s",
+                            opportunity["opportunityId"],
+                            e,
+                        )
+            
+                # persist updated opportunity (messages, followUP_date, etc.)
+                es_update_with_retry(
+                    esClient,
+                    index="opportunities",
+                    id=opportunity["opportunityId"],
+                    doc=opportunity,
+                )
+            
+            # write debug json + stop processing this opp for this run
+            wJson(opportunity, f"jsons/process/{opportunity['opportunityId']}.json")
+            return
+
+def _derive_appointment_from_sched_activities(opportunity, tz_name="America/Los_Angeles"):
+    """Inspect scheduledActivities for a future appointment and, if found,
+    update opportunity['patti']['mode'] / ['appt_due_utc'] so Patti will
+    pause cadence nudges once an appointment is on the books.
+    Returns True if state was updated, False otherwise.
+    """
+    try:
+        sched = opportunity.get("scheduledActivities") or []
+        if not isinstance(sched, list):
+            return False
+
+        # If we already have a future appt_due_utc recorded, don't override it.
+        patti_meta = opportunity.get("patti") or {}
+        appt_due_utc = patti_meta.get("appt_due_utc")
+        if appt_due_utc:
+            try:
+                existing_dt = _dt.fromisoformat(str(appt_due_utc).replace("Z", "+00:00"))
+                if existing_dt > _dt.now(_tz.utc):
+                    return False
+            except Exception:
+                # fall through and allow re-deriving if parsing fails
+                pass
+
+        now_utc = _dt.now(_tz.utc)
+        candidates = []
+
+        for a in sched:
+            raw_name = (a.get("activityName") or a.get("name") or "").strip().lower()
+            t = a.get("activityType")
+
+            # Treat anything clearly labeled as an appointment as such
+            t_str = str(t).strip().lower() if t is not None else ""
+            is_appt = (
+                "appointment" in raw_name
+                or t_str in ("2", "appointment")
+            )
+            if not is_appt:
+                continue
+
+            # Many booking-link activities use dueDateTime / startDateTime
+            due_raw = (
+                a.get("dueDateTime")
+                or a.get("dueDate")
+                or a.get("startDateTime")
+                or a.get("activityDate")
+                or a.get("completedDate")
+            )
+            if not due_raw:
+                continue
+            try:
+                due_dt = _dt.fromisoformat(str(due_raw).replace("Z", "+00:00"))
+            except Exception:
+                continue
 
 
+            if due_dt > now_utc:
+                candidates.append(due_dt)
+
+        if not candidates:
+            return False
+
+        # Use the earliest future appointment
+        due_dt = min(candidates)
+        due_dt_iso_utc = due_dt.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        patti_meta["mode"] = "scheduled"
+        patti_meta["appt_due_utc"] = due_dt_iso_utc
+        opportunity["patti"] = patti_meta
+
+        return True
+    except Exception as e:
+        # Never break the main job because of a best-effort helper
+        try:
+            log.warning("Failed to derive appointment from scheduledActivities for %s: %s",
+                        opportunity.get("opportunityId"), e)
+        except Exception:
+            pass
+        return False
 
 
 def processHit(hit):
-    currDate = _dt.now()
+    currDate = _dt.now(_tz.utc)
 
     # remove later
     global already_processed
@@ -675,7 +924,7 @@ def processHit(hit):
     if isinstance(activities, list):
         activities = {"scheduledActivities": [], "completedActivities": activities}
     
-    currDate = _dt.now()
+    currDate = _dt.now(_tz.utc)
     docToUpdate = {
         "scheduledActivities": activities.get("scheduledActivities", []),
         "completedActivities": activities.get("completedActivities", []),
@@ -683,9 +932,32 @@ def processHit(hit):
     }
     opportunity.update(docToUpdate)
     
+    # Best-effort: if the CRM already has a future appointment scheduled
+    # (for example, via a booking link), mirror that into Patti's state so
+    # she pauses cadence nudges but continues to watch for replies.
+    has_appt = _derive_appointment_from_sched_activities(opportunity)
+    
+    # NEW: if we now know there’s an appointment, flip the CRM substatus
+    if has_appt and not OFFLINE_MODE:
+        try:
+            resp = set_opportunity_substatus(
+                token,
+                subscription_id,
+                opportunityId,
+                sub_status="Appointment Set",
+            )
+            log.info(
+                "Non-KBB appt: SubStatus update response: %s",
+                getattr(resp, "status_code", "n/a"),
+            )
+        except Exception as e:
+            log.warning("Non-KBB appt: set_opportunity_substatus failed: %s", e)
+    
     if not OFFLINE_MODE:
         opportunity.pop("completedActivitiesTesting", None)
         es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+
+
 
 
     # ====================================================
@@ -716,10 +988,22 @@ def processHit(hit):
     if base_url and (make and model):
         vehicle_str = f'<a href="{base_url}?make={make}&model={model}">{vehicle_str}</a>'
 
-    
     completedActivities = activities.get('completedActivities', [])
 
     patti_already_contacted = checkedDict.get('patti_already_contacted', False)
+
+    # 🔒 Extra safety: if we see any Fortellis send-email activities, 
+    # assume Patti has already contacted this lead at least once.
+    if not patti_already_contacted:
+        for act in completedActivities:
+            name = (act.get("activityName") or "").strip()
+            comments = (act.get("comments") or "").lower()
+            if name == "Fortellis - Send Email" and "sent via fortellis email service" in comments:
+                patti_already_contacted = True
+                checkedDict["patti_already_contacted"] = True
+                opportunity["checkedDict"] = checkedDict
+                break
+
 
     if not patti_already_contacted:
 
@@ -743,7 +1027,8 @@ def processHit(hit):
                 
                 firstActivityFull = {
                     "activityId": newest.get("activityId") or newest.get("id") or f"offline-{uuid.uuid4().hex[:8]}",
-                    "completedDate": newest.get("completedDate") or _dt.datetime.utcnow().isoformat() + "Z",
+                    "completedDate": newest.get("completedDate")
+                        or _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                     "message": {"subject": newest.get("subject", ""), "body": firstActivityMessageBody},
                     "activityType": newest.get("activityType", 20),
                     "activityName": newest.get("activityName", "Read Email"),
@@ -781,8 +1066,6 @@ def processHit(hit):
             opportunity['firstActivityAdfDict'] = firstActivityAdfDict
             opportunity['inquiry_text_body'] = inquiry_text_body
 
-
-    
             customerFirstMsgDict: dict = getCustomerMsgDict(inquiry_text_body)
             opportunity['customerFirstMsgDict'] = customerFirstMsgDict
 
@@ -809,8 +1092,14 @@ def processHit(hit):
                 or f"unknown-{uuid4().hex}"
             )
             
-            # Save this activity under that key
-            opportunity["alreadyProcessedActivities"][act_id] = firstActivityFull or firstActivity or {}
+            # Save ONLY a minimal stub for this activity
+            src = (firstActivityFull or firstActivity or {}) or {}
+            opportunity["alreadyProcessedActivities"][act_id] = {
+                "activityId": src.get("activityId") or src.get("id") or act_id,
+                "completedDate": src.get("completedDate"),
+                "activityType": src.get("activityType"),
+                "activityName": src.get("activityName"),
+            }
 
             # --- ensure the seeded customer message exists and is visible to the UI ---
 
@@ -853,12 +1142,55 @@ def processHit(hit):
             # Optional: log for debugging
             print(f"[SEED] Added seed customer message. len={len(conv)} act_id={act_id}")
 
-   
-
             try:
                 inquiry_text = customerFirstMsgDict.get('customerMsg', None)
             except:
                 pass
+
+            # --- unified opt-out check on the very first inbound ---
+            from patti_common import _is_optout_text, _is_decline
+
+            if inquiry_text and (_is_optout_text(inquiry_text) or _is_decline(inquiry_text)):
+                log.info("❌ Customer opted out on first message. Marking inactive.")
+
+                # make sure checkedDict exists
+                checkedDict = opportunity.get("checkedDict") or {}
+                checkedDict["exit_type"] = "customer_declined"
+                checkedDict["exit_reason"] = (inquiry_text or "")[:250]
+                opportunity["checkedDict"] = checkedDict
+                opportunity["isActive"] = False
+
+                # mark Patti as do-not-email for this opp
+                patti_meta = opportunity.get("patti") or {}
+                patti_meta["email_blocked_do_not_email"] = True
+                opportunity["patti"] = patti_meta
+
+                if not OFFLINE_MODE:
+                    # update ES
+                    es_update_with_retry(
+                        esClient,
+                        index="opportunities",
+                        id=opportunityId,
+                        doc=opportunity
+                    )
+
+                    # update CRM (best-effort)
+                    try:
+                        from fortellis import set_opportunity_inactive, set_customer_do_not_email
+                        set_opportunity_inactive(
+                            token,
+                            subscription_id,
+                            opportunityId,
+                            sub_status="Not In Market",
+                            comment="Customer opted out of communication."
+                        )
+                        set_customer_do_not_email(token, subscription_id, opportunityId)
+                    except Exception as e:
+                        log.error(f"Failed to set CRM inactive / do-not-email: {e}")
+
+                # persist local JSON + stop processing
+                wJson(opportunity, f"jsons/process/{opportunityId}.json")
+                return
 
             # TODO: check with kristin if need to add activity logic to crm that patti will not used here
             if customerFirstMsgDict.get('salesAlreadyContact', False):
@@ -870,6 +1202,59 @@ def processHit(hit):
                 wJson(opportunity, f"jsons/process/{opportunityId}.json")
 
                 return
+
+            # --- Step 3: try to auto-schedule an appointment from the inquiry text ---
+            proposed = extract_appt_time(inquiry_text or "", tz="America/Los_Angeles")
+            appt_iso = (proposed.get("iso") or "").strip()
+            conf = float(proposed.get("confidence") or 0)
+
+            created_appt_ok = False
+            appt_human = None
+            due_dt_iso_utc = None
+
+            if appt_iso and conf >= 0.60:
+                try:
+                    # parse the local time and convert to UTC ISO
+                    dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
+                    due_dt_iso_utc = dt_local.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+                    schedule_activity(
+                        token,
+                        subscription_id,
+                        opportunityId,
+                        due_dt_iso_utc=due_dt_iso_utc,
+                        activity_name="Sales Appointment",
+                        activity_type="Appointment",
+                        comments=f"Auto-scheduled from customer email: {inquiry_text[:180]}",
+                    )
+                    created_appt_ok = True
+                    appt_human = fmt_local_human(dt_local)
+
+                    # 🔐 Store appointment state so future runs know this opp is scheduled
+                    patti_meta = opportunity.get("patti") or {}
+                    patti_meta["mode"] = "scheduled"
+                    patti_meta["appt_due_utc"] = due_dt_iso_utc
+                    # Patti will confirm this appointment in the outgoing email,
+                    # so mark the confirmation as sent to avoid duplicates later.
+                    patti_meta["appt_confirm_email_sent"] = True
+                    opportunity["patti"] = patti_meta
+
+
+                    log.info(
+                        "✅ Auto-scheduled appointment for %s at %s (conf=%.2f)",
+                        opportunityId,
+                        appt_human,
+                        conf,
+                    )
+                except Exception as e:
+                    log.error(
+                        "Failed to auto-schedule appointment for %s (appt_iso=%r): %s",
+                        opportunityId,
+                        appt_iso,
+                        e,
+                    )
+
+
 
         # === Compose with GPT ===============================================
         fallback_mode = not inquiry_text or inquiry_text.strip().lower() in ["", "request a quote", "interested", "info", "information", "looking"]
@@ -913,6 +1298,20 @@ def processHit(hit):
         Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
         """
             
+        # --- NEW: if Patti auto-scheduled an appointment, tell GPT to confirm it ---
+        if created_appt_ok and appt_human:
+            prompt += f"""
+
+    IMPORTANT APPOINTMENT CONTEXT (do not skip):
+    - The guest proposed a time and Patti already scheduled a dealership appointment for {appt_human}.
+    
+    In your email:
+    - Clearly confirm that date and time in plain language.
+    - Thank them for scheduling.
+    - Invite them to reply if they need to adjust the time or have any questions.
+    - Do NOT ask them to pick a time; the appointment is already scheduled. Focus on confirming it.
+    """
+            
         # === Inventory recommendations =====================================
 
         # Get live inventory XML
@@ -948,96 +1347,316 @@ def processHit(hit):
         response  = run_gpt(prompt, customer_name, rooftop_name)
         subject   = response["subject"]
         body_html = response["body"]
-
-        body_html = re.sub(
-            r"(?is)(?:\n\s*)?patti\s*(?:\r?\n)+virtual assistant.*?$",
-            "",
-            body_html
-        )
-        from kbb_ico import _PREFS_RE
-        body_html = _PREFS_RE.sub("", body_html).strip()
-        opportunity["body_html"] = body_html
-
-        if "messages" in opportunity:
-            opportunity['messages'].append(
-                {
-                    "msgFrom": "patti",
-                    "subject": subject,
-                    "body": body_html,
-                    "date": currDate
-                }
-            )
+        
+        # --- Normalize Patti body ---
+        body_html = normalize_patti_body(body_html)
+        
+        # --- patch the rooftop/address placeholders ---
+        from kbb_ico import _patch_address_placeholders, build_patti_footer, _PREFS_RE
+        body_html = _patch_address_placeholders(body_html, rooftop_name)
+        
+        # Decide which CTA behavior to use based on appointment state
+        patti_meta = opportunity.get("patti") or {}
+        mode = patti_meta.get("mode")
+        
+        if mode == "scheduled":
+            body_html = rewrite_sched_cta_for_booked(body_html)
         else:
-            opportunity['messages'] = [
-                {
-                    "msgFrom": "patti",
-                    "subject": subject,
-                    "body": body_html,
-                    "date": currDate
-                }
-            ]
-        opportunity['checkedDict']['patti_already_contacted'] = True
-        opportunity['checkedDict']['last_msg_by'] = "patti"
-        nextDate = currDate + _td(hours=24)   # or use your cadence
-        opportunity['followUP_date'] = nextDate.isoformat()
-        opportunity['followUP_count'] = 0
-        if not OFFLINE_MODE:
-            es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+            body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+        
+        # Strip GPT footer if added
+        body_html = _PREFS_RE.sub("", body_html).strip()
+        
+        # --- add Patti’s signature/footer (same as KBB) ---
+        body_html = body_html + build_patti_footer(rooftop_name)
+        
+        opportunity["body_html"] = body_html
+        
+        # Append message to opportunity log
+        msg_entry = {
+            "msgFrom": "patti",
+            "subject": subject,
+            "body": body_html,
+            "date": currDate
+        }
+        
+        if "messages" in opportunity:
+            opportunity["messages"].append(msg_entry)
+        else:
+            opportunity["messages"] = [msg_entry]
+        
+        # ---------------------------
+        #   FIX: Only mark as sent if actual success
+        # ---------------------------
+        sent_ok = False
+        
+        if OFFLINE_MODE:
+            sent_ok = True
+        else:
+            if customer_email:
+                try:
+                    send_opportunity_email_activity(
+                        token,
+                        subscription_id,        # dealer_key
+                        opportunityId,
+                        sender=rooftop_sender,
+                        recipients=[customer_email],
+                        carbon_copies=[],
+                        subject=subject,
+                        body_html=body_html,
+                        rooftop_name=rooftop_name,
+                    )
+                    sent_ok = True   # <-- ONLY HERE DO WE MARK SUCCESS
+                except Exception as e:
+                    log.warning(
+                        "Failed to send Patti general lead email for opp %s: %s",
+                        opportunityId,
+                        e,
+                    )
+            else:
+                log.warning(
+                    "No customer_email for opp %s – cannot send Patti general lead email.",
+                    opportunityId,
+                )
+        
+        # ---------------------------
+        #   Only update Patti's state IF sent_ok is True
+        # ---------------------------
+        if sent_ok:
+            opportunity['checkedDict']['patti_already_contacted'] = True
+            opportunity['checkedDict']['last_msg_by'] = "patti"
+            nextDate = currDate + _td(hours=24)
+            opportunity['followUP_date'] = nextDate.isoformat()
+            opportunity['followUP_count'] = 0
+        else:
+            log.warning(
+                "Did NOT mark Patti as contacted for opp %s because sendEmail failed.",
+                opportunityId,
+            )
+        
+        # Persist Patti state + messages into ES
+        es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+
     else:
         # handle follow-ups messages
         checkActivities(opportunity, currDate, rooftop_name)
 
-    fud = opportunity.get('followUP_date')
-    followUP_date = _dt.fromisoformat(fud) if isinstance(fud, str) else (fud if isinstance(fud, _dt) else currDate)
-    followUP_count = opportunity['followUP_count']
+        # --- One-time confirmation for appointments booked via the online link ---
+        patti_meta = opportunity.get("patti") or {}
+        appt_due_utc = patti_meta.get("appt_due_utc")
+        appt_confirm_sent = patti_meta.get("appt_confirm_email_sent", False)
 
-    last_by = (opportunity.get('checkedDict') or {}).get('last_msg_by', '')
-    if followUP_date <= currDate and followUP_count > 3:
-        opportunity['isActive'] = False
-        if not OFFLINE_MODE:
-            es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity) 
-        wJson(opportunity, f"jsons/process/{opportunityId}.json")
-        return
-    elif followUP_date <= currDate:
-        messages = opportunity['messages']
-        prompt = f"""
-        generate next patti reply which is a follow-up message, here is the current messages between patti and the customer (python list of dicts):
-        {messages}
-        """
-        response = run_gpt(
-        prompt,
-        customer_name,
-        rooftop_name,
-        prevMessages= True)
+        # If we see a scheduled appointment but Patti never confirmed it,
+        # assume it came from the booking link and send a confirmation now.
+        if appt_due_utc and not appt_confirm_sent:
+            try:
+                # Convert stored UTC ISO to local time for human-friendly text
+                appt_dt_utc = _dt.fromisoformat(str(appt_due_utc).replace("Z", "+00:00"))
+                # TODO: if you have per-rooftop timezones, swap this out
+                local_tz = _tz.timezone("America/Los_Angeles")
+                appt_dt_local = appt_dt_utc.astimezone(local_tz)
+                appt_human = fmt_local_human(appt_dt_local)
+            except Exception:
+                appt_human = appt_due_utc
 
-        subject   = response["subject"]
-        body_html = response["body"]
+            messages = opportunity.get("messages") or []
+            prompt = f"""
+            The customer used the online booking link and there is now a scheduled
+            sales appointment in the CRM.
 
-        body_html = re.sub(
-            r"(?is)(?:\n\s*)?patti\s*(?:\r?\n)+virtual assistant.*?$",
-            "",
-            body_html
-        )
+            Appointment time (local dealership time): {appt_human}.
 
-        opportunity['messages'].append(
-            {
+            Write Patti's next email reply using the messages list below. Patti should:
+            - Warmly confirm the appointment for {appt_human}
+            - Thank the guest and set expectations for the visit
+            - NOT ask the customer to choose a time again.
+
+            Here are the messages (Python list of dicts):
+            {messages}
+            """
+
+            response = run_gpt(
+                prompt,
+                customer_name,
+                rooftop_name,
+                prevMessages=True
+            )
+            subject   = response["subject"]
+            body_html = response["body"]
+
+            # Normalize + patch + CTA + footer (same as other Patti emails)
+            body_html = normalize_patti_body(body_html)
+            from kbb_ico import _patch_address_placeholders, build_patti_footer, _PREFS_RE
+            body_html = _patch_address_placeholders(body_html, rooftop_name)
+
+            mode = patti_meta.get("mode")
+            if mode == "scheduled":
+                body_html = rewrite_sched_cta_for_booked(body_html)
+            else:
+                body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+
+            body_html = _PREFS_RE.sub("", body_html).strip()
+            body_html = body_html + build_patti_footer(rooftop_name)
+
+            # Append to thread
+            opportunity.setdefault("messages", []).append({
                 "msgFrom": "patti",
                 "subject": subject,
                 "body": body_html,
                 "date": currDate,
                 "action": response.get("action"),
-                "notes": response.get("notes")
-            }
-        )
+                "notes": response.get("notes"),
+            })
 
-        # TODO: fix in which line
-        opportunity['checkedDict']['last_msg_by'] = "patti"
+            checkedDict["last_msg_by"] = "patti"
+            opportunity["checkedDict"] = checkedDict
 
-        nextDate = currDate + _td(days=1)
-        opportunity['followUP_date'] = nextDate.isoformat()
-        opportunity['followUP_count'] += 1
-        if not OFFLINE_MODE:
-            es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+            # Mark confirmation as sent so we never do this twice
+            patti_meta["appt_confirm_email_sent"] = True
+            opportunity["patti"] = patti_meta
+
+            # Send email through Fortellis + persist
+            if not OFFLINE_MODE:
+                rt = get_rooftop_info(subscription_id)
+                rooftop_sender = rt.get("sender") or TEST_FROM
+
+                cust   = opportunity.get("customer") or {}
+                emails = cust.get("emails") or []
+                customer_email = None
+                for e in emails:
+                    if e.get("doNotEmail"):
+                        continue
+                    if e.get("isPreferred"):
+                        customer_email = e.get("address")
+                        break
+                if not customer_email and emails:
+                    customer_email = emails[0].get("address")
+
+                if customer_email:
+                    try:
+                        send_opportunity_email_activity(
+                            token,
+                            subscription_id,
+                            opportunity["opportunityId"],
+                            sender=rooftop_sender,
+                            recipients=[customer_email],
+                            carbon_copies=[],
+                            subject=subject,
+                            body_html=body_html,
+                            rooftop_name=rooftop_name,
+                        )
+                    except Exception as e:
+                        log.warning(
+                            "Failed to send Patti booking-link appt confirmation for opp %s: %s",
+                            opportunity["opportunityId"],
+                            e,
+                        )
+
+                es_update_with_retry(
+                    esClient,
+                    index="opportunities",
+                    id=opportunity["opportunityId"],
+                    doc=opportunity,
+                )
+
+            # Debug JSON + stop this run
+            wJson(opportunity, f"jsons/process/{opportunity['opportunityId']}.json")
+            return
+
+        
+        # -- followUP_date normalization --
+        fud = opportunity.get("followUP_date")
+        
+        if isinstance(fud, str):
+            # Convert ISO → datetime
+            dt = _dt.fromisoformat(fud)
+        elif isinstance(fud, _dt):
+            dt = fud
+        else:
+            # No previous follow-up → due now
+            dt = currDate
+        
+        # Make it timezone-aware (UTC)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=_tz.utc)
+        
+        followUP_date = dt
+        
+        # -- followUP_count normalization --
+        followUP_count = int(opportunity.get("followUP_count") or 0)
+
+    
+        # --- NEW: Step 4 — pause cadence if there is an upcoming appointment ---
+        patti_meta = opportunity.get("patti") or {}
+        appt_due_utc = patti_meta.get("appt_due_utc")
+        if appt_due_utc:
+            try:
+                appt_dt = _dt.fromisoformat(str(appt_due_utc).replace("Z", "+00:00"))
+                now_utc = _dt.now(_tz.utc)
+                if appt_dt > now_utc:
+                    log.info(
+                        "⏸ Skipping cadence follow-up for %s — appointment already scheduled at %s",
+                        opportunityId,
+                        appt_dt.isoformat(),
+                    )
+                    wJson(opportunity, f"jsons/process/{opportunityId}.json")
+                    return
+            except Exception as e:
+                log.warning(
+                    "Failed to parse appt_due_utc %r for %s: %s",
+                    appt_due_utc,
+                    opportunityId,
+                    e,
+                )
+    
+        last_by = (opportunity.get('checkedDict') or {}).get('last_msg_by', '')
+        if followUP_date <= currDate and followUP_count > 3:
+            opportunity['isActive'] = False
+            if not OFFLINE_MODE:
+                es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+            wJson(opportunity, f"jsons/process/{opportunityId}.json")
+            return
+        elif followUP_date <= currDate:
+            messages = opportunity['messages']
+            prompt = f"""
+            generate next patti reply which is a follow-up message, ... messages between patti and the customer (python list of dicts):
+            {messages}
+            """
+            response = run_gpt(
+                prompt,
+                customer_name,
+                rooftop_name,
+                prevMessages=True,
+            )
+
+            subject   = response["subject"]
+            body_html = response["body"]
+
+            body_html = re.sub(
+                r"(?is)(?:\n\s*)?patti\s*(?:\r?\n)+virtual assistant.*?$",
+                "",
+                body_html
+            )
+
+            opportunity['messages'].append(
+                {
+                    "msgFrom": "patti",
+                    "subject": subject,
+                    "body": body_html,
+                    "date": currDate,
+                    "action": response.get("action"),
+                    "notes": response.get("notes")
+                }
+            )
+
+            # TODO: fix in which line
+            opportunity['checkedDict']['last_msg_by'] = "patti"
+
+            nextDate = currDate + _td(days=1)
+            opportunity['followUP_date'] = nextDate.isoformat()
+            opportunity['followUP_count'] += 1
+            if not OFFLINE_MODE:
+                es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
     
     wJson(opportunity, f"jsons/process/{opportunityId}.json")
 
@@ -1046,18 +1665,44 @@ def processHit(hit):
 LOOKBACK_DAYS = int(os.getenv("ES_LOOKBACK_DAYS", "6"))
 
 if __name__ == "__main__":
-    if not OFFLINE_MODE:
-        # Start date = now - LOOKBACK_DAYS (UTC), formatted YYYY-MM-DD
-        
-        start_date = (_dt.now(_tz.utc) - _td(days=LOOKBACK_DAYS)).date().isoformat()
-        log.info("ES lookback start_date=%s (last %s days)", start_date, LOOKBACK_DAYS)
+    # Optional single-opportunity test switch:
+    # If TEST_OPPORTUNITY_ID is set, we only process that one opp and exit.
+    test_opp_id = os.getenv("TEST_OPPORTUNITY_ID", "").strip()
 
-        data = getNewDataByDate(start_date)
+    if test_opp_id:
+        log.info(
+            "TEST_OPPORTUNITY_ID=%s set; running single-opportunity test mode",
+            test_opp_id,
+        )
 
-        # Process ALL hits (no early exit)
-        for hit in data:
+        # Grab the document directly from ES
+        hit = getDocByID(test_opp_id)
+
+        if not hit.get("found"):
+            log.warning(
+                "TEST_OPPORTUNITY_ID %s not found in Elasticsearch index '%s'; exiting.",
+                test_opp_id,
+                os.getenv("ELASTIC_INDEX", "opportunities"),
+            )
+        else:
+            # getDocByID returns a doc like {"_index":..., "_id":..., "_source":{...}}
+            # processHit() already handles both hit['_source'] and bare dicts.
             processHit(hit)
-    # playground drives processHit() via Flask; nothing to run here when OFFLINE_MODE=1
+
+    else:
+        # Normal multi-opp behavior
+        if not OFFLINE_MODE:
+            # Start date = now - LOOKBACK_DAYS (UTC), formatted YYYY-MM-DD
+            start_date = (_dt.now(_tz.utc) - _td(days=LOOKBACK_DAYS)).date().isoformat()
+            log.info("ES lookback start_date=%s (last %s days)", start_date, LOOKBACK_DAYS)
+
+            data = getNewDataByDate(start_date)
+
+            # Process ALL hits (no early exit)
+            for hit in data:
+                processHit(hit)
+        # playground drives processHit() via Flask; nothing to run here when OFFLINE_MODE=1
+
 
     
 

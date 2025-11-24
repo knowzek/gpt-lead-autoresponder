@@ -17,7 +17,7 @@ SUBSCRIPTION_TO_ROOFTOP = {
    # Tustin Kia
     "c27d7f4f-4a4c-45c8-8154-a5de48421fc3": {
         "name":    "Tustin Kia",
-        "address": "",
+        "address": "28 B Auto Center Drive, Tustin CA 92782",
         "sender":  "Sales@tustinkia.edealerhub.com",
     },
   # Tustin Hyundai
@@ -58,8 +58,9 @@ ROOFTOP_INFO = {
         "email": "sales@tustinhyundai.com"
     },
     "Tustin Kia": {
-        "address": "",
-        "email": "sales@tustinkia.com"
+        "address": "28 B Auto Center Drive, Tustin CA 92782",
+        "email": "Sales@tustinkia.edealerhub.com",
+        "signature_img": "https://www.pattersonautos.com/static/dealer-30005/TK_LOGO_on_light_background__1_.png"
     },
 }
 
