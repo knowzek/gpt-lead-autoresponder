@@ -811,22 +811,42 @@ def get_activities(opportunity_id, customer_id, token, dealer_key):
 
     resp.raise_for_status()
     data = resp.json() or {}
-    items = data.get("items", [])
+    items = data.get("items", []) or []
+
+    # minimal map to keep ES happy; you can expand this with your full table
+    TYPE_MAP = {
+        "send email": 3,
+        "appointment": 7,
+        "internet up": 13,
+        "read email": 20,
+        "inbound email": 20,  # official type name in ref data
+    }
 
     scheduled = []
     completed = []
 
     for it in items:
+        raw_type = it.get("activityType")
+        mapped_type = None
+
+        if isinstance(raw_type, int):
+            mapped_type = raw_type
+        elif isinstance(raw_type, str):
+            mapped_type = TYPE_MAP.get(raw_type.strip().lower())
+
         base = {
             "activityId": it.get("id"),
             "activityName": it.get("name"),
-            "activityType": it.get("activityType"),
             "dueDate": it.get("dueDate"),
             "completedDate": it.get("completedDate"),
             "outcome": it.get("outcome"),
             "assignedTo": it.get("assignedTo"),
             # NOTE: comments are NOT available here (CDK-only field)
         }
+
+        # Only include activityType if it's numeric so ES mapping doesn't explode
+        if isinstance(mapped_type, int):
+            base["activityType"] = mapped_type
 
         category = (it.get("category") or "").lower()
         outcome  = (it.get("outcome") or "").lower()
@@ -841,8 +861,6 @@ def get_activities(opportunity_id, customer_id, token, dealer_key):
         "scheduledActivities": scheduled,
         "completedActivities": completed,
     }
-
-
 
 
 def get_activity_by_url(url, token, dealer_key):
