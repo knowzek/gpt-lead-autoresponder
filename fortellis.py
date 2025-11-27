@@ -201,25 +201,32 @@ def get_activities(opportunity_id, customer_id, token, dealer_key):
 def set_customer_do_not_email(token, subscription_id, customer_id, email_address, do_not=True):
     """
     Marks the given customer email as DoNotEmail=True via Fortellis Customers API.
+    Works with existing fortellis._headers() for auth.
     """
+
     import requests
-    from common import get_fortellis_headers
+
+    # Use our existing Fortellis header builder (no dependency on 'common')
+    headers = _headers(subscription_id, token)
 
     url = f"https://api.fortellis.io/sales/v2/elead/customers/{customer_id}"
-    headers = get_fortellis_headers(token, subscription_id)
 
-    # Fetch full customer record first (so we can preserve other emails)
-    resp = requests.get(url, headers=headers)
+    # --- STEP 1: Fetch full customer record ---
+    resp = requests.get(url, headers=headers, timeout=30)
     resp.raise_for_status()
     cust = resp.json()
 
+    # --- STEP 2: Update DoNotEmail flag appropriately ---
     emails = cust.get("emails") or []
+    found = False
+
     for e in emails:
         if e.get("address", "").lower() == email_address.lower():
             e["doNotEmail"] = do_not
+            found = True
             break
-    else:
-        # If we didn't find it, append a new email entry
+
+    if not found:
         emails.append({
             "address": email_address,
             "emailType": "Personal",
@@ -229,9 +236,10 @@ def set_customer_do_not_email(token, subscription_id, customer_id, email_address
 
     cust["emails"] = emails
 
-    patch_resp = requests.put(url, headers=headers, json=cust)
-    log_msg = f"set_customer_do_not_email({email_address}) status={patch_resp.status_code}"
-    print(log_msg)
+    # --- STEP 3: PUT updated customer record back ---
+    patch_resp = requests.put(url, headers=headers, json=cust, timeout=30)
+    print(f"set_customer_do_not_email({email_address}) status={patch_resp.status_code}")
+
     return patch_resp
 
 
