@@ -937,7 +937,7 @@ def processHit(hit):
     # she pauses cadence nudges but continues to watch for replies.
     has_appt = _derive_appointment_from_sched_activities(opportunity)
     
-    # NEW: if we now know there’s an appointment, flip the CRM substatus
+    # If we now know there’s an appointment, flip the CRM substatus in Fortellis
     if has_appt and not OFFLINE_MODE:
         try:
             resp = set_opportunity_substatus(
@@ -952,15 +952,48 @@ def processHit(hit):
             )
         except Exception as e:
             log.warning("Non-KBB appt: set_opportunity_substatus failed: %s", e)
-    
+
+    # 🚫 Global guard: if this opp is already appointment-set, stop Patti's cadence
+    patti_meta = opportunity.get("patti") or {}
+    mode = patti_meta.get("mode")
+    sub_status = (
+        (fresh_opp.get("subStatus") or fresh_opp.get("substatus") or "")
+        or (opportunity.get("subStatus") or opportunity.get("substatus") or "")
+    ).strip().lower()
+
+    has_booked_appt = (mode == "scheduled") or ("appointment" in sub_status)
+
+    if has_booked_appt:
+        log.info(
+            "Opp %s has booked appointment (mode=%r, subStatus=%r); "
+            "suppressing Patti follow-up cadence.",
+            opportunityId,
+            mode,
+            sub_status,
+        )
+        opportunity["patti"] = patti_meta
+
+        if not OFFLINE_MODE:
+            opportunity.pop("completedActivitiesTesting", None)
+            es_update_with_retry(
+                esClient,
+                index="opportunities",
+                id=opportunityId,
+                doc=opportunity,
+            )
+
+        wJson(opportunity, f"jsons/process/{opportunityId}.json")
+        return
+
+    # normal ES cleanup when there is *no* appointment yet
     if not OFFLINE_MODE:
         opportunity.pop("completedActivitiesTesting", None)
-        es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
-
-
-
-
-    # ====================================================
+        es_update_with_retry(
+            esClient,
+            index="opportunities",
+            id=opportunityId,
+            doc=opportunity,
+        )
 
 
     # === Vehicle & SRP link =============================================
