@@ -1650,17 +1650,44 @@ def processHit(hit):
             wJson(opportunity, f"jsons/process/{opportunityId}.json")
             return
         elif followUP_date <= currDate:
-            messages = opportunity['messages']
+            # Use full thread history but be explicit that this is NOT a first email.
+            messages = opportunity.get("messages") or []
+        
             prompt = f"""
-            generate next patti reply which is a follow-up message, ... messages between patti and the customer (python list of dicts):
-            {messages}
-            """
+        You are generating a FOLLOW-UP email, not a first welcome message.
+        
+        Context:
+        - The guest originally inquired about: {vehicle_str}
+        - Patti already sent an intro email.
+        - The customer has NOT replied since that first email.
+        
+        You are Patti. Use the full message history below to understand what has already been said,
+        then write the next short follow-up from Patti.
+        
+        messages between Patti and the customer (python list of dicts):
+        {messages}
+        
+        Follow-up requirements:
+        - Do NOT repeat the full opener or dealership Why Buys from the first email.
+        - Assume they already read your original message.
+        - Keep it short: 2–4 sentences max.
+        - Sound like you’re checking in on a thread you already started
+          (e.g., “I wanted to follow up on my last note about the Sportage.”).
+        - Make one simple, low-pressure ask (e.g., “Are you still considering the Sportage?” or
+          “Would you like me to check availability or options for you?”).
+        - Use a subject line that clearly looks like a follow-up on their vehicle inquiry,
+          not a brand-new outreach.
+        
+        Return ONLY valid JSON with keys: subject, body.
+            """.strip()
+        
             response = run_gpt(
                 prompt,
                 customer_name,
                 rooftop_name,
                 prevMessages=True,
             )
+
 
             subject   = response["subject"]
             body_html = response["body"]
