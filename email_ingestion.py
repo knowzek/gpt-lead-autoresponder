@@ -3,7 +3,7 @@ from esQuerys import esClient
 from es_resilient import es_update_with_retry
 from gpt import run_gpt
 from rooftops import get_rooftop_info
-from fortellis import send_opportunity_email_activity
+from fortellis import get_token, send_opportunity_email_activity
 TEST_OPP_ID = "050a81e9-78d4-f011-814f-00505690ec8c"
 KBB_SOURCE_HINTS = ("kbb", "instant cash offer", "ico")
 
