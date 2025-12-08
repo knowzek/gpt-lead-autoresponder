@@ -937,7 +937,7 @@ def processHit(hit):
     # she pauses cadence nudges but continues to watch for replies.
     has_appt = _derive_appointment_from_sched_activities(opportunity)
     
-    # NEW: if we now know there’s an appointment, flip the CRM substatus
+    # If we now know there’s an appointment, flip the CRM substatus in Fortellis
     if has_appt and not OFFLINE_MODE:
         try:
             resp = set_opportunity_substatus(
@@ -952,15 +952,48 @@ def processHit(hit):
             )
         except Exception as e:
             log.warning("Non-KBB appt: set_opportunity_substatus failed: %s", e)
-    
+
+    # 🚫 Global guard: if this opp is already appointment-set, stop Patti's cadence
+    patti_meta = opportunity.get("patti") or {}
+    mode = patti_meta.get("mode")
+    sub_status = (
+        (fresh_opp.get("subStatus") or fresh_opp.get("substatus") or "")
+        or (opportunity.get("subStatus") or opportunity.get("substatus") or "")
+    ).strip().lower()
+
+    has_booked_appt = (mode == "scheduled") or ("appointment" in sub_status)
+
+    if has_booked_appt:
+        log.info(
+            "Opp %s has booked appointment (mode=%r, subStatus=%r); "
+            "suppressing Patti follow-up cadence.",
+            opportunityId,
+            mode,
+            sub_status,
+        )
+        opportunity["patti"] = patti_meta
+
+        if not OFFLINE_MODE:
+            opportunity.pop("completedActivitiesTesting", None)
+            es_update_with_retry(
+                esClient,
+                index="opportunities",
+                id=opportunityId,
+                doc=opportunity,
+            )
+
+        wJson(opportunity, f"jsons/process/{opportunityId}.json")
+        return
+
+    # normal ES cleanup when there is *no* appointment yet
     if not OFFLINE_MODE:
         opportunity.pop("completedActivitiesTesting", None)
-        es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
-
-
-
-
-    # ====================================================
+        es_update_with_retry(
+            esClient,
+            index="opportunities",
+            id=opportunityId,
+            doc=opportunity,
+        )
 
 
     # === Vehicle & SRP link =============================================
@@ -1617,17 +1650,44 @@ def processHit(hit):
             wJson(opportunity, f"jsons/process/{opportunityId}.json")
             return
         elif followUP_date <= currDate:
-            messages = opportunity['messages']
+            # Use full thread history but be explicit that this is NOT a first email.
+            messages = opportunity.get("messages") or []
+        
             prompt = f"""
-            generate next patti reply which is a follow-up message, ... messages between patti and the customer (python list of dicts):
-            {messages}
-            """
+        You are generating a FOLLOW-UP email, not a first welcome message.
+        
+        Context:
+        - The guest originally inquired about: {vehicle_str}
+        - Patti already sent an intro email.
+        - The customer has NOT replied since that first email.
+        
+        You are Patti. Use the full message history below to understand what has already been said,
+        then write the next short follow-up from Patti.
+        
+        messages between Patti and the customer (python list of dicts):
+        {messages}
+        
+        Follow-up requirements:
+        - Do NOT repeat the full opener or dealership Why Buys from the first email.
+        - Assume they already read your original message.
+        - Keep it short: 2–4 sentences max.
+        - Sound like you’re checking in on a thread you already started
+          (e.g., “I wanted to follow up on my last note about the Sportage.”).
+        - Make one simple, low-pressure ask (e.g., “Are you still considering the Sportage?” or
+          “Would you like me to check availability or options for you?”).
+        - Use a subject line that clearly looks like a follow-up on their vehicle inquiry,
+          not a brand-new outreach.
+        
+        Return ONLY valid JSON with keys: subject, body.
+            """.strip()
+        
             response = run_gpt(
                 prompt,
                 customer_name,
                 rooftop_name,
                 prevMessages=True,
             )
+
 
             subject   = response["subject"]
             body_html = response["body"]

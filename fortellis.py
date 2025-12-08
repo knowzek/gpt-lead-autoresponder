@@ -74,28 +74,159 @@ TOKEN_URL = os.getenv(
     f"https://identity.fortellis.io/oauth2/{AUTH_SERVER_ID}/v1/token"
 )
 
+ACTIVITY_TYPE_MAP = {
+    "attend meeting": 1,
+    "phone call": 2,
+    "send email": 3,
+    "other": 5,
+    "appointment": 7,
+    "send letter": 12,
+    "send email/letter": 14,
+    "inbound email": 20,            # This is what CDK calls “Read Email”
+    "leadlink up": 21,
+    "service reminder": 27,
+    "lease reminder": 28,
+    "confirm appointment": 34,
+    "auto response": 36,
+    "note": 37,
+    "inbound call": 38,
+    "duplicate lead": 40,
+    "brochure": 41,
+    "parts up": 42,
+    "service appt up": 43,
+    "miscellaneous sold": 44,
+    "directcall": 45,
+    "ivr": 46,
+    "directmail": 47,
+    "text message": 48,
+    "service appointment": 49,
+    "delivery appointment": 50,
+    "miscellaneous appointment": 51,
+    "credit application": 53,
+    "appraisal integration": 54,
+    "birthday/anniv survey": 56,
+    "ace email": 57,
+    "alert sent": 59,
+    "data enrichment": 60,
+    "in market notification": 63,
+    "appraisal appointment": 65,
+    "service plus survey": 66,
+    "livestream": 67,
+    "credit soft pull": 68,
+    "bulk text message": 69,
+
+    # Also add missing ones from CDK Activity History:
+    "internet up": 13,              
+}
+
+def normalize_activity_item(it: dict) -> dict:
+    """
+    Converts Sales v1 activityHistory items to Patti-safe format:
+    - Always returns numeric activityType (or omits the field)
+    - Avoids ES type errors
+    """
+
+    raw_type = it.get("activityType")
+    mapped_type = None
+
+    # Already numeric → good
+    if isinstance(raw_type, int):
+        mapped_type = raw_type
+    # String → map using ACTIVITY_TYPE_MAP
+    elif isinstance(raw_type, str):
+        mapped_type = ACTIVITY_TYPE_MAP.get(raw_type.strip().lower())
+
+    base = {
+        "activityId": it.get("id"),
+        "activityName": it.get("name"),
+        "dueDate": it.get("dueDate"),
+        "completedDate": it.get("completedDate"),
+        "outcome": it.get("outcome"),
+        "assignedTo": it.get("assignedTo"),
+    }
+
+    # Only include numeric activityType:
+    if mapped_type is not None:
+        base["activityType"] = mapped_type
+
+    return base
+
+
+
+def get_activities(opportunity_id, customer_id, token, dealer_key):
+    """
+    Replace expensive CDK Activity History with Sales v1 activities.history/byOpportunityId.
+    Returns:
+        {
+            "scheduledActivities": [...],
+            "completedActivities": [...]
+        }
+    """
+
+    url = f"{BASE_URL}/sales/v1/elead/activities/history/byOpportunityId/{opportunity_id}"
+    headers = _headers(dealer_key, token)
+
+    resp = requests.get(url, headers=headers, timeout=30)
+
+    # Retry once on 401
+    if resp.status_code == 401:
+        fresh = get_token(dealer_key, force_refresh=True)
+        resp = requests.get(url, headers=_headers(dealer_key, fresh), timeout=30)
+
+    resp.raise_for_status()
+    data = resp.json() or {}
+
+    items = data.get("items", []) or []
+
+    scheduled = []
+    completed = []
+
+    for it in items:
+        norm = normalize_activity_item(it)
+
+        category = (it.get("category") or "").lower()
+        outcome = (it.get("outcome") or "").lower()
+
+        if category == "scheduled" or outcome in ("open", "in progress"):
+            scheduled.append(norm)
+        else:
+            completed.append(norm)
+
+    return {
+        "scheduledActivities": scheduled,
+        "completedActivities": completed,
+    }
+
+
 def set_customer_do_not_email(token, subscription_id, customer_id, email_address, do_not=True):
     """
     Marks the given customer email as DoNotEmail=True via Fortellis Customers API.
+    Works with existing fortellis._headers() for auth.
     """
+
     import requests
-    from common import get_fortellis_headers
+
+    # Use our existing Fortellis header builder (no dependency on 'common')
+    headers = _headers(subscription_id, token)
 
     url = f"https://api.fortellis.io/sales/v2/elead/customers/{customer_id}"
-    headers = get_fortellis_headers(token, subscription_id)
 
-    # Fetch full customer record first (so we can preserve other emails)
-    resp = requests.get(url, headers=headers)
+    # --- STEP 1: Fetch full customer record ---
+    resp = requests.get(url, headers=headers, timeout=30)
     resp.raise_for_status()
     cust = resp.json()
 
+    # --- STEP 2: Update DoNotEmail flag appropriately ---
     emails = cust.get("emails") or []
+    found = False
+
     for e in emails:
         if e.get("address", "").lower() == email_address.lower():
             e["doNotEmail"] = do_not
+            found = True
             break
-    else:
-        # If we didn't find it, append a new email entry
+
+    if not found:
         emails.append({
             "address": email_address,
             "emailType": "Personal",
@@ -105,9 +236,10 @@ def set_customer_do_not_email(token, subscription_id, customer_id, email_address
 
     cust["emails"] = emails
 
-    patch_resp = requests.put(url, headers=headers, json=cust)
-    log_msg = f"set_customer_do_not_email({email_address}) status={patch_resp.status_code}"
-    print(log_msg)
+    # --- STEP 3: PUT updated customer record back ---
+    patch_resp = requests.put(url, headers=headers, json=cust, timeout=30)
+    print(f"set_customer_do_not_email({email_address}) status={patch_resp.status_code}")
+
     return patch_resp
 
 
@@ -285,25 +417,20 @@ def _since_iso(minutes: int | None = 30) -> str:
     return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 def get_activity_history_v1(token, subscription_id, opportunity_id, customer_id, page=1, size=100):
-    url = "https://api.fortellis.io/cdk/sales/elead/v1/activity-history/search"
+    """
+    Legacy wrapper. Now mapped to Sales v1 activities history.
+    """
+
+    url = f"{BASE_URL}/sales/v1/elead/activities/history/byOpportunityId/{opportunity_id}"
     headers = {
         "Authorization": f"Bearer {token}",
         "Subscription-Id": subscription_id,
-        "Accept": "application/json",
-        "Content-Type": "application/json",
+        "Accept": "application/json"
     }
-    params = {
-        "opportunityId": opportunity_id,
-        "customerId": customer_id,
-        "pageNumber": page,
-        "pageSize": size,
-    }
-    t0 = datetime.now(timezone.utc)
-    resp = requests.get(url, headers=headers, params=params, timeout=10)
-    dur_ms = int((datetime.now(timezone.utc) - t0).total_seconds() * 1000)
-    _log_txn_compact(logging.INFO, method="ActivityHistory GET", url=url, headers=headers,
-                     status=resp.status_code, duration_ms=dur_ms, request_id=headers.get("Request-Id", "auto"))
+
+    resp = requests.get(url, headers=headers, timeout=30)
     resp.raise_for_status()
+
     return resp.json()
 
 
@@ -594,20 +721,29 @@ def complete_activity(
 
 
 def search_activities_by_opportunity(opportunity_id, token, dealer_key, page=1, page_size=10, customer_id=None):
+    """
+    Search activities for an opportunity.
+
+    NOTE:
+    - This has been switched from the expensive CDK Activity History endpoint
+      to the cheaper Sales v1 activities history endpoint:
+        /sales/v1/elead/activities/history/byOpportunityId/{opportunity_id}
+    - We preserve the original function's behavior as much as possible:
+        * same arguments
+        * 401 retry with fresh token
+        * correlation-id logging on failure
+        * returns a list of activities
+        * simple paging via `page` and `page_size` (now done client-side)
+    """
+
     if not opportunity_id:
         raise ValueError("opportunity_id is required")
 
-    url = f"{BASE_URL}{ACTIVITIES_SEARCH}"  # "/cdk/sales/elead/v1/activity-history/search"
-    params = {
-        "opportunityId": opportunity_id,
-        "pageNumber": page,
-        "pageSize": page_size,
-    }
-    if customer_id:
-        params["customerId"] = customer_id
+    # New cheaper endpoint (no server-side paging or customerId filter)
+    url = f"{BASE_URL}/sales/v1/elead/activities/history/byOpportunityId/{opportunity_id}"
 
-    # First attempt (GET; no Content-Type)
-    resp = requests.get(url, headers=_headers_get(dealer_key, token), params=params, timeout=30)
+    # First attempt
+    resp = requests.get(url, headers=_headers_get(dealer_key, token), timeout=30)
 
     # If the token is stale or wrong for this rooftop, refresh once and retry
     if resp.status_code == 401:
@@ -617,8 +753,8 @@ def search_activities_by_opportunity(opportunity_id, token, dealer_key, page=1, 
                 fresh = get_token(dealer_key, force_refresh=True)
             except TypeError:
                 fresh = get_token(dealer_key)
-            resp = requests.get(url, headers=_headers_get(dealer_key, fresh), params=params, timeout=30)
-        except Exception as e:
+            resp = requests.get(url, headers=_headers_get(dealer_key, fresh), timeout=30)
+        except Exception:
             # don't hide the original 401; just log it if you have a logger
             pass
 
@@ -626,38 +762,113 @@ def search_activities_by_opportunity(opportunity_id, token, dealer_key, page=1, 
     if resp.status_code >= 400:
         corr = resp.headers.get("x-correlation-id")
         try:
-            log.error("ActivityHistory search failed: %s corr=%s body=%s",
-                      resp.status_code, corr, (resp.text or "")[:400])
+            log.error(
+                "ActivityHistory(search_activities_by_opportunity) failed: %s corr=%s body=%s",
+                resp.status_code,
+                corr,
+                (resp.text or "")[:400],
+            )
         except Exception:
             pass
+
     resp.raise_for_status()
 
-    data = resp.json()
-    # Some tenants return a flat object with arrays; others wrap items—be tolerant:
-    return data.get("items") or data.get("activities") or data.get("completedActivities") or []
+    data = resp.json() or {}
+
+    # Sales v1 returns a flat list under "items"
+    items = data.get("items") or []
+
+    # Emulate paging client-side so callers can keep using `page` and `page_size`
+    try:
+        page = int(page) if page is not None else 1
+        page_size = int(page_size) if page_size is not None else 10
+    except (TypeError, ValueError):
+        page = 1
+        page_size = 10
+
+    if page < 1:
+        page = 1
+    if page_size < 1:
+        page_size = 10
+
+    start = (page - 1) * page_size
+    end = start + page_size
+
+    return items[start:end]
 
 
 
 def get_activities(opportunity_id, customer_id, token, dealer_key):
-    url = f"{BASE_URL}{ACTIVITIES_SEARCH}"
-    params = {
-        "opportunityId": opportunity_id,
-        "customerId":   customer_id,   # your tenant requires this
-        "pageNumber":   1,
-        "pageSize":     100,
+    """
+    Replace CDK Activity History with Sales v1 activities.history/byOpportunityId,
+    but preserve the same return shape:
+        {
+            "scheduledActivities": [...],
+            "completedActivities": [...]
+        }
+    so that existing logic in processNewData continues to work.
+    """
+
+    url = f"{BASE_URL}/sales/v1/elead/activities/history/byOpportunityId/{opportunity_id}"
+    headers = _headers(dealer_key, token)
+
+    resp = requests.get(url, headers=headers, timeout=30)
+    if resp.status_code == 401:
+        fresh = get_token(dealer_key, force_refresh=True)
+        resp = requests.get(url, headers=_headers(dealer_key, fresh), timeout=30)
+
+    resp.raise_for_status()
+    data = resp.json() or {}
+    items = data.get("items", []) or []
+
+    # minimal map to keep ES happy; you can expand this with your full table
+    TYPE_MAP = {
+        "send email": 3,
+        "appointment": 7,
+        "internet up": 13,
+        "read email": 20,
+        "inbound email": 20,  # official type name in ref data
     }
 
-    # TEMP debug
-    try:
-        log.info("ActivityHistory GET %s params=%s", url, params)
-    except Exception:
-        pass
+    scheduled = []
+    completed = []
 
-    resp = requests.get(url, headers=_headers(dealer_key, token), params=params, timeout=30)
-    resp.raise_for_status()
-    return resp.json()
+    for it in items:
+        raw_type = it.get("activityType")
+        mapped_type = None
 
+        if isinstance(raw_type, int):
+            mapped_type = raw_type
+        elif isinstance(raw_type, str):
+            mapped_type = TYPE_MAP.get(raw_type.strip().lower())
 
+        base = {
+            "activityId": it.get("id"),
+            "activityName": it.get("name"),
+            "dueDate": it.get("dueDate"),
+            "completedDate": it.get("completedDate"),
+            "outcome": it.get("outcome"),
+            "assignedTo": it.get("assignedTo"),
+            # NOTE: comments are NOT available here (CDK-only field)
+        }
+
+        # Only include activityType if it's numeric so ES mapping doesn't explode
+        if isinstance(mapped_type, int):
+            base["activityType"] = mapped_type
+
+        category = (it.get("category") or "").lower()
+        outcome  = (it.get("outcome") or "").lower()
+
+        # map into the buckets your code already expects
+        if category == "scheduled" or outcome in ("open", "in progress"):
+            scheduled.append(base)
+        else:
+            completed.append(base)
+
+    return {
+        "scheduledActivities": scheduled,
+        "completedActivities": completed,
+    }
 
 
 def get_activity_by_url(url, token, dealer_key):
