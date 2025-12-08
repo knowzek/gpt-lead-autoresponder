@@ -4,6 +4,9 @@ from es_resilient import es_update_with_retry
 from gpt import run_gpt
 from rooftops import get_rooftop_info
 from fortellis import send_opportunity_email_activity
+TEST_OPP_ID = "050a81e9-78d4-f011-814f-00505690ec8c"
+KBB_SOURCE_HINTS = ("kbb", "instant cash offer", "ico")
+
 
 from datetime import datetime, timezone
 import logging
@@ -62,6 +65,12 @@ def process_inbound_email(inbound):
         opportunity = hits[0]["_source"]
     else:
         opportunity = esClient.get(index="opportunities", id=opp_id)["_source"]
+        
+    # 🔒 Hard gate: only operate on your single test opportunity, and only if it looks like a KBB lead
+    if opp_id != TEST_OPP_ID:
+        log.info("Inbound email for opp %s – skipping due to test gate (only %s allowed)",
+                 opp_id, TEST_OPP_ID)
+        return
 
     # 3️⃣ Append the message into the ES conversation thread
     msg_dict = {
