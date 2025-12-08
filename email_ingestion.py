@@ -30,32 +30,34 @@ def process_inbound_email(inbound):
     # 1️⃣ Try to extract opportunityId from header (best method)
     opp_id = headers.get("X-Opportunity-ID") or None
 
-    # 2️⃣ If no header, fallback: find opp by email address match
+    # 2️⃣ If no header, fallback: find opp by email address match (non-nested)
     if not opp_id:
-        rsp = esClient.search(
-            index="opportunities",
-            query={
-                "nested": {
-                    "path": "customer.emails",
-                    "query": {
-                        "bool": {
-                            "must": [
-                                {"term": {"customer.emails.address.keyword": sender}}
-                            ]
-                        }
-                    }
-                }
-            },
-            size=1
-        )
+        # strip display name if present, e.g. "Kristin <foo@bar.com>"
+        import re
+        m = re.search(r"<([^>]+)>", sender)
+        sender_email = (m.group(1) if m else sender).strip().lower()
+
+        # try several likely fields; missing fields just return 0 hits, no error
+        query = {
+            "bool": {
+                "should": [
+                    {"term": {"customerEmail.keyword": sender_email}},
+                    {"term": {"customer.email.keyword": sender_email}},
+                    {"term": {"customerEmail": sender_email}},
+                ],
+                "minimum_should_match": 1
+            }
+        }
+
+        rsp = esClient.search(index="opportunities", query=query, size=1)
         hits = rsp["hits"]["hits"]
         if not hits:
-            print("No matching opportunity found for inbound email")
+            log.warning("No matching opportunity found for inbound email %s", sender_email)
             return
+
         opp_id = hits[0]["_id"]
         opportunity = hits[0]["_source"]
     else:
-        # Fetch the opportunity directly
         opportunity = esClient.get(index="opportunities", id=opp_id)["_source"]
 
     # 3️⃣ Append the message into the ES conversation thread
