@@ -1597,17 +1597,30 @@ def processHit(hit):
             return
 
         
-        # -- followUP_date normalization --
         fud = opportunity.get("followUP_date")
-        
+
         if isinstance(fud, str):
-            # Convert ISO → datetime
             dt = _dt.fromisoformat(fud)
         elif isinstance(fud, _dt):
             dt = fud
         else:
-            # No previous follow-up → due now
-            dt = currDate
+            # No previous follow-up recorded.
+            # Seed a follow-up date 24h from now and DO NOT send a nudge on this run.
+            dt = currDate + _td(hours=24)
+            opportunity['followUP_date'] = dt.isoformat()
+            opportunity.setdefault('followUP_count', 0)
+            if not OFFLINE_MODE:
+                es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+            wJson(opportunity, f"jsons/process/{opportunityId}.json")
+            return  # ⬅️ important: skip the cadence logic below for this run
+        
+        # Make it timezone-aware (UTC)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=_tz.utc)
+        
+        followUP_date = dt
+        followUP_count = int(opportunity.get("followUP_count") or 0)
+
         
         # Make it timezone-aware (UTC)
         if dt.tzinfo is None:
@@ -1658,11 +1671,11 @@ def processHit(hit):
         
         Context:
         - The guest originally inquired about: {vehicle_str}
-        - Patti already sent an intro email.
-        - The customer has NOT replied since that first email.
-        
-        You are Patti. Use the full message history below to understand what has already been said,
-        then write the next short follow-up from Patti.
+        - Patti has already been in touch with the guest.
+
+        Use the full message history below to see what’s already been discussed,
+        then write the next short follow-up from Patti that makes sense given
+        where the conversation left off.
         
         messages between Patti and the customer (python list of dicts):
         {messages}
