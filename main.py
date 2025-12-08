@@ -10,6 +10,7 @@ from inventory_matcher import recommend_from_xml
 from fortellis import get_vehicle_inventory_xml  # we’ll add this helper next
 import re, html as _html
 from kbb_ico import process_kbb_ico_lead
+from flask import Flask, request, jsonify
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +31,40 @@ from fortellis import (
     complete_activity,
     search_activities_by_opportunity,  # <-- add this
 )
+
+app = Flask(__name__)
+
+@app.route("/email-inbound", methods=["POST"])
+def email_inbound():
+    """
+    Main webhook endpoint that receives inbound email JSON
+    from Power Automate, IMAP, or Graph.
+    """
+    try:
+        payload = request.json or {}
+
+        # Extract relevant fields from the inbound payload
+        inbound = {
+            "from": payload.get("from"),
+            "to": payload.get("to"),
+            "cc": payload.get("cc"),
+            "subject": payload.get("subject", "").strip(),
+            "body_html": payload.get("body_html") or "",
+            "body_text": payload.get("body_text") or "",
+            "timestamp": payload.get("timestamp") or datetime.utcnow().isoformat(),
+            "headers": payload.get("headers") or {}
+        }
+
+        log.info(f"📥 Incoming email: from={inbound['from']} subject='{inbound['subject']}'")
+
+        # Call your ingestion handler
+        process_inbound_email(inbound)
+
+        return jsonify({"status": "ok"}), 200
+
+    except Exception as e:
+        log.exception("Email ingestion failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 def _is_assigned_to_kristin_doc(doc: dict) -> bool:
     for m in (doc.get("salesTeam") or []):
