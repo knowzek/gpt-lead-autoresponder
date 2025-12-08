@@ -90,10 +90,15 @@ def process_inbound_email(inbound):
 
     opportunity.setdefault("messages", []).append(msg_dict)
 
-    # Save updated opportunity in ES
+    # Save updated opportunity in ES (same pattern as kbb_ico)
     es_update_with_retry(
-        esClient, "opportunities", opp_id, {"messages": opportunity["messages"]}
+        esClient,
+        index="opportunities",
+        id=opp_id,
+        doc={"messages": opportunity["messages"]},
     )
+
+
 
     # 4️⃣ Generate Patti reply with existing logic
     rooftop_name = get_rooftop_info(opportunity["_subscription_id"])["name"]
