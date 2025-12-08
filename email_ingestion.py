@@ -46,16 +46,12 @@ def process_inbound_email(inbound):
         query = {
             "bool": {
                 "should": [
-                    {
-                        "nested": {
-                            "path": "customer.emails",
-                            "query": {
-                                "term": {
-                                    "customer.emails.address.keyword": sender_email
-                                }
-                            }
-                        }
-                    }
+                    # actual structure: customer.emails[].address
+                    {"term": {"customer.emails.address.keyword": sender_email}},
+                    {"term": {"customer.emails.address": sender_email}},
+                    # keep some fallbacks in case other rooftops index differently
+                    {"term": {"customerEmail.keyword": sender_email}},
+                    {"term": {"customerEmail": sender_email}},
                 ],
                 "minimum_should_match": 1,
             }
