@@ -6,6 +6,9 @@ from rooftops import get_rooftop_info
 from fortellis import send_opportunity_email_activity
 
 from datetime import datetime, timezone
+import logging
+log = logging.getLogger("patti.email_ingestion")
+
 
 def clean_html(html: str) -> str:
     """Strip HTML tags and reduce to plain text."""
