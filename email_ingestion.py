@@ -36,40 +36,52 @@ def process_inbound_email(inbound):
     # 1️⃣ Try to extract opportunityId from header (best method)
     opp_id = headers.get("X-Opportunity-ID") or None
 
-    # 2️⃣ If no header, fallback: find opp by email address match (non-nested)
+    # 2️⃣ If no header, fallback: find opp by email address match (nested query)
     if not opp_id:
-        # strip display name if present, e.g. "Kristin <foo@bar.com>"
         import re
+        # strip display name if present, e.g. "Kristin <foo@bar.com>"
         m = re.search(r"<([^>]+)>", sender)
         sender_email = (m.group(1) if m else sender).strip().lower()
 
-        # try several likely fields; missing fields just return 0 hits, no error
         query = {
             "bool": {
                 "should": [
-                    {"term": {"customerEmail.keyword": sender_email}},
-                    {"term": {"customer.email.keyword": sender_email}},
-                    {"term": {"customerEmail": sender_email}},
+                    {
+                        "nested": {
+                            "path": "customer.emails",
+                            "query": {
+                                "term": {
+                                    "customer.emails.address.keyword": sender_email
+                                }
+                            }
+                        }
+                    }
                 ],
-                "minimum_should_match": 1
+                "minimum_should_match": 1,
             }
         }
 
         rsp = esClient.search(index="opportunities", query=query, size=1)
         hits = rsp["hits"]["hits"]
         if not hits:
-            log.warning("No matching opportunity found for inbound email %s", sender_email)
+            log.warning(
+                "No matching opportunity found for inbound email %s",
+                sender_email,
+            )
             return
 
         opp_id = hits[0]["_id"]
         opportunity = hits[0]["_source"]
     else:
         opportunity = esClient.get(index="opportunities", id=opp_id)["_source"]
-        
-    # 🔒 Hard gate: only operate on your single test opportunity, and only if it looks like a KBB lead
+
+    # 🔒 Hard gate: only operate on your single test opportunity
     if opp_id != TEST_OPP_ID:
-        log.info("Inbound email for opp %s – skipping due to test gate (only %s allowed)",
-                 opp_id, TEST_OPP_ID)
+        log.info(
+            "Inbound email for opp %s – skipping due to test gate (only %s allowed)",
+            opp_id,
+            TEST_OPP_ID,
+        )
         return
 
     # 3️⃣ Append the message into the ES conversation thread
