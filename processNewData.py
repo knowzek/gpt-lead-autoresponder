@@ -192,10 +192,17 @@ def checkActivities(opportunity, currDate, rooftop_name):
     activities = sortActivities(activities)
     
     alreadyProcessedActivities = opportunity.get('alreadyProcessedActivities', {})
-    checkedDict = opportunity.get('checkedDict', {})
+
+    # Ensure checkedDict is always a dict on the opportunity
+    checkedDict = opportunity.get('checkedDict') or {}
+    if not isinstance(checkedDict, dict):
+        checkedDict = {}
+    opportunity["checkedDict"] = checkedDict  # <-- make it live on the opp
+    
     subscription_id = opportunity.get('_subscription_id')
     messages = opportunity.get("messages", [])
     customerInfo = opportunity.get('customer', {})
+
 
     # Get a single token for this function, if needed
     if OFFLINE_MODE or DEBUGMODE:
@@ -1456,16 +1463,20 @@ def processHit(hit):
         #   Only update Patti's state IF sent_ok is True
         # ---------------------------
         if sent_ok:
-            opportunity['checkedDict']['patti_already_contacted'] = True
-            opportunity['checkedDict']['last_msg_by'] = "patti"
+            # use the initialized checkedDict from above
+            checkedDict["patti_already_contacted"] = True
+            checkedDict["last_msg_by"] = "patti"
+            opportunity["checkedDict"] = checkedDict
+        
             nextDate = currDate + _td(hours=24)
-            opportunity['followUP_date'] = nextDate.isoformat()
-            opportunity['followUP_count'] = 0
+            opportunity["followUP_date"] = nextDate.isoformat()
+            opportunity["followUP_count"] = 0
         else:
             log.warning(
                 "Did NOT mark Patti as contacted for opp %s because sendEmail failed.",
                 opportunityId,
             )
+
         
         # Persist Patti state + messages into ES
         es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
