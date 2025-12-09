@@ -4,7 +4,7 @@ from kbb_templates import TEMPLATES, fill_merge_fields
 from kbb_cadence import events_for_day
 from fortellis import (
     add_opportunity_comment,
-    send_opportunity_email_activity,
+    send_opportunity_email_activity as _crm_send_opportunity_email_activity,
     schedule_activity,
 )
 
@@ -28,6 +28,72 @@ import zoneinfo as _zi
 from html import unescape as _unesc
 
 #from rooftops import ROOFTOP_INFO as ROOFTOP_INFO
+
+# Only flip to Outlook for test opps / email mode on this branch
+TEST_EMAIL_OPP_IDS = {
+    "050a81e9-78d4-f011-814f-00505690ec8c",  # your current test
+}
+EMAIL_MODE = os.getenv("EMAIL_MODE", "crm")  # "crm" or "outlook"
+
+
+def send_opportunity_email_activity(
+    token,
+    subscription_id,
+    opp_id,
+    sender,
+    recipients,
+    carbon_copies,
+    subject,
+    body_html,
+    rooftop_name,
+):
+    """
+    Wrapper that either:
+      - sends via CRM (Fortellis), or
+      - sends via Patti Outlook inbox + logs to CRM,
+    depending on EMAIL_MODE and opp_id.
+    """
+
+    # Normal behavior everywhere except our test opps in Outlook mode
+    if EMAIL_MODE != "outlook" or opp_id not in TEST_EMAIL_OPP_IDS:
+        return _crm_send_opportunity_email_activity(
+            token,
+            subscription_id,
+            opp_id,
+            sender=sender,
+            recipients=recipients,
+            carbon_copies=carbon_copies,
+            subject=subject,
+            body_html=body_html,
+            rooftop_name=rooftop_name,
+        )
+
+    # 📨 Outlook path for test opps
+    to_addr = recipients[0] if recipients else None
+    if not to_addr:
+        return
+
+    # 1) Send from Patti via Power Automate
+    send_email_via_outlook(
+        to_addr=to_addr,
+        subject=subject,
+        html_body=body_html,
+        headers={"X-Opportunity-ID": opp_id},
+    )
+
+    # 2) Log back to CRM as an email activity (so store sees it)
+    if token and subscription_id:
+        try:
+            log_email_to_crm(
+                token=token,
+                dealer_key=subscription_id,
+                opportunity_id=opp_id,
+                subject=subject,
+                body_preview=_clean_html(body_html)[:500],
+            )
+        except Exception as e:
+            log.warning("Failed to log Outlook email to CRM for opp %s: %s", opp_id, e)
+
 
 def _es_debug_update(esClient, index, id, doc, tag=""):
     try:
