@@ -19,7 +19,7 @@ def _extract_shopper_email(body_text: str) -> str | None:
     """
     Parse the ADF notification email text to find shopper's email.
     Example lines:
-      Email: evalynnquezada@gmail.com
+      Email: knowzek@gmail.com
     """
     if not body_text:
         return None
@@ -106,7 +106,7 @@ def process_kbb_adf_notification(inbound: dict) -> None:
         or "Tustin Mazda"
     )
 
-    prompt = f"""
+    some_prompt = f"""
 You are Patti, a friendly acquisition specialist at {rooftop_name}.
 A new Kelley Blue Book Instant Cash Offer lead just came in.
 
