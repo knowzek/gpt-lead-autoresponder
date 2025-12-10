@@ -7,7 +7,7 @@ from fortellis import (
     send_opportunity_email_activity as _crm_send_opportunity_email_activity,
     schedule_activity,
 )
-from outlook_email import send_email_via_outlook, log_email_to_crm
+from outlook_email import send_email_via_outlook
 from fortellis import search_activities_by_opportunity
 from helpers import build_calendar_links
 import json, re
