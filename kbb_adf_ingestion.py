@@ -62,10 +62,15 @@ def process_kbb_adf_notification(inbound: dict) -> None:
                 }
             ],
             "should": [
+                # main ES structure
+                {"term": {"customer.emails.address.keyword": shopper_email}},
+                {"term": {"customer.emails.address": shopper_email}},
+                # older / alternate mappings, just in case
                 {"term": {"customerEmail.keyword": shopper_email}},
                 {"term": {"customer.email.keyword": shopper_email}},
                 {"term": {"customerEmail": shopper_email}},
             ],
+
             "minimum_should_match": 1,
         }
     }
