@@ -120,15 +120,18 @@ Keep it:
 Do NOT include subject line in the body.
 """
 
-    body_out = run_gpt(
-        prompt=prompt,
-        customer_name=customer_name,
+    reply = run_gpt(
+        prompt=some_prompt,
+        customer_name=shopper_first_name,
         rooftop_name=rooftop_name,
-        persona="sales",
+        prevMessages=False,
+        persona="kbb_ico",
         kbb_ctx={"source": "kbb_adf"},
     )
+    
+    subject_out = reply.get("subject") or f"Your Kelley Blue Book Instant Cash Offer with {rooftop_name}"
+    body_out = reply.get("body") or "Thanks for your interest in your Kelley Blue Book Instant Cash Offer."
 
-    subject_out = "Your Kelley Blue Book Instant Cash Offer with " + rooftop_name
 
     # Send via Outlook
     send_email_via_outlook(
