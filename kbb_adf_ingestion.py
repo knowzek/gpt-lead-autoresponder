@@ -122,12 +122,13 @@ Do NOT include subject line in the body.
 
     reply = run_gpt(
         prompt=some_prompt,
-        customer_name=shopper_first_name,
+        customer_name=customer_name,
         rooftop_name=rooftop_name,
         prevMessages=False,
         persona="kbb_ico",
         kbb_ctx={"source": "kbb_adf"},
     )
+
     
     subject_out = reply.get("subject") or f"Your Kelley Blue Book Instant Cash Offer with {rooftop_name}"
     body_out = reply.get("body") or "Thanks for your interest in your Kelley Blue Book Instant Cash Offer."
