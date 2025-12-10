@@ -11,6 +11,7 @@ from outlook_email import send_email_via_outlook, log_email_to_crm
 from fortellis import search_activities_by_opportunity
 from helpers import build_calendar_links
 import json, re
+from crm_logging import log_email_to_crm
 STATE_TAG = "[PATTI_KBB_STATE]"  # marker to find the state comment quickly
 
 import os
