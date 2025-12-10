@@ -15,24 +15,11 @@ log = logging.getLogger("patti.email_ingestion")
 TEST_OPP_ID = "050a81e9-78d4-f011-814f-00505690ec8c"
 
 
-def clean_html(h: str) -> str:
-    """
-    Strip basic HTML tags and decode entities. 
-    This mirrors the _html_to_text helper you used elsewhere.
-    """
-    if not h:
-        return ""
 
-    # line breaks
-    h = re.sub(r'(?i)<br\s*/?>', '\n', h)
-    h = re.sub(r'(?is)<p[^>]*>', '', h)
-    h = re.sub(r'(?i)</p>', '\n\n', h)
-
-    # strip all remaining tags
-    h = re.sub(r'(?is)<[^>]+>', '', h)
-
-    # unescape HTML entities (&amp; → &, etc.)
-    return _html.unescape(h).strip()
+def clean_html(html: str) -> str:
+    """Strip HTML tags and reduce to plain text."""
+    text = re.sub(r"(?is)<[^>]+>", " ", html or "")
+    return re.sub(r"\s+", " ", text).strip()
 
 def _extract_email(addr: str) -> str:
     """
