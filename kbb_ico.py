@@ -2116,7 +2116,9 @@ def process_kbb_ico_lead(
 
         
     # If we are already in convo mode, no new inbound detected now, and enough time has passed → send a nudge
-    if state.get("mode") == "convo":
+    # 🔒 But NEVER send nudges once an appointment is scheduled/upcoming.
+    if state.get("mode") == "convo" and not scheduled_active_now:
+
         last_agent_ts = state.get("last_agent_msg_at")
         nudge_count   = int(state.get("nudge_count") or 0)
 
