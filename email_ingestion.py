@@ -108,20 +108,50 @@ def process_inbound_email(inbound: dict) -> None:
     """
     sender_raw = (inbound.get("from") or "").strip()
     subject = inbound.get("subject") or ""
+    
     body_html = inbound.get("body_html") or ""
     raw_text = inbound.get("body_text") or clean_html(body_html)
 
-    # Use KBB's reply-stripper so we only see the *new* message,
-    # not the quoted appointment email with "Wed at 2PM" in it.
+    # Start with raw text as a fallback
+    body_text = raw_text
+
+    # 1️⃣ Try KBB's HTML reply-stripper first (when we actually have HTML)
     if body_html:
         try:
-            top_html = _top_reply_only(body_html)
-            body_text = clean_html(top_html)
+            top_html = _top_reply_only(body_html) or ""
+            stripped = clean_html(top_html)
+            # Only use it if we got something non-empty back
+            if stripped:
+                body_text = stripped
         except Exception:
-            # If anything weird happens, fall back to the raw text
-            body_text = raw_text
-    else:
-        body_text = raw_text
+            # If anything weird happens, just stick with raw_text
+            pass
+
+    # 2️⃣ Plain-text reply stripping for Outlook-style separators
+    body_text = (body_text or "").strip()
+
+    # Cut off everything after common reply delimiters so KBB only sees
+    # the *new* line like "What was the kbb estimate?"
+    for sep in [
+        "\r\n________________________________",
+        "\n________________________________",
+        "\r\nFrom:",
+        "\nFrom:",
+        "\r\nOn ",
+        "\nOn ",
+    ]:
+        idx = body_text.find(sep)
+        if idx != -1:
+            body_text = body_text[:idx].strip()
+            break
+
+    # Optional but useful while testing:
+    log.info(
+        "Email ingestion text debug: raw=%r final=%r",
+        (raw_text or "")[:160],
+        (body_text or "")[:160],
+    )
+
 
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     headers = inbound.get("headers") or {}
