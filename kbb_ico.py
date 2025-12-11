@@ -1879,6 +1879,11 @@ def process_kbb_ico_lead(
             from helpers import get_kbb_offer_context_simple
             
             facts = get_kbb_offer_context_simple(opportunity)
+            if not (facts.get("amount_usd") or facts.get("offer_url")):
+                # Fall back to scanning completed activities / messages
+                facts = get_kbb_offer_context_simple(opportunity)
+                if facts:
+                    opportunity["_kbb_offer_ctx"] = facts
             
             if wants_kbb_value(inquiry_text) and facts.get("amount_usd"):
                 amt = facts["amount_usd"]
