@@ -1004,8 +1004,21 @@ def customer_has_replied(
 
 
 
-def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
-                         token, subscription_id, SAFE_MODE=False, rooftop_sender=None):
+def process_kbb_ico_lead(
+    opportunity,
+    lead_age_days,
+    rooftop_name,
+    inquiry_text,
+    token,
+    subscription_id,
+    SAFE_MODE=False,
+    rooftop_sender=None,
+    trigger="cron",            # "cron" (old style) or "email_webhook"
+    inbound_ts=None,           # timestamp string from webhook (ISO)
+    inbound_msg_id=None,       # message id / synthetic id
+    inbound_subject=None,      # subject of the inbound email (for reply subject)
+):
+
     opp_id = opportunity.get("opportunityId") or opportunity.get("id")
     created_iso = opportunity.get("createdDate") or opportunity.get("created_on")
 
@@ -1042,6 +1055,15 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     
     # also consider the inquiry_text (sometimes we only get that)
     found_optout = found_optout or _is_optout_text(inquiry_text)
+
+    from os import getenv as _getenv
+
+    # Are we in Outlook mode overall?
+    is_outlook_mode = (EMAIL_MODE == "outlook")
+
+    # Is THIS invocation coming from an Outlook webhook?
+    is_webhook = is_outlook_mode and (trigger == "email_webhook")
+
     
     declined = False
     if found_optout:
@@ -1131,12 +1153,18 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     selected_inbound_id = None
     reply_subject = "Re:"
     from helpers import build_kbb_ctx
+    
     kbb_ctx = build_kbb_ctx(opportunity)
 
-    # Before you compute mode/cadence, pull LIVE activities
     opp_id = opportunity.get("opportunityId") or opportunity.get("id")
     customer_id = (opportunity.get("customer") or {}).get("id")
-    acts_live = _fetch_activities_live(opp_id, customer_id, token, subscription_id)
+
+    # Only hit Fortellis activities when we're NOT Outlook-webhook-driven.
+    if is_webhook:
+        acts_live = []   # rely on ES + webhook data, no API call
+    else:
+        acts_live = _fetch_activities_live(opp_id, customer_id, token, subscription_id)
+
 
     # Track if appointment is currently booked or upcoming
     scheduled_active_now = (
@@ -1230,54 +1258,92 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     
     # === If appointment is booked/upcoming, pause cadence but still watch for inbound ===
     if state.get("mode") == "scheduled" or _has_upcoming_appt(acts_live, state):
+        if is_webhook:
+            # Webhook invocation = we know this is a fresh inbound
+            log.info("KBB ICO: inbound during scheduled/appt (webhook) → switch to convo mode")
+            state["mode"] = "convo"
+            state["nudge_count"] = 0
+            if inbound_ts:
+                state["last_customer_msg_at"] = inbound_ts
+            if inbound_msg_id:
+                state["last_inbound_activity_id"] = inbound_msg_id
+            # fall through to convo handling
+        else:
+            # Legacy CRM-based detection for stores not yet on Outlook
+            has_reply, last_cust_ts, last_inbound_activity_id = customer_has_replied(
+                opportunity,
+                token,
+                subscription_id,
+                state,
+                acts=acts_live,
+            )
+
+            if (
+                has_reply
+                and last_inbound_activity_id
+                and last_inbound_activity_id != state.get("last_inbound_activity_id")
+            ):
+                log.info("KBB ICO: true customer reply after appointment → switch to convo mode")
+                state["mode"] = "convo"
+                state["nudge_count"] = 0
+                if last_cust_ts:
+                    state["last_customer_msg_at"] = last_cust_ts
+                state["last_inbound_activity_id"] = last_inbound_activity_id
+                # fall through to convo handling below
+            else:
+                log.info("KBB ICO: appointment active, no *new* inbound → stay quiet")
+                state["mode"] = "scheduled"
+                opportunity["_kbb_state"] = state
+                return state, action_taken
+    # else: not scheduled and no upcoming appt → continue into normal detection/cadence logic
+
+    # --- Detect whether we have a NEW inbound to respond to ---
+
+    if is_webhook:
+        # This invocation *is* a new inbound email from Outlook
+        has_reply = True
+        last_cust_ts = inbound_ts or _dt.now(_tz.utc).isoformat()
+        last_inbound_activity_id = inbound_msg_id or f"esmsg:{last_cust_ts}"
+    else:
+        # Legacy CRM-based detection
         has_reply, last_cust_ts, last_inbound_activity_id = customer_has_replied(
             opportunity,
             token,
             subscription_id,
             state,
-            acts=acts_live,       
+            acts=acts_live,
         )
-        
-        if has_reply and last_inbound_activity_id and last_inbound_activity_id != state.get("last_inbound_activity_id"):
-            log.info("KBB ICO: true customer reply after appointment → switch to convo mode")
-            state["mode"] = "convo"
-            state["nudge_count"] = 0
-            if last_cust_ts:
-                state["last_customer_msg_at"] = last_cust_ts
-            state["last_inbound_activity_id"] = last_inbound_activity_id
-            # fall through to convo handling below
 
-        else:
-            log.info("KBB ICO: appointment active, no *new* inbound → stay quiet")
-            state["mode"] = "scheduled"
-            opportunity["_kbb_state"] = state
-            return state, action_taken
-    # else: not scheduled and no upcoming appt → continue into normal detection/cadence logic
-
-
-    ## NOTE: pass state into the detector so it can ignore already-seen inbounds
-    has_reply, last_cust_ts, last_inbound_activity_id = customer_has_replied(
-        opportunity,
-        token,
-        subscription_id,
-        state,
-        acts=acts_live,          
-    )
-
-    # Only flip to convo when we truly have a new inbound with a timestamp
-    # Compute the last agent send time from state (if present)
-    # Prefer real Fortellis send time; fall back to state if missing
-    # === Compute last agent send time (prefer live Fortellis data) ===
-    last_agent_dt_live = _last_agent_send_dt(acts_live)
-    last_agent_dt = last_agent_dt_live
-    if (last_agent_dt is None) and state.get("last_agent_msg_at"):
+    # === Compute last agent send time (prefer ES state; avoid extra CRM calls in webhook mode) ===
+    last_agent_dt = None
+    if state.get("last_agent_msg_at"):
         try:
-            last_agent_dt = _dt.fromisoformat(str(state["last_agent_msg_at"]).replace("Z","+00:00"))
+            last_agent_dt = _dt.fromisoformat(
+                str(state["last_agent_msg_at"]).replace("Z", "+00:00")
+            )
         except Exception:
             last_agent_dt = None
-    
-    # ✅ Convo mode if and only if there is a READ EMAIL newer than Patti's send
-    if has_reply or _has_new_read_email_since(acts_live, last_agent_dt):
+
+    # Only fall back to Fortellis sends when we are NOT in webhook mode
+    if (last_agent_dt is None) and (not is_webhook):
+        last_agent_dt_live = _last_agent_send_dt(acts_live)
+        if last_agent_dt_live is not None:
+            last_agent_dt = last_agent_dt_live
+
+    if is_webhook:
+        has_new_inbound = has_reply  # the webhook *is* the signal
+    else:
+        has_new_inbound = has_reply or _has_new_read_email_since(acts_live, last_agent_dt)
+
+    if not has_new_inbound:
+        log.info(
+            "KBB ICO: no new inbound detected (mode=%s, webhook=%s)",
+            state.get("mode"),
+            is_webhook,
+        )
+        # Let cadence logic later decide if a nudge should be sent.
+        # We just don't drop into convo reply.
+    else:
         state["mode"] = "convo"
         state["nudge_count"] = 0
         if has_reply and last_cust_ts:
@@ -1285,93 +1351,128 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         if last_inbound_activity_id:
             state["last_inbound_activity_id"] = last_inbound_activity_id
 
-        #_save_state_comment(token, subscription_id, opp_id, state)
-
-        # Only refetch if we actually sent something new in this run
-        if action_taken:
+    # If we ended up in convo mode, prepare reply subject/body context
+    if state.get("mode") == "convo":
+        # Only re-fetch activities if we are in CRM mode and actually sent something new
+        if (not is_webhook) and action_taken:
             acts_now = _fetch_activities_live(opp_id, customer_id, token, subscription_id)
         else:
             acts_now = acts_live
-    
-        def _newest_read_after(acts, floor_dt):
-            newest = None
-            newest_dt = None
-            for a in acts or []:
-                if not _is_read_email(a):
-                    continue
-                adt = _activity_dt(a)
-                if not adt:
-                    continue
-                # only consider reads newer than Patti's last send (or any if floor_dt is None)
-                if (floor_dt is None) or (adt > floor_dt):
-                    if (newest_dt is None) or (adt > newest_dt):
-                        newest_dt = adt
-                        newest = a
-            return newest, newest_dt
-    
-        # Prefer the truly newest read AFTER Patti’s last send
-        newest_read, newest_dt = _newest_read_after(acts_now, last_agent_dt)
-    
-        # Fallback order: newest fresh read → detector id → prior snapshot newest
+
         selected_inbound_id = None
-        if newest_read:
-            selected_inbound_id = str(newest_read.get("activityId") or newest_read.get("id") or "")
-        elif last_inbound_activity_id:
+
+        if is_webhook:
+            # Outlook path: the inbound email *is* what we reply to
             selected_inbound_id = last_inbound_activity_id
-
         else:
-            selected_inbound_id = _latest_read_email_id(acts_now)  # use fresh not stale
+            def _newest_read_after(acts, floor_dt):
+                newest = None
+                newest_dt = None
+                for a in acts or []:
+                    if not _is_read_email(a):
+                        continue
+                    adt = _activity_dt(a)
+                    if not adt:
+                        continue
+                    if (floor_dt is None) or (adt > floor_dt):
+                        if (newest_dt is None) or (adt > newest_dt):
+                            newest_dt = adt
+                            newest = a
+                return newest, newest_dt
 
-        log.info("KBB ICO: replying to inbound id=%s; snippet=%r",
-            selected_inbound_id, (inquiry_text or "")[:120])
-        
-        # Initialize a safe default subject for all paths
+            newest_read, newest_dt = _newest_read_after(acts_now, last_agent_dt)
+
+            # Fallback order: newest fresh read → detector id → prior snapshot newest
+            if newest_read:
+                selected_inbound_id = str(
+                    newest_read.get("activityId") or newest_read.get("id") or ""
+                )
+            elif last_inbound_activity_id:
+                selected_inbound_id = last_inbound_activity_id
+            else:
+                selected_inbound_id = _latest_read_email_id(acts_now)
+
+        log.info(
+            "KBB ICO: replying to inbound id=%s; snippet=%r",
+            selected_inbound_id,
+            (inquiry_text or "")[:120],
+        )
+
+        # Initialize a safe default subject
         reply_subject = "Re:"
-        
-        # Keep what you already computed earlier
-        declined_optout = bool(declined)  # preserve earlier decision
-        
-        if selected_inbound_id:
-            try:
-                from fortellis import get_activity_by_id_v1
-                full = get_activity_by_id_v1(selected_inbound_id, token, subscription_id)
-        
-                # Subject (even if body extraction fails)
-                thread_subject = ((full.get("message") or {}).get("subject") or "").strip()
-        
-                def _clean_subject(s: str) -> str:
-                    s = _re.sub(r'^\s*\[.*?\]\s*', '', s or '', flags=_re.I)  # strip [CAUTION], etc.
-                    s = _re.sub(r'^\s*(re|fwd)\s*:\s*', '', s, flags=_re.I)   # strip leading RE:/FWD:
-                    return s.strip()
-        
-                reply_subject = f"Re: {_clean_subject(thread_subject)}" if thread_subject else "Re:"
-        
-                # Body (only overwrite inquiry_text if we actually extracted something)
-                latest_body_raw = ((full.get("message") or {}).get("body") or "").strip()
-                latest_body = _top_reply_only(latest_body_raw)
-        
-                if not latest_body:
-                    import re as _re2
-                    _TAGS = _re2.compile(r"<[^>]+>")
-                    _WS   = _re2.compile(r"\s+")
-                    light = _WS.sub(" ", _TAGS.sub(" ", latest_body_raw)).strip()
-                    if light:
-                        latest_body = light
-        
-                if latest_body:
-                    inquiry_text = latest_body
-                    log.info("KBB ICO: using inbound body (len=%d): %r", len(latest_body), latest_body[:120])
-                else:
-                    log.info("KBB ICO: inbound had no usable body; keeping prior inquiry_text.")
-            except Exception as e:
-                log.warning("Could not load inbound activity %s: %s", selected_inbound_id, e)
+
+        # Preserve earlier opt-out decision
+        declined_optout = bool(declined)
+
+        if is_outlook_mode:
+            # Outlook path: we already have the inbound subject/body from the webhook
+            def _clean_subject(s: str) -> str:
+                s = _re.sub(r"^\s*\[.*?\]\s*", "", s or "", flags=_re.I)  # strip [CAUTION], etc.
+                s = _re.sub(r"^\s*(re|fwd)\s*:\s*", "", s, flags=_re.I)   # strip leading RE:/FWD:
+                return s.strip()
+
+            subj_src = inbound_subject or ""
+            subj_clean = _clean_subject(subj_src)
+            reply_subject = f"Re: {subj_clean}" if subj_clean else "Re:"
+            # `inquiry_text` is already the webhook body; no CRM fetch needed
         else:
-            log.info("KBB ICO: no selected inbound id; keeping prior inquiry_text and default subject.")
-        
-        # If we picked a concrete newest read, persist it so we won't re-answer older ones
-        if newest_read and newest_dt:
-            state["last_inbound_activity_id"] = selected_inbound_id
-            state["last_customer_msg_at"] = newest_dt.astimezone(_tz.utc).isoformat()
+            # Legacy CRM path: fetch inbound subject/body from Fortellis
+            if selected_inbound_id:
+                try:
+                    from fortellis import get_activity_by_id_v1
+
+                    full = get_activity_by_id_v1(selected_inbound_id, token, subscription_id)
+
+                    thread_subject = (
+                        (full.get("message") or {}).get("subject") or ""
+                    ).strip()
+
+                    def _clean_subject(s: str) -> str:
+                        s = _re.sub(r"^\s*\[.*?\]\s*", "", s or "", flags=_re.I)
+                        s = _re.sub(r"^\s*(re|fwd)\s*:\s*", "", s, flags=_re.I)
+                        return s.strip()
+
+                    reply_subject = (
+                        f"Re: {_clean_subject(thread_subject)}"
+                        if thread_subject
+                        else "Re:"
+                    )
+
+                    latest_body_raw = (
+                        (full.get("message") or {}).get("body") or ""
+                    ).strip()
+                    latest_body = _top_reply_only(latest_body_raw)
+
+                    if not latest_body:
+                        import re as _re2
+
+                        _TAGS = _re2.compile(r"<[^>]+>")
+                        _WS = _re2.compile(r"\s+")
+                        light = _WS.sub(" ", _TAGS.sub(" ", latest_body_raw)).strip()
+                        if light:
+                            latest_body = light
+
+                    if latest_body:
+                        inquiry_text = latest_body
+                        log.info(
+                            "KBB ICO: using inbound body (len=%d): %r",
+                            len(latest_body),
+                            latest_body[:120],
+                        )
+                    else:
+                        log.info(
+                            "KBB ICO: inbound had no usable body; keeping prior inquiry_text."
+                        )
+                except Exception as e:
+                    log.warning(
+                        "Could not load inbound activity %s: %s",
+                        selected_inbound_id,
+                        e,
+                    )
+            else:
+                log.info(
+                    "KBB ICO: no selected inbound id; keeping prior inquiry_text and default subject."
+                )
         
         # 🔐 Re-evaluate decline BUT never lose an earlier True
         declined_from_classifier = False
