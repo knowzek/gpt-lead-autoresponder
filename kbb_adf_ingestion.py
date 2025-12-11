@@ -4,10 +4,7 @@ import logging
 from datetime import datetime, timezone
 
 from esQuerys import esClient
-from gpt import run_gpt
 from feature_flags import is_test_opp
-from outlook_email import send_email_via_outlook
-from crm_logging import log_email_to_crm
 from fortellis import get_token
 from rooftops import get_rooftop_info
 from email_ingestion import clean_html  # reuse helper
@@ -99,14 +96,6 @@ def process_kbb_adf_notification(inbound: dict) -> None:
             opp_id,
         )
         return
-
-    # Build a simple Day-1 style email via GPT
-    customer_name = (opportunity.get("customer") or {}).get("firstName") or "there"
-    rooftop_name = (
-        opportunity.get("rooftop_name")
-        or opportunity.get("rooftop")
-        or "Tustin Mazda"
-    )
 
     # --- Use the main KBB engine instead of hand-rolled GPT ---
 
