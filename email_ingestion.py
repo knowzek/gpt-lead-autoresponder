@@ -172,13 +172,18 @@ def process_inbound_email(inbound: dict) -> None:
         token = get_token(subscription_id)
 
     # 6️⃣ Hand off to the existing KBB ICO logic
+    # Use Outlook webhook trigger; this call itself *is* the new inbound signal
+    inbound_ts = ts
+    inbound_subject = subject
+    inbound_msg_id = headers.get("Message-Id") or f"esmsg:{inbound_ts}"
+
     state, action_taken = process_kbb_ico_lead(
-        opportunity=opp,
+        opportunity=opportunity,
         lead_age_days=lead_age_days,
         rooftop_name=rooftop_name,
-        inquiry_text=inbound_body_text,
+        inquiry_text=body_text,          # customer's reply text
         token=token,
-        subscription_id=dealer_key,
+        subscription_id=subscription_id,
         SAFE_MODE=False,
         rooftop_sender=rooftop_sender,
         trigger="email_webhook",
@@ -189,9 +194,18 @@ def process_inbound_email(inbound: dict) -> None:
 
     # 7️⃣ Persist any mutations KBB logic made to the opportunity
     try:
-        es_update_with_retry(esClient, index="opportunities", id=opp_id, doc=opportunity)
+        es_update_with_retry(
+            esClient,
+            index="opportunities",
+            id=opp_id,
+            doc=opportunity,
+        )
     except Exception as e:
-        log.warning("ES persist failed after KBB processing opp %s: %s", opp_id, e)
+        log.warning(
+            "ES persist failed after KBB processing opp %s: %s",
+            opp_id,
+            e,
+        )
 
     log.info(
         "KBB email ingestion handled for opp %s – action_taken=%s, state[last_template_day_sent]=%s",
