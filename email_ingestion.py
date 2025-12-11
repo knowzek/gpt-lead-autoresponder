@@ -108,7 +108,7 @@ def process_inbound_email(inbound: dict) -> None:
     sender_raw = (inbound.get("from") or "").strip()
     subject = inbound.get("subject") or ""
     body_html = inbound.get("body_html") or ""
-    body_text = inbound.get("body_text") or _clean_html(body_html)
+    body_text = inbound.get("body_text") or clean_html(body_html)
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     headers = inbound.get("headers") or {}
 
@@ -140,21 +140,20 @@ def process_inbound_email(inbound: dict) -> None:
     }
     opportunity.setdefault("messages", []).append(msg_dict)
 
-    # Also bump last_customer_msg_at in the KBB state so cadence logic sees it
+    # Load current state but do NOT touch last_customer_msg_at here.
     state = dict(opportunity.get("_kbb_state") or {})
-    state["last_customer_msg_at"] = ts
     opportunity["_kbb_state"] = state
-
-    # Persist those changes before calling kbb_ico (matches pattern in processNewData)
+    
+    # Persist the new message thread only; KBB will update _kbb_state itself.
     es_update_with_retry(
         esClient,
         index="opportunities",
         id=opp_id,
         doc={
             "messages": opportunity["messages"],
-            "_kbb_state": state,
         },
     )
+
 
     # 4️⃣ Compute the same lead_age_days we use in processNewData
     lead_age_days = _compute_lead_age_days(opportunity)
