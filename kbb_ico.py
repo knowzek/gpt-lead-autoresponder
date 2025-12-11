@@ -83,7 +83,7 @@ def send_opportunity_email_activity(
             reply_to_activity_id=reply_to_activity_id,
         )
 
-    # 📨 Outlook path for test opps
+    # 📨 Outlook path (no Fortellis email send; just log as a comment)
     to_addr = recipients[0] if recipients else None
     if not to_addr:
         return
@@ -96,18 +96,23 @@ def send_opportunity_email_activity(
         headers={"X-Opportunity-ID": opp_id},
     )
 
-    # 2) Log back to CRM as an email activity (so store sees it)
+    # 2) Log back to CRM as a simple note so the store can see the email
     if token and subscription_id:
         try:
-            log_email_to_crm(
-                token=token,
-                dealer_key=subscription_id,
-                opportunity_id=opp_id,
-                subject=subject,
-                body_preview=_clean_html(body_html)[:500],
+            preview = _clean_html(body_html)[:500]
+            add_opportunity_comment(
+                token,
+                subscription_id,
+                opp_id,
+                f"Outbound email to {to_addr}: {subject}\n\n{preview}",
             )
         except Exception as e:
-            log.warning("Failed to log Outlook email to CRM for opp %s: %s", opp_id, e)
+            log.warning(
+                "Failed to log Outlook outbound email for opp %s: %s",
+                opp_id,
+                e,
+            )
+
 
 
 def _es_debug_update(esClient, index, id, doc, tag=""):
@@ -760,17 +765,30 @@ def normalize_patti_body(body_html: str) -> str:
     return body_html
 
 
-def compose_kbb_convo_body(rooftop_name: str, cust_first: str, customer_message: str, booking_link_text="Schedule Your Visit"):
+def compose_kbb_convo_body(
+    rooftop_name: str,
+    cust_first: str,
+    customer_message: str,
+    booking_link_text: str = "Schedule Your Visit",
+):
     return _tw.dedent(f"""
     You are Patti, the virtual assistant for {rooftop_name}. This thread is about a Kelley Blue Book® Instant Cash Offer (ICO).
-    Keep replies short, warm, and human—no corporate tone.
-    Write HTML with simple <p> paragraphs (no lists). Always:
-    - Begin with: "Hi {cust_first}," (exactly).
-    - Acknowledge the customer's note in 1-2 concise sentences.
+
+    Write your reply as short, warm, human HTML using simple <p> paragraphs (no lists).
+
+    Very important behavior rules:
+    - Begin with: "Hi {cust_first}," (exactly) as the first line.
+    - FIRST, understand what the customer actually asked or said.
+    - DIRECTLY answer the customer's question or request in plain language.
+      * If they ask things like "When can I come in?" or "What time works?" you must:
+        - Explain how and when they can visit (e.g., "You can bring your vehicle in during our normal business hours; just tell me what day/time works best for you.")
+        - Invite them to share a specific day and time that works for them.
+        - You do NOT need to know exact store hours; if you don't know, say something like
+          "Let me know a day and time that works for you and we'll confirm it."
     - If relevant, mention their Kelley Blue Book® Instant Cash Offer naturally in your reply.
-    - Avoid re-explaining topics you already covered earlier in this thread unless the customer explicitly asks again; if they do, confirm briefly in one short sentence and move on.
-    - If the customer has not already specified or booked the meeting, close with a friendly nudge to pick a day/time (no links) — a short booking line with the link will be appended automatically.
-    - You may remind them to bring title, ID, and keys if appropriate, and if you haven't already done it in an earlier message
+    - Avoid re-explaining general information you already covered earlier; if they repeat something, confirm briefly and move on.
+    - Do NOT just send a generic "thank you for your interest" note. The reply should feel like you're responding to THIS message, not restarting the conversation.
+    - You may remind them to bring title, ID, and keys if appropriate, and if you haven't already done it in an earlier message.
     - No extra signatures; we will append yours.
     - Keep to 2–4 short paragraphs max.
 
@@ -779,6 +797,7 @@ def compose_kbb_convo_body(rooftop_name: str, cust_first: str, customer_message:
 
     Produce only the HTML body (no subject).
     """).strip()
+
 _CTA_ANCHOR_RE = _re.compile(r'(?is)<a[^>]*>\s*Schedule\s+Your\s+Visit\s*</a>')
 _RAW_TOKEN_RE  = _re.compile(r'(?i)<\{LegacySalesApptSchLink\}>')
 _ANY_SCHED_LINE_RE = _re.compile(r'(?i)(reserve your time|schedule (an )?appointment|schedule your visit)[:\s]*', _re.I)
