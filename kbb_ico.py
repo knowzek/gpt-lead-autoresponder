@@ -36,6 +36,44 @@ TEST_EMAIL_OPP_IDS = {
 }
 EMAIL_MODE = os.getenv("EMAIL_MODE", "crm")  # "crm" or "outlook"
 
+def wants_kbb_value(text: str) -> bool:
+    """
+    Heuristic: does the customer seem to be asking for their KBB estimate / offer amount?
+    """
+    if not text:
+        return False
+
+    t = text.lower()
+
+    # Must be about KBB / offer context
+    has_kbb_context = any(
+        phrase in t
+        for phrase in [
+            "kbb",
+            "kelley blue book",
+            "instant cash offer",
+            "cash offer",
+            "offer",
+        ]
+    )
+
+    # Must be about the amount / value / price
+    has_amount_context = any(
+        phrase in t
+        for phrase in [
+            "estimate",
+            "amount",
+            "value",
+            "price",
+            "how much",
+            "what was",
+            "what is",
+        ]
+    )
+
+    return has_kbb_context and has_amount_context
+
+
 def _clean_html(h: str) -> str:
     """
     Lightweight HTML → text for logging to CRM.
@@ -1833,7 +1871,7 @@ def process_kbb_ico_lead(
             opportunity["messages"] = msgs
             
             # === Deterministic KBB value shortcut (if customer asks for their offer amount) ===
-            from helpers import get_kbb_offer_context_simple, wants_kbb_value
+            from helpers import get_kbb_offer_context_simple
             
             facts = get_kbb_offer_context_simple(opportunity)
             
