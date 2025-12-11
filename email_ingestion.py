@@ -135,6 +135,15 @@ def process_inbound_email(inbound: dict) -> None:
     for sep in [
         "\r\n________________________________",
         "\n________________________________",
+
+        # HTML-cleaned versions (no underscores / newlines)
+        " From:",
+        " Sent:",
+        " On ",
+        " Subject:",
+        " To:",
+
+        # Raw newline forms, in case they survive
         "\r\nFrom:",
         "\nFrom:",
         "\r\nOn ",
@@ -144,6 +153,7 @@ def process_inbound_email(inbound: dict) -> None:
         if idx != -1:
             body_text = body_text[:idx].strip()
             break
+
 
     # Optional but useful while testing:
     log.info(
