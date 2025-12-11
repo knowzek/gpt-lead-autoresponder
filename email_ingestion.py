@@ -154,7 +154,6 @@ def process_inbound_email(inbound: dict) -> None:
         },
     )
 
-
     # 4️⃣ Compute the same lead_age_days we use in processNewData
     lead_age_days = _compute_lead_age_days(opportunity)
 
@@ -174,14 +173,18 @@ def process_inbound_email(inbound: dict) -> None:
 
     # 6️⃣ Hand off to the existing KBB ICO logic
     state, action_taken = process_kbb_ico_lead(
-        opportunity=opportunity,
+        opportunity=opp,
         lead_age_days=lead_age_days,
         rooftop_name=rooftop_name,
-        inquiry_text=body_text,  # treat this inbound as the latest "inquiry"
+        inquiry_text=inbound_body_text,
         token=token,
-        subscription_id=subscription_id,
-        SAFE_MODE=os.getenv("SAFE_MODE", "1") in ("1", "true", "True"),
+        subscription_id=dealer_key,
+        SAFE_MODE=False,
         rooftop_sender=rooftop_sender,
+        trigger="email_webhook",
+        inbound_ts=inbound_ts,
+        inbound_msg_id=inbound_msg_id,
+        inbound_subject=inbound_subject,
     )
 
     # 7️⃣ Persist any mutations KBB logic made to the opportunity
