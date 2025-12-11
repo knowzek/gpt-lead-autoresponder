@@ -29,13 +29,18 @@ def _scan_text_for_offer(text: str) -> dict:
 
 def get_kbb_offer_context_simple(opportunity: dict) -> dict:
     """Returns {'offer_url','amount_usd','offer_id','vehicle'} if found."""
-    memo = opportunity.get("_kbb_offer_ctx") or {}
-    if memo.get("offer_url"):
+    # 1) If we already have a stored value from ADF or past scans, trust it.
+    memo = dict(opportunity.get("_kbb_offer_ctx") or {})
+    if memo.get("amount_usd") or memo.get("offer_url"):
         return memo
 
-    completed = (opportunity.get("completedActivities")
-                 or (opportunity.get("activityHistory") or {}).get("completedActivities")
-                 or [])
+    # 2) Otherwise, scan completed activities/messages for an offer URL/amount.
+    completed = (
+        opportunity.get("completedActivities")
+        or (opportunity.get("activityHistory") or {}).get("completedActivities")
+        or []
+    )
+
     texts = []
     for a in completed:
         texts.append((a.get("comments") or "") + " " + (a.get("notes") or ""))
@@ -47,17 +52,32 @@ def get_kbb_offer_context_simple(opportunity: dict) -> dict:
         bits = _scan_text_for_offer(t)
         if bits:
             found.update(bits)
-            if found.get("offer_url"): break
+            if found.get("offer_url"):
+                break
 
+    # 3) Build a vehicle string if we have trade info
     ti = (opportunity.get("tradeIns") or [{}])[0] if (opportunity.get("tradeIns") or []) else {}
-    veh = " ".join(filter(None, [str(ti.get("year") or "").strip(),
-                                 str(ti.get("make") or "").strip(),
-                                 str(ti.get("model") or "").strip()])).strip()
+    veh = " ".join(
+        filter(
+            None,
+            [
+                str(ti.get("year") or "").strip(),
+                str(ti.get("make") or "").strip(),
+                str(ti.get("model") or "").strip(),
+            ],
+        )
+    ).strip()
     if veh:
         found["vehicle"] = veh
 
+    # 4) Merge with any memo we already had, instead of wiping it.
+    if memo:
+        memo.update(found)
+        found = memo
+
     opportunity["_kbb_offer_ctx"] = found
     return found
+
 
 def build_kbb_ctx(opportunity: dict) -> dict:
     """Small, consistent payload we can hand to run_gpt."""
