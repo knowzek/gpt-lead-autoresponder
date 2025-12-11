@@ -823,12 +823,17 @@ def compose_kbb_convo_body(
         - Invite them to share a specific day and time that works for them.
         - You do NOT need to know exact store hours; if you don't know, say something like
           "Let me know a day and time that works for you and we'll confirm it."
+      * If they ask you to remind them of their Kelley Blue Book® estimate (for example "What was the KBB estimate you gave me?"):
+        - ONLY mention a specific dollar amount if you can actually see a real dollar amount (like "$12,345") in your context or KBB data.
+        - If you do NOT see a real amount anywhere, DO NOT make one up. Instead say that you don’t see the exact figure yet and that the team will confirm the value when they inspect the vehicle at the visit.
+        - Never invent or guess a dollar amount.
     - If relevant, mention their Kelley Blue Book® Instant Cash Offer naturally in your reply.
     - Avoid re-explaining general information you already covered earlier; if they repeat something, confirm briefly and move on.
     - Do NOT just send a generic "thank you for your interest" note. The reply should feel like you're responding to THIS message, not restarting the conversation.
     - You may remind them to bring title, ID, and keys if appropriate, and if you haven't already done it in an earlier message.
     - No extra signatures; we will append yours.
-    - Keep to 2–4 short paragraphs max.
+    - Keep to 2–4 short paragraphs max. Do not stop after only a greeting.
+
 
     Customer said:
     \"\"\"{customer_message}\"\"\"
