@@ -11,6 +11,8 @@ from crm_logging import log_email_to_crm
 from fortellis import get_token
 from rooftops import get_rooftop_info
 from email_ingestion import clean_html  # reuse helper
+from kbb_ico import process_kbb_ico_lead
+
 
 log = logging.getLogger("patti.kbb_adf")
 
@@ -106,52 +108,43 @@ def process_kbb_adf_notification(inbound: dict) -> None:
         or "Tustin Mazda"
     )
 
-    some_prompt = f"""
-You are Patti, a friendly acquisition specialist at {rooftop_name}.
-A new Kelley Blue Book Instant Cash Offer lead just came in.
+    # --- Use the main KBB engine instead of hand-rolled GPT ---
 
-Write the FIRST outreach email to the customer to schedule a time
-for them to bring their vehicle in for inspection and finalize their offer.
-
-Keep it:
-- short and clear (3–5 short paragraphs)
-- specific to Instant Cash Offer
-- warm, professional, and human
-Do NOT include subject line in the body.
-"""
-
-    reply = run_gpt(
-        prompt=some_prompt,
-        customer_name=customer_name,
-        rooftop_name=rooftop_name,
-        prevMessages=False,
-        persona="kbb_ico",
-        kbb_ctx={"source": "kbb_adf"},
-    )
-
-    
-    subject_out = reply.get("subject") or f"Your Kelley Blue Book Instant Cash Offer with {rooftop_name}"
-    body_out = reply.get("body") or "Thanks for your interest in your Kelley Blue Book Instant Cash Offer."
-
-
-    # Send via Outlook
-    send_email_via_outlook(
-        to_addr=shopper_email,
-        subject=subject_out,
-        html_body=body_out,
-        headers={"X-Opportunity-ID": opp_id},
-    )
-
-    # Log to CRM
     dealer_key = opportunity.get("_subscription_id")
-    if dealer_key:
-        token = get_token(dealer_key)
-        log_email_to_crm(
-            token=token,
-            dealer_key=dealer_key,
-            opportunity_id=opp_id,
-            subject=subject_out,
-            body_preview=clean_html(body_out)[:500],
-        )
-    else:
-        log.warning("KBB opp %s missing _subscription_id; cannot log to CRM", opp_id)
+    if not dealer_key:
+        log.warning("KBB opp %s missing _subscription_id; cannot send Patti email", opp_id)
+        return
+    
+    token = get_token(dealer_key)
+    
+    # Rooftop info (name + sender email)
+    rt_info = get_rooftop_info(dealer_key) or {}
+    rooftop_name   = rt_info.get("name") or (opportunity.get("rooftop_name") or opportunity.get("rooftop") or "Patterson Auto Group")
+    rooftop_sender = rt_info.get("sender") or ""
+    
+    # Lead age in days (so KBB cadence picks Day 1 vs later)
+    created_iso = opportunity.get("createdDate") or opportunity.get("created_on")
+    lead_age_days = 0
+    if created_iso:
+        try:
+            created_dt = datetime.fromisoformat(str(created_iso).replace("Z", "+00:00")).astimezone(timezone.utc)
+            lead_age_days = (datetime.now(timezone.utc) - created_dt).days
+        except Exception:
+            log.warning("KBB ADF: could not parse created date %r", created_iso)
+    
+    # For a fresh ADF lead there’s usually no “question” yet, so inquiry_text can be blank
+    inquiry_text = ""
+    
+    state, action_taken = process_kbb_ico_lead(
+        opportunity=opportunity,
+        lead_age_days=lead_age_days,
+        rooftop_name=rooftop_name,
+        inquiry_text=inquiry_text,
+        token=token,
+        subscription_id=dealer_key,
+        SAFE_MODE=False,
+        rooftop_sender=rooftop_sender,
+    )
+    
+    log.info("KBB ADF → process_kbb_ico_lead finished: opp=%s action_taken=%s mode=%s",
+             opp_id, action_taken, (state or {}).get("mode"))
