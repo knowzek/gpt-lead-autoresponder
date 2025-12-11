@@ -108,7 +108,7 @@ def process_inbound_email(inbound: dict) -> None:
     """
     sender_raw = (inbound.get("from") or "").strip()
     subject = inbound.get("subject") or ""
-        body_html = inbound.get("body_html") or ""
+    body_html = inbound.get("body_html") or ""
     raw_text = inbound.get("body_text") or clean_html(body_html)
 
     # Use KBB's reply-stripper so we only see the *new* message,
