@@ -6,7 +6,7 @@ from datetime import datetime as _dt, timezone as _tz
 from esQuerys import esClient
 from es_resilient import es_update_with_retry
 from rooftops import get_rooftop_info
-from fortellis import get_token
+from fortellis import get_token, add_opportunity_comment
 from kbb_ico import process_kbb_ico_lead
 
 log = logging.getLogger("patti.email_ingestion")
@@ -139,7 +139,7 @@ def process_inbound_email(inbound: dict) -> None:
         "date": ts,
     }
     opportunity.setdefault("messages", []).append(msg_dict)
-
+    
     # Load current state but do NOT touch last_customer_msg_at here.
     state = dict(opportunity.get("_kbb_state") or {})
     opportunity["_kbb_state"] = state
@@ -149,27 +149,43 @@ def process_inbound_email(inbound: dict) -> None:
         esClient,
         index="opportunities",
         id=opp_id,
-        doc={
-            "messages": opportunity["messages"],
-        },
+        doc={"messages": opportunity["messages"]},
     )
-
+    
     # 4️⃣ Compute the same lead_age_days we use in processNewData
     lead_age_days = _compute_lead_age_days(opportunity)
-
+    
     # 5️⃣ Get rooftop + token info
     subscription_id = opportunity.get("_subscription_id")
     if not subscription_id:
         log.warning("Opportunity %s missing _subscription_id; cannot run KBB flow", opp_id)
         return
-
+    
     rooftop_info = get_rooftop_info(subscription_id)
     rooftop_name = rooftop_info["name"]
     rooftop_sender = rooftop_info["sender"]
-
+    
     token = None
     if os.getenv("OFFLINE_MODE", "0") not in ("1", "true", "True"):
         token = get_token(subscription_id)
+    
+    # 3b️⃣ Log inbound email to CRM as a comment (now token IS defined)
+    if token:
+        try:
+            preview = (body_text or "")[:500]
+            add_opportunity_comment(
+                token,
+                subscription_id,
+                opp_id,
+                f"Inbound email from {sender_raw}: {subject}\n\n{preview}",
+            )
+        except Exception as e:
+            log.warning(
+                "Failed to log inbound email as CRM comment for opp %s: %s",
+                opp_id,
+                e,
+            )
+
 
     # 6️⃣ Hand off to the existing KBB ICO logic
     # Use Outlook webhook trigger; this call itself *is* the new inbound signal
