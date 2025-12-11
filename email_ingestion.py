@@ -8,6 +8,7 @@ from es_resilient import es_update_with_retry
 from rooftops import get_rooftop_info
 from fortellis import get_token, add_opportunity_comment
 from kbb_ico import process_kbb_ico_lead
+from kbb_ico import _top_reply_only
 
 log = logging.getLogger("patti.email_ingestion")
 
@@ -107,8 +108,21 @@ def process_inbound_email(inbound: dict) -> None:
     """
     sender_raw = (inbound.get("from") or "").strip()
     subject = inbound.get("subject") or ""
-    body_html = inbound.get("body_html") or ""
-    body_text = inbound.get("body_text") or clean_html(body_html)
+        body_html = inbound.get("body_html") or ""
+    raw_text = inbound.get("body_text") or clean_html(body_html)
+
+    # Use KBB's reply-stripper so we only see the *new* message,
+    # not the quoted appointment email with "Wed at 2PM" in it.
+    if body_html:
+        try:
+            top_html = _top_reply_only(body_html)
+            body_text = clean_html(top_html)
+        except Exception:
+            # If anything weird happens, fall back to the raw text
+            body_text = raw_text
+    else:
+        body_text = raw_text
+
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     headers = inbound.get("headers") or {}
 
