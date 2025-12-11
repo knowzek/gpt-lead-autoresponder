@@ -7,11 +7,67 @@ from esQuerys import esClient
 from feature_flags import is_test_opp
 from fortellis import get_token
 from rooftops import get_rooftop_info
-from email_ingestion import clean_html  # reuse helper
+from email_ingestion import clean_html  
 from kbb_ico import process_kbb_ico_lead
 
 
 log = logging.getLogger("patti.kbb_adf")
+
+# Match $12,345 or ¤12,345 but NOT things like "+$1,025"
+_KBB_AMT_RE = re.compile(r"(?<!\+)(?:\$|¤)[0-9][0-9,]*")
+
+def _extract_kbb_amount(text: str) -> str | None:
+    """
+    Try to pull out the most relevant KBB offer amount from the ADF email body.
+
+    Priority:
+      1) "Counter Offer Amount: $XX,XXX"
+      2) "Offer Amount: $XX,XXX" or "Offer Amount: ¤XX,XXX"
+      3) "Instant Cash Offer $XX,XXX"
+      4) First generic currency-looking amount as a fallback.
+
+    We also normalize '¤' → '$' for display.
+    """
+    if not text:
+        return None
+
+    lower = text.lower()
+
+    def _find_after(label: str) -> str | None:
+        idx = lower.find(label.lower())
+        if idx == -1:
+            return None
+        # Look in a short window after the label
+        segment = text[idx: idx + 200]
+        m = _KBB_AMT_RE.search(segment)
+        if not m:
+            return None
+        raw = m.group(0)
+        # Normalize ¤ to $
+        return raw.replace("¤", "$")
+
+    # 1) Counter-offer first, if present
+    amt = _find_after("Counter Offer Amount")
+    if amt:
+        return amt
+
+    # 2) Standard offer amount next
+    amt = _find_after("Offer Amount")
+    if amt:
+        return amt
+
+    # 3) Instant Cash Offer line
+    amt = _find_after("Instant Cash Offer")
+    if amt:
+        return amt
+
+    # 4) Generic fallback: first amount anywhere
+    m = _KBB_AMT_RE.search(text)
+    if not m:
+        return None
+    raw = m.group(0)
+    return raw.replace("¤", "$")
+
 
 
 def _extract_shopper_email(body_text: str) -> str | None:
@@ -88,6 +144,25 @@ def process_kbb_adf_notification(inbound: dict) -> None:
     hit = hits[0]
     opp_id = hit["_id"]
     opportunity = hit["_source"]
+
+    # Try to capture the KBB amount from the ADF email body and persist it on the opp
+    # so later KBB flows can answer "what was my estimate?" deterministically.
+    amt = _extract_kbb_amount(body_text or body_html or "")
+    if amt:
+        ctx = dict(opportunity.get("_kbb_offer_ctx") or {})
+        # Don't overwrite if we already have an amount
+        if not ctx.get("amount_usd"):
+            ctx["amount_usd"] = amt
+            opportunity["_kbb_offer_ctx"] = ctx
+            try:
+                esClient.update(
+                    index="opportunities",
+                    id=opp_id,
+                    body={"doc": {"_kbb_offer_ctx": ctx}},
+                )
+                log.info("KBB ADF: stored offer amount %s for opp %s", amt, opp_id)
+            except Exception as e:
+                log.warning("KBB ADF: failed to store _kbb_offer_ctx for opp %s: %s", opp_id, e)
 
     # Gate: only run Outlook Patti for test opps on this branch
     if not is_test_opp(opportunity):
