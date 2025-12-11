@@ -36,6 +36,18 @@ TEST_EMAIL_OPP_IDS = {
 }
 EMAIL_MODE = os.getenv("EMAIL_MODE", "crm")  # "crm" or "outlook"
 
+def _clean_html(h: str) -> str:
+    """
+    Lightweight HTML → text for logging to CRM.
+    """
+    h = h or ""
+    # strip tags
+    h = _TAGS_RE.sub(" ", h) if "_TAGS_RE" in globals() else re.sub(r"<[^>]+>", " ", h)
+    # unescape & collapse whitespace
+    h = _unesc(h)
+    h = re.sub(r"\s+", " ", h).strip()
+    return h
+
 
 def send_opportunity_email_activity(
     token,
@@ -47,6 +59,7 @@ def send_opportunity_email_activity(
     subject,
     body_html,
     rooftop_name,
+    reply_to_activity_id=None, 
 ):
     """
     Wrapper that either:
@@ -67,6 +80,7 @@ def send_opportunity_email_activity(
             subject=subject,
             body_html=body_html,
             rooftop_name=rooftop_name,
+            reply_to_activity_id=reply_to_activity_id,
         )
 
     # 📨 Outlook path for test opps
@@ -186,19 +200,6 @@ def _last_agent_send_dt(acts: list[dict]):
         if dt and (latest is None or dt > latest):
             latest = dt
     return latest
-
-def _latest_read_email_id(acts: list[dict]) -> str | None:
-    newest = None
-    newest_dt = None
-    for a in acts or []:
-        if not _is_read_email(a):
-            continue
-        dt = _activity_dt(a)
-        if dt and (newest_dt is None or dt > newest_dt):
-            newest_dt = dt
-            newest = str(a.get("activityId") or a.get("id") or "")
-    return newest
-
 
 
 def append_soft_schedule_sentence(body_html: str, rooftop_name: str) -> str:
