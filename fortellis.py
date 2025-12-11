@@ -641,12 +641,52 @@ def add_vehicle_sought(token, dealer_key, opportunity_id,
 
 def _coerce_activity_type(value):
     """
-    Accepts an int (pass-through), a numeric string ('14' -> 14),
-    or a small set of known labels -> codes.
+    Accepts an int, a numeric string, or one of the known Elead
+    activity names and returns the numeric activityType ID.
 
-    Standardized for all rooftops:
-      - "Send Email" -> 3
+    Known names/IDs (from Elead for this group):
+      1  -> Attend Meeting
+      2  -> Phone Call
+      3  -> Send Email
+      5  -> Other
+      7  -> Appointment
+      12 -> Send Letter
+      14 -> Send Email/Letter
+      20 -> Inbound Email
+      21 -> LeadLink Up
+      27 -> Service Reminder
+      28 -> Lease Reminder
+      34 -> Confirm Appointment
+      36 -> Auto Response
+      37 -> Note
+      38 -> Inbound Call
+      40 -> Duplicate Lead
+      41 -> Brochure
+      42 -> Parts Up
+      43 -> Service Appt Up
+      44 -> Miscellaneous Sold
+      45 -> DirectCall
+      46 -> IVR
+      47 -> DirectMail
+      48 -> Text Message
+      49 -> Service Appointment
+      50 -> Delivery Appointment
+      51 -> Miscellaneous Appointment
+      53 -> Credit Application
+      54 -> Appraisal Integration
+      56 -> Birthday/Anniv Survey
+      57 -> ACE Email
+      59 -> Alert Sent
+      60 -> Data Enrichment
+      63 -> In Market Notification
+      65 -> Appraisal Appointment
+      66 -> Service Plus Survey
+      67 -> Livestream
+      68 -> Credit Soft Pull
+      69 -> Bulk Text Message
     """
+
+    # Already a numeric ID? Just return it.
     if isinstance(value, int):
         return value
     if isinstance(value, str) and value.isdigit():
@@ -654,22 +694,57 @@ def _coerce_activity_type(value):
 
     label = (value or "").strip()
 
+    # Map the names we care about to their proper numeric IDs.
     BUILTIN = {
-        "Send Email": 3,   # <-- standardize on 3
-        "Task": 3,
-        "Call": 1,
-        "Appointment": 2,
-        "Note": 37
-        # note: we intentionally drop "Send Email/Letter"
+        "Attend Meeting": 1,
+        "Phone Call": 2,
+        "Send Email": 3,
+        "Other": 5,
+        "Appointment": 7,
+        "Send Letter": 12,
+        "Send Email/Letter": 14,
+        "Inbound Email": 20,
+        "LeadLink Up": 21,
+        "Service Reminder": 27,
+        "Lease Reminder": 28,
+        "Confirm Appointment": 34,
+        "Auto Response": 36,
+        "Note": 37,
+        "Inbound Call": 38,
+        "Duplicate Lead": 40,
+        "Brochure": 41,
+        "Parts Up": 42,
+        "Service Appt Up": 43,
+        "Miscellaneous Sold": 44,
+        "DirectCall": 45,
+        "IVR": 46,
+        "DirectMail": 47,
+        "Text Message": 48,
+        "Service Appointment": 49,
+        "Delivery Appointment": 50,
+        "Miscellaneous Appointment": 51,
+        "Credit Application": 53,
+        "Appraisal Integration": 54,
+        "Birthday/Anniv Survey": 56,
+        "ACE Email": 57,
+        "Alert Sent": 59,
+        "Data Enrichment": 60,
+        "In Market Notification": 63,
+        "Appraisal Appointment": 65,
+        "Service Plus Survey": 66,
+        "Livestream": 67,
+        "Credit Soft Pull": 68,
+        "Bulk Text Message": 69,
     }
+
     if label in BUILTIN:
         return BUILTIN[label]
 
     raise ValueError(
         f"Unrecognized activityType: {value!r}. "
-        "Use a numeric code or one of the supported labels: "
-        f"{', '.join(BUILTIN.keys())}"
+        "Use a numeric code or one of the supported labels."
     )
+
 
 
 def schedule_activity(
@@ -680,17 +755,31 @@ def schedule_activity(
     due_dt_iso_utc,
     activity_name,
     activity_type,
-    comments=""
+    comments="",
 ):
+    """
+    Create a scheduled activity on an opportunity.
+
+    `activity_type` can be:
+      - an int (Elead code from /activity-types),
+      - a numeric string, or
+      - one of the known names (e.g. "Appointment", "Phone Call", "Send Email").
+    """
     url = f"{BASE_URL}{ACTIVITIES_BASE}/schedule"
     payload = {
         "opportunityId": opportunity_id,
         "dueDate": due_dt_iso_utc,
         "activityName": activity_name,
-        "activityType": "Appointment",
-        "comments": comments or ""
+        "activityType": _coerce_activity_type(activity_type),
+        "comments": comments or "",
     }
-    return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
+    return post_and_wrap(
+        "POST",
+        url,
+        headers=_headers(dealer_key, token),
+        json=payload,
+    )
+
 
 
 def complete_activity(
