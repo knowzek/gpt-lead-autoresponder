@@ -431,6 +431,11 @@ def run_gpt(prompt: str,
            
     # Build system stack (persona-aware)
     # For KBB ICO, we typically exclude generic follow-up rules because cadence uses templates.
+                
+    log.info("RUN_GPT debug: kbb_ctx keys=%s offer_amount=%r",
+         list((kbb_ctx or {}).keys()),
+         (kbb_ctx or {}).get("offer_amount_usd"))
+
     system_msgs = _build_system_stack(
         persona=persona,
         customer_first=customer_name,
