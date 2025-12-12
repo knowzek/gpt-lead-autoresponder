@@ -166,24 +166,36 @@ def _build_system_stack(persona: str, customer_first: str, rooftop_name: str | N
             amt = kbb_ctx.get("offer_amount_usd") or kbb_ctx.get("amount_usd")
             veh = kbb_ctx.get("vehicle")
             url = kbb_ctx.get("offer_url")
-
+        
             if amt:
-                facts_lines = [
-                    f"Kelley Blue Book® Instant Cash Offer amount: {amt}."
-                ]
+                facts_lines = [f"Kelley Blue Book® Instant Cash Offer amount: {amt}."]
                 if veh:
                     facts_lines.append(f"Vehicle: {veh}.")
                 if url:
                     facts_lines.append(f"Offer details URL: {url}.")
-
+        
+                # (1) FACTS message
                 base.append({
                     "role": "system",
                     "content": (
-                        "Internal KBB facts (for answering customer questions accurately; "
-                        "do not volunteer unless asked):\n"
-                        + " ".join(facts_lines)
+                        "Internal KBB facts (authoritative; use to answer customer questions accurately; "
+                        "do not volunteer unless asked):\n" + " ".join(facts_lines)
                     )
                 })
+                log.info("KBB FACTS SYSTEM MSG: %r", base[-1]["content"])
+        
+                # (2) OVERRIDE rule message
+                base.append({
+                    "role": "system",
+                    "content": (
+                        "CRITICAL OVERRIDE: If the customer asks for their KBB/ICO offer/estimate/value/amount "
+                        "and an internal KBB facts message contains a dollar amount, you MUST state that exact "
+                        "dollar amount in your reply. Do NOT say you 'don't have access' or 'can't see it' when "
+                        "the amount is provided internally. Only say you don't have the amount if no dollar amount "
+                        "is present internally."
+                    )
+                })
+
                 log.info("KBB FACTS SYSTEM MSG: %r", base[-1]["content"])
 
         return base
