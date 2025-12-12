@@ -1400,6 +1400,13 @@ def process_kbb_ico_lead(
         has_reply = True
         last_cust_ts = inbound_ts or _dt.now(_tz.utc).isoformat()
         last_inbound_activity_id = inbound_msg_id or f"esmsg:{last_cust_ts}"
+    
+    elif trigger == "kbb_adf":
+        # ✅ ADF notifications are system-generated. Not a customer reply.
+        has_reply = False
+        last_cust_ts = None
+        last_inbound_activity_id = None
+    
     else:
         # Legacy CRM-based detection
         has_reply, last_cust_ts, last_inbound_activity_id = customer_has_replied(
@@ -1409,6 +1416,7 @@ def process_kbb_ico_lead(
             state,
             acts=acts_live,
         )
+
 
     # === Compute last agent send time (prefer ES state; avoid extra CRM calls in webhook mode) ===
     last_agent_dt = None
@@ -1427,19 +1435,30 @@ def process_kbb_ico_lead(
             last_agent_dt = last_agent_dt_live
 
     if is_webhook:
-        has_new_inbound = has_reply  # the webhook *is* the signal
+        has_new_inbound = True  # webhook itself is the signal
+    elif trigger == "kbb_adf":
+        has_new_inbound = False
     else:
         has_new_inbound = has_reply or _has_new_read_email_since(acts_live, last_agent_dt)
-
+    
     if not has_new_inbound:
         log.info(
             "KBB ICO: no new inbound detected (mode=%s, webhook=%s)",
             state.get("mode"),
             is_webhook,
         )
+    
+        # ✅ Hard stop: never send a convo reply without new inbound
+        if state.get("mode") == "convo":
+            log.info("KBB ICO: convo mode but no new inbound → suppress reply (anti-duplicate)")
+            opportunity["_kbb_state"] = state
+            return state, action_taken
+    
         # Let cadence logic later decide if a nudge should be sent.
         # We just don't drop into convo reply.
+    
     else:
+        # ✅ We have new inbound → switch to convo
         state["mode"] = "convo"
         state["nudge_count"] = 0
         if has_reply and last_cust_ts:
