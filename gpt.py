@@ -184,6 +184,7 @@ def _build_system_stack(persona: str, customer_first: str, rooftop_name: str | N
                         + " ".join(facts_lines)
                     )
                 })
+                log.info("KBB FACTS SYSTEM MSG: %r", base[-1]["content"])
 
         return base
 
@@ -469,6 +470,11 @@ def run_gpt(prompt: str,
         kbb_ctx=kbb_ctx,
         include_followup_rules=(persona != "kbb_ico")
     )
+                
+    if persona == "kbb_ico":
+        joined = "\n---\n".join([m.get("content","") for m in system_msgs if m.get("role") == "system"])
+        log.info("KBB SYSTEM STACK (trunc): %s", joined[:4000])
+
 
     # --- Tustin Kia new-location flavor (subscription c27d7f4f...) ---
     # That subscription maps to rooftop_name == "Tustin Kia" in rooftops.py.
