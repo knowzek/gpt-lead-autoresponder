@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
-<title>Instant Cash Offer – Follow-Up</title>
+<title>Instant Cash Offer - Follow-Up</title>
 <style>
   body {margin:0;padding:0;background-color:#ffffff;font-family:Arial,Helvetica,sans-serif;}
   table {border-collapse:collapse;}
@@ -61,16 +61,16 @@
     <p style="margin:0 0 10px;">Hi <strong>&lt;{CustFirstName}&gt;</strong>,</p>
 
     <p style="margin:0 0 10px;">
-      Just checking back in — I wanted to make sure you had everything you need for your Kelley Blue Book® Instant Cash Offer.  
-      If you’re still interested, we can wrap things up with a quick 15-minute visit here at <strong>&lt;{DealershipName}&gt;</strong>.
+      Just checking back in - I wanted to make sure you had everything you need for your Kelley Blue Book® Instant Cash Offer.  
+      If you're still interested, we can wrap things up with a quick 15-minute visit here at <strong>&lt;{DealershipName}&gt;</strong>.
     </p>
 
     <p style="margin:0 0 10px;">
-      Sometimes we’re able to pay <strong>more than the KBB offer</strong> once we see the vehicle in person — it just depends on its exact condition and features.
+      Sometimes we're able to pay <strong>more than the KBB offer</strong> once we see the vehicle in person - it just depends on its exact condition and features.
     </p>
 
     <p style="margin:0 0 10px;">
-      Pick a time that works best for you, or let me know what’s easiest and I’ll get it scheduled for you:
+      Pick a time that works best for you, or let me know what's easiest and I'll get it scheduled for you:
     </p>
 
     <p style="margin:0 0 20px;">
