@@ -256,7 +256,7 @@ To complete the Kelley Blue Book&#174; Instant Cash Offer for your <{TradeModel}
   We've received the details of the Kelley Blue Book Instant Cash Offer for your 
   <{TradeYear}> <{TradeModel}>.
   <br><br>
-  The offer is <strong>only valid for 7 days</strong> (not including Sunday). Our next step is to schedule a 15–20 minute in-person appointment to verify the offer at a time that works best for you so we can finalize everything and get you your payment.
+  The offer is <strong>only valid for 7 days</strong> (not including Sunday). Our next step is to schedule a 15-20 minute in-person appointment to verify the offer at a time that works best for you so we can finalize everything and get you your payment.
 </p>
 <p>Please let us know what time works best, or you can instantly reserve an appointment here:</p>
 <p><{LegacySalesApptSchLink}></p>
