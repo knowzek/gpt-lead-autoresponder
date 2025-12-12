@@ -219,6 +219,7 @@ def process_kbb_adf_notification(inbound: dict) -> None:
         subscription_id=dealer_key,
         SAFE_MODE=False,
         rooftop_sender=rooftop_sender,
+        trigger="kbb_adf",
     )
     
     log.info("KBB ADF → process_kbb_ico_lead finished: opp=%s action_taken=%s mode=%s",
