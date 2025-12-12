@@ -222,5 +222,27 @@ def process_kbb_adf_notification(inbound: dict) -> None:
         trigger="kbb_adf",
     )
     
+    # ✅ NEW: persist the state/messages written by process_kbb_ico_lead
+    try:
+        esClient.update(
+            index="opportunities",
+            id=opp_id,
+            body={
+                "doc": {
+                    "_kbb_state": opportunity.get("_kbb_state") or state or {},
+                    "messages": opportunity.get("messages") or [],
+                    "_kbb_offer_ctx": opportunity.get("_kbb_offer_ctx") or {},
+                }
+            },
+        )
+        log.info(
+            "KBB ADF: persisted _kbb_state to ES for opp %s (last_template_day_sent=%s mode=%s)",
+            opp_id,
+            (opportunity.get("_kbb_state") or {}).get("last_template_day_sent"),
+            (opportunity.get("_kbb_state") or {}).get("mode"),
+        )
+    except Exception as e:
+        log.warning("KBB ADF: failed to persist _kbb_state/messages for opp %s: %s", opp_id, e)
+    
     log.info("KBB ADF → process_kbb_ico_lead finished: opp=%s action_taken=%s mode=%s",
              opp_id, action_taken, (state or {}).get("mode"))
