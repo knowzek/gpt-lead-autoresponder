@@ -638,34 +638,48 @@ def _find_new_customer_scheduled_appt(acts_live, state, *, token=None, subscript
     """
     last_seen = (state or {}).get("last_appt_activity_id")
 
-    def _matches(a: dict) -> bool:
-        raw_name = a.get("activityName") or a.get("name")
-        nm = str(raw_name).strip().lower() if raw_name is not None else ""
-        raw_type = a.get("activityType") or a.get("type")
-        t = str(raw_type).strip().lower() if raw_type is not None else ""
-        cat = str(a.get("category") or "").strip().lower()
-
-        # Very specific match (what we expect for this tenant)
+    def _matches(a: dict, bucket: str | None = None) -> bool:
+        raw_name = a.get("activityName") or a.get("name") or ""
+        nm = str(raw_name).strip().lower()
+    
+        raw_type = a.get("activityType") or a.get("type") or ""
+        t = str(raw_type).strip().lower()
+    
+        # If this item came from scheduledActivities, it’s scheduled by definition.
+        in_scheduled_bucket = (bucket or "").lower() == "scheduledactivities"
+    
+        # Appointment-ish detection (covers "KBB ICO Appointment" and future variants)
+        is_apptish = ("appointment" in nm) or ("appointment" in t) or (str(a.get("activityType")) == "7")
+    
+        # Tenant-specific phrase (keep, but not required)
         is_customer_sched = "customer scheduled" in nm
-        # Safety net: any Scheduled Appointment
-        is_generic_appt = (("appointment" in nm) or ("appointment" in t)) and (cat == "scheduled")
+    
+        if in_scheduled_bucket and is_apptish:
+            return True
+    
+        # Older payloads might include category (optional fallback)
+        cat = str(a.get("category") or "").strip().lower()
+        is_generic_appt = is_apptish and (cat == "scheduled")
+    
         return is_customer_sched or is_generic_appt
-
-    def _scan(items):
+    
+    
+    def _scan(items, bucket: str | None = None):
         for a in items or []:
-            if not _matches(a):
+            if not _matches(a, bucket=bucket):
                 continue
             aid = str(a.get("activityId") or a.get("id") or "")
-            if not aid or (last_seen and aid == last_seen):
+            if not aid:
                 continue
             due = a.get("dueDate") or a.get("completedDate") or a.get("activityDate")
             return aid, due
         return None, None
 
+
     # 1) Scan the snapshot we were given
     if isinstance(acts_live, dict):
         for key in ("scheduledActivities", "items", "activities", "completedActivities"):
-            appt_id, due = _scan(acts_live.get(key) or [])
+            appt_id, due = _scan(acts_live.get(key) or [], bucket=key)
             if appt_id:
                 return appt_id, due
     elif isinstance(acts_live, list):
@@ -705,7 +719,8 @@ def _find_new_customer_scheduled_appt(acts_live, state, *, token=None, subscript
 
             if isinstance(fresh, dict):
                 for key in ("scheduledActivities", "items", "activities", "completedActivities"):
-                    appt_id, due = _scan(fresh.get(key) or [])
+                    appt_id, due = _scan(fresh.get(key) or [], bucket=key)
+
                     if appt_id:
                         return appt_id, due
             elif isinstance(fresh, list):
