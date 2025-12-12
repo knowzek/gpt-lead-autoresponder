@@ -150,7 +150,14 @@ def process_kbb_adf_notification(inbound: dict) -> None:
 
     # Try to capture the KBB amount from the ADF email body and persist it on the opp
     # so later KBB flows can answer "what was my estimate?" deterministically.
-    amt = _extract_kbb_amount(body_text or body_html or "")
+    combined_body = "\n".join([
+        body_text or "",
+        body_html or "",
+    ])
+    
+    amt = _extract_kbb_amount(combined_body)
+    log.info("KBB ADF: _extract_kbb_amount len=%d -> %r", len(combined_body), amt)
+    
     if amt:
         ctx = dict(opportunity.get("_kbb_offer_ctx") or {})
         # Don't overwrite if we already have an amount
@@ -166,6 +173,7 @@ def process_kbb_adf_notification(inbound: dict) -> None:
                 log.info("KBB ADF: stored offer amount %s for opp %s", amt, opp_id)
             except Exception as e:
                 log.warning("KBB ADF: failed to store _kbb_offer_ctx for opp %s: %s", opp_id, e)
+
 
     # Gate: only run Outlook Patti for test opps on this branch
     if not is_test_opp(opportunity):
