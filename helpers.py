@@ -94,27 +94,28 @@ def build_kbb_ctx(opportunity: dict) -> dict:
 
 
 def rewrite_sched_cta_for_booked(body_html: str) -> str:
-    """
-    If the email contains a schedule CTA, replace the phrasing so it's appropriate
-    for customers who already have an appointment.
-    Keeps <{LegacySalesApptSchLink}> intact.
-    """
     if not body_html:
         return ""
 
-    # Replace any common scheduling intros with a reschedule line
     replacements = [
-        (r"(?i)(to\s+schedule\s+(your\s+)?(appointment|visit)[^<]*:)", 
-         "If you need to reschedule your appointment, you can do so here:"),
-        (r"(?i)(let\s+me\s+know\s+a\s+time\s+that\s+works\s+for\s+you[^<]*:)", 
-         "If you need to reschedule your appointment, you can do so here:"),
-        (r"(?i)(please\s+let\s+us\s+know\s+a\s+convenient\s+time\s+for\s+you[^<]*:)", 
-         "If you need to reschedule your appointment, you can do so here:")
+        # Anything that invites scheduling before a link
+        (
+            r"(?is)(let\s+me\s+know.*?(schedule|book|reserve).*?:)",
+            "If you need to reschedule your appointment, you can do so here:"
+        ),
+        (
+            r"(?is)(schedule\s+(your\s+)?(appointment|visit).*?:)",
+            "If you need to reschedule your appointment, you can do so here:"
+        ),
+        (
+            r"(?is)(please\s+let\s+us\s+know.*?:)",
+            "If you need to reschedule your appointment, you can do so here:"
+        ),
     ]
 
     new_html = body_html
     for pattern, repl in replacements:
-        new_html = re.sub(pattern, repl, new_html, flags=re.I)
+        new_html = re.sub(pattern, repl, new_html)
 
     return new_html
 
