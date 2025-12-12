@@ -36,6 +36,12 @@ TEST_EMAIL_OPP_IDS = {
 }
 EMAIL_MODE = os.getenv("EMAIL_MODE", "crm")  # "crm" or "outlook"
 
+def _crm_appt_set(opportunity: dict) -> bool:
+    status = (opportunity.get("salesStatus") or opportunity.get("sales_status") or "")
+    status = status.strip().lower()
+    return status in {"appointment set", "appt set", "appointment scheduled"}
+
+
 def wants_kbb_value(text: str) -> bool:
     """
     Heuristic: does the customer seem to be asking for their KBB estimate / offer amount?
@@ -1985,7 +1991,12 @@ def process_kbb_ico_lead(
             body_html = normalize_patti_body(body_html)
             body_html = _patch_address_placeholders(body_html, rooftop_name)
             
-            is_scheduled = scheduled_active_now or state.get("mode") == "scheduled" or _has_upcoming_appt(acts_live, state)
+            is_scheduled = (
+                _crm_appt_set(opportunity)
+                or scheduled_active_now
+                or state.get("mode") == "scheduled"
+                or _has_upcoming_appt(acts_live, state)
+            )
 
             if is_scheduled:
                 from helpers import rewrite_sched_cta_for_booked
