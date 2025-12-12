@@ -266,7 +266,7 @@ Thank you in advance for your reply,
     <td class="stack-column" width="280" valign="top" align="left" style="padding-right:16px;">
       <a href="https://www.tustinmazda.com" target="_blank" style="text-decoration:none;">
         <img src="https://www.pattersonautos.com/blogs/7684/wp-content/uploads/2025/11/image.png"
-             alt="Patterson Autos • Your KBB Buying Center"
+             alt="Patterson Autos - Your KBB Buying Center"
              width="280" border="0" style="display:block; height:auto;">
       </a>
     </td>
