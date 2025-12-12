@@ -1949,6 +1949,10 @@ def process_kbb_ico_lead(
                 kbb_ctx["vehicle"] = facts["vehicle"]
             if facts.get("offer_url"):
                 kbb_ctx["offer_url"] = facts["offer_url"]
+
+            log.info("KBB_CTX debug: offer_amount_usd=%r offer_url=%r vehicle=%r",
+             kbb_ctx.get("offer_amount_usd"), kbb_ctx.get("offer_url"), kbb_ctx.get("vehicle"))
+
             
             reply = run_gpt(
                 prompt,
