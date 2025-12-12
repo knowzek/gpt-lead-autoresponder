@@ -1937,6 +1937,18 @@ def process_kbb_ico_lead(
 
             from helpers import build_kbb_ctx
             kbb_ctx = build_kbb_ctx(opportunity)
+
+            from helpers import get_kbb_offer_context_simple
+            
+            facts = get_kbb_offer_context_simple(opportunity) or {}
+            
+            # Make sure GPT can see the amount + vehicle + url
+            if facts.get("amount_usd"):
+                kbb_ctx["offer_amount_usd"] = facts["amount_usd"]      # keep as "$27,000" string
+            if facts.get("vehicle"):
+                kbb_ctx["vehicle"] = facts["vehicle"]
+            if facts.get("offer_url"):
+                kbb_ctx["offer_url"] = facts["offer_url"]
             
             reply = run_gpt(
                 prompt,
