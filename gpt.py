@@ -455,6 +455,12 @@ def run_gpt(prompt: str,
         messages = system_msgs + [
             {"role": "user", "content": prompt}
         ]
+
+        import json, re
+        dump = json.dumps(messages, ensure_ascii=False)
+        log.info("RUN_GPT debug: kbb_ctx_in_messages=%s", "$27,000" in dump)
+        log.info("RUN_GPT debug: messages_preview=%s", dump[:1500])
+
         
         model_used, resp = chat_complete_with_fallback(messages, want_json=True, temperature=0.6)
         text = _safe_extract_text(resp)
@@ -485,7 +491,12 @@ def run_gpt(prompt: str,
     messages = system_msgs + [
         {"role": "user", "content": prompt}
     ]
-    
+
+    import json, re
+    dump = json.dumps(messages, ensure_ascii=False)
+    log.info("RUN_GPT debug: kbb_ctx_in_messages=%s", "$27,000" in dump)
+    log.info("RUN_GPT debug: messages_preview=%s", dump[:1500])
+
     model_used, resp = chat_complete_with_fallback(messages, want_json=True, temperature=0.6)
     text = _safe_extract_text(resp)
     if not text:
