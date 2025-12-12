@@ -2025,14 +2025,10 @@ def process_kbb_ico_lead(
                 return state, action_taken
 
             
-            # ===== NEW: send the normal GPT convo reply =====
+            # ===== send the normal GPT convo reply =====
             cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
             prompt = compose_kbb_convo_body(rooftop_name, cust_first, inquiry_text or "")
-            prompt += f"""
-            
-            messages history (python list of dicts):
-            {opportunity.get('messages', [])}
-            """
+
 
             from helpers import build_kbb_ctx
             kbb_ctx = build_kbb_ctx(opportunity)
@@ -2041,7 +2037,7 @@ def process_kbb_ico_lead(
                 prompt,
                 customer_name=cust_first,
                 rooftop_name=rooftop_name,
-                prevMessages=True,
+                prevMessages=False,
                 persona="kbb_ico",
                 kbb_ctx=kbb_ctx
             )
@@ -2129,9 +2125,7 @@ def process_kbb_ico_lead(
         # 2) Prompt with convo + appointment context (so no “we haven’t set a time yet”)
         prompt = compose_kbb_convo_body(rooftop_name, cust_first, inquiry_text or "")
         prompt += f"""
-    
-    messages history (python list of dicts):
-    {msgs_hist}
+        
     
     Context for Patti (not shown to customer):
     - appointment_scheduled: yes
@@ -2147,7 +2141,7 @@ def process_kbb_ico_lead(
             prompt,
             customer_name=cust_first,
             rooftop_name=rooftop_name,
-            prevMessages=True,
+            prevMessages=False
             persona="kbb_ico",
             kbb_ctx=kbb_ctx,
         )
@@ -2241,8 +2235,7 @@ def process_kbb_ico_lead(
                     generate next Patti follow-up message for a Kelley Blue Book® Instant Cash Offer lead.
                     The customer previously replied once but has since gone silent.
                     Keep it short, warm, and helpful—remind about the ICO and next steps.
-                    messages history (python list of dicts):
-                    {opportunity.get('messages', [])}
+
                     """
 
                     from helpers import build_kbb_ctx
