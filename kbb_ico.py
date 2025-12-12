@@ -679,6 +679,21 @@ def _find_new_customer_scheduled_appt(acts_live, state, *, token=None, subscript
                     type(fresh).__name__,
                     list(fresh.keys()) if isinstance(fresh, dict) else None,
                 )
+                # 🔍 DEBUG: inspect scheduled vs completed activities from Fortellis
+                sa = (fresh or {}).get("scheduledActivities") if isinstance(fresh, dict) else None
+                ca = (fresh or {}).get("completedActivities") if isinstance(fresh, dict) else None
+
+                
+                log.info(
+                    "KBB acts_raw scheduledActivities=%s completedActivities=%s",
+                    len(sa or []) if sa is not None else "n/a",
+                    len(ca or []) if ca is not None else "n/a"
+                )
+                
+                if sa:
+                    log.info("KBB acts_raw first scheduledActivity keys=%s", list((sa[0] or {}).keys()))
+                    log.info("KBB acts_raw first scheduledActivity=%r", sa[0])
+
             except Exception:
                 pass
 
