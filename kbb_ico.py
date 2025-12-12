@@ -860,10 +860,12 @@ def compose_kbb_convo_body(
         - ONLY mention a specific dollar amount if you can actually see a real dollar amount (like "$12,345") in your context or KBB data.
         - If you do NOT see a real amount anywhere, DO NOT make one up. Instead say that you don’t see the exact figure yet and that the team will confirm the value when they inspect the vehicle at the visit.
         - Never invent or guess a dollar amount.
-    - If relevant, mention their Kelley Blue Book® Instant Cash Offer naturally in your reply.
+    - Mention the Kelley Blue Book® Instant Cash Offer only when it helps answer the question (don’t force it).
     - Avoid re-explaining general information you already covered earlier; if they repeat something, confirm briefly and move on.
     - Do NOT just send a generic "thank you for your interest" note. The reply should feel like you're responding to THIS message, not restarting the conversation.
     - You may remind them to bring title, ID, and keys if appropriate, and if you haven't already done it in an earlier message.
+    - Respond ONLY to the customer's latest message shown below. Do not answer earlier questions unless the customer repeats them in this message.
+    - Do not quote or restate the customer's message verbatim; just answer it.
     - No extra signatures; we will append yours.
     - Keep to 2–4 short paragraphs max. Do not stop after only a greeting.
 
