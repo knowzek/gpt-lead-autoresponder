@@ -1997,6 +1997,15 @@ def process_kbb_ico_lead(
                 or state.get("mode") == "scheduled"
                 or _has_upcoming_appt(acts_live, state)
             )
+            log.info(
+                "KBB is_scheduled=%s (crm=%s scheduled_active_now=%s state_mode=%s upcoming_appt=%s)",
+                is_scheduled,
+                _crm_appt_set(opportunity),
+                scheduled_active_now,
+                state.get("mode"),
+                _has_upcoming_appt(acts_live, state),
+            )
+
 
             if is_scheduled:
                 from helpers import rewrite_sched_cta_for_booked
