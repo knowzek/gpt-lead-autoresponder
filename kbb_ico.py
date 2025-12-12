@@ -1954,10 +1954,19 @@ def process_kbb_ico_lead(
             body_html = normalize_patti_body(body_html)
             body_html = _patch_address_placeholders(body_html, rooftop_name)
             
-            is_scheduled = state.get("mode") == "scheduled" or _has_upcoming_appt(acts_live, state)
+            is_scheduled = scheduled_active_now or state.get("mode") == "scheduled" or _has_upcoming_appt(acts_live, state)
+
             if is_scheduled:
                 from helpers import rewrite_sched_cta_for_booked
                 body_html = rewrite_sched_cta_for_booked(body_html)
+
+                # FINAL SAFETY NET — remove any leftover schedule/reserve wording lines
+                body_html = _ANY_SCHED_LINE_RE.sub("", body_html)
+                
+                # Remove raw token if it survived
+                body_html = body_html.replace("<{LegacySalesApptSchLink}>", "").replace("<{LegacySalesApptSchLink }>", "")
+
+                
             else:
                 body_html = append_soft_schedule_sentence(body_html, rooftop_name)
             
