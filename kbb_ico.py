@@ -764,35 +764,68 @@ def build_patti_footer(rooftop_name: str) -> str:
     patti_email  = rt.get("patti_email")   or "patti@pattersonautos.com"
     dealer_site  = (rt.get("website") or "https://www.pattersonautos.com").rstrip("/")
     dealer_addr  = rt.get("address")       or ""
+    logo_alt     = f"Patti | {rooftop_name}"
 
-    # ✅ Use fixed widths via attributes (best for Outlook/Gmail + CRM sanitizers)
-    # Outer table keeps it from wrapping; inner row is two fixed cells.
+    clean_site = dealer_site.replace("https://", "").replace("http://", "")
+
     return f"""
-    <table width="650" border="0" cellspacing="0" cellpadding="0" style="margin-top:18px;">
+    <table width="650" border="0" cellspacing="0" cellpadding="0" style="margin-top:18px;border-collapse:collapse;">
       <tr>
-        <!-- LEFT: image (fixed width) -->
-        <td width="300" valign="top" align="left" style="padding-right:16px;">
-          <img src="{img_url}" alt="Patterson Autos" width="300" border="0" style="display:block; height:auto;">
-        </td>
-    
-        <!-- RIGHT: contact block -->
-        <td width="350" valign="top" align="left" style="font-family:Arial, Helvetica, sans-serif; color:#222;">
-          <div style="font-size:13px; line-height:20px; font-weight:bold;">Patti</div>
-          <div style="font-size:12px; line-height:18px; color:#666; margin:2px 0 8px;">Virtual Assistant at {rooftop_name}</div>
-          
-          <div style="font-size:13px; line-height:20px;">
-            <div><strong>Email:</strong> <a href="mailto:{patti_email}" style="color:#0066cc; text-decoration:none;">{patti_email}</a></div>
-            <div><strong>Website:</strong> <a href="{dealer_site}" style="color:#0066cc; text-decoration:none;">{dealer_site.replace('https://','').replace('http://','')}</a></div>
-          </div>
-    
-          <div style="font-size:13px; line-height:20px; margin-top:10px; color:#333;">
-            <div>{rooftop_name}</div>
-            <div>{dealer_addr}</div>
-          </div>
+        <td style="padding:12px 16px;border:1px solid #e2e2e2;border-radius:4px;background-color:#fafafa;">
+          <table width="100%" border="0" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+            <tr>
+              <!-- LEFT: image + text block -->
+              <td width="260" valign="top" align="left" style="padding-right:16px;">
+                <table border="0" cellspacing="0" cellpadding="0" width="100%" style="border-collapse:collapse;">
+                  <tr>
+                    <td align="left" valign="top" style="padding-bottom:8px;">
+                      <img src="{img_url}"
+                           alt="{logo_alt}"
+                           width="240"
+                           border="0"
+                           style="display:block;height:auto;max-width:240px;">
+                    </td>
+                  </tr>
+                  <tr>
+                    <!-- Fallback text still shows even if image is blocked -->
+                    <td align="left" valign="top" style="font-family:Arial, Helvetica, sans-serif;font-size:13px;line-height:18px;color:#333333;">
+                      <strong>Patti</strong><br>
+                      Virtual Assistant | {rooftop_name}
+                    </td>
+                  </tr>
+                </table>
+              </td>
+
+              <!-- RIGHT: contact block -->
+              <td width="360" valign="top" align="left" style="font-family:Arial, Helvetica, sans-serif; color:#222222;">
+                <div style="font-size:13px; line-height:20px; font-weight:bold; margin-bottom:2px;">
+                  Contact details
+                </div>
+                <div style="font-size:12px; line-height:18px; color:#666666; margin-bottom:8px;">
+                  You can reply directly to this email or use the details below.
+                </div>
+
+                <div style="font-size:13px; line-height:20px; margin-bottom:8px;">
+                  <div><strong>Email:</strong>
+                    <a href="mailto:{patti_email}" style="color:#0066cc; text-decoration:none;">{patti_email}</a>
+                  </div>
+                  <div><strong>Website:</strong>
+                    <a href="{dealer_site}" style="color:#0066cc; text-decoration:none;">{clean_site}</a>
+                  </div>
+                </div>
+
+                <div style="font-size:13px; line-height:20px; color:#333333;">
+                  <div>{rooftop_name}</div>
+                  <div>{dealer_addr}</div>
+                </div>
+              </td>
+            </tr>
+          </table>
         </td>
       </tr>
     </table>
     """.strip()
+
 
 
 def normalize_patti_body(body_html: str) -> str:
