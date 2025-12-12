@@ -157,8 +157,34 @@ def _build_system_stack(persona: str, customer_first: str, rooftop_name: str | N
         ]
         # KBB cadence follow-ups are handled by your template scheduler, so we usually
         # do NOT include the generic follow-up generator here. Keep it optional:
+        
         if include_followup_rules:
             base.append({"role": "system", "content": _getFollowUPRules()})
+            
+        # ---- Inject concrete KBB facts so the model can actually see them ----
+        if kbb_ctx:
+            amt = kbb_ctx.get("offer_amount_usd") or kbb_ctx.get("amount_usd")
+            veh = kbb_ctx.get("vehicle")
+            url = kbb_ctx.get("offer_url")
+
+            if amt:
+                facts_lines = [
+                    f"Kelley Blue Book® Instant Cash Offer amount: {amt}."
+                ]
+                if veh:
+                    facts_lines.append(f"Vehicle: {veh}.")
+                if url:
+                    facts_lines.append(f"Offer details URL: {url}.")
+
+                base.append({
+                    "role": "system",
+                    "content": (
+                        "Internal KBB facts (for answering customer questions accurately; "
+                        "do not volunteer unless asked):\n"
+                        + " ".join(facts_lines)
+                    )
+                })
+
         return base
 
     # default "sales" persona (your current stack)
