@@ -2141,7 +2141,7 @@ def process_kbb_ico_lead(
             prompt,
             customer_name=cust_first,
             rooftop_name=rooftop_name,
-            prevMessages=False
+            prevMessages=False,
             persona="kbb_ico",
             kbb_ctx=kbb_ctx,
         )
