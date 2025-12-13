@@ -300,23 +300,31 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
         token=token, subscription_id=subscription_id,
         opp_id=opp_id, customer_id=customer_id
     )
-
+                                 
+    state = state or {}
+    did_send = False
     # Build a quick index of current appointment activity ids returned by CRM
     def _appt_ids_from(acts):
+        items = []
+        if isinstance(acts, dict):
+            for key in ("scheduledActivities", "completedActivities", "items", "activities"):
+                items.extend(acts.get(key) or [])
+        else:
+            items = acts or []
+    
         out = set()
-        for a in (acts or []):
+        for a in items:
             raw_type = a.get("activityType") or a.get("type")
             raw_name = a.get("activityName") or a.get("name")
-    
             t = str(raw_type).strip().lower() if raw_type is not None else ""
             n = str(raw_name).strip().lower() if raw_name is not None else ""
     
-            # Match either the type *name* or the activity label text
-            if ("appointment" in t) or ("appointment" in n):
+            if ("appointment" in t) or ("appointment" in n) or (raw_type == 7) or (t == "7"):
                 aid = a.get("activityId") or a.get("id")
                 if aid:
                     out.add(str(aid))
         return out
+
 
     
     current_appt_ids = _appt_ids_from(acts_live)
@@ -325,8 +333,8 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
     prev_due = (state or {}).get("appt_due_utc")
     
     # If ES points to an appointment that no longer exists in CRM, reconcile silently.
-    if prev_id and prev_id not in current_appt_ids:
-        # If the due time matches the newly detected one, just update the id and skip send.
+    # If ES points to an appointment id that no longer exists in CRM, reconcile silently.
+    if prev_id and prev_id not in current_appt_ids and appt_id and appt_due_iso:
         new_due_norm = _norm_iso_utc(appt_due_iso)
         if prev_due and new_due_norm and prev_due == new_due_norm:
             log.info("KBB ICO: reconciling stale ES appt id (%s → %s) for same due; no resend.",
@@ -343,45 +351,59 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
             return (True, False)
 
 
+
     # 1) Nothing booked → no short-circuit and DO NOT touch state
     if not (appt_id and appt_due_iso):
         return (False, False)
-
-    st = state or {}
+    
+    # Normalize due time once
     new_due_norm = _norm_iso_utc(appt_due_iso)
     
-    # Log for visibility
+    # Capture previous markers BEFORE mutating state
+    prev_id   = state.get("last_appt_activity_id")
+    prev_due  = state.get("appt_due_utc")
+    last_conf = state.get("last_confirmed_due_utc")
+    
+    # 🔒 HARD RULE: appointment exists → scheduled mode immediately
+    state["last_appt_activity_id"] = appt_id
+    state["appt_due_utc"] = new_due_norm
+    state["mode"] = "scheduled"
+    
     log.info(
         "Idempotency check → prev_id=%r prev_due=%r last_confirmed_due=%r :: new_id=%r new_due=%r",
-        st.get("last_appt_activity_id"),
-        st.get("appt_due_utc"),
-        st.get("last_confirmed_due_utc"),
-        appt_id,
-        new_due_norm,
+        prev_id, prev_due, last_conf, appt_id, new_due_norm
     )
     
-    prev_id   = st.get("last_appt_activity_id")
-    prev_due  = st.get("appt_due_utc")
-    last_conf = st.get("last_confirmed_due_utc")
+    same_id   = prev_id == appt_id
+    same_due  = prev_due == new_due_norm
+    same_conf = last_conf == new_due_norm
     
-    same_id   = (prev_id and prev_id == appt_id)
-    same_due  = (prev_due and new_due_norm and prev_due == new_due_norm)
-    same_conf = (last_conf and new_due_norm and last_conf == new_due_norm)
-    
-    # small time jiggle tolerance
     def _parse_utc(x):
         try:
-            return _dt.fromisoformat(str(x).replace("Z","+00:00")).astimezone(_tz.utc)
+            return _dt.fromisoformat(str(x).replace("Z", "+00:00")).astimezone(_tz.utc)
         except Exception:
             return None
+    
     within_2m = False
     pdt, ndt = _parse_utc(prev_due), _parse_utc(new_due_norm)
     if pdt and ndt:
         within_2m = abs((ndt - pdt).total_seconds()) <= 120
     
     already_done = same_id or same_due or same_conf or within_2m
+    
     if already_done:
-        log.info("KBB ICO: already acknowledged (id or due matched; or last_confirmed_due matched) → skip resend")
+        log.info("KBB ICO: already acknowledged → skip resend")
+        try:
+            from esQuerys import esClient
+            from es_resilient import es_update_with_retry
+            es_update_with_retry(
+                esClient,
+                index="opportunities",
+                id=opp_id,
+                doc={"_kbb_state": state}
+            )
+        except Exception as e:
+            log.warning("ES persist failed (already_done): %s", e)
         return (True, False)
 
 
@@ -441,12 +463,6 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
         log.warning("No recipient; skip send for opp=%s", opp_id)
         return (True, False)  # handled, but no send
 
-    # choose id safely (handles reschedule reconcile paths)
-    try:
-        chosen_appt_id = new_id if (("new_id" in locals()) and new_id) else appt_id
-    except NameError:
-        chosen_appt_id = appt_id
-
     # --- PERSIST FIRST so re-runs short-circuit even if send fails ---
     now_iso = _dt.now(_tz.utc).isoformat()
     state["mode"]                  = "scheduled"
@@ -475,7 +491,8 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
             opp_id, e
         )
         # Do NOT send the email if we couldn't persist idempotency markers
-        return state, False
+        return (True, False)
+
 
 
     # Flip CRM subStatus → Appointment Set (appointment exists regardless of email)
