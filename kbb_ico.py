@@ -302,6 +302,7 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
     )
                                  
     state = state or {}
+    action_taken = False
     did_send = False
     # Build a quick index of current appointment activity ids returned by CRM
     def _appt_ids_from(acts):
@@ -510,7 +511,8 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
         if not _can_email(state):
             log.info("Email suppressed by state for opp=%s", opp_id)
             opportunity["_kbb_state"] = state
-            return state, action_taken  # <— we DID act (substatus), just didn’t email
+            return (True, False)
+
 
         send_opportunity_email_activity(
             token, subscription_id, opp_id,
