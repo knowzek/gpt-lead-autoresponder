@@ -2,13 +2,13 @@
 
 TEST_OPP_IDS = {
     "050a81e9-78d4-f011-814f-00505690ec8c",  # your current Mazda KBB test opp
-    # add more opp IDs as needed
+    "e7f79ae6-0cb9-f011-814f-00505690ec8c",
 }
 
 TEST_CUSTOMER_EMAILS = {
     "kristin@blackoctopusai.com",
     "knowzek@gmail.com",
-    # add any other test emails here
+    "mickeyt@the-dms.com",
 }
 
 
