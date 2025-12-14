@@ -2149,8 +2149,14 @@ def process_kbb_ico_lead(
     - reschedule_link_token: <{{LegacySalesApptSchLink}}>
     Instructions:
     - If appointment_time_local is known, explicitly confirm it.
-    - Offer the reschedule line ONLY if timing/change is relevant.
+    - Do NOT ask the customer to choose a day/time or propose times.
+    - Do NOT include any scheduling CTA language such as:
+      “let me know a time/day and time that works”, “schedule directly”, “reserve your time”, or the <{LegacySalesApptSchLink}> token.
+    - Only mention rescheduling if the customer asks to change/cancel, or if they indicate a conflict.
+      If rescheduling is needed, use this exact one-liner (and nothing else about scheduling):
+      "If you need to reschedule, just reply here and we’ll help."
     - Do NOT include cadence/nudge language while appointment_scheduled is yes.
+
     """
     
         reply = run_gpt(
@@ -2184,13 +2190,15 @@ def process_kbb_ico_lead(
             log.warning("No recipient; skip send for opp=%s", opp_id)
             opportunity["_kbb_state"] = state
             return state, action_taken
-    
+            
+        thread_subject = reply_subject if (reply_subject or "").strip() else subject
+        
         send_opportunity_email_activity(
             token, subscription_id, opp_id,
             sender=rooftop_sender,
             recipients=recipients,
             carbon_copies=[],
-            subject=reply_subject,                 # keep inbound thread subject
+            subject=thread_subject,                # keep inbound thread subject
             body_html=body_html,
             rooftop_name=rooftop_name,
             reply_to_activity_id=selected_inbound_id  # <— keeps CRM thread intact
