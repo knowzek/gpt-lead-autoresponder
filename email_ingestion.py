@@ -331,8 +331,4 @@ def process_inbound_email(inbound: dict) -> None:
             log.warning("ES persist failed after GENERAL processing opp %s: %s", opp_id, e)
     
         log.info("GENERAL email ingestion handled for opp %s", opp_id)
-
-        opp_id,
-        bool(action_taken),
-        (state or {}).get("last_template_day_sent"),
-    )
+    
