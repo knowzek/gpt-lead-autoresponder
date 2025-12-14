@@ -33,6 +33,7 @@ from html import unescape as _unesc
 # Only flip to Outlook for test opps / email mode on this branch
 TEST_EMAIL_OPP_IDS = {
     "050a81e9-78d4-f011-814f-00505690ec8c",  # your current test
+    "e7f79ae6-0cb9-f011-814f-00505690ec8c",
 }
 EMAIL_MODE = os.getenv("EMAIL_MODE", "crm")  # "crm" or "outlook"
 
