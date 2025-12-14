@@ -933,20 +933,19 @@ def compose_kbb_convo_body(
 
 _CTA_ANCHOR_RE = _re.compile(r'(?is)<a[^>]*>\s*Schedule\s+Your\s+Visit\s*</a>')
 _RAW_TOKEN_RE  = _re.compile(r'(?i)<\{LegacySalesApptSchLink\}>')
+
 _ANY_SCHED_LINE_RE = _re.compile(
-    r"(?is)<p[^>]*>.*?(?:"
-    r"let\s+me\s+know"
-    r"|feel\s+free\s+to\s+let\s+me\s+know"
-    r"|please\s+let\s+us\s+know"
-    r"|schedule\s+directly"
-    r"|reserve\s+your\s+time"
-    r"|day\s+and\s+time\s+that\s+works"
-    r"|date\s+and\s+time\s+that\s+works"
-    r"|schedule\s+(?:an\s+)?appointment"
-    r"|schedule\s+your\s+visit"
-    r"|<\{LegacySalesApptSchLink\s*\}>"
-    r").*?</p>"
+    r"(?is)"
+    r"(?:"
+    r"(?:feel\s+free\s+to\s+)?let\s+me\s+know\s+(?:a\s+)?(?:day\s+and\s+)?time\s+that\s+works[^\.!\?]*[\.!\?]?"
+    r"|please\s+let\s+us\s+know\s+a\s+convenient\s+time[^\.!\?]*[\.!\?]?"
+    r"|schedule\s+directly[^\.!\?]*[\.!\?]?"
+    r"|reserve\s+your\s+time[^\.!\?]*[\.!\?]?"
+    r"|schedule\s+(?:an\s+)?appointment[^\.!\?]*[\.!\?]?"
+    r"|schedule\s+your\s+visit[^\.!\?]*[\.!\?]?"
+    r")"
 )
+
 
 
 def enforce_standard_schedule_sentence(body_html: str) -> str:
