@@ -1413,14 +1413,14 @@ def process_kbb_ico_lead(
     if state.get("mode") == "scheduled" or _has_upcoming_appt(acts_live, state):
         if is_webhook:
             # Webhook invocation = we know this is a fresh inbound
-            log.info("KBB ICO: inbound during scheduled/appt (webhook) → switch to convo mode")
-            state["mode"] = "convo"
+            log.info("KBB ICO: inbound during scheduled/appt (webhook) → keep scheduled; reply in-thread")
+            state["mode"] = "scheduled"          # ✅ do NOT switch to convo
             state["nudge_count"] = 0
             if inbound_ts:
                 state["last_customer_msg_at"] = inbound_ts
             if inbound_msg_id:
                 state["last_inbound_activity_id"] = inbound_msg_id
-            # fall through to convo handling
+                        # fall through to convo handling
         else:
             # Legacy CRM-based detection for stores not yet on Outlook
             has_reply, last_cust_ts, last_inbound_activity_id = customer_has_replied(
@@ -1515,16 +1515,21 @@ def process_kbb_ico_lead(
         # We just don't drop into convo reply.
     
     else:
-        # ✅ We have new inbound → switch to convo
-        state["mode"] = "convo"
+        # ✅ We have new inbound → reply, but don't clobber scheduled state
+        if scheduled_active_now:
+            state["mode"] = "scheduled"
+        else:
+            state["mode"] = "convo"
+    
         state["nudge_count"] = 0
         if has_reply and last_cust_ts:
             state["last_customer_msg_at"] = last_cust_ts
         if last_inbound_activity_id:
             state["last_inbound_activity_id"] = last_inbound_activity_id
 
-    # If we ended up in convo mode, prepare reply subject/body context
-    if state.get("mode") == "convo":
+
+    # If we have new inbound, prepare reply subject/body context
+    if has_new_inbound:
         # Only re-fetch activities if we are in CRM mode and actually sent something new
         if (not is_webhook) and action_taken:
             acts_now = _fetch_activities_live(opp_id, customer_id, token, subscription_id)
