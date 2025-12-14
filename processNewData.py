@@ -184,7 +184,16 @@ def _is_assigned_to_kristin(doc: dict) -> bool:
 
 
 
-def checkActivities(opportunity, currDate, rooftop_name):
+def checkActivities(opportunity, currDate, rooftop_name, activities_override=None):
+    if activities_override is not None:
+        activities = activities_override
+    elif OFFLINE_MODE:
+        activities = opportunity.get('completedActivitiesTesting', [])
+    else:
+        activities = opportunity.get('completedActivities', [])
+
+    activities = sortActivities(activities)
+
     if OFFLINE_MODE:
         activities = opportunity.get('completedActivitiesTesting', [])
     else:
@@ -467,17 +476,20 @@ def checkActivities(opportunity, currDate, rooftop_name):
             
                 if customer_email:
                     try:
-                        send_opportunity_email_activity(
-                            token,
-                            subscription_id,
-                            opportunity["opportunityId"],
-                            sender=rooftop_sender,
-                            recipients=[customer_email],
-                            carbon_copies=[],
+                        from patti_mailer import send_patti_email
+
+                        send_patti_email(
+                            token=token,
+                            subscription_id=subscription_id,
+                            opp_id=opportunity["opportunityId"],
+                            rooftop_name=rooftop_name,
+                            rooftop_sender=rooftop_sender,
+                            to_addr=customer_email,
                             subject=subject,
                             body_html=body_html,
-                            rooftop_name=rooftop_name,
+                            cc_addrs=[],
                         )
+
                     except Exception as e:
                         log.warning(
                             "Failed to send Patti follow-up email for opp %s: %s",
@@ -1435,17 +1447,20 @@ def processHit(hit):
         else:
             if customer_email:
                 try:
-                    send_opportunity_email_activity(
-                        token,
-                        subscription_id,        # dealer_key
-                        opportunityId,
-                        sender=rooftop_sender,
-                        recipients=[customer_email],
-                        carbon_copies=[],
+                    from patti_mailer import send_patti_email
+                    
+                    send_patti_email(
+                        token=token,
+                        subscription_id=subscription_id,
+                        opp_id=opportunity["opportunityId"],
+                        rooftop_name=rooftop_name,
+                        rooftop_sender=rooftop_sender,
+                        to_addr=customer_email,
                         subject=subject,
                         body_html=body_html,
-                        rooftop_name=rooftop_name,
+                        cc_addrs=[],
                     )
+
                     sent_ok = True   # <-- ONLY HERE DO WE MARK SUCCESS
                 except Exception as e:
                     log.warning(
@@ -1578,17 +1593,20 @@ def processHit(hit):
 
                 if customer_email:
                     try:
-                        send_opportunity_email_activity(
-                            token,
-                            subscription_id,
-                            opportunity["opportunityId"],
-                            sender=rooftop_sender,
-                            recipients=[customer_email],
-                            carbon_copies=[],
+                        from patti_mailer import send_patti_email
+                        
+                        send_patti_email(
+                            token=token,
+                            subscription_id=subscription_id,
+                            opp_id=opportunity["opportunityId"],
+                            rooftop_name=rooftop_name,
+                            rooftop_sender=rooftop_sender,
+                            to_addr=customer_email,
                             subject=subject,
                             body_html=body_html,
-                            rooftop_name=rooftop_name,
+                            cc_addrs=[],
                         )
+
                     except Exception as e:
                         log.warning(
                             "Failed to send Patti booking-link appt confirmation for opp %s: %s",
@@ -1722,25 +1740,70 @@ def processHit(hit):
                 body_html
             )
 
-            opportunity['messages'].append(
-                {
-                    "msgFrom": "patti",
-                    "subject": subject,
-                    "body": body_html,
-                    "date": currDate,
-                    "action": response.get("action"),
-                    "notes": response.get("notes")
-                }
-            )
-
-            # TODO: fix in which line
-            opportunity['checkedDict']['last_msg_by'] = "patti"
-
-            nextDate = currDate + _td(days=1)
-            opportunity['followUP_date'] = nextDate.isoformat()
-            opportunity['followUP_count'] += 1
+            # ✅ SEND the follow-up (currently missing)
+            sent_ok = False
+            customer_email = None
+            
             if not OFFLINE_MODE:
-                es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+                from patti_mailer import send_patti_email  # wrapper: Outlook send + CRM comment
+            
+                cust = opportunity.get("customer") or {}
+                emails = cust.get("emails") or []
+            
+                # pick preferred + not doNotEmail, else first not doNotEmail
+                for e in emails:
+                    if e.get("doNotEmail"):
+                        continue
+                    if e.get("isPreferred") and e.get("address"):
+                        customer_email = e["address"]
+                        break
+            
+                if not customer_email:
+                    for e in emails:
+                        if e.get("doNotEmail"):
+                            continue
+                        if e.get("address"):
+                            customer_email = e["address"]
+                            break
+            
+                if customer_email:
+                    try:
+                        send_patti_email(
+                            token=token,
+                            subscription_id=subscription_id,
+                            opp_id=opportunityId,
+                            rooftop_name=rooftop_name,
+                            rooftop_sender=rooftop_sender,
+                            to_addr=customer_email,
+                            subject=subject,
+                            body_html=body_html,
+                            cc_addrs=[],
+                        )
+                        sent_ok = True
+                    except Exception as e:
+                        log.warning("Follow-up send failed for opp %s: %s", opportunityId, e)
+            
+            # Only record + advance cadence if we actually sent (or you're in OFFLINE_MODE)
+            if sent_ok or OFFLINE_MODE:
+                opportunity.setdefault("messages", []).append(
+                    {
+                        "msgFrom": "patti",
+                        "subject": subject,
+                        "body": body_html,
+                        "date": currDate,
+                        "action": response.get("action"),
+                        "notes": response.get("notes"),
+                    }
+                )
+            
+                opportunity.setdefault("checkedDict", {})["last_msg_by"] = "patti"
+            
+                nextDate = currDate + _td(days=1)
+                opportunity["followUP_date"] = nextDate.isoformat()
+                opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
+            
+                if not OFFLINE_MODE:
+                    es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
     
     wJson(opportunity, f"jsons/process/{opportunityId}.json")
 
