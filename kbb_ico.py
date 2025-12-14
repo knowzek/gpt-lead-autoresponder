@@ -933,7 +933,20 @@ def compose_kbb_convo_body(
 
 _CTA_ANCHOR_RE = _re.compile(r'(?is)<a[^>]*>\s*Schedule\s+Your\s+Visit\s*</a>')
 _RAW_TOKEN_RE  = _re.compile(r'(?i)<\{LegacySalesApptSchLink\}>')
-_ANY_SCHED_LINE_RE = _re.compile(r'(?i)(reserve your time|schedule (an )?appointment|schedule your visit)[:\s]*', _re.I)
+_ANY_SCHED_LINE_RE = _re.compile(
+    r"(?is)(?:^|\n).*?(?:"
+    r"let\s+me\s+know\s+a\s+time\s+that\s+works"
+    r"|please\s+let\s+us\s+know\s+a\s+convenient\s+time"
+    r"day\s+and\s+time\s+that\s+works"
+    r"date\s+and\s+time\s+that\s+works"
+    r"|schedule\s+directly"
+    r"|reserve\s+your\s+time"
+    r"|schedule\s+(?:an\s+)?appointment"
+    r"|schedule\s+your\s+visit"
+    r"|<\{LegacySalesApptSchLink\s*\}>"
+    r").*?(?:\n|$)"
+)
+
 
 def enforce_standard_schedule_sentence(body_html: str) -> str:
     """Ensure exactly one standard CTA appears above visit/closing lines."""
@@ -2049,14 +2062,12 @@ def process_kbb_ico_lead(
             if is_scheduled:
                 from helpers import rewrite_sched_cta_for_booked
                 body_html = rewrite_sched_cta_for_booked(body_html)
-
-                # FINAL SAFETY NET — remove any leftover schedule/reserve wording lines
-                body_html = _ANY_SCHED_LINE_RE.sub("", body_html)
-                
+            
+                # STRIP any generic scheduling CTA variants no matter what wording GPT used
+                body_html = _ANY_SCHED_LINE_RE.sub("", body_html).strip()
+            
                 # Remove raw token if it survived
                 body_html = body_html.replace("<{LegacySalesApptSchLink}>", "").replace("<{LegacySalesApptSchLink }>", "")
-
-                
             else:
                 body_html = append_soft_schedule_sentence(body_html, rooftop_name)
             
