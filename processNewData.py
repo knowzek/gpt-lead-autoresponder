@@ -408,12 +408,21 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
             
             # Decide which CTA behavior to use based on appointment state
             patti_meta = opportunity.get("patti") or {}
-            mode = patti_meta.get("mode")
+            mode = (patti_meta.get("mode") or "").strip().lower()
             
-            if mode == "scheduled":
+            sub_status = (
+                (fresh_opp.get("subStatus") or fresh_opp.get("substatus") or "")
+                or (opportunity.get("subStatus") or opportunity.get("substatus") or "")
+            ).strip().lower()
+            
+            has_booked_appt = (mode == "scheduled") or ("appointment" in sub_status) or bool(patti_meta.get("appt_due_utc"))
+            
+            if has_booked_appt:
                 body_html = rewrite_sched_cta_for_booked(body_html)
+                body_html = _ANY_SCHED_LINE_RE.sub("", body_html).strip()
             else:
                 body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+
             
             # Strip any extraneous prefs/unsubscribe footer GPT might add
             body_html = _PREFS_RE.sub("", body_html).strip()
@@ -950,6 +959,13 @@ def processHit(hit):
     # (for example, via a booking link), mirror that into Patti's state so
     # she pauses cadence nudges but continues to watch for replies.
     has_appt = _derive_appointment_from_sched_activities(opportunity)
+    patti_meta = opportunity.get("patti") or {}
+    if has_appt:
+        patti_meta["mode"] = "scheduled"
+        # if _derive_appointment_from_sched_activities returns / sets due date somewhere, store it:
+        # patti_meta["appt_due_utc"] = derived_due_utc
+        opportunity["patti"] = patti_meta
+
     
     # If we now know there’s an appointment, flip the CRM substatus in Fortellis
     if has_appt and not OFFLINE_MODE:
@@ -1399,15 +1415,22 @@ def processHit(hit):
         body_html = normalize_patti_body(body_html)
         
         # --- patch the rooftop/address placeholders ---
-        from kbb_ico import _patch_address_placeholders, build_patti_footer, _PREFS_RE
         body_html = _patch_address_placeholders(body_html, rooftop_name)
         
         # Decide which CTA behavior to use based on appointment state
         patti_meta = opportunity.get("patti") or {}
-        mode = patti_meta.get("mode")
+        mode = (patti_meta.get("mode") or "").strip().lower()
         
-        if mode == "scheduled":
+        sub_status = (
+            (fresh_opp.get("subStatus") or fresh_opp.get("substatus") or "")
+            or (opportunity.get("subStatus") or opportunity.get("substatus") or "")
+        ).strip().lower()
+        
+        has_booked_appt = (mode == "scheduled") or ("appointment" in sub_status) or bool(patti_meta.get("appt_due_utc"))
+        
+        if has_booked_appt:
             body_html = rewrite_sched_cta_for_booked(body_html)
+            body_html = _ANY_SCHED_LINE_RE.sub("", body_html).strip()
         else:
             body_html = append_soft_schedule_sentence(body_html, rooftop_name)
         
@@ -1543,11 +1566,22 @@ def processHit(hit):
             from kbb_ico import _patch_address_placeholders, build_patti_footer, _PREFS_RE
             body_html = _patch_address_placeholders(body_html, rooftop_name)
 
-            mode = patti_meta.get("mode")
-            if mode == "scheduled":
+            patti_meta = opportunity.get("patti") or {}
+            mode = (patti_meta.get("mode") or "").strip().lower()
+            
+            sub_status = (
+                (fresh_opp.get("subStatus") or fresh_opp.get("substatus") or "")
+                or (opportunity.get("subStatus") or opportunity.get("substatus") or "")
+            ).strip().lower()
+            
+            has_booked_appt = (mode == "scheduled") or ("appointment" in sub_status) or bool(patti_meta.get("appt_due_utc"))
+            
+            if has_booked_appt:
                 body_html = rewrite_sched_cta_for_booked(body_html)
+                body_html = _ANY_SCHED_LINE_RE.sub("", body_html).strip()
             else:
                 body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+
 
             body_html = _PREFS_RE.sub("", body_html).strip()
             body_html = body_html + build_patti_footer(rooftop_name)
