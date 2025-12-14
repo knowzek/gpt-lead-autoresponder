@@ -2175,7 +2175,7 @@ def process_kbb_ico_lead(
         body_html = _patch_address_placeholders(body_html, rooftop_name)
         if scheduled_active_now:
             from helpers import rewrite_sched_cta_for_booked
-            body_html = rewrite_sched_cta_for_booked(body_html)  # converts any schedule CTA to reschedule line
+
         body_html = _PREFS_RE.sub("", body_html).strip()
         body_html = body_html + build_patti_footer(rooftop_name)
         if not subject.lower().startswith("re:"):
