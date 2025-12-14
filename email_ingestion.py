@@ -240,45 +240,98 @@ def process_inbound_email(inbound: dict) -> None:
                 e,
             )
 
+    # Determine whether this opp is a KBB lead or a general lead
+    is_kbb = (opportunity.get("source") or "").lower().startswith("kbb")
+    # If your KBB sources are more specific, use:
+    # is_kbb = (opportunity.get("source") in ("KBB Instant Cash Offer", "KBB ServiceDrive"))
 
-    # 6️⃣ Hand off to the existing KBB ICO logic
-    # Use Outlook webhook trigger; this call itself *is* the new inbound signal
+    # 6️⃣ Hand off to the correct brain based on lead type
     inbound_ts = ts
     inbound_subject = subject
     inbound_msg_id = headers.get("Message-Id") or f"esmsg:{inbound_ts}"
-
-    state, action_taken = process_kbb_ico_lead(
-        opportunity=opportunity,
-        lead_age_days=lead_age_days,
-        rooftop_name=rooftop_name,
-        inquiry_text=body_text,          # customer's reply text
-        token=token,
-        subscription_id=subscription_id,
-        SAFE_MODE=False,
-        rooftop_sender=rooftop_sender,
-        trigger="email_webhook",
-        inbound_ts=inbound_ts,
-        inbound_msg_id=inbound_msg_id,
-        inbound_subject=inbound_subject,
-    )
-
-    # 7️⃣ Persist any mutations KBB logic made to the opportunity
-    try:
-        es_update_with_retry(
-            esClient,
-            index="opportunities",
-            id=opp_id,
-            doc=opportunity,
+    
+    if is_kbb:
+        # ---- KBB path (unchanged) ----
+        state, action_taken = process_kbb_ico_lead(
+            opportunity=opportunity,
+            lead_age_days=lead_age_days,
+            rooftop_name=rooftop_name,
+            inquiry_text=body_text,          # customer's reply text
+            token=token,
+            subscription_id=subscription_id,
+            SAFE_MODE=False,
+            rooftop_sender=rooftop_sender,
+            trigger="email_webhook",
+            inbound_ts=inbound_ts,
+            inbound_msg_id=inbound_msg_id,
+            inbound_subject=inbound_subject,
         )
-    except Exception as e:
-        log.warning(
-            "ES persist failed after KBB processing opp %s: %s",
+    
+        # Persist any mutations KBB logic made to the opportunity
+        try:
+            es_update_with_retry(
+                esClient,
+                index="opportunities",
+                id=opp_id,
+                doc=opportunity,
+            )
+        except Exception as e:
+            log.warning("ES persist failed after KBB processing opp %s: %s", opp_id, e)
+    
+        log.info(
+            "KBB email ingestion handled for opp %s – action_taken=%s, state[last_template_day_sent]=%s",
             opp_id,
-            e,
+            bool(action_taken),
+            (state or {}).get("last_template_day_sent"),
         )
+    
+    else:
+        # ---- GENERAL path (new) ----
+        # We need to "wake up" checkActivities without Fortellis polling.
+        # That requires a fake "Read Email" activity representing this inbound message.
+        from processNewData import checkActivities
+        from datetime import datetime, timezone
+    
+        fake_act = {
+            "activityName": "Read Email",
+            "activityType": 20,
+            "completedDate": inbound_ts,
+            "message": {"subject": inbound_subject, "body": body_text},
+            # checkActivities uses this to dedupe alreadyProcessedActivities
+            "activityId": inbound_msg_id,
+        }
+    
+        # IMPORTANT: this requires checkActivities(..., activities_override=[...])
+        # (you will add that optional parameter in processNewData.py)
+        try:
+            checkActivities(
+                opportunity,
+                currDate=datetime.now(timezone.utc),
+                rooftop_name=rooftop_name,
+                activities_override=[fake_act],
+            )
+        except TypeError:
+            log.error(
+                "checkActivities() does not accept activities_override yet. "
+                "Add activities_override=None parameter to checkActivities in processNewData.py"
+            )
+            raise
+        except Exception as e:
+            log.warning("General checkActivities failed for opp %s: %s", opp_id, e)
+    
+        # Persist mutations made by checkActivities (messages, checkedDict, etc.)
+        try:
+            es_update_with_retry(
+                esClient,
+                index="opportunities",
+                id=opp_id,
+                doc=opportunity,
+            )
+        except Exception as e:
+            log.warning("ES persist failed after GENERAL processing opp %s: %s", opp_id, e)
+    
+        log.info("GENERAL email ingestion handled for opp %s", opp_id)
 
-    log.info(
-        "KBB email ingestion handled for opp %s – action_taken=%s, state[last_template_day_sent]=%s",
         opp_id,
         bool(action_taken),
         (state or {}).get("last_template_day_sent"),
