@@ -194,12 +194,6 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
 
     activities = sortActivities(activities)
 
-    if OFFLINE_MODE:
-        activities = opportunity.get('completedActivitiesTesting', [])
-    else:
-        activities = opportunity.get('completedActivities', [])
-    activities = sortActivities(activities)
-    
     alreadyProcessedActivities = opportunity.get('alreadyProcessedActivities', {})
 
     # Ensure checkedDict is always a dict on the opportunity
@@ -235,10 +229,11 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
 
         if activityName == "read email" or activityType == 20:
             fullAct = act
-            if not DEBUGMODE and not OFFLINE_MODE:
+            has_msg_body = bool(((act.get("message") or {}).get("body") or "").strip())
+            
+            if (not has_msg_body) and (not DEBUGMODE) and (not OFFLINE_MODE):
                 fullAct = get_activity_by_id_v1(activityId, token, subscription_id)
 
-            customerMsg = (fullAct.get("message") or {})
 
             # --- KBB-style normalization: top reply only + plain-text fallback ---
             raw_body_html = (customerMsg.get("body") or "").strip()
