@@ -3,12 +3,15 @@ import re
 import logging
 from datetime import datetime, timezone
 
-from esQuerys import esClient
-from feature_flags import is_test_opp
-from fortellis import get_token
-from rooftops import get_rooftop_info
 from email_ingestion import clean_html  
-from kbb_ico import process_kbb_ico_lead
+import json
+from datetime import datetime as _dt, timezone as _tz
+
+from airtable_store import (
+    find_by_customer_email,   
+    opp_from_record,
+    save_opp,
+)
 
 
 log = logging.getLogger("patti.kbb_adf")
@@ -106,47 +109,28 @@ def process_kbb_adf_notification(inbound: dict) -> None:
         log.warning("KBB ADF inbound had no shopper email; subject=%s", subject)
         return
 
-    # Find KBB opportunity by shopper email
-    query = {
-        "bool": {
-            "must": [
-                {
-                    "terms": {
-                        "source.keyword": [
-                            "KBB Instant Cash Offer",
-                            "KBB ServiceDrive",
-                        ]
-                    }
-                }
-            ],
-            "should": [
-                # main ES structure
-                {"term": {"customer.emails.address.keyword": shopper_email}},
-                {"term": {"customer.emails.address": shopper_email}},
-                # older / alternate mappings, just in case
-                {"term": {"customerEmail.keyword": shopper_email}},
-                {"term": {"customer.email.keyword": shopper_email}},
-                {"term": {"customerEmail": shopper_email}},
-            ],
-
-            "minimum_should_match": 1,
-        }
-    }
-
-    rsp = esClient.search(
-        index="opportunities",
-        query=query,
-        size=1,
-        sort=[{"created_at": {"order": "desc"}}],
-    )
-    hits = rsp["hits"]["hits"]
-    if not hits:
-        log.warning("No KBB opportunity found for shopper email %s", shopper_email)
+    # -----------------------------
+    # Airtable lookup instead of ES
+    # -----------------------------
+    rec = find_by_customer_email(shopper_email)
+    if not rec:
+        log.warning("No Airtable opportunity found for shopper email %s", shopper_email)
         return
 
-    hit = hits[0]
-    opp_id = hit["_id"]
-    opportunity = hit["_source"]
+    opportunity = opp_from_record(rec)
+
+    # opp_id should come from the JSON blob
+    opp_id = opportunity.get("opportunityId") or opportunity.get("id")
+    if not opp_id:
+        log.warning("Airtable record matched email %s but opp_json missing opportunityId/id", shopper_email)
+        return
+
+    # Optional: strict KBB-only gate (recommended)
+    src = (opportunity.get("source") or "").strip().lower()
+    if not src.startswith("kbb"):
+        log.warning("Airtable record matched email %s but source=%r is not KBB; skipping", shopper_email, opportunity.get("source"))
+        return
+
 
     # Try to capture the KBB amount from the ADF email body and persist it on the opp
     # so later KBB flows can answer "what was my estimate?" deterministically.
@@ -158,91 +142,79 @@ def process_kbb_adf_notification(inbound: dict) -> None:
     amt = _extract_kbb_amount(combined_body)
     log.info("KBB ADF: _extract_kbb_amount len=%d -> %r", len(combined_body), amt)
     
+    # -----------------------------
+    # Store the offer amount on the opp_json (Airtable)
+    # -----------------------------
     if amt:
         ctx = dict(opportunity.get("_kbb_offer_ctx") or {})
-        # Don't overwrite if we already have an amount
         if not ctx.get("amount_usd"):
             ctx["amount_usd"] = amt
             opportunity["_kbb_offer_ctx"] = ctx
-            try:
-                esClient.update(
-                    index="opportunities",
-                    id=opp_id,
-                    body={"doc": {"_kbb_offer_ctx": ctx}},
-                )
-                log.info("KBB ADF: stored offer amount %s for opp %s", amt, opp_id)
-            except Exception as e:
-                log.warning("KBB ADF: failed to store _kbb_offer_ctx for opp %s: %s", opp_id, e)
+            log.info("KBB ADF: stored offer amount %s for opp %s (Airtable)", amt, opp_id)
 
 
-    # Gate: only run Outlook Patti for test opps on this branch
-    if not is_test_opp(opportunity):
-        log.info(
-            "KBB ADF inbound matched opp %s but it's not a test opp; skipping Outlook flow",
-            opp_id,
-        )
-        return
-
-    # --- Use the main KBB engine instead of hand-rolled GPT ---
-
-    dealer_key = opportunity.get("_subscription_id")
-    if not dealer_key:
-        log.warning("KBB opp %s missing _subscription_id; cannot send Patti email", opp_id)
+    # -----------------------------
+    # TEST GATE (KEEP THIS)
+    # -----------------------------
+    TEST_OPP_ID = "050a81e9-78d4-f011-814f-00505690ec8c"
+    
+    if (opportunity.get("opportunityId") != TEST_OPP_ID) and (opportunity.get("id") != TEST_OPP_ID):
+        log.info("KBB ADF matched opp %s but not TEST_OPP_ID; skipping", opp_id)
         return
     
-    token = get_token(dealer_key)
     
-    # Rooftop info (name + sender email)
-    rt_info = get_rooftop_info(dealer_key) or {}
-    rooftop_name   = rt_info.get("name") or (opportunity.get("rooftop_name") or opportunity.get("rooftop") or "Patterson Auto Group")
-    rooftop_sender = rt_info.get("sender") or ""
+    # -----------------------------
+    # QUEUE FOR CRON (DO NOT SEND)
+    # -----------------------------
+    now_iso = _dt.now(_tz.utc).isoformat()
     
-    # Lead age in days (so KBB cadence picks Day 1 vs later)
-    created_iso = opportunity.get("createdDate") or opportunity.get("created_on")
-    lead_age_days = 0
-    if created_iso:
-        try:
-            created_dt = datetime.fromisoformat(str(created_iso).replace("Z", "+00:00")).astimezone(timezone.utc)
-            lead_age_days = (datetime.now(timezone.utc) - created_dt).days
-        except Exception:
-            log.warning("KBB ADF: could not parse created date %r", created_iso)
+    # mark due immediately
+    opportunity["followUP_date"] = now_iso
+    opportunity["isActive"] = True
     
-    # For a fresh ADF lead there’s usually no “question” yet, so inquiry_text can be blank
-    inquiry_text = ""
+    # mark that customer initiated (important for cadence logic)
+    opportunity.setdefault("checkedDict", {})["last_msg_by"] = "customer"
     
-    state, action_taken = process_kbb_ico_lead(
-        opportunity=opportunity,
-        lead_age_days=lead_age_days,
-        rooftop_name=rooftop_name,
-        inquiry_text=inquiry_text,
-        token=token,
-        subscription_id=dealer_key,
-        SAFE_MODE=False,
-        rooftop_sender=rooftop_sender,
-        trigger="kbb_adf",
+    # persist ONLY to Airtable
+    save_opp(
+        opportunity,
+        extra_fields={
+            "opp_id": opp_id,
+            "subscription_id": opportunity.get("_subscription_id") or "",
+            "is_active": True,
+            "follow_up_at": now_iso,
+            "source": opportunity.get("source") or "",
+            "opp_json": json.dumps(opportunity, ensure_ascii=False),
+        },
     )
     
-    # ✅ NEW: persist the state/messages written by process_kbb_ico_lead
-    try:
-        esClient.update(
-            index="opportunities",
-            id=opp_id,
-            body={
-                "doc": {
-                    "_kbb_state": opportunity.get("_kbb_state") or state or {},
-                    "messages": opportunity.get("messages") or [],
-                    "_kbb_offer_ctx": opportunity.get("_kbb_offer_ctx") or {},
-                }
-            },
-        )
-        log.info(
-            "KBB ADF: persisted _kbb_state to ES for opp %s (last_template_day_sent=%s mode=%s)",
-            opp_id,
-            (opportunity.get("_kbb_state") or {}).get("last_template_day_sent"),
-            (opportunity.get("_kbb_state") or {}).get("mode"),
-        )
-    except Exception as e:
-        log.warning("KBB ADF: failed to persist _kbb_state/messages for opp %s: %s", opp_id, e)
-    
-    log.info("KBB ADF → process_kbb_ico_lead finished: opp=%s action_taken=%s mode=%s",
-             opp_id, action_taken, (state or {}).get("mode"))
+    log.info("KBB ADF queued in Airtable for opp %s (follow_up_at=%s)", opp_id, now_iso)
+    return
+
+
+    # -----------------------------
+    # Queue for processNewData.py
+    # -----------------------------
+    now_iso = _dt.now(_tz.utc).isoformat()
+
+    opportunity["followUP_date"] = now_iso
+    opportunity["isActive"] = True
+    opportunity.setdefault("checkedDict", {})["last_msg_by"] = "customer"
+
+    # Save back to Airtable and make it show in Due Now
+    save_opp(
+        opportunity,
+        extra_fields={
+            "opp_id": opp_id,
+            "subscription_id": opportunity.get("_subscription_id") or "",
+            "is_active": True,
+            "follow_up_at": now_iso,
+            "source": opportunity.get("source") or "",
+            "mode": (opportunity.get("_kbb_state") or {}).get("mode", ""),
+            "opp_json": json.dumps(opportunity, ensure_ascii=False),
+        },
+    )
+
+    log.info("KBB ADF queued in Airtable for opp %s (follow_up_at=%s)", opp_id, now_iso)
+    return
+
