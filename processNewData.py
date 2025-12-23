@@ -1802,8 +1802,6 @@ def processHit(hit):
 
 
 # ---- Rolling ES lookback window (default 6 days) ----
-LOOKBACK_DAYS = int(os.getenv("ES_LOOKBACK_DAYS", "6"))
-
 if __name__ == "__main__":
     test_opp_id = os.getenv("TEST_OPPORTUNITY_ID", "").strip()
 
