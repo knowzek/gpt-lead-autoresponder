@@ -278,6 +278,7 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
                 opportunity["alreadyProcessedActivities"] = apa
 
                 if not OFFLINE_MODE:
+                    opportunity["followUP_date"] = None
                     airtable_save(opportunity)
 
                 wJson(opportunity, f"jsons/process/{opportunity['opportunityId']}.json")
@@ -1183,27 +1184,25 @@ def processHit(hit):
 
             # --- unified opt-out check on the very first inbound ---
             from patti_common import _is_optout_text, _is_decline
-
+            
             if inquiry_text and (_is_optout_text(inquiry_text) or _is_decline(inquiry_text)):
                 log.info("❌ Customer opted out on first message. Marking inactive.")
-
-                # make sure checkedDict exists
+            
                 checkedDict = opportunity.get("checkedDict") or {}
                 checkedDict["exit_type"] = "customer_declined"
                 checkedDict["exit_reason"] = (inquiry_text or "")[:250]
                 opportunity["checkedDict"] = checkedDict
+            
                 opportunity["isActive"] = False
-
-                # mark Patti as do-not-email for this opp
+                opportunity["followUP_date"] = None      # ✅ ADD THIS
+            
                 patti_meta = opportunity.get("patti") or {}
                 patti_meta["email_blocked_do_not_email"] = True
                 opportunity["patti"] = patti_meta
-
+            
                 if not OFFLINE_MODE:
-                    # update ES
                     airtable_save(opportunity)
-
-                    # update CRM (best-effort)
+            
                     try:
                         from fortellis import set_opportunity_inactive, set_customer_do_not_email
                         set_opportunity_inactive(
@@ -1216,21 +1215,21 @@ def processHit(hit):
                         set_customer_do_not_email(token, subscription_id, opportunityId)
                     except Exception as e:
                         log.error(f"Failed to set CRM inactive / do-not-email: {e}")
-
-                # persist local JSON + stop processing
+            
                 wJson(opportunity, f"jsons/process/{opportunityId}.json")
                 return
-
-            # TODO: check with kristin if need to add activity logic to crm that patti will not used here
+            
             if customerFirstMsgDict.get('salesAlreadyContact', False):
                 opportunity['isActive'] = False
+                opportunity["followUP_date"] = None   # 👈 ADD THIS
                 opportunity['checkedDict']['is_sales_contacted'] = True
                 if not OFFLINE_MODE:
                     airtable_save(opportunity)
 
+            
                 wJson(opportunity, f"jsons/process/{opportunityId}.json")
-
                 return
+
 
             # --- Step 3: try to auto-schedule an appointment from the inquiry text ---
             proposed = extract_appt_time(inquiry_text or "", tz="America/Los_Angeles")
@@ -1679,10 +1678,12 @@ def processHit(hit):
         last_by = (opportunity.get('checkedDict') or {}).get('last_msg_by', '')
         if followUP_date <= currDate and followUP_count > 3:
             opportunity['isActive'] = False
+            opportunity["followUP_date"] = None   # 👈 ADD THIS
             if not OFFLINE_MODE:
                 airtable_save(opportunity)
             wJson(opportunity, f"jsons/process/{opportunityId}.json")
             return
+
         elif followUP_date <= currDate:
             # Use full thread history but be explicit that this is NOT a first email.
             messages = opportunity.get("messages") or []
