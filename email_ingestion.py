@@ -3,6 +3,7 @@ import os
 import re
 import logging
 from datetime import datetime as _dt, timezone as _tz
+import json
 
 from rooftops import get_rooftop_info
 from fortellis import get_token, add_opportunity_comment
