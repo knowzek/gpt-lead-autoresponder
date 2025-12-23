@@ -1,16 +1,14 @@
 # kbb_adf_ingestion.py
 import re
 import logging
-from datetime import datetime, timezone
 
 from fortellis import get_token, get_recent_opportunities, get_opportunity, get_customer_by_url, find_recent_kbb_opportunity_by_email, find_best_kbb_opp_for_email
 from constants import CUSTOMER_URL 
 from airtable_store import upsert_lead, find_by_opp_id, _safe_json_dumps, find_by_customer_email, opp_from_record, save_opp
 
-
+from datetime import datetime as _dt, timedelta as _td, timezone as _tz
 from email_ingestion import clean_html  
 import json
-from datetime import datetime as _dt, timezone as _tz
 
 # TEMP: while testing, only these rooftops
 ALLOWED_SUBSCRIPTIONS = {
@@ -280,7 +278,7 @@ def process_kbb_adf_notification(inbound: dict) -> None:
     if not is_test:
         # keep record for visibility, but do NOT wake cron while testing
         is_active = False
-        follow_up_at = (_dt.now(_tz.utc) + timedelta(days=365)).isoformat()
+        follow_up_at = (_dt.now(_tz.utc) + _td(days=365)).isoformat()
         opportunity["isActive"] = False
         opportunity.setdefault("checkedDict", {})["exit_type"] = "not_test_opp"
         opportunity["followUP_date"] = follow_up_at
