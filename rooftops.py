@@ -43,11 +43,13 @@ DEALERKEY_TO_SUBSCRIPTION = {
 ROOFTOP_INFO = {
     "Mission Viejo Kia": {
         "address": "24041 El Toro Rd, Lake Forest, CA 92630",
-        "email": "sales@missionviejokia.com"
+        "email": "sales@missionviejokia.com",
+        "booking_link": "https://www.missionviejokia.com/scheduleservice",
     },
     "Tustin Mazda": {
         "address": "28 Auto Center Dr, Tustin, CA 92782",
-        "email": "sales@tustinmazda.com"
+        "email": "sales@tustinmazda.com",
+        "booking_link": "https://www.tustinmazda.com/scheduleservice",
     },
     "Huntington Beach Mazda": {
         "address": "16800 Beach Blvd, Huntington Beach, CA 92647",
@@ -60,6 +62,7 @@ ROOFTOP_INFO = {
     "Tustin Kia": {
         "address": "28 B Auto Center Drive, Tustin CA 92782",
         "email": "Sales@tustinkia.edealerhub.com",
+        "booking_link": "https://www.tustinkia.com/scheduleservice",
         "signature_img": "https://www.pattersonautos.com/static/dealer-30005/TK_LOGO_on_light_background__1_.png"
     },
 }
