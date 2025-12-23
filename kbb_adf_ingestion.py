@@ -96,12 +96,67 @@ def _extract_shopper_email(body_text: str) -> str | None:
         return None
     return m.group(1).strip().lower()
 
+def _find_kbb_opp_by_email_via_fortellis(shopper_email: str) -> tuple[str, str] | None:
+    """
+    Returns (subscription_id, opportunity_id) for the most recent KBB opp whose customer email matches.
+    Strategy: searchDelta last N minutes, then hydrate customer for KBB candidates and compare email.
+    """
+    from fortellis import SUB_MAP
+
+    # search window: choose something generous but not crazy
+    LOOKBACK_MIN = 24 * 60  # 24h
+
+    # SUB_MAP may be {dealer_key: subscription_id}; we only need subscription_ids
+    sub_ids = list(SUB_MAP.values()) if isinstance(SUB_MAP, dict) else []
+
+    shopper_email = (shopper_email or "").strip().lower()
+    if not shopper_email:
+        return None
+
+    for subscription_id in sub_ids:
+        try:
+            tok = get_token(subscription_id)
+            data = get_recent_opportunities(tok, subscription_id, since_minutes=LOOKBACK_MIN, page_size=100)
+            items = (data or {}).get("items") or []
+
+            # only KBB candidates
+            for op in items:
+                src = (op.get("source") or "").strip().lower()
+                if not src.startswith("kbb"):
+                    continue
+
+                opp_id = op.get("opportunityId") or op.get("id")
+                cust_id = (op.get("customer") or {}).get("id")
+                if not (opp_id and cust_id):
+                    continue
+
+                # hydrate customer and compare email
+                try:
+                    cust = get_customer_by_url(f"{CUSTOMER_URL}/{cust_id}", tok, subscription_id) or {}
+                    emails = cust.get("emails") or []
+                    for e in emails:
+                        addr = (e.get("address") or "").strip().lower()
+                        if addr and addr == shopper_email:
+                            return (subscription_id, opp_id)
+                except Exception:
+                    continue
+
+        except Exception:
+            continue
+
+    return None
+
 
 def process_kbb_adf_notification(inbound: dict) -> None:
-    ...
+    subject = inbound.get("subject") or ""
+    body_html = inbound.get("body_html") or ""
+    body_text = inbound.get("body_text") or clean_html(body_html)
+
+    log.info("KBB ADF: raw body_text sample: %r", (body_text or "")[:500])
+
     shopper_email = _extract_shopper_email(body_text)
     if not shopper_email:
-        ...
+        log.warning("KBB ADF inbound had no shopper email; subject=%s", subject)
         return
 
     # -----------------------------
@@ -130,13 +185,25 @@ def process_kbb_adf_notification(inbound: dict) -> None:
         log.warning("KBB ADF: No Fortellis KBB opp found for shopper email %s", shopper_email)
         return
 
-    # Pull full opp so Airtable has customer + everything processNewData expects
+    # -----------------------------
+    # 2) Hydrate full opp + customer (THIS FIXES missing email)
+    # -----------------------------
     token = get_token(subscription_id)
     fresh_opp = get_opportunity(opp_id, token, subscription_id) or {}
 
-    # -----------------------------
-    # 2) Build the opp_json we store in Airtable
-    # -----------------------------
+    # hydrate customer FULL record (emails live here)
+    customer = fresh_opp.get("customer") or {}
+    customer_id = customer.get("id")
+
+    if customer_id:
+        try:
+            customer_full = get_customer_by_url(f"{CUSTOMER_URL}/{customer_id}", token, subscription_id) or {}
+            if customer_full:
+                customer = customer_full
+        except Exception as e:
+            log.warning("KBB ADF: customer hydrate failed opp=%s cust_id=%s err=%s", opp_id, customer_id, e)
+
+    # Build opp_json
     now_iso = _dt.now(_tz.utc).isoformat()
 
     opportunity = dict(fresh_opp)
@@ -144,6 +211,11 @@ def process_kbb_adf_notification(inbound: dict) -> None:
     opportunity["id"] = opportunity.get("id") or opportunity["opportunityId"]
     opportunity["_subscription_id"] = subscription_id
 
+    # ensure customer is stored (with emails)
+    if customer:
+        opportunity["customer"] = customer
+
+    # safety defaults processNewData expects
     opportunity.setdefault("messages", [])
     opportunity.setdefault("checkedDict", {
         "patti_already_contacted": False,
@@ -155,11 +227,19 @@ def process_kbb_adf_notification(inbound: dict) -> None:
     opportunity.setdefault("subStatus", opportunity.get("subStatus") or opportunity.get("substatus") or "New")
     opportunity.setdefault("upType", opportunity.get("upType") or opportunity.get("uptype") or "Campaign")
 
-    # IMPORTANT: queue for cron
+    # mark that ADF arrived (lets cron guard against accidental blasts)
+    opportunity["_kbb_adf_seen_at"] = now_iso
+
+    # IMPORTANT: queue for cron (this ONE opp only)
     opportunity["followUP_date"] = now_iso
 
+    # Treat this as customer-initiated inbound so cadence can start cleanly
+    checked = opportunity.setdefault("checkedDict", {})
+    checked.setdefault("last_msg_by", "customer")
+
+
     # -----------------------------
-    # 3) Store offer amount (optional)
+    # 3) Store offer amount (optional) — make ADF authoritative
     # -----------------------------
     combined_body = "\n".join([body_text or "", body_html or ""])
     amt = _extract_kbb_amount(combined_body)
@@ -167,9 +247,8 @@ def process_kbb_adf_notification(inbound: dict) -> None:
 
     if amt:
         ctx = dict(opportunity.get("_kbb_offer_ctx") or {})
-        if not ctx.get("amount_usd"):
-            ctx["amount_usd"] = amt
-            opportunity["_kbb_offer_ctx"] = ctx
+        ctx["amount_usd"] = amt  # overwrite ok
+        opportunity["_kbb_offer_ctx"] = ctx
 
     # Make sure KBB state exists for cadence logic
     opportunity.setdefault("_kbb_state", {
@@ -186,35 +265,49 @@ def process_kbb_adf_notification(inbound: dict) -> None:
     })
 
     # -----------------------------
-    # 4) TEST GATE
-    #    Keep it, BUT apply it ONLY to whether cron should act.
-    #    We STILL create the Airtable record either way.
+    # 4) TEST GATE (ONLY controls "active", not record creation)
+    #    If not test, DO NOT set follow_up_at=now (prevents Due Now noise)
     # -----------------------------
     TEST_OPP_ID = "050a81e9-78d4-f011-814f-00505690ec8c"
     is_test = (opportunity.get("opportunityId") == TEST_OPP_ID) or (opportunity.get("id") == TEST_OPP_ID)
 
-    # If you want cron to ignore non-test while testing:
+    follow_up_at = now_iso
+    is_active = True
+
     if not is_test:
-        opportunity["isActive"] = False  # prevents processNewData from sending
+        # keep record for visibility, but do NOT wake cron while testing
+        is_active = False
+        follow_up_at = (_dt.now(_tz.utc) + timedelta(days=365)).isoformat()
+        opportunity["isActive"] = False
         opportunity.setdefault("checkedDict", {})["exit_type"] = "not_test_opp"
+        opportunity["followUP_date"] = follow_up_at
 
     # -----------------------------
-    # 5) Save to Airtable (THIS is what was missing)
-    #    follow_up_at is what your Due Now view uses.
+    # 5) Save to Airtable (follow_up_at drives Due Now view)
     # -----------------------------
     save_opp(
         opportunity,
         extra_fields={
             "opp_id": opp_id,
             "subscription_id": subscription_id,
-            "is_active": bool(opportunity.get("isActive", True)),
-            "follow_up_at": now_iso,
+            "is_active": bool(is_active),
+            "follow_up_at": follow_up_at,
             "source": opportunity.get("source") or "",
             "mode": (opportunity.get("_kbb_state") or {}).get("mode", ""),
             "opp_json": json.dumps(opportunity, ensure_ascii=False),
         },
     )
 
-    log.info("KBB ADF: upserted Airtable opp=%s sub=%s follow_up_at=%s is_test=%s",
-             opp_id, subscription_id, now_iso, is_test)
+    # quick sanity log showing customer email we stored
+    cust_email = None
+    try:
+        emails = (opportunity.get("customer") or {}).get("emails") or []
+        cust_email = (emails[0].get("address") if emails else None)
+    except Exception:
+        cust_email = None
+
+    log.info(
+        "KBB ADF: upserted Airtable opp=%s sub=%s shopper_email=%s customer_email=%s follow_up_at=%s is_test=%s is_active=%s",
+        opp_id, subscription_id, shopper_email, cust_email, follow_up_at, is_test, is_active
+    )
     return
