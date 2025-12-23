@@ -1267,6 +1267,9 @@ def process_kbb_ico_lead(
 
     # Is THIS invocation coming from an Outlook webhook?
     is_webhook = is_outlook_mode and (trigger == "email_webhook")
+    log.info("KBB webhook debug: EMAIL_MODE=%s trigger=%s is_webhook=%s",
+         EMAIL_MODE, trigger, is_webhook)
+
 
     
     declined = False
