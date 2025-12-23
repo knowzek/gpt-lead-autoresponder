@@ -247,11 +247,33 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
         if created_now:
             if customerID:
                 try:
-                    richer = get_customer_by_url(f"{CUSTOMER_URL}/{customerID}", token, subscription_id) or {}
-                    if richer:
+                    # Prefer the exact self-link provided by the opportunity
+                    cust = op.get("customer") or {}
+                    links = cust.get("links") or []
+                    self_href = None
+                    for lk in links:
+                        if (lk.get("rel") == "self") and lk.get("href"):
+                            self_href = lk["href"]
+                            break
+            
+                    # Fallback to the known-good Sales v1 URL format
+                    if not self_href:
+                        self_href = f"{BASE_URL}/sales/v1/elead/customers/{customerID}"
+            
+                    richer = get_customer_by_url(self_href, token, subscription_id) or {}
+            
+                    # If we got a richer record, store it; otherwise keep the stub
+                    if richer and isinstance(richer, dict):
                         docToIndex["customer"] = richer
+            
+                        # Hard assertion-style log so you can SEE if emails are present
+                        has_emails = bool((richer.get("emails") or []))
+                        log.info("Customer hydrate ok opp=%s customer=%s emails=%s url=%s",
+                                 opp_id, customerID, has_emails, self_href)
+            
                 except Exception as e:
-                    log.warning("customer hydrate failed opp_id=%s err=%s", opp_id, e)
+                    log.warning("customer hydrate failed opp_id=%s customer=%s err=%s", opp_id, customerID, e)
+
         
             completedActivities = []
             try:
