@@ -3,7 +3,8 @@ import re
 import logging
 from datetime import datetime, timezone
 
-from fortellis import get_token, get_opportunity, find_recent_kbb_opportunity_by_email
+from fortellis import get_token, get_recent_opportunities, get_opportunity, get_customer_by_url
+from constants import CUSTOMER_URL 
 from airtable_store import find_by_opp_id 
 
 from email_ingestion import clean_html  
