@@ -279,7 +279,7 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
 
                 if not OFFLINE_MODE:
                     opportunity["followUP_date"] = None
-                    airtable_save(opportunity)
+                    airtable_save(opportunity, extra_fields={"follow_up_at": None})
 
                 wJson(opportunity, f"jsons/process/{opportunity['opportunityId']}.json")
                 return
@@ -754,7 +754,7 @@ def processHit(hit):
             if not OFFLINE_MODE:
                 # also clear follow-up so it won't keep showing as due
                 opportunity["followUP_date"] = None
-                airtable_save(opportunity)
+                airtable_save(opportunity, extra_fields={"follow_up_at": None})
 
         return
 
@@ -1194,14 +1194,14 @@ def processHit(hit):
                 opportunity["checkedDict"] = checkedDict
             
                 opportunity["isActive"] = False
-                opportunity["followUP_date"] = None      # ✅ ADD THIS
+                opportunity["followUP_date"] = None    
             
                 patti_meta = opportunity.get("patti") or {}
                 patti_meta["email_blocked_do_not_email"] = True
                 opportunity["patti"] = patti_meta
             
                 if not OFFLINE_MODE:
-                    airtable_save(opportunity)
+                    airtable_save(opportunity, extra_fields={"follow_up_at": None})
             
                     try:
                         from fortellis import set_opportunity_inactive, set_customer_do_not_email
@@ -1221,10 +1221,10 @@ def processHit(hit):
             
             if customerFirstMsgDict.get('salesAlreadyContact', False):
                 opportunity['isActive'] = False
-                opportunity["followUP_date"] = None   # 👈 ADD THIS
+                opportunity["followUP_date"] = None   
                 opportunity['checkedDict']['is_sales_contacted'] = True
                 if not OFFLINE_MODE:
-                    airtable_save(opportunity)
+                    airtable_save(opportunity, extra_fields={"follow_up_at": None})
 
             
                 wJson(opportunity, f"jsons/process/{opportunityId}.json")
@@ -1461,14 +1461,21 @@ def processHit(hit):
         #   Only update Patti's state IF sent_ok is True
         # ---------------------------
         if sent_ok:
-            # use the initialized checkedDict from above
             checkedDict["patti_already_contacted"] = True
             checkedDict["last_msg_by"] = "patti"
             opportunity["checkedDict"] = checkedDict
         
             nextDate = currDate + _td(hours=24)
-            opportunity["followUP_date"] = nextDate.isoformat()
+            next_iso = nextDate.isoformat()
+        
+            opportunity["followUP_date"] = next_iso
             opportunity["followUP_count"] = 0
+        
+            airtable_save(
+                opportunity,
+                extra_fields={"follow_up_at": next_iso}
+            )
+
         else:
             log.warning(
                 "Did NOT mark Patti as contacted for opp %s because sendEmail failed.",
@@ -1678,9 +1685,9 @@ def processHit(hit):
         last_by = (opportunity.get('checkedDict') or {}).get('last_msg_by', '')
         if followUP_date <= currDate and followUP_count > 3:
             opportunity['isActive'] = False
-            opportunity["followUP_date"] = None   # 👈 ADD THIS
+            opportunity["followUP_date"] = None   
             if not OFFLINE_MODE:
-                airtable_save(opportunity)
+                airtable_save(opportunity, extra_fields={"follow_up_at": None})
             wJson(opportunity, f"jsons/process/{opportunityId}.json")
             return
 
@@ -1792,8 +1799,16 @@ def processHit(hit):
                 opportunity.setdefault("checkedDict", {})["last_msg_by"] = "patti"
             
                 nextDate = currDate + _td(days=1)
-                opportunity["followUP_date"] = nextDate.isoformat()
+                next_iso = nextDate.isoformat()
+                
+                opportunity["followUP_date"] = next_iso
                 opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
+                
+                airtable_save(
+                    opportunity,
+                    extra_fields={"follow_up_at": next_iso}
+                )
+
             
                 if not OFFLINE_MODE:
                     airtable_save(opportunity)
