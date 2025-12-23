@@ -9,8 +9,6 @@ from helpers import (
 )
 from kbb_ico import process_kbb_ico_lead 
 from kbb_ico import _top_reply_only, _is_optout_text as _kbb_is_optout_text, _is_decline as _kbb_is_decline
-from es_resilient import es_update_with_retry
-from esQuerys import getNewData, esClient, getNewDataByDate, getDocByID
 from rooftops import get_rooftop_info
 from constants import *
 from gpt import run_gpt, getCustomerMsgDict, extract_appt_time
@@ -18,7 +16,12 @@ import re
 import logging
 import hashlib, json, time
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 import uuid
+from airtable_store import (
+    find_by_opp_id, query_view, acquire_lock, release_lock,
+    opp_from_record, save_opp
+)
 
 from fortellis import (
     get_activities,
@@ -63,20 +66,13 @@ def is_exit_message(msg: str) -> bool:
 already_processed = get_names_in_dir("jsons/process")
 DEBUGMODE = os.getenv("DEBUGMODE", "1") == "1"
 
-def _lc(x): return str(x).strip().lower() if x is not None else ""
-def _first_present_lc(doc, *keys):
-    for k in keys:
-        if doc and k in doc and doc[k] is not None:
-            return _lc(doc[k])
-    return ""
-def _kbb_flags_from(opportunity_doc: dict, fresh_opp: dict | None) -> dict:
-    src  = _first_present_lc(fresh_opp, "source") or _first_present_lc(opportunity_doc, "source")
-    st   = _first_present_lc(fresh_opp, "status") or _first_present_lc(opportunity_doc, "status")
-    sub  = (_first_present_lc(fresh_opp, "subStatus", "substatus")
-            or _first_present_lc(opportunity_doc, "subStatus", "substatus"))
-    upt  = (_first_present_lc(fresh_opp, "upType", "uptype")
-            or _first_present_lc(opportunity_doc, "upType", "uptype"))
-    return {"source": src, "status": st, "substatus": sub, "uptype": upt}
+def airtable_save(opportunity: dict, extra_fields: dict | None = None):
+    """
+    Persist the full opp back to Airtable (opp_json + follow_up_at + is_active).
+    """
+    if OFFLINE_MODE:
+        return
+    return save_opp(opportunity, extra_fields=extra_fields or {})
 
 _KBB_SOURCES = {
     "kbb instant cash offer",
@@ -236,6 +232,7 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
 
 
             # --- KBB-style normalization: top reply only + plain-text fallback ---
+            customerMsg = (fullAct.get("message") or {})
             raw_body_html = (customerMsg.get("body") or "").strip()
             customer_body = _top_reply_only(raw_body_html)
 
@@ -281,12 +278,7 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
                 opportunity["alreadyProcessedActivities"] = apa
 
                 if not OFFLINE_MODE:
-                    es_update_with_retry(
-                        esClient,
-                        index="opportunities",
-                        id=opportunity['opportunityId'],
-                        doc=opportunity,
-                    )
+                    airtable_save(opportunity)
 
                 wJson(opportunity, f"jsons/process/{opportunity['opportunityId']}.json")
                 return
@@ -502,12 +494,7 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
                         )
             
                 # persist updated opportunity (messages, followUP_date, etc.)
-                es_update_with_retry(
-                    esClient,
-                    index="opportunities",
-                    id=opportunity["opportunityId"],
-                    doc=opportunity,
-                )
+                airtable_save(opportunity)
             
             # write debug json + stop processing this opp for this run
             wJson(opportunity, f"jsons/process/{opportunity['opportunityId']}.json")
@@ -715,12 +702,9 @@ def processHit(hit):
 
         # Clear any prior transient_error now that the fetch succeeded
         if not OFFLINE_MODE:
-            es_update_with_retry(
-                esClient,
-                index="opportunities",
-                id=opportunityId,
-                doc={"patti": {"transient_error": None}}
-            )
+            opportunity.setdefault("patti", {})["transient_error"] = None
+            airtable_save(opportunity)
+
 
 
     except Exception as e:
@@ -730,24 +714,21 @@ def processHit(hit):
             # increment a lightweight failure counter using what we already have in memory
             prev = (opportunity.get("patti") or {}).get("transient_error") or {}
             fail_count = (prev.get("count") or 0) + 1
-            es_update_with_retry(
-                esClient,
-                index="opportunities",
-                id=opportunityId,
-                doc={
-                    "patti": {
-                        "transient_error": {
-                            "code": "get_opportunity_failed",
-                            "message": str(e)[:200],
-                            "at": _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                            "count": fail_count
-                        },
-                        # make sure we are NOT marking as a permanent skip
-                        "skip": False,
-                        "skip_reason": None
-                    }
-                }
-            )
+            # update in-memory opp then persist to Airtable
+            patti = opportunity.setdefault("patti", {})
+            patti["transient_error"] = {
+                "code": "get_opportunity_failed",
+                "message": str(e)[:200],
+                "at": _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "count": fail_count,
+            }
+            patti["skip"] = False
+            patti["skip_reason"] = None
+            
+            # Persist blob to Airtable (instead of ES partial update)
+            if not OFFLINE_MODE:
+                airtable_save(opportunity)   # or save_opp(opportunity)
+
         # We can’t proceed without fresh_opp; exit gracefully and let the next run retry.
         return
     
@@ -755,25 +736,25 @@ def processHit(hit):
     if not is_active_opp(fresh_opp):
         log.info("Skipping opp %s (inactive from Fortellis).", opportunityId)
         if not OFFLINE_MODE:
-            es_update_with_retry(
-                esClient,
-                index="opportunities",
-                id=opportunityId,
-                doc={
-                    "patti": {
-                        "skip": True,
-                        "skip_reason": "inactive_opportunity",
-                        # clear any transient flag since this is a definitive state
-                        "transient_error": None,
-                        "inactive_at": _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                        "inactive_snapshot": {
-                            "status": fresh_opp.get("status"),
-                            "subStatus": fresh_opp.get("subStatus"),
-                            "isActive": fresh_opp.get("isActive")
-                        }
-                    }
-                }
-            )
+            patti = opportunity.setdefault("patti", {})
+            patti["skip"] = True
+            patti["skip_reason"] = "inactive_opportunity"
+            patti["transient_error"] = None
+            patti["inactive_at"] = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            patti["inactive_snapshot"] = {
+                "status": fresh_opp.get("status"),
+                "subStatus": fresh_opp.get("subStatus"),
+                "isActive": fresh_opp.get("isActive"),
+            }
+            
+            # optional (but recommended): also mark inactive at the top level so your Due Now view stops pulling it
+            opportunity["isActive"] = False
+            
+            if not OFFLINE_MODE:
+                # also clear follow-up so it won't keep showing as due
+                opportunity["followUP_date"] = None
+                airtable_save(opportunity)
+
         return
 
     
@@ -907,8 +888,8 @@ def processHit(hit):
     
             # Persist updates
             if not OFFLINE_MODE:
-                es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
-    
+                airtable_save(opportunity)
+
             # Optional: write compact state note if we acted
             if action_taken:
                 compact = {
@@ -1005,12 +986,7 @@ def processHit(hit):
 
         if not OFFLINE_MODE:
             opportunity.pop("completedActivitiesTesting", None)
-            es_update_with_retry(
-                esClient,
-                index="opportunities",
-                id=opportunityId,
-                doc=opportunity,
-            )
+            airtable_save(opportunity)
 
         wJson(opportunity, f"jsons/process/{opportunityId}.json")
         return
@@ -1018,12 +994,7 @@ def processHit(hit):
     # normal ES cleanup when there is *no* appointment yet
     if not OFFLINE_MODE:
         opportunity.pop("completedActivitiesTesting", None)
-        es_update_with_retry(
-            esClient,
-            index="opportunities",
-            id=opportunityId,
-            doc=opportunity,
-        )
+        airtable_save(opportunity)
 
 
     # === Vehicle & SRP link =============================================
@@ -1230,12 +1201,7 @@ def processHit(hit):
 
                 if not OFFLINE_MODE:
                     # update ES
-                    es_update_with_retry(
-                        esClient,
-                        index="opportunities",
-                        id=opportunityId,
-                        doc=opportunity
-                    )
+                    airtable_save(opportunity)
 
                     # update CRM (best-effort)
                     try:
@@ -1260,7 +1226,7 @@ def processHit(hit):
                 opportunity['isActive'] = False
                 opportunity['checkedDict']['is_sales_contacted'] = True
                 if not OFFLINE_MODE:
-                    es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+                    airtable_save(opportunity)
 
                 wJson(opportunity, f"jsons/process/{opportunityId}.json")
 
@@ -1512,7 +1478,7 @@ def processHit(hit):
 
         
         # Persist Patti state + messages into ES
-        es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+        airtable_save(opportunity)
 
     else:
         # handle follow-ups messages
@@ -1530,7 +1496,9 @@ def processHit(hit):
                 # Convert stored UTC ISO to local time for human-friendly text
                 appt_dt_utc = _dt.fromisoformat(str(appt_due_utc).replace("Z", "+00:00"))
                 # TODO: if you have per-rooftop timezones, swap this out
-                local_tz = _tz.timezone("America/Los_Angeles")
+                local_tz = ZoneInfo("America/Los_Angeles")
+                appt_dt_local = appt_dt_utc.astimezone(local_tz)
+
                 appt_dt_local = appt_dt_utc.astimezone(local_tz)
                 appt_human = fmt_local_human(appt_dt_local)
             except Exception:
@@ -1643,12 +1611,7 @@ def processHit(hit):
                             e,
                         )
 
-                es_update_with_retry(
-                    esClient,
-                    index="opportunities",
-                    id=opportunity["opportunityId"],
-                    doc=opportunity,
-                )
+                airtable_save(opportunity)
 
             # Debug JSON + stop this run
             wJson(opportunity, f"jsons/process/{opportunity['opportunityId']}.json")
@@ -1668,7 +1631,7 @@ def processHit(hit):
             opportunity['followUP_date'] = dt.isoformat()
             opportunity.setdefault('followUP_count', 0)
             if not OFFLINE_MODE:
-                es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+                airtable_save(opportunity)
             wJson(opportunity, f"jsons/process/{opportunityId}.json")
             return  # ⬅️ important: skip the cadence logic below for this run
         
@@ -1717,7 +1680,7 @@ def processHit(hit):
         if followUP_date <= currDate and followUP_count > 3:
             opportunity['isActive'] = False
             if not OFFLINE_MODE:
-                es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+                airtable_save(opportunity)
             wJson(opportunity, f"jsons/process/{opportunityId}.json")
             return
         elif followUP_date <= currDate:
@@ -1832,7 +1795,7 @@ def processHit(hit):
                 opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
             
                 if not OFFLINE_MODE:
-                    es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+                    airtable_save(opportunity)
     
     wJson(opportunity, f"jsons/process/{opportunityId}.json")
 
@@ -1841,45 +1804,30 @@ def processHit(hit):
 LOOKBACK_DAYS = int(os.getenv("ES_LOOKBACK_DAYS", "6"))
 
 if __name__ == "__main__":
-    # Optional single-opportunity test switch:
-    # If TEST_OPPORTUNITY_ID is set, we only process that one opp and exit.
     test_opp_id = os.getenv("TEST_OPPORTUNITY_ID", "").strip()
 
     if test_opp_id:
-        log.info(
-            "TEST_OPPORTUNITY_ID=%s set; running single-opportunity test mode",
-            test_opp_id,
-        )
-
-        # Grab the document directly from ES
-        hit = getDocByID(test_opp_id)
-
-        if not hit.get("found"):
-            log.warning(
-                "TEST_OPPORTUNITY_ID %s not found in Elasticsearch index '%s'; exiting.",
-                test_opp_id,
-                os.getenv("ELASTIC_INDEX", "opportunities"),
-            )
+        log.info("TEST_OPPORTUNITY_ID=%s set; running single-opportunity test mode", test_opp_id)
+        rec = find_by_opp_id(test_opp_id)
+        if not rec:
+            log.warning("TEST_OPPORTUNITY_ID %s not found in Airtable; exiting.", test_opp_id)
         else:
-            # getDocByID returns a doc like {"_index":..., "_id":..., "_source":{...}}
-            # processHit() already handles both hit['_source'] and bare dicts.
-            processHit(hit)
+            opp = opp_from_record(rec)
+            processHit(opp)
 
     else:
-        # Normal multi-opp behavior
         if not OFFLINE_MODE:
-            # Start date = now - LOOKBACK_DAYS (UTC), formatted YYYY-MM-DD
-            start_date = (_dt.now(_tz.utc) - _td(days=LOOKBACK_DAYS)).date().isoformat()
-            log.info("ES lookback start_date=%s (last %s days)", start_date, LOOKBACK_DAYS)
+            # pull from Airtable view instead of ES
+            records = query_view("Due Now", max_records=200)
 
-            data = getNewDataByDate(start_date)
+            for rec in records:
+                rec_id = rec.get("id")
+                token = acquire_lock(rec_id, lock_minutes=10)
+                if not token:
+                    continue
 
-            # Process ALL hits (no early exit)
-            for hit in data:
-                processHit(hit)
-        # playground drives processHit() via Flask; nothing to run here when OFFLINE_MODE=1
-
-
-    
-
-    
+                try:
+                    opp = opp_from_record(rec)
+                    processHit(opp)
+                finally:
+                    release_lock(rec_id, token)
