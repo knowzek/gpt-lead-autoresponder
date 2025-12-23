@@ -58,6 +58,8 @@ def _headers_post(subscription_id: str, token: str) -> dict:
         "Request-Id": str(uuid.uuid4()),
     }
 
+
+
 BASE_URL = os.getenv("FORTELLIS_BASE_URL", "https://api.fortellis.io")  # prod default
 LEADS_BASE = "/cdk/sales/elead/v1/leads"
 OPPS_BASE        = "/sales/v2/elead/opportunities"   
@@ -118,6 +120,98 @@ ACTIVITY_TYPE_MAP = {
     # Also add missing ones from CDK Activity History:
     "internet up": 13,              
 }
+
+BASE_URL = "https://api.fortellis.io"
+
+def _headers(subscription_id: str, token: str) -> dict:
+    return {
+        "Authorization": f"Bearer {token}",
+        "Subscription-Id": subscription_id,
+        "Request-Id": str(uuid.uuid4()),
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+def search_customers_by_email(email: str, token: str, subscription_id: str, page_size: int = 10) -> list[dict]:
+    url = f"{BASE_URL}/sales/v1/elead/customers/search"
+    payload = {"emailAddress": (email or "").strip()}
+    params = {"page": 1, "pageSize": page_size}
+    r = requests.post(url, headers=_headers(subscription_id, token), params=params, json=payload, timeout=30)
+    r.raise_for_status()
+    data = r.json() or {}
+    return data.get("items") or []
+
+def get_opps_by_customer_id(customer_id: str, token: str, subscription_id: str, page_size: int = 50) -> list[dict]:
+    url = f"{BASE_URL}/sales/v2/elead/opportunities/search-by-customerId/{customer_id}"
+    params = {"page": 1, "pageSize": page_size}
+    r = requests.get(url, headers=_headers(subscription_id, token), params=params, timeout=30)
+    r.raise_for_status()
+    data = r.json() or {}
+    return data.get("items") or []
+
+def _parse_dt(s: str | None) -> datetime:
+    if not s:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    # Fortellis often returns "...Z"
+    s2 = s.replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(s2)
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+def find_best_kbb_opp_for_email(
+    *,
+    shopper_email: str,
+    token: str,
+    subscription_id: str,
+    kbb_sources: set[str] | None = None,
+) -> tuple[str | None, str | None, str | None]:
+    """
+    Returns (opp_id, customer_id, reason).
+    Chooses most recent Active KBB opp for this email within this subscription.
+    """
+    kbb_sources = kbb_sources or {"kbb instant cash offer", "kbb servicedrive"}
+
+    customers = search_customers_by_email(shopper_email, token, subscription_id, page_size=10)
+    if not customers:
+        return None, None, "no_customers"
+
+    candidates: list[tuple[datetime, dict, str]] = []
+    for c in customers:
+        cid = c.get("id")
+        if not cid:
+            continue
+        try:
+            opps = get_opps_by_customer_id(cid, token, subscription_id, page_size=100)
+        except Exception:
+            continue
+
+        for o in opps or []:
+            src = (o.get("source") or "").strip().lower()
+            status = (o.get("status") or "").strip().lower()
+
+            if src not in kbb_sources:
+                continue
+            if status != "active":
+                continue
+
+            # Most reliable “freshness” field here is usually dateIn (per example),
+            # else fall back to created_at/updated_at if present.
+            dt = _parse_dt(o.get("dateIn") or o.get("createdAt") or o.get("created_at") or o.get("updatedAt"))
+            opp_id = o.get("id") or o.get("opportunityId")
+            if opp_id:
+                candidates.append((dt, o, cid))
+
+    if not candidates:
+        return None, None, "no_kbb_opps"
+
+    # pick most recent
+    candidates.sort(key=lambda t: t[0], reverse=True)
+    best_dt, best_opp, best_cid = candidates[0]
+    best_id = best_opp.get("id") or best_opp.get("opportunityId")
+    return best_id, best_cid, f"picked_most_recent={best_dt.isoformat()}"
+
 
 def normalize_activity_item(it: dict) -> dict:
     """
