@@ -6,7 +6,6 @@ from rooftops import get_rooftop_info
 from gpt import run_gpt
 from emailer import send_email
 import requests
-from es_resilient import es_upsert_with_retry
 
 import html as _html
 
@@ -15,7 +14,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from constants import *
-from esQuerys import esClient, isIdExist
+from airtable_store import upsert_lead, find_by_opp_id, _safe_json_dumps
+
 
 DRY_RUN = int(os.getenv("DRY_RUN", "1"))  # 1 = DO NOT write to CRM, 0 = allow writes
 
@@ -229,14 +229,22 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
         else:
             docToIndex["followUP_date"] = (_dt.now(_tz.utc) + _td(days=1)).isoformat()
     
-        # Single, safe upsert (no HEAD)
-        resp = es_upsert_with_retry(
-            esClient, index="opportunities", id=opp_id, document=docToIndex
-        )
-    
-        # If created now, optionally hydrate with activities and init state, then upsert again
-        if resp and resp.get("result") == "created":
-            # fetch richer customer only on create (optional)
+        # ---- Airtable upsert ----
+        existing = find_by_opp_id(opp_id)
+        created_now = existing is None
+        
+        # write the base opp blob + index fields Airtable needs
+        upsert_lead(opp_id, {
+            "subscription_id": subscription_id,
+            "source": docToIndex.get("source") or "",
+            "is_active": bool(docToIndex.get("isActive", True)),
+            "follow_up_at": docToIndex.get("followUP_date"),
+            "mode": (docToIndex.get("_kbb_state") or {}).get("mode", ""),
+            "opp_json": _safe_json_dumps(docToIndex),
+        })
+        
+        # If created now, optionally hydrate customer+activities then upsert again
+        if created_now:
             if customerID:
                 try:
                     richer = get_customer_by_url(f"{CUSTOMER_URL}/{customerID}", token, subscription_id) or {}
@@ -244,30 +252,34 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
                         docToIndex["customer"] = richer
                 except Exception as e:
                     log.warning("customer hydrate failed opp_id=%s err=%s", opp_id, e)
-    
+        
             completedActivities = []
             try:
                 acts = get_activities(opp_id, customerID, token, subscription_id) or {}
                 completedActivities = acts.get("items") or acts.get("activities") or []
             except Exception as e:
                 log.warning("get_activities failed opp_id=%s err=%s", opp_id, e)
-    
-            init_doc = {
-                "customer": docToIndex.get("customer"),
-                "completedActivities": completedActivities,
-                "scheduledActivities": [],
-                "messages": [],
-                "alreadyProcessedActivities": {},
-                "checkedDict": {
-                    "is_sales_contacted": False,
-                    "patti_already_contacted": False,
-                    "last_msg_by": None
-                }
+        
+            # mirror your init_doc behavior by mutating docToIndex
+            docToIndex["completedActivities"] = completedActivities
+            docToIndex["scheduledActivities"] = []
+            docToIndex["messages"] = []
+            docToIndex["alreadyProcessedActivities"] = {}
+            docToIndex["checkedDict"] = {
+                "is_sales_contacted": False,
+                "patti_already_contacted": False,
+                "last_msg_by": None,
             }
-            es_upsert_with_retry(  # ← write the init fields too
-                esClient, index="opportunities", id=opp_id, document=init_doc
-            )
-    
+        
+            upsert_lead(opp_id, {
+                "subscription_id": subscription_id,
+                "source": docToIndex.get("source") or "",
+                "is_active": bool(docToIndex.get("isActive", True)),
+                "follow_up_at": docToIndex.get("followUP_date"),
+                "mode": (docToIndex.get("_kbb_state") or {}).get("mode", ""),
+                "opp_json": _safe_json_dumps(docToIndex),
+            })
+
         # keep what we’re sending for logging/return
         items.append(docToIndex)
 
