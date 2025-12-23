@@ -371,27 +371,31 @@ def process_kbb_adf_notification(inbound: dict) -> None:
     try:
         from kbb_ico import process_kbb_ico_lead
         from rooftops import get_rooftop_info
-
+        from airtable_store import save_opp
+    
         # Only send immediately if we haven't already sent Day 1
         state = opportunity.setdefault("_kbb_state", {})
         already_sent_day = state.get("last_template_day_sent")
         if already_sent_day:
-            log.info("KBB ADF: skipping immediate send (already sent day=%s) opp=%s", already_sent_day, opp_id)
+            log.info(
+                "KBB ADF: skipping immediate send (already sent day=%s) opp=%s",
+                already_sent_day, opp_id
+            )
             return
-
+    
         rt = get_rooftop_info(subscription_id) or {}
         rooftop_name   = rt.get("name") or rt.get("rooftop_name") or "Rooftop"
         rooftop_sender = rt.get("sender") or rt.get("patti_email") or None
-
+    
         tok = get_token(subscription_id)
-
+    
         log.info("KBB ADF: triggering immediate Day 1 send opp=%s sub=%s", opp_id, subscription_id)
-
+    
         # Make Day 1 eligible
         state.setdefault("mode", "cadence")
         state.setdefault("last_template_day_sent", None)
         state.setdefault("nudge_count", 0)
-
+    
         state, action_taken = process_kbb_ico_lead(
             opportunity=opportunity,
             lead_age_days=0,          # ADF just arrived
@@ -402,30 +406,28 @@ def process_kbb_adf_notification(inbound: dict) -> None:
             SAFE_MODE=False,          # allow sending
             rooftop_sender=rooftop_sender,
         )
-
+    
         if action_taken:
-            # Make future runs idempotent (cron won't re-send Day 1)
+            # Make future runs idempotent
             opportunity["_kbb_state"] = state
             checked = opportunity.setdefault("checkedDict", {})
             checked["patti_already_contacted"] = True
             checked["last_msg_by"] = "patti"
-
-            # persist updated state back into Airtable immediately
-            rec = upsert_lead(opp_id, {
-                "subscription_id": subscription_id,
-                "source": opportunity.get("source") or "",
-                "is_active": bool(is_active),
-                "follow_up_at": follow_up_at,
-                "mode": (opportunity.get("_kbb_state") or {}).get("mode", ""),
-                "opp_json": _safe_json_dumps(opportunity),
-            })
-            opportunity["_airtable_rec_id"] = rec.get("id")
-
-            log.info("KBB ADF: Day 1 sent immediately + persisted state opp=%s", opp_id)
-
+    
+            # ✅ schedule next nudge + persist (THIS updates Airtable follow_up_at)
+            next_follow = (_dt.now(_tz.utc) + _td(days=1)).isoformat()
+            opportunity["followUP_date"] = next_follow
+    
+            save_opp(opportunity)
+    
+            log.info("KBB ADF: Day 1 sent; scheduled next follow_up_at=%s opp=%s", next_follow, opp_id)
+    
     except Exception as e:
         log.exception("KBB ADF: immediate Day 1 send failed opp=%s err=%s", opp_id, e)
 
+
+    except Exception as e:
+        log.exception("KBB ADF: immediate Day 1 send failed opp=%s err=%s", opp_id, e)
 
     # quick sanity log showing customer email we stored
     cust_email = None
