@@ -914,37 +914,58 @@ def processHit(hit):
             if not OFFLINE_MODE:
                 tok = token
     
-            state, action_taken = process_kbb_ico_lead(
-                opportunity=opportunity,
-                lead_age_days=lead_age_days,
-                rooftop_name=rooftop_name,
-                inquiry_text=inquiry_text_safe,
-                token=tok,
-                subscription_id=subscription_id,
-                SAFE_MODE=os.getenv("SAFE_MODE", "1") in ("1","true","True"),
-                rooftop_sender=rooftop_sender,
-            )
+                state, action_taken = process_kbb_ico_lead(
+                    opportunity=opportunity,
+                    lead_age_days=lead_age_days,
+                    rooftop_name=rooftop_name,
+                    inquiry_text=inquiry_text_safe,
+                    token=tok,
+                    subscription_id=subscription_id,
+                    SAFE_MODE=os.getenv("SAFE_MODE", "1") in ("1","true","True"),
+                    rooftop_sender=rooftop_sender,
+                )
     
-            # Persist updates
-            if not OFFLINE_MODE:
-                airtable_save(opportunity)
-
-            # Optional: write compact state note if we acted
-            if action_taken:
-                compact = {
-                    "mode": state.get("mode"),
-                    "last_template_day_sent": state.get("last_template_day_sent"),
-                    "nudge_count": state.get("nudge_count"),
-                    "last_customer_msg_at": state.get("last_customer_msg_at"),
-                    "last_agent_msg_at": state.get("last_agent_msg_at"),
-                    "last_inbound_activity_id": state.get("last_inbound_activity_id"),
-                    "last_appt_activity_id": state.get("last_appt_activity_id"),
-                    "appt_due_utc": state.get("appt_due_utc"),
-                    "appt_due_local": state.get("appt_due_local"),
-                }
-                note_txt = f"[PATTI_KBB_STATE] {json.dumps(compact, separators=(',',':'))}"
+                # Always persist the updated state back onto the opp dict
+                opportunity["_kbb_state"] = state
+    
+                # -----------------------------
+                # ✅ NEW: If we sent something, schedule the next follow-up
+                # -----------------------------
+                if action_taken:
+                    now_utc = _dt.now(_tz.utc)
+    
+                    # Simple cadence: check again in 1 day after any send.
+                    # (You can swap this to a day-map later if you want Day3/Day7/Day14, etc.)
+                    next_follow = (now_utc + _td(days=1)).isoformat()
+    
+                    opportunity["followUP_date"] = next_follow
+    
+                    log.info(
+                        "KBB ICO: action_taken=True → scheduled next followUP_date=%s opp=%s",
+                        next_follow, opportunityId
+                    )
+    
+                # Persist updates (Airtable follow_up_at will mirror followUP_date via airtable_save/save_opp)
                 if not OFFLINE_MODE:
-                    add_opportunity_comment(tok, subscription_id, opportunityId, note_txt)
+                    airtable_save(opportunity)
+    
+                # Optional: write compact state note if we acted
+                if action_taken:
+                    compact = {
+                        "mode": state.get("mode"),
+                        "last_template_day_sent": state.get("last_template_day_sent"),
+                        "nudge_count": state.get("nudge_count"),
+                        "last_customer_msg_at": state.get("last_customer_msg_at"),
+                        "last_agent_msg_at": state.get("last_agent_msg_at"),
+                        "last_inbound_activity_id": state.get("last_inbound_activity_id"),
+                        "last_appt_activity_id": state.get("last_appt_activity_id"),
+                        "appt_due_utc": state.get("appt_due_utc"),
+                        "appt_due_local": state.get("appt_due_local"),
+                    }
+                    note_txt = f"[PATTI_KBB_STATE] {json.dumps(compact, separators=(',',':'))}"
+                    if not OFFLINE_MODE:
+                        add_opportunity_comment(tok, subscription_id, opportunityId, note_txt)
+
     
         except Exception as e:
             log.exception("KBB ICO handler failed for opp %s: %s", opportunityId, e)
