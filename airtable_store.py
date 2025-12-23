@@ -18,6 +18,24 @@ HEADERS = {
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
+def find_by_customer_email(email: str):
+    email = (email or "").strip().lower()
+    if not email:
+        return None
+
+    # If you have a dedicated column like customer_email, use it (fastest):
+    # formula = f"LOWER({{customer_email}})='{email}'"
+
+    # Otherwise search inside opp_json (works fine for Phase 2):
+    safe = email.replace("'", "\\'")
+    formula = f"FIND('{safe}', LOWER({{opp_json}}))"
+
+    params = {"filterByFormula": formula, "maxRecords": 1}
+    data = _request("GET", BASE_URL, params=params)
+    recs = data.get("records") or []
+    return recs[0] if recs else None
+
+
 def _iso(dt: datetime | str | None) -> str | None:
     if dt is None:
         return None
