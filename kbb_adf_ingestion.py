@@ -26,43 +26,53 @@ FORTELLIS_COMPLETE_ACTIVITY_URL = "https://api.fortellis.io/sales/v1/elead/activ
 ACTIVITY_TYPE_SEND_EMAIL = 3
 ACTIVITY_TYPE_NOTE = 37
 
-def log_completed_activity_email(*, token: str, subscription_id: str, opportunity_id: str, customer_id: str | None,
-                                 subject: str, body_text: str, from_email: str, to_email: str,
-                                 use_send_email_type: bool = True) -> None:
+import requests
+from datetime import datetime, timezone
+
+FORTELLIS_BASE = "https://api.fortellis.io"
+COMPLETE_ACTIVITY_URL = f"{FORTELLIS_BASE}/sales/v1/elead/activities/complete"
+
+def complete_send_email_activity(*, token: str, subscription_id: str,
+                                 opportunity_id: str, customer_id: str,
+                                 subject: str, body_text: str,
+                                 from_email: str | None = None) -> dict:
     """
-    Logs an outbound email to Fortellis as a completed activity.
-    IMPORTANT: This does NOT send an email. It only logs.
+    Logs a completed 'Send Email' activity in Fortellis WITHOUT sending an email.
+    This should stop the dealership response-time clock (per your requirement).
     """
-    activity_type_id = ACTIVITY_TYPE_SEND_EMAIL if use_send_email_type else ACTIVITY_TYPE_NOTE
+
+    now = datetime.now(timezone.utc).isoformat()
 
     payload = {
-        "activityTypeId": activity_type_id,
         "opportunityId": opportunity_id,
         "customerId": customer_id,
-        "completedDateTime": _dt.now(_tz.utc).isoformat(),
-        "comments": f"PATTI sent Day 1 email via Outlook.\nFrom: {from_email}\nTo: {to_email}\nSubject: {subject}",
+        "activityTypeId": 3,  # "send email"
+        "completedDate": now,
+        "comments": f"Patti sent Day 1 ICO email via Outlook. Subject: {subject}",
+        # Some tenants accept message object; safe to include (Fortellis may ignore unknown fields)
         "message": {
             "subject": subject,
             "body": body_text,
-        },
+        }
     }
+
+    # Optional: capture sender used
+    if from_email:
+        payload["comments"] += f" | From: {from_email}"
 
     headers = {
         "Authorization": f"Bearer {token}",
         "Subscription-Id": subscription_id,
-        "Request-Id": f"patti-kbb-day1-{opportunity_id}",
+        "Request-Id": f"patti-{opportunity_id}-{int(datetime.now().timestamp())}",
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
 
-    try:
-        r = requests.post(FORTELLIS_COMPLETE_ACTIVITY_URL, headers=headers, json=payload, timeout=30)
-        if r.status_code >= 400:
-            # Don't fail the webhook if CRM logging fails
-            # (email already went out; we can retry later)
-            print("WARN: Fortellis activity log failed:", r.status_code, r.text[:300])
-    except Exception as e:
-        print("WARN: Fortellis activity log exception:", e)
+    r = requests.post(COMPLETE_ACTIVITY_URL, headers=headers, json=payload, timeout=30)
+    if r.status_code >= 400:
+        raise RuntimeError(f"Complete Activity failed {r.status_code}: {r.text[:800]}")
+    return r.json()
+
 
 log = logging.getLogger("patti.kbb_adf")
 
@@ -356,81 +366,65 @@ def process_kbb_adf_notification(inbound: dict) -> None:
     )
 
     # -----------------------------
-    # 6) IMMEDIATE Day 1 send (webhook-driven)
+    # 6) IMMEDIATE Day 1 send (ADF-triggered)
     # -----------------------------
-    # Only send if:
-    # - record is active
-    # - we haven't already sent Day 1
-    # - customer email exists and is mailable
-    kbb_state = opportunity.get("_kbb_state") or {}
-    already_sent_day1 = bool(kbb_state.get("last_template_day_sent"))  # any value means we already sent something
+    try:
+        from kbb_ico import process_kbb_ico_lead
+        from rooftops import get_rooftop_info
 
-    cust = opportunity.get("customer") or {}
-    emails = cust.get("emails") or []
-    cust_email_obj = next((e for e in emails if (e.get("address") or "").strip()), None)
-    cust_email = (cust_email_obj.get("address") or "").strip() if cust_email_obj else None
-    do_not_email = bool(cust_email_obj.get("doNotEmail")) if cust_email_obj else False
+        # Only send immediately if we haven't already sent Day 1
+        state = opportunity.setdefault("_kbb_state", {})
+        already_sent_day = state.get("last_template_day_sent")
+        if already_sent_day:
+            log.info("KBB ADF: skipping immediate send (already sent day=%s) opp=%s", already_sent_day, opp_id)
+            return
 
-    if is_active and (not already_sent_day1) and cust_email and (not do_not_email):
-        try:
-            # --- Render Day 1 content ---
-            # REPLACE THIS with your existing Day 1 template renderer.
-            # It should return: subject, html_body, text_body
-            subject_out, html_out, text_out = render_kbb_day1_email(opportunity)
+        rt = get_rooftop_info(subscription_id) or {}
+        rooftop_name   = rt.get("name") or rt.get("rooftop_name") or "Rooftop"
+        rooftop_sender = rt.get("sender") or rt.get("patti_email") or None
 
-            # Send via Outlook (Patti email), NOT Fortellis
-            # Assumes your send_email handles the proper From based on rooftop/subscription_id
-            send_email(
-                to_email=cust_email,
-                subject=subject_out,
-                html_body=html_out,
-                text_body=text_out,
-                rooftop_key=subscription_id,   # if your send_email expects dealer key; adjust if needed
-            )
+        tok = get_token(subscription_id)
 
-            now2 = _dt.now(_tz.utc).isoformat()
+        log.info("KBB ADF: triggering immediate Day 1 send opp=%s sub=%s", opp_id, subscription_id)
 
-            # Update state so cron will NOT resend Day 1
-            opportunity.setdefault("checkedDict", {})["patti_already_contacted"] = True
-            opportunity["checkedDict"]["last_msg_by"] = "patti"
+        # Make Day 1 eligible
+        state.setdefault("mode", "cadence")
+        state.setdefault("last_template_day_sent", None)
+        state.setdefault("nudge_count", 0)
 
-            kbb_state = opportunity.setdefault("_kbb_state", {})
-            kbb_state["mode"] = kbb_state.get("mode") or "cadence"
-            kbb_state["last_template_day_sent"] = 1
-            kbb_state["last_template_sent_at"] = now2
-            kbb_state["last_agent_msg_at"] = now2
-            kbb_state["nudge_count"] = kbb_state.get("nudge_count") or 0
-
-            # Persist updated opp_json back to Airtable (NOW that _airtable_rec_id is attached)
-            from airtable_store import save_opp
-            save_opp(opportunity)
-
-            # Log to Fortellis as "Send Email" completed activity (does NOT send)
-            # If you decide this might affect response-time metrics incorrectly,
-            # flip use_send_email_type=False to log as NOTE instead.
-            from_email_for_log = "patti@pattersonautos.com"  # replace if you derive per rooftop
-            log_completed_activity_email(
-                token=token,
-                subscription_id=subscription_id,
-                opportunity_id=opp_id,
-                customer_id=(cust.get("id") or customer_id),
-                subject=subject_out,
-                body_text=text_out or "",
-                from_email=from_email_for_log,
-                to_email=cust_email,
-                use_send_email_type=True,
-            )
-
-            log.info("KBB ADF: Day 1 sent immediately to %s for opp=%s", cust_email, opp_id)
-
-        except Exception as e:
-            # Do NOT crash webhook; just log and let cron pick it up later
-            log.exception("KBB ADF: immediate Day 1 send failed opp=%s err=%s", opp_id, e)
-    else:
-        log.info(
-            "KBB ADF: skip immediate Day 1 send (is_active=%s already_sent=%s cust_email=%s do_not_email=%s)",
-            is_active, already_sent_day1, bool(cust_email), do_not_email
+        state, action_taken = process_kbb_ico_lead(
+            opportunity=opportunity,
+            lead_age_days=0,          # ADF just arrived
+            rooftop_name=rooftop_name,
+            inquiry_text="",          # Day 1 is a kickoff, not a reply
+            token=tok,
+            subscription_id=subscription_id,
+            SAFE_MODE=False,          # allow sending
+            rooftop_sender=rooftop_sender,
         )
+
+        if action_taken:
+            # Make future runs idempotent (cron won't re-send Day 1)
+            opportunity["_kbb_state"] = state
+            checked = opportunity.setdefault("checkedDict", {})
+            checked["patti_already_contacted"] = True
+            checked["last_msg_by"] = "patti"
+
+            # persist updated state back into Airtable immediately
+            rec = upsert_lead(opp_id, {
+                "subscription_id": subscription_id,
+                "source": opportunity.get("source") or "",
+                "is_active": bool(is_active),
+                "follow_up_at": follow_up_at,
+                "mode": (opportunity.get("_kbb_state") or {}).get("mode", ""),
+                "opp_json": _safe_json_dumps(opportunity),
+            })
+            opportunity["_airtable_rec_id"] = rec.get("id")
+
+            log.info("KBB ADF: Day 1 sent immediately + persisted state opp=%s", opp_id)
+
+    except Exception as e:
+        log.exception("KBB ADF: immediate Day 1 send failed opp=%s err=%s", opp_id, e)
 
 
     # quick sanity log showing customer email we stored
