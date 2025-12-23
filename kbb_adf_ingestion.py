@@ -5,18 +5,13 @@ from datetime import datetime, timezone
 
 from fortellis import get_token, get_recent_opportunities, get_opportunity, get_customer_by_url, find_recent_kbb_opportunity_by_email, find_best_kbb_opp_for_email
 from constants import CUSTOMER_URL 
-from airtable_store import find_by_opp_id 
+from airtable_store import upsert_lead, find_by_opp_id, _safe_json_dumps, find_by_customer_email, opp_from_record, save_opp
 
 
 from email_ingestion import clean_html  
 import json
 from datetime import datetime as _dt, timezone as _tz
 
-from airtable_store import (
-    find_by_customer_email,   
-    opp_from_record,
-    save_opp,
-)
 # TEMP: while testing, only these rooftops
 ALLOWED_SUBSCRIPTIONS = {
     "7a05ce2c-cf00-4748-b841-45b3442665a7",
@@ -291,20 +286,30 @@ def process_kbb_adf_notification(inbound: dict) -> None:
         opportunity["followUP_date"] = follow_up_at
 
     # -----------------------------
-    # 5) Save to Airtable (follow_up_at drives Due Now view)
+    # 5) Upsert Airtable record (create OR update)
     # -----------------------------
-    save_opp(
-        opportunity,
-        extra_fields={
-            "opp_id": opp_id,
-            "subscription_id": subscription_id,
-            "is_active": bool(is_active),
-            "follow_up_at": follow_up_at,
-            "source": opportunity.get("source") or "",
-            "mode": (opportunity.get("_kbb_state") or {}).get("mode", ""),
-            "opp_json": json.dumps(opportunity, ensure_ascii=False),
-        },
+    from airtable_store import upsert_lead, _safe_json_dumps
+    
+    rec = upsert_lead(opp_id, {
+        "subscription_id": subscription_id,
+        "source": opportunity.get("source") or "",
+        "is_active": bool(is_active),
+        "follow_up_at": follow_up_at,
+        "mode": (opportunity.get("_kbb_state") or {}).get("mode", ""),
+        "opp_json": _safe_json_dumps(opportunity),
+    })
+    
+    # Attach Airtable record id so future save_opp() calls work
+    opportunity["_airtable_rec_id"] = rec.get("id")
+    
+    log.info(
+        "KBB ADF: upserted Airtable opp=%s rec_id=%s follow_up_at=%s is_active=%s",
+        opp_id,
+        opportunity["_airtable_rec_id"],
+        follow_up_at,
+        is_active,
     )
+
 
     # quick sanity log showing customer email we stored
     cust_email = None
