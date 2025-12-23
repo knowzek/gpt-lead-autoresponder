@@ -267,13 +267,14 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
             docToIndex["followUP_date"] = (_dt.now(_tz.utc) + _td(days=1)).isoformat()
     
         # ---- Airtable upsert ----
-        existing = find_by_opp_id(opp_id)
+        existing_rec = find_by_opp_id(opp_id)
+        created_now = existing_rec is None
         
-        # If it already exists, merge so we don't wipe nested fields like customer/emails
-        if existing and isinstance(existing, dict):
-            docToIndex = _merge_preserve(existing, docToIndex)
+        # If Airtable already has a richer opp_json, DO NOT wipe it.
+        if existing_rec:
+            existing_opp = opp_from_record(existing_rec)  # <-- parses opp_json into a dict
+            docToIndex = _merge_preserve(existing_opp, docToIndex)
         
-        # Now write ONE time (or twice if created_now and you hydrate more below)
         upsert_lead(opp_id, {
             "subscription_id": subscription_id,
             "source": docToIndex.get("source") or "",
@@ -282,6 +283,7 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
             "mode": (docToIndex.get("_kbb_state") or {}).get("mode", ""),
             "opp_json": _safe_json_dumps(docToIndex),
         })
+
         
         created_now = existing is None
 
