@@ -7,6 +7,8 @@ from fortellis import (
     send_opportunity_email_activity as _crm_send_opportunity_email_activity,
     schedule_activity,
 )
+from fortellis import complete_activity
+
 from outlook_email import send_email_via_outlook
 from fortellis import search_activities_by_opportunity
 from helpers import build_calendar_links
@@ -159,14 +161,15 @@ def send_opportunity_email_activity(
     # This does NOT send an email — it only records an activity.
     try:
         now_z = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
         complete_activity(
             token,
-            subscription_id,
+            subscription_id,           # <-- dealer_key (you pass sub id here)
             opp_id,
             due_dt_iso_utc=now_z,
             completed_dt_iso_utc=now_z,
             activity_name="Send Email",
-            activity_type=3,  # your map shows "send email": 3
+            activity_type=3,           # Send Email
             comments=f"Patti Outlook: sent to {to_addr} | subject={subject}",
         )
     except Exception as e:
