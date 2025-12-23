@@ -151,6 +151,61 @@ def normalize_activity_item(it: dict) -> dict:
 
     return base
 
+# fortellis.py
+
+def find_recent_kbb_opportunity_by_email(
+    *,
+    shopper_email: str,
+    subscription_id: str,
+    token: str,
+    since_minutes: int = 60 * 48,   # last 48 hours
+    page_size: int = 100,
+    max_pages: int = 10,
+):
+    """
+    Search recent opportunities in Fortellis for a KBB opp whose customer email matches shopper_email.
+    Returns (opp_id, opp_obj_from_delta) or (None, None).
+    """
+    target = (shopper_email or "").strip().lower()
+    if not target:
+        return None, None
+
+    page = 1
+    while page <= max_pages:
+        data = get_recent_opportunities(
+            token,
+            subscription_id,
+            since_minutes=since_minutes,
+            page=page,
+            page_size=page_size,
+        ) or {}
+
+        items = (data.get("items") or [])
+        if not items:
+            return None, None
+
+        for op in items:
+            src = (op.get("source") or "").strip().lower()
+            if src not in ("kbb instant cash offer", "kbb servicedrive"):
+                continue
+
+            cust = (op.get("customer") or {})
+            emails = cust.get("emails") or []
+            for e in emails:
+                addr = (e.get("address") or "").strip().lower()
+                if addr == target:
+                    opp_id = op.get("opportunityId") or op.get("id")
+                    return opp_id, op
+
+            # fallback: some payloads have customerEmail
+            addr2 = (op.get("customerEmail") or "").strip().lower()
+            if addr2 == target:
+                opp_id = op.get("opportunityId") or op.get("id")
+                return opp_id, op
+
+        page += 1
+
+    return None, None
 
 
 def get_activities(opportunity_id, customer_id, token, dealer_key):
