@@ -631,10 +631,44 @@ def processHit(hit):
     # if f"{opportunityId}.json" in already_processed:
     #     return
 
-    customer = opportunity['customer']
-    customerId = customer['id']
-
-    print("opportunityId:", opportunityId)
+    # --- Customer: tolerate missing + self-heal from Fortellis ---
+    customer = opportunity.get("customer") or {}
+    customerId = customer.get("id")
+    
+    if not customerId and not OFFLINE_MODE:
+        try:
+            fresh_opp = get_opportunity(opportunityId, token, subscription_id)
+            if isinstance(fresh_opp, dict):
+                # hydrate missing customer
+                if fresh_opp.get("customer"):
+                    opportunity["customer"] = fresh_opp.get("customer") or {}
+                    customer = opportunity["customer"]
+                    customerId = customer.get("id")
+    
+                # hydrate other commonly-missing fields
+                if fresh_opp.get("salesTeam") is not None:
+                    opportunity["salesTeam"] = fresh_opp.get("salesTeam") or []
+                if fresh_opp.get("source") is not None:
+                    opportunity["source"] = fresh_opp.get("source")
+                if fresh_opp.get("upType") is not None:
+                    opportunity["upType"] = fresh_opp.get("upType")
+                if fresh_opp.get("status") is not None:
+                    opportunity["status"] = fresh_opp.get("status")
+                if fresh_opp.get("subStatus") is not None:
+                    opportunity["subStatus"] = fresh_opp.get("subStatus")
+                if fresh_opp.get("isActive") is not None:
+                    opportunity["isActive"] = fresh_opp.get("isActive")
+    
+                # persist once so future runs are clean
+                airtable_save(opportunity)
+    
+        except Exception as e:
+            log.warning("Customer hydrate failed opp=%s err=%s", opportunityId, e)
+    
+    # final safety gate
+    if not customerId:
+        log.warning("Opp %s missing customer.id after hydrate; skipping.", opportunityId)
+        return
 
 
     # getting customer email & info
