@@ -955,6 +955,37 @@ def complete_activity(
 
     return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
 
+from datetime import datetime, timezone
+
+def _iso_z(dt: datetime) -> str:
+    # Fortellis examples commonly accept Zulu timestamps
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+def complete_send_email_activity(
+    *,
+    token: str,
+    subscription_id: str,
+    opportunity_id: str,
+    to_addr: str,
+    subject: str,
+    comments_extra: str = "",
+):
+    now = _iso_z(datetime.now(timezone.utc))
+
+    # IMPORTANT: pass activity_type as a string so _coerce_activity_type maps it reliably
+    return complete_activity(
+        token,
+        subscription_id,              # dealer_key == Subscription-Id in your _headers()
+        opportunity_id,
+        due_dt_iso_utc=now,
+        completed_dt_iso_utc=now,
+        activity_name="Send Email",
+        activity_type="send email",   # <-- this maps to 3 in your ACTIVITY_TYPE_MAP
+        comments=f"Patti Outlook: sent to {to_addr} | subject={subject}"
+                 + (f" | {comments_extra}" if comments_extra else ""),
+    )
+
+
 
 def search_activities_by_opportunity(opportunity_id, token, dealer_key, page=1, page_size=10, customer_id=None):
     """
