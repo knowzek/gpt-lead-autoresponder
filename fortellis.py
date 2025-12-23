@@ -929,8 +929,6 @@ def schedule_activity(
         json=payload,
     )
 
-
-
 def complete_activity(
     token,
     dealer_key,
