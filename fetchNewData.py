@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from constants import *
-from airtable_store import upsert_lead, find_by_opp_id, _safe_json_dumps
+from airtable_store import upsert_lead, find_by_opp_id, _safe_json_dumps, opp_from_record
 
 
 DRY_RUN = int(os.getenv("DRY_RUN", "1"))  # 1 = DO NOT write to CRM, 0 = allow writes
@@ -283,10 +283,6 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
             "mode": (docToIndex.get("_kbb_state") or {}).get("mode", ""),
             "opp_json": _safe_json_dumps(docToIndex),
         })
-
-        
-        created_now = existing is None
-
         
         # If created now, optionally hydrate customer+activities then upsert again
         if created_now:
