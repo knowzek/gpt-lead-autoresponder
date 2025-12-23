@@ -3,9 +3,10 @@ import re
 import logging
 from datetime import datetime, timezone
 
-from fortellis import get_token, get_recent_opportunities, get_opportunity, get_customer_by_url, find_recent_kbb_opportunity_by_email
+from fortellis import get_token, get_recent_opportunities, get_opportunity, get_customer_by_url, find_recent_kbb_opportunity_by_email, find_best_kbb_opp_for_email
 from constants import CUSTOMER_URL 
 from airtable_store import find_by_opp_id 
+
 
 from email_ingestion import clean_html  
 import json
@@ -162,28 +163,35 @@ def process_kbb_adf_notification(inbound: dict) -> None:
     # -----------------------------
     # 1) Fortellis lookup (NOT Airtable)
     # -----------------------------
+
     opp_id = None
     subscription_id = None
-
+    customer_id = None
+    reason = None
+    
     for sub_id in ALLOWED_SUBSCRIPTIONS:
         try:
             tok = get_token(sub_id)
-            found_id, _ = find_recent_kbb_opportunity_by_email(
+            found_opp_id, found_cust_id, why = find_best_kbb_opp_for_email(
                 shopper_email=shopper_email,
-                subscription_id=sub_id,
                 token=tok,
-                since_minutes=60 * 48,   # 48h window
+                subscription_id=sub_id,
             )
-            if found_id:
-                opp_id = found_id
+            if found_opp_id:
+                opp_id = found_opp_id
+                customer_id = found_cust_id
                 subscription_id = sub_id
+                reason = why
                 break
         except Exception as e:
-            log.warning("KBB ADF: fortellis lookup failed sub=%s err=%s", sub_id, e)
-
+            log.warning("KBB ADF: lookup failed sub=%s err=%s", sub_id, e)
+    
     if not opp_id or not subscription_id:
         log.warning("KBB ADF: No Fortellis KBB opp found for shopper email %s", shopper_email)
         return
+    
+    log.info("KBB ADF: matched opp=%s sub=%s customer=%s (%s)", opp_id, subscription_id, customer_id, reason)
+
 
     # -----------------------------
     # 2) Hydrate full opp + customer (THIS FIXES missing email)
