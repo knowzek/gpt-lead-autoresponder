@@ -45,6 +45,27 @@ def _crm_appt_set(opportunity: dict) -> bool:
     return status in {"appointment set", "appt set", "appointment scheduled"}
 
 
+def expand_legacy_schedule_token_for_outlook(body_html: str, rooftop_name: str) -> str:
+    """
+    Fortellis expands <{LegacySalesApptSchLink}> inside the CRM.
+    Outlook/email-outside-CRM will NOT, so we replace it with a real URL
+    based on rooftop_name (ROOFTOP_INFO).
+    """
+    body_html = body_html or ""
+    rt = (ROOFTOP_INFO.get(rooftop_name) or {})
+    booking_link = (rt.get("booking_link") or rt.get("scheduler_url") or "").strip()
+
+    # If we don't have a booking link, leave token alone (or pick a safe fallback).
+    if not booking_link:
+        return body_html
+
+    # Replace the raw token wherever it appears
+    return re.sub(
+        r"(?i)<\{LegacySalesApptSchLink\}>",
+        f'<a href="{booking_link}">Schedule Your Visit</a>',
+        body_html,
+    )
+
 def wants_kbb_value(text: str) -> bool:
     """
     Heuristic: does the customer seem to be asking for their KBB estimate / offer amount?
@@ -135,6 +156,9 @@ def send_opportunity_email_activity(
     to_addr = recipients[0] if recipients else None
     if not to_addr:
         return
+
+    # ✅ Replace CRM-only token with rooftop-specific schedule URL
+    body_html = expand_legacy_schedule_token_for_outlook(body_html, rooftop_name)
 
     # 1) Send from Patti via Power Automate / Outlook
     send_email_via_outlook(
