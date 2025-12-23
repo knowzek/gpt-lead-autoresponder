@@ -157,48 +157,62 @@ def send_opportunity_email_activity(
     if not to_addr:
         return
 
-    # ✅ Replace CRM-only token with rooftop-specific schedule URL
-    body_html = expand_legacy_schedule_token_for_outlook(body_html, rooftop_name)
+    from datetime import datetime, timezone
 
-    # 1) Send from Patti via Power Automate / Outlook
-    send_email_via_outlook(
-        to_addr=to_addr,
-        subject=subject,
-        html_body=body_html,
-        headers={"X-Opportunity-ID": opp_id},
-    )
+# ✅ Replace CRM-only token with rooftop-specific schedule URL
+body_html = expand_legacy_schedule_token_for_outlook(body_html, rooftop_name)
 
-    # 2) Log back to CRM as a note (visibility)
-    if token and subscription_id:
-        try:
-            preview = _clean_html(body_html)[:500]
-            add_opportunity_comment(
-                token,
-                subscription_id,
-                opp_id,
-                f"Outbound email (Patti Outlook) to {to_addr}: {subject}\n\n{preview}",
-            )
-        except Exception as e:
-            log.warning("Failed to add CRM comment for Outlook send opp=%s: %s", opp_id, e)
+# 1) Send from Patti via Power Automate / Outlook
+send_email_via_outlook(
+    to_addr=to_addr,
+    subject=subject,
+    html_body=body_html,
+    headers={"X-Opportunity-ID": opp_id},
+)
 
-    # 3) ✅ Create a "Send Email" completed activity (stops the response clock)
-    # This does NOT send an email — it only records an activity.
+# 2) Log back to CRM as a NOTE (visibility)
+if token and subscription_id:
     try:
-        now_z = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-        complete_activity(
+        preview = _clean_html(body_html)[:500]
+        add_opportunity_comment(
             token,
-            subscription_id,           # <-- dealer_key (you pass sub id here)
+            subscription_id,
             opp_id,
-            due_dt_iso_utc=now_z,
-            completed_dt_iso_utc=now_z,
-            activity_name="Send Email",
-            activity_type=3,           # Send Email
-            comments=f"Patti Outlook: sent to {to_addr} | subject={subject}",
+            f"Outbound email (Patti Outlook) to {to_addr}: {subject}\n\n{preview}",
         )
     except Exception as e:
-        log.warning("Failed to complete 'Send Email' activity opp=%s: %s", opp_id, e)
+        log.warning("Failed to add CRM comment for Outlook send opp=%s: %s", opp_id, e)
 
+    # 3) ✅ Create a "Send Email" COMPLETED ACTIVITY (stops the response clock)
+    # IMPORTANT: This does NOT send an email — it only records the activity in eLead.
+    if token and subscription_id:
+        try:
+            # dealer_key must match what your _headers(dealer_key, token) expects.
+            # If your _headers() expects a rooftop key (NOT subscription_id), do this:
+            rt = get_rooftop_info(subscription_id) or {}
+            dealer_key = rt.get("rooftop_key") or rt.get("key") or rt.get("rooftop")  # <-- pick the correct field
+    
+            if not dealer_key:
+                raise RuntimeError("Missing dealer_key/rooftop_key for complete_activity()")
+    
+            now_z = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+            complete_activity(
+                token,
+                dealer_key,                 # ✅ NOT subscription_id (unless your _headers actually wants sub id)
+                opp_id,
+                due_dt_iso_utc=now_z,
+                completed_dt_iso_utc=now_z,
+                activity_name="Send Email",
+                activity_type="send email",  # or 3; string is safer with your _coerce_activity_type()
+                comments=f"Patti Outlook: sent to {to_addr} | subject={subject}",
+            )
+    
+            log.info("Completed 'Send Email' activity in CRM opp=%s", opp_id)
+    
+        except Exception as e:
+            # Make this loud while testing so we SEE why it's not creating the activity
+            log.exception("Failed to complete 'Send Email' activity opp=%s: %s", opp_id, e)
 
 
 
