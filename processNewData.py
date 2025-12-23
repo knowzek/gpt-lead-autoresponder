@@ -910,69 +910,85 @@ def processHit(hit):
     
         # Hand off to the KBB ICO flow (templates + stop-on-reply convo)
         try:
+            # Hand off to the KBB ICO flow (templates + stop-on-reply convo)
             tok = None
             if not OFFLINE_MODE:
                 tok = token
-    
-                state, action_taken = process_kbb_ico_lead(
-                    opportunity=opportunity,
-                    lead_age_days=lead_age_days,
-                    rooftop_name=rooftop_name,
-                    inquiry_text=inquiry_text_safe,
-                    token=tok,
-                    subscription_id=subscription_id,
-                    SAFE_MODE=os.getenv("SAFE_MODE", "1") in ("1","true","True"),
-                    rooftop_sender=rooftop_sender,
-                )
-    
-                # Always persist the updated state back onto the opp dict
-                opportunity["_kbb_state"] = state
-    
-                # -----------------------------
-                # ✅ NEW: If we sent something, schedule the next follow-up
-                # -----------------------------
-                if action_taken:
-                    now_utc = _dt.now(_tz.utc)
-    
-                    # Simple cadence: check again in 1 day after any send.
-                    # (You can swap this to a day-map later if you want Day3/Day7/Day14, etc.)
-                    next_follow = (now_utc + _td(days=1)).isoformat()
-    
-                    opportunity["followUP_date"] = next_follow
-    
-                    log.info(
-                        "KBB ICO: action_taken=True → scheduled next followUP_date=%s opp=%s",
-                        next_follow, opportunityId
-                    )
-    
-                # Persist updates (Airtable follow_up_at will mirror followUP_date via airtable_save/save_opp)
+        
+            state, action_taken = process_kbb_ico_lead(
+                opportunity=opportunity,
+                lead_age_days=lead_age_days,
+                rooftop_name=rooftop_name,
+                inquiry_text=inquiry_text_safe,
+                token=tok,
+                subscription_id=subscription_id,
+                SAFE_MODE=os.getenv("SAFE_MODE", "1") in ("1","true","True"),
+                rooftop_sender=rooftop_sender,
+            )
+        
+            # Optional: write compact state note if we acted
+            if action_taken:
+                # --- Schedule next follow_up based on cadence keys ---
+                from kbb_cadence import CADENCE
+        
+                def _next_cadence_day(after_day: int) -> int | None:
+                    days = sorted(int(d) for d in CADENCE.keys())
+                    for d in days:
+                        if d > int(after_day):
+                            return d
+                    return None
+        
+                now_utc = _dt.now(_tz.utc)
+        
+                # Prefer state-based scheduling (more reliable than "days since dateIn")
+                last_sent_day = None
+                if isinstance(state, dict):
+                    last_sent_day = state.get("last_template_day_sent")
+        
+                if isinstance(last_sent_day, int) and last_sent_day > 0:
+                    next_day = _next_cadence_day(last_sent_day)
+                else:
+                    # fallback if state didn't update for some reason
+                    next_day = _next_cadence_day(int(lead_age_days))
+        
+                if next_day is not None:
+                    # Schedule next run for the correct future day
+                    # (relative to NOW; if you want relative to dateIn, tell me and I’ll swap it)
+                    delta_days = int(next_day) - int(last_sent_day or lead_age_days or 0)
+                    if delta_days <= 0:
+                        delta_days = 1
+        
+                    opportunity["followUP_date"] = (now_utc + _td(days=delta_days)).isoformat()
+                    log.info("KBB ICO: scheduled next followUP_date=%s opp=%s next_day=%s",
+                             opportunity["followUP_date"], opportunityId, next_day)
+                else:
+                    # No more nudges in cadence; deactivate (optional)
+                    opportunity["isActive"] = False
+                    opportunity.setdefault("checkedDict", {})["exit_type"] = "cadence_complete"
+                    log.info("KBB ICO: cadence complete → set inactive opp=%s", opportunityId)
+        
+                compact = {
+                    "mode": state.get("mode") if isinstance(state, dict) else None,
+                    "last_template_day_sent": last_sent_day,
+                    "nudge_count": state.get("nudge_count") if isinstance(state, dict) else None,
+                    "last_customer_msg_at": state.get("last_customer_msg_at") if isinstance(state, dict) else None,
+                    "last_agent_msg_at": state.get("last_agent_msg_at") if isinstance(state, dict) else None,
+                }
+                note_txt = f"[PATTI_KBB_STATE] {json.dumps(compact, separators=(',',':'))}"
                 if not OFFLINE_MODE:
-                    airtable_save(opportunity)
-    
-                # Optional: write compact state note if we acted
-                if action_taken:
-                    compact = {
-                        "mode": state.get("mode"),
-                        "last_template_day_sent": state.get("last_template_day_sent"),
-                        "nudge_count": state.get("nudge_count"),
-                        "last_customer_msg_at": state.get("last_customer_msg_at"),
-                        "last_agent_msg_at": state.get("last_agent_msg_at"),
-                        "last_inbound_activity_id": state.get("last_inbound_activity_id"),
-                        "last_appt_activity_id": state.get("last_appt_activity_id"),
-                        "appt_due_utc": state.get("appt_due_utc"),
-                        "appt_due_local": state.get("appt_due_local"),
-                    }
-                    note_txt = f"[PATTI_KBB_STATE] {json.dumps(compact, separators=(',',':'))}"
-                    if not OFFLINE_MODE:
-                        add_opportunity_comment(tok, subscription_id, opportunityId, note_txt)
-
-    
+                    add_opportunity_comment(tok, subscription_id, opportunityId, note_txt)
+        
+            # Persist updates (this writes follow_up_at from followUP_date via save_opp/airtable_save)
+            if not OFFLINE_MODE:
+                airtable_save(opportunity)
+        
         except Exception as e:
             log.exception("KBB ICO handler failed for opp %s: %s", opportunityId, e)
-    
+        
         # Do not fall through to general flow
         wJson(opportunity, f"jsons/process/{opportunityId}.json")
         return
+
     
     # === if we got here, proceed with the normal (non-KBB) flow ===
 
