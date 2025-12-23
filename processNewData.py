@@ -80,6 +80,24 @@ _KBB_SOURCES = {
     "kbb service drive",
 }
 
+def _next_kbb_followup_iso(*, lead_age_days: int) -> str:
+    """
+    Returns the UTC iso timestamp for the next cadence day after lead_age_days.
+    Uses your kbb_cadence.CADENCE keys (day numbers).
+    """
+    from kbb_cadence import CADENCE
+
+    days_sorted = sorted(int(d) for d in CADENCE.keys())
+    # pick next cadence day strictly greater than current day
+    next_day = next((d for d in days_sorted if d > lead_age_days), None)
+
+    # if nothing left, park far in future (no more nudges)
+    if next_day is None:
+        return (_dt.now(_tz.utc) + _td(days=365)).isoformat()
+
+    delta_days = max(1, next_day - lead_age_days)  # safety: at least 1 day
+    return (_dt.now(_tz.utc) + _td(days=delta_days)).isoformat()
+
 def _is_exact_kbb_source(val) -> bool:
     return (val or "").strip().lower() in _KBB_SOURCES
 
@@ -910,7 +928,6 @@ def processHit(hit):
     
         # Hand off to the KBB ICO flow (templates + stop-on-reply convo)
         try:
-            # Hand off to the KBB ICO flow (templates + stop-on-reply convo)
             tok = None
             if not OFFLINE_MODE:
                 tok = token
@@ -926,50 +943,66 @@ def processHit(hit):
                 rooftop_sender=rooftop_sender,
             )
         
-            # Optional: write compact state note if we acted
-            if action_taken:
-                # --- Schedule next follow_up based on cadence keys ---
-                from kbb_cadence import CADENCE
+            # Always persist returned state back onto opp (some versions mutate, some return)
+            if isinstance(state, dict):
+                opportunity["_kbb_state"] = state
         
-                def _next_cadence_day(after_day: int) -> int | None:
-                    days = sorted(int(d) for d in CADENCE.keys())
-                    for d in days:
-                        if d > int(after_day):
-                            return d
-                    return None
+            # -----------------------------
+            # Schedule next follow-up in Airtable (cadence only)
+            # -----------------------------
+            from kbb_cadence import CADENCE
         
-                now_utc = _dt.now(_tz.utc)
+            def _next_cadence_day(after_day: int) -> int | None:
+                days = sorted(int(d) for d in CADENCE.keys())
+                for d in days:
+                    if d > int(after_day):
+                        return d
+                return None
         
-                # Prefer state-based scheduling (more reliable than "days since dateIn")
+            now_utc = _dt.now(_tz.utc)
+        
+            mode = (state.get("mode") if isinstance(state, dict) else None) or (opportunity.get("_kbb_state") or {}).get("mode")
+        
+            # If customer engaged, stop nudges (don’t keep it "Due Now")
+            if mode == "convo":
+                # Park follow-up far out (or set inactive if you prefer)
+                opportunity["followUP_date"] = (now_utc + _td(days=365)).isoformat()
+                opportunity.setdefault("checkedDict", {})["exit_type"] = opportunity.get("checkedDict", {}).get("exit_type") or "customer_engaged"
+                log.info("KBB ICO: convo mode → parked followUP_date=%s opp=%s",
+                         opportunity["followUP_date"], opportunityId)
+        
+            else:
+                # Cadence mode: schedule next based on last_template_day_sent (preferred)
                 last_sent_day = None
                 if isinstance(state, dict):
                     last_sent_day = state.get("last_template_day_sent")
         
-                if isinstance(last_sent_day, int) and last_sent_day > 0:
-                    next_day = _next_cadence_day(last_sent_day)
-                else:
-                    # fallback if state didn't update for some reason
-                    next_day = _next_cadence_day(int(lead_age_days))
+                # Fallback to lead_age_days if state didn't update
+                anchor_day = int(last_sent_day) if isinstance(last_sent_day, int) and last_sent_day > 0 else int(lead_age_days or 0)
+        
+                next_day = _next_cadence_day(anchor_day)
         
                 if next_day is not None:
-                    # Schedule next run for the correct future day
-                    # (relative to NOW; if you want relative to dateIn, tell me and I’ll swap it)
-                    delta_days = int(next_day) - int(last_sent_day or lead_age_days or 0)
+                    delta_days = int(next_day) - int(anchor_day)
                     if delta_days <= 0:
                         delta_days = 1
         
                     opportunity["followUP_date"] = (now_utc + _td(days=delta_days)).isoformat()
-                    log.info("KBB ICO: scheduled next followUP_date=%s opp=%s next_day=%s",
-                             opportunity["followUP_date"], opportunityId, next_day)
+                    log.info("KBB ICO: scheduled next followUP_date=%s opp=%s anchor_day=%s next_day=%s",
+                             opportunity["followUP_date"], opportunityId, anchor_day, next_day)
                 else:
-                    # No more nudges in cadence; deactivate (optional)
+                    # No more nudges
                     opportunity["isActive"] = False
                     opportunity.setdefault("checkedDict", {})["exit_type"] = "cadence_complete"
+                    # optional: park the date anyway for sorting/views
+                    opportunity["followUP_date"] = (now_utc + _td(days=365)).isoformat()
                     log.info("KBB ICO: cadence complete → set inactive opp=%s", opportunityId)
         
+            # Optional: write compact state note if we acted
+            if action_taken:
                 compact = {
                     "mode": state.get("mode") if isinstance(state, dict) else None,
-                    "last_template_day_sent": last_sent_day,
+                    "last_template_day_sent": state.get("last_template_day_sent") if isinstance(state, dict) else None,
                     "nudge_count": state.get("nudge_count") if isinstance(state, dict) else None,
                     "last_customer_msg_at": state.get("last_customer_msg_at") if isinstance(state, dict) else None,
                     "last_agent_msg_at": state.get("last_agent_msg_at") if isinstance(state, dict) else None,
@@ -978,7 +1011,7 @@ def processHit(hit):
                 if not OFFLINE_MODE:
                     add_opportunity_comment(tok, subscription_id, opportunityId, note_txt)
         
-            # Persist updates (this writes follow_up_at from followUP_date via save_opp/airtable_save)
+            # Persist updates (writes follow_up_at from followUP_date)
             if not OFFLINE_MODE:
                 airtable_save(opportunity)
         
