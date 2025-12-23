@@ -145,18 +145,22 @@ def _is_kbb_ico(doc_flags: dict) -> bool:
 def _is_kbb_ico_new_active(doc: dict) -> bool:
     source    = _get_lc(doc, "source")
     status    = _get_lc(doc, "status")
-    substatus = _get_lc(doc, "subStatus", "substatus")  # ← read both
-    uptype    = _get_lc(doc, "upType", "uptype")        # ← read both
-    
-    print("KBB detect →", {"source": source, "status": status, "substatus": substatus, "uptype": uptype})
+    substatus = _get_lc(doc, "subStatus", "substatus")
+    uptype    = _get_lc(doc, "upType", "uptype")
+
+    print("KBB detect →", {
+        "source": source,
+        "status": status,
+        "substatus": substatus,
+        "uptype": uptype,
+    })
 
     return (
-        source == "kbb instant cash offer" and
+        source in _KBB_SOURCES and
         status == "active" and
-        substatus == "new" and
-        uptype == "campaign"
+        uptype == "campaign" and
+        substatus in {"new", "working"}
     )
-
 
 def _is_assigned_to_kristin(doc: dict) -> bool:
     """
