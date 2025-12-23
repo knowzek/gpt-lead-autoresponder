@@ -4,12 +4,16 @@ import re
 import logging
 from datetime import datetime as _dt, timezone as _tz
 
-from esQuerys import esClient
-from es_resilient import es_update_with_retry
 from rooftops import get_rooftop_info
 from fortellis import get_token, add_opportunity_comment
-from kbb_ico import process_kbb_ico_lead
 from kbb_ico import _top_reply_only
+from airtable_store import (
+    find_by_opp_id,
+    find_by_customer_email,   # you will add this helper (below)
+    opp_from_record,
+    save_opp,
+)
+
 
 log = logging.getLogger("patti.email_ingestion")
 
@@ -57,33 +61,19 @@ def _compute_lead_age_days(opportunity: dict) -> int:
 
 def _find_opportunity_by_sender(sender_email: str):
     """
-    Look up the opportunity in ES by customer email.
-
-    We intentionally DO NOT use nested here because the mapping
-    shows customer.emails as a simple object array.
+    Find opportunity in Airtable by matching the sender email against
+    opp_json.customer.emails[].address (or a stored customer_email column if you have one).
     """
     if not sender_email:
         return None, None
 
-    query = {
-        "bool": {
-            "should": [
-                {"term": {"customer.emails.address.keyword": sender_email}},
-                {"term": {"customer.emails.address": sender_email}},
-                {"term": {"customerEmail.keyword": sender_email}},
-                {"term": {"customerEmail": sender_email}},
-            ],
-            "minimum_should_match": 1,
-        }
-    }
-
-    rsp = esClient.search(index="opportunities", query=query, size=1)
-    hits = rsp.get("hits", {}).get("hits", [])
-    if not hits:
+    rec = find_by_customer_email(sender_email)  # you’ll add this in airtable_store.py
+    if not rec:
         return None, None
 
-    doc = hits[0]
-    return doc["_id"], doc["_source"]
+    opp = opp_from_record(rec)
+    return opp.get("opportunityId") or opp.get("id"), opp
+
 
 
 def is_test_opp(opp: dict, opp_id: str | None) -> bool:
@@ -167,26 +157,30 @@ def process_inbound_email(inbound: dict) -> None:
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     headers = inbound.get("headers") or {}
 
-    # 1️⃣ Try direct opp id from header
+    # 1) Try direct opp id from header
     opp_id = headers.get("X-Opportunity-ID") or None
-
+    
+    opportunity = None
+    
     if opp_id:
-        doc = esClient.get(index="opportunities", id=opp_id)
-        opportunity = doc["_source"]
+        rec = find_by_opp_id(opp_id)
+        if rec:
+            opportunity = opp_from_record(rec)
     else:
-        # 2️⃣ Fallback: match sender email to customer.emails / customerEmail
         sender_email = _extract_email(sender_raw)
         opp_id, opportunity = _find_opportunity_by_sender(sender_email)
-        if not opp_id:
-            log.warning("No matching opportunity found for inbound email %s", sender_email)
-            return
-
-    # 🔒 Hard gate: only run this Outlook-based path on your single test opp
+    
+    if not opp_id or not opportunity:
+        log.warning("No matching opportunity found for inbound email from=%s", sender_raw)
+        return
+    
+    # 🔒 Optional test gate (keep during Phase 2 if you want)
     if not is_test_opp(opportunity, opp_id):
         log.info("Inbound email for opp %s is not TEST_OPP_ID; skipping", opp_id)
         return
-
-    # 3️⃣ Append the inbound message into the ES conversation thread
+    
+    # 2) Append inbound message into the thread (in-memory)
+    ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     msg_dict = {
         "msgFrom": "customer",
         "subject": subject,
@@ -195,141 +189,39 @@ def process_inbound_email(inbound: dict) -> None:
     }
     opportunity.setdefault("messages", []).append(msg_dict)
     
-    # Load current state but do NOT touch last_customer_msg_at here.
-    state = dict(opportunity.get("_kbb_state") or {})
-    opportunity["_kbb_state"] = state
+    # 3) Mark “new inbound” so processNewData will respond next run
+    opportunity.setdefault("checkedDict", {})["last_msg_by"] = "customer"
+    opportunity["followUP_date"] = _dt.now(_tz.utc).isoformat()
     
-    # Persist the new message thread only; KBB will update _kbb_state itself.
-    es_update_with_retry(
-        esClient,
-        index="opportunities",
-        id=opp_id,
-        doc={"messages": opportunity["messages"]},
-    )
+    # 4) Persist to Airtable + make Due Now immediately
+    extra = {
+        "opp_id": opp_id,
+        "subscription_id": opportunity.get("_subscription_id") or (inbound.get("subscription_id") or ""),
+        "is_active": bool(opportunity.get("isActive", True)),
+        "follow_up_at": opportunity.get("followUP_date"),
+        "opp_json": json.dumps(opportunity, ensure_ascii=False),
+    }
+    save_opp(opportunity, extra_fields=extra)
     
-    # 4️⃣ Compute the same lead_age_days we use in processNewData
-    lead_age_days = _compute_lead_age_days(opportunity)
-    
-    # 5️⃣ Get rooftop + token info
+    # 5) Optional: log inbound email to CRM as a comment (Fortellis writeback)
     subscription_id = opportunity.get("_subscription_id")
-    if not subscription_id:
-        log.warning("Opportunity %s missing _subscription_id; cannot run KBB flow", opp_id)
-        return
+    if subscription_id:
+        token = None
+        if os.getenv("OFFLINE_MODE", "0").lower() not in ("1", "true", "yes"):
+            token = get_token(subscription_id)
     
-    rooftop_info = get_rooftop_info(subscription_id)
-    rooftop_name = rooftop_info["name"]
-    rooftop_sender = rooftop_info["sender"]
+        if token:
+            try:
+                preview = (body_text or "")[:500]
+                add_opportunity_comment(
+                    token,
+                    subscription_id,
+                    opp_id,
+                    f"Inbound email from {sender_raw}: {subject}\n\n{preview}",
+                )
+            except Exception as e:
+                log.warning("Failed to log inbound email comment opp=%s err=%s", opp_id, e)
     
-    token = None
-    if os.getenv("OFFLINE_MODE", "0") not in ("1", "true", "True"):
-        token = get_token(subscription_id)
-    
-    # 3b️⃣ Log inbound email to CRM as a comment (now token IS defined)
-    if token:
-        try:
-            preview = (body_text or "")[:500]
-            add_opportunity_comment(
-                token,
-                subscription_id,
-                opp_id,
-                f"Inbound email from {sender_raw}: {subject}\n\n{preview}",
-            )
-        except Exception as e:
-            log.warning(
-                "Failed to log inbound email as CRM comment for opp %s: %s",
-                opp_id,
-                e,
-            )
+    log.info("Queued inbound email in Airtable for opp=%s (Due Now)", opp_id)
+    return
 
-    # Determine whether this opp is a KBB lead or a general lead
-    is_kbb = (opportunity.get("source") or "").lower().startswith("kbb")
-    # If your KBB sources are more specific, use:
-    # is_kbb = (opportunity.get("source") in ("KBB Instant Cash Offer", "KBB ServiceDrive"))
-
-    # 6️⃣ Hand off to the correct brain based on lead type
-    inbound_ts = ts
-    inbound_subject = subject
-    inbound_msg_id = headers.get("Message-Id") or f"esmsg:{inbound_ts}"
-    
-    if is_kbb:
-        # ---- KBB path (unchanged) ----
-        state, action_taken = process_kbb_ico_lead(
-            opportunity=opportunity,
-            lead_age_days=lead_age_days,
-            rooftop_name=rooftop_name,
-            inquiry_text=body_text,          # customer's reply text
-            token=token,
-            subscription_id=subscription_id,
-            SAFE_MODE=False,
-            rooftop_sender=rooftop_sender,
-            trigger="email_webhook",
-            inbound_ts=inbound_ts,
-            inbound_msg_id=inbound_msg_id,
-            inbound_subject=inbound_subject,
-        )
-    
-        # Persist any mutations KBB logic made to the opportunity
-        try:
-            es_update_with_retry(
-                esClient,
-                index="opportunities",
-                id=opp_id,
-                doc=opportunity,
-            )
-        except Exception as e:
-            log.warning("ES persist failed after KBB processing opp %s: %s", opp_id, e)
-    
-        log.info(
-            "KBB email ingestion handled for opp %s – action_taken=%s, state[last_template_day_sent]=%s",
-            opp_id,
-            bool(action_taken),
-            (state or {}).get("last_template_day_sent"),
-        )
-    
-    else:
-        # ---- GENERAL path (new) ----
-        # We need to "wake up" checkActivities without Fortellis polling.
-        # That requires a fake "Read Email" activity representing this inbound message.
-        from processNewData import checkActivities
-        from datetime import datetime, timezone
-    
-        fake_act = {
-            "activityName": "Read Email",
-            "activityType": 20,
-            "completedDate": inbound_ts,
-            "message": {"subject": inbound_subject, "body": body_text},
-            # checkActivities uses this to dedupe alreadyProcessedActivities
-            "activityId": inbound_msg_id,
-        }
-    
-        # IMPORTANT: this requires checkActivities(..., activities_override=[...])
-        # (you will add that optional parameter in processNewData.py)
-        try:
-            checkActivities(
-                opportunity,
-                currDate=datetime.now(timezone.utc),
-                rooftop_name=rooftop_name,
-                activities_override=[fake_act],
-            )
-        except TypeError:
-            log.error(
-                "checkActivities() does not accept activities_override yet. "
-                "Add activities_override=None parameter to checkActivities in processNewData.py"
-            )
-            raise
-        except Exception as e:
-            log.warning("General checkActivities failed for opp %s: %s", opp_id, e)
-    
-        # Persist mutations made by checkActivities (messages, checkedDict, etc.)
-        try:
-            es_update_with_retry(
-                esClient,
-                index="opportunities",
-                id=opp_id,
-                doc=opportunity,
-            )
-        except Exception as e:
-            log.warning("ES persist failed after GENERAL processing opp %s: %s", opp_id, e)
-    
-        log.info("GENERAL email ingestion handled for opp %s", opp_id)
-    
