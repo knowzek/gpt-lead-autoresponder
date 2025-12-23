@@ -104,17 +104,18 @@ def send_opportunity_email_activity(
     subject,
     body_html,
     rooftop_name,
-    reply_to_activity_id=None, 
+    reply_to_activity_id=None,
 ):
     """
-    Wrapper that either:
-      - sends via CRM (Fortellis), or
-      - sends via Patti Outlook inbox + logs to CRM,
-    depending on EMAIL_MODE and opp_id.
+    KBB wrapper:
+      - If EMAIL_MODE == "outlook": send from Patti Outlook + log to CRM
+        AND create a "Send Email" completed activity (stops response-time clock).
+      - Else: send via Fortellis /sendEmail (original behavior).
     """
+    from fortellis import complete_activity  # exists in your fortellis module (used elsewhere)
 
-    # Normal behavior everywhere except our test opps in Outlook mode
-    if EMAIL_MODE != "outlook" or opp_id not in TEST_EMAIL_OPP_IDS:
+    # Default CRM behavior if not in Outlook mode
+    if EMAIL_MODE != "outlook":
         return _crm_send_opportunity_email_activity(
             token,
             subscription_id,
@@ -128,12 +129,12 @@ def send_opportunity_email_activity(
             reply_to_activity_id=reply_to_activity_id,
         )
 
-    # 📨 Outlook path (no Fortellis email send; just log as a comment)
+    # 📨 Outlook path (NO Fortellis email send)
     to_addr = recipients[0] if recipients else None
     if not to_addr:
         return
 
-    # 1) Send from Patti via Power Automate
+    # 1) Send from Patti via Power Automate / Outlook
     send_email_via_outlook(
         to_addr=to_addr,
         subject=subject,
@@ -141,7 +142,7 @@ def send_opportunity_email_activity(
         headers={"X-Opportunity-ID": opp_id},
     )
 
-    # 2) Log back to CRM as a simple note so the store can see the email
+    # 2) Log back to CRM as a note (visibility)
     if token and subscription_id:
         try:
             preview = _clean_html(body_html)[:500]
@@ -149,14 +150,28 @@ def send_opportunity_email_activity(
                 token,
                 subscription_id,
                 opp_id,
-                f"Outbound email to {to_addr}: {subject}\n\n{preview}",
+                f"Outbound email (Patti Outlook) to {to_addr}: {subject}\n\n{preview}",
             )
         except Exception as e:
-            log.warning(
-                "Failed to log Outlook outbound email for opp %s: %s",
-                opp_id,
-                e,
-            )
+            log.warning("Failed to add CRM comment for Outlook send opp=%s: %s", opp_id, e)
+
+    # 3) ✅ Create a "Send Email" completed activity (stops the response clock)
+    # This does NOT send an email — it only records an activity.
+    try:
+        now_z = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        complete_activity(
+            token,
+            subscription_id,
+            opp_id,
+            due_dt_iso_utc=now_z,
+            completed_dt_iso_utc=now_z,
+            activity_name="Send Email",
+            activity_type=3,  # your map shows "send email": 3
+            comments=f"Patti Outlook: sent to {to_addr} | subject={subject}",
+        )
+    except Exception as e:
+        log.warning("Failed to complete 'Send Email' activity opp=%s: %s", opp_id, e)
+
 
 
 
