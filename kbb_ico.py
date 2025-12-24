@@ -220,15 +220,12 @@ def _es_debug_update(esClient, index, id, doc, tag=""):
 
 
 def _can_email(state: dict) -> bool:
-    # Hard suppression
     if state.get("email_blocked_do_not_email"):
         return False
-
-    # Business logic suppression
-    if state.get("mode") in {"closed_declined"}:
+    if state.get("mode") in {"closed_declined", "closed_opted_out"}:
         return False
-
     return True
+
 
 
 def _patch_address_placeholders(html: str, rooftop_name: str) -> str:
@@ -1227,11 +1224,15 @@ def _handle_optout(opportunity, state, optout_text, *, token, subscription_id):
     # Airtable / brain
     state["mode"] = "closed_opted_out"
     state["email_blocked_do_not_email"] = True
-    state["opted_out_at"] = now_iso
-    state["opted_out_text"] = (optout_text or "")[:2000]
+    opportunity["isActive"] = False
+    checked = dict(opportunity.get("checkedDict") or {})
+    checked["exit_type"] = "customer_opt_out"
+    checked["exit_reason"] = (optout_text or "")[:500]
+    opportunity["checkedDict"] = checked
+    save_opp(opportunity, extra_fields={"is_active": False, "mode": "closed_opted_out"})
 
     opportunity["_kbb_state"] = state
-    opportunity["is_active"] = False  # <-- your Airtable checkbox
+    opportunity["isActive"] = False
 
     # Optional reporting fields (only if your schema has them)
     opportunity["patti_disposition"] = "Opted Out"
@@ -1243,7 +1244,12 @@ def _handle_optout(opportunity, state, optout_text, *, token, subscription_id):
     # CRM: make opp inactive + log
     try:
         from fortellis import set_opportunity_inactive, add_opportunity_comment
-        set_opportunity_inactive(token, subscription_id, opp_id)
+        set_opportunity_inactive(
+            token, subscription_id, opp_id,
+            sub_status="Not In Market",
+            comments="Customer requested no further contact — set inactive by Patti"
+        )
+
         add_opportunity_comment(
             token, subscription_id, opp_id,
             "Customer opted out via email. Marked inactive + suppressed all automated outreach."
@@ -1314,9 +1320,13 @@ def process_kbb_ico_lead(
     # --- detect customer opt-out message ---
     state.setdefault("last_optout_seen_at", None)
     found_optout, optout_ts, optout_txt = _latest_customer_optout(opportunity)
-    if found:
-        state = _handle_optout(opportunity, state, txt, token=token, subscription_id=subscription_id)
+    if found_optout:
+        state = _handle_optout(
+            opportunity, state, optout_txt,
+            token=token, subscription_id=subscription_id
+        )
         return state, True
+
     
     # also consider the inquiry_text (sometimes we only get that)
     found_optout = found_optout or _is_optout_text(inquiry_text)
@@ -2655,7 +2665,7 @@ def process_kbb_ico_lead(
         s = str(body)
 
         if "SendEmailInvalidRecipient" in s and "DoNotEmail" in s:
-        log.warning("DoNotEmail → skipping cadence email for opp %s", opp_id)
+            log.warning("DoNotEmail → skipping cadence email for opp %s", opp_id)
     
         state["email_blocked_do_not_email"] = True
     
