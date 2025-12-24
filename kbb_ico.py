@@ -9,6 +9,7 @@ from fortellis import (
 )
 from fortellis import complete_activity
 from fortellis import complete_send_email_activity
+from airtable_store import save_opp
 
 
 from outlook_email import send_email_via_outlook
@@ -1890,80 +1891,16 @@ def process_kbb_ico_lead(
 
         # ---------- DECLINED (opt-out) ----------
         if declined:
-            log.info("KBB ICO: decline/opt-out detected; suppressing ALL future sends for opp=%s", opp_id)
-
-            # Set local stop flags
-            now_iso = _dt.now(_tz.utc).isoformat()
-            state["mode"] = "closed_declined"
-            state["nudge_count"] = 0
-            state["email_blocked_do_not_email"] = True
-            opportunity["_kbb_state"] = state
-
-            # Persist to ES immediately so re-runs short-circuit deterministically
-            try:
-                from esQuerys import esClient
-                from es_resilient import es_update_with_retry  # if you use a wrapper; else use your existing helper
-            except Exception:
-                es_update_with_retry = None
-            
-            try:
-                if es_update_with_retry:
-                    # also persist an explicit exit marker in checkedDict
-                    checked = dict(opportunity.get("checkedDict") or {})
-                    checked["exit_type"] = "customer_declined"
-                    checked["exit_reason"] = "Stop emailing me"
-            
-                    es_update_with_retry(
-                        esClient,
-                        index="opportunities",
-                        id=opp_id,
-                        doc={"_kbb_state": state, "isActive": False, "checkedDict": checked}
-                    )
-            except Exception as e:
-                log.warning("ES persist failed (decline): %s", e)
-            
-            # Flip CRM opp → Not In Market (no send)
-            try:
-                from fortellis import set_opportunity_inactive, add_opportunity_comment
-                set_opportunity_inactive(
-                    token,
-                    subscription_id,
-                    opp_id,
-                    sub_status="Not In Market",
-                    comments="Customer requested no further contact — set inactive by Patti"
-                )
-                # Add a clear CRM note for the team
-                add_opportunity_comment(
-                    token, subscription_id, opp_id,
-                    "Patti: Customer requested NO FURTHER CONTACT. Email/SMS suppressed; "
-                    "opportunity set to Not In Market."
-                )
-            except Exception as e:
-                log.warning("CRM inactive/comment failed (decline): %s", e)
-            
-            # Also mark the customer record as DoNotEmail=True
-            try:
-                cust = (opportunity.get("customer") or {})
-                customer_id = cust.get("id")
-            
-                # choose preferred email if present, else first, else None
-                email_address = None
-                emails = cust.get("emails") or []
-                if emails:
-                    preferred = next((e for e in emails if e.get("isPreferred")), None)
-                    email_address = (preferred or emails[0]).get("address")
-            
-                if customer_id and email_address:
-                    from fortellis import set_customer_do_not_email
-                    set_customer_do_not_email(token, subscription_id, customer_id, email_address, do_not=True)
-                    log.info("Customer marked DoNotEmail in CRM for opp=%s (email=%s)", opp_id, email_address)
-                else:
-                    log.warning("Cannot set DoNotEmail: missing customer_id or email (opp=%s)", opp_id)
-            except Exception as e:
-                log.warning("Failed to mark customer DoNotEmail in CRM: %s", e)
-            
+            txt = optout_txt or inquiry_text or ""
+            log.info("KBB ICO: decline/opt-out detected; routing to _handle_optout opp=%s", opp_id)
+        
+            state = _handle_optout(
+                opportunity, state, txt,
+                token=token, subscription_id=subscription_id
+            )
             action_taken = True
-            return state, action_taken  # important: stop here (no email)
+            return state, action_taken
+
 
 
 
@@ -2666,29 +2603,29 @@ def process_kbb_ico_lead(
         if "SendEmailInvalidRecipient" in s and "DoNotEmail" in s:
             log.warning("DoNotEmail → skipping cadence email for opp %s", opp_id)
     
-        state["email_blocked_do_not_email"] = True
-    
-        # ✅ Option B: rollback "sent" markers because the email did NOT go out
-        state["last_template_day_sent"] = None
-        state["last_template_sent_at"]  = None
-    
-        opportunity["_kbb_state"] = state
-        try:
-            save_opp(opportunity)  # Airtable brain
-        except Exception as ee:
-            log.warning("Airtable persist failed (DoNotEmail rollback): %s", ee)
-    
-        # Optional: note in CRM for human follow-up by phone/text
-        try:
-            from fortellis import add_opportunity_comment
-            add_opportunity_comment(
-                token, subscription_id, opp_id,
-                comment="Auto-email not sent: customer is marked DoNotEmail. Recommend phone/text follow-up."
-            )
-        except Exception as ee:
-            log.warning("Failed to add DoNotEmail comment: %s", ee)
-    
-        # do not re-raise
+            state["email_blocked_do_not_email"] = True
+        
+            # ✅ Option B: rollback "sent" markers because the email did NOT go out
+            state["last_template_day_sent"] = None
+            state["last_template_sent_at"]  = None
+        
+            opportunity["_kbb_state"] = state
+            try:
+                save_opp(opportunity)  # Airtable brain
+            except Exception as ee:
+                log.warning("Airtable persist failed (DoNotEmail rollback): %s", ee)
+        
+            # Optional: note in CRM for human follow-up by phone/text
+            try:
+                from fortellis import add_opportunity_comment
+                add_opportunity_comment(
+                    token, subscription_id, opp_id,
+                    comment="Auto-email not sent: customer is marked DoNotEmail. Recommend phone/text follow-up."
+                )
+            except Exception as ee:
+                log.warning("Failed to add DoNotEmail comment: %s", ee)
+        
+            # do not re-raise
 
             # do not re-raise; proceed so we can create phone/text task below if enabled
         else:
