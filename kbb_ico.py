@@ -1336,6 +1336,22 @@ def process_kbb_ico_lead(
                 set_customer_do_not_email(token, subscription_id, customer_id, email_address, do_not=True)
         except Exception as e:
             log.warning("CRM inactive/DoNotEmail failed (global decline): %s", e)
+
+        # ✅ Persist to Airtable so future nudges/replies stop
+        try:
+            rec_id = opportunity.get("_airtable_rec_id")
+            if rec_id:
+                from airtable_helpers import update_lead_row  # <-- use YOUR real helper
+                update_lead_row(rec_id, {
+                    "active": False,
+                    "mode": "closed_declined",
+                    "lock_until": "2099-01-01T00:00:00.000Z",
+                })
+                log.info("DECLINE AIRTABLE OK opp=%s rec=%s", opp_id, rec_id)
+            else:
+                log.warning("DECLINE AIRTABLE skipped: missing _airtable_rec_id opp=%s", opp_id)
+        except Exception as e:
+            log.warning("Airtable persist failed (decline): %s", e)
     
         return state, True
 
