@@ -288,9 +288,6 @@ def process_kbb_adf_notification(inbound: dict) -> None:
     # mark that ADF arrived (lets cron guard against accidental blasts)
     opportunity["_kbb_adf_seen_at"] = now_iso
 
-    # IMPORTANT: queue for cron (this ONE opp only)
-    opportunity["followUP_date"] = now_iso
-
     # Treat this as customer-initiated inbound so cadence can start cleanly
     checked = opportunity.setdefault("checkedDict", {})
     checked.setdefault("last_msg_by", "customer")
@@ -323,7 +320,6 @@ def process_kbb_adf_notification(inbound: dict) -> None:
     })
 
     follow_up_at = now_iso
-    is_active = True
     opportunity["isActive"] = True
     opportunity["followUP_date"] = follow_up_at
 
@@ -412,10 +408,6 @@ def process_kbb_adf_notification(inbound: dict) -> None:
     except Exception as e:
         log.exception("KBB ADF: immediate Day 1 send failed opp=%s err=%s", opp_id, e)
 
-
-    except Exception as e:
-        log.exception("KBB ADF: immediate Day 1 send failed opp=%s err=%s", opp_id, e)
-
     # quick sanity log showing customer email we stored
     cust_email = None
     try:
@@ -425,7 +417,8 @@ def process_kbb_adf_notification(inbound: dict) -> None:
         cust_email = None
 
     log.info(
-        "KBB ADF: upserted Airtable opp=%s sub=%s shopper_email=%s customer_email=%s follow_up_at=%s is_test=%s is_active=%s",
-        opp_id, subscription_id, shopper_email, cust_email, follow_up_at, is_test, is_active
+        "KBB ADF: upserted Airtable opp=%s sub=%s shopper_email=%s customer_email=%s follow_up_at=%s is_active=%s",
+        opp_id, subscription_id, shopper_email, cust_email, follow_up_at, is_active
     )
+
     return
