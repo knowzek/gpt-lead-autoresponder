@@ -2630,7 +2630,6 @@ def process_kbb_ico_lead(
     
     # ✅ Persist to Airtable (your brain), not ES
     try:
-        from your_airtable_module import save_opp  # wherever save_opp lives
         save_opp(opportunity)
         log.info("Persisted Airtable _kbb_state pre-template send opp=%s day=%s", opp_id, effective_day)
     except Exception as e:
