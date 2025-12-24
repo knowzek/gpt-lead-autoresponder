@@ -938,6 +938,7 @@ def processHit(hit):
                 rooftop_name=rooftop_name,
                 inquiry_text=inquiry_text_safe,
                 token=tok,
+                trigger="cron",
                 subscription_id=subscription_id,
                 SAFE_MODE=os.getenv("SAFE_MODE", "1") in ("1","true","True"),
                 rooftop_sender=rooftop_sender,
