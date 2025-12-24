@@ -866,57 +866,63 @@ def build_patti_footer(rooftop_name: str) -> str:
     clean_site = dealer_site.replace("https://", "").replace("http://", "")
 
     return f"""
-    <table width="650" border="0" cellspacing="0" cellpadding="0" style="margin-top:18px;border-collapse:collapse;">
-      <tr>
-        <td style="padding:12px 16px;border:1px solid #e2e2e2;border-radius:4px;background-color:#fafafa;">
-          <table width="100%" border="0" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
-            <tr>
-              <!-- LEFT: image + text block -->
-              <td width="260" valign="top" align="left" style="padding-right:16px;">
-                <table border="0" cellspacing="0" cellpadding="0" width="100%" style="border-collapse:collapse;">
-                  <tr>
-                    <td align="left" valign="top" style="padding-bottom:8px;">
-                      <img src="{img_url}"
-                           alt="{logo_alt}"
-                           width="240"
-                           border="0"
-                           style="display:block;height:auto;max-width:240px;">
-                    </td>
-                  </tr>
-                  <tr>
-                    <!-- Fallback text still shows even if image is blocked -->
-                    <td align="left" valign="top" style="font-family:Arial, Helvetica, sans-serif;font-size:13px;line-height:18px;color:#333333;">
-                      <strong>Patti</strong><br>
-                      Virtual Assistant | {rooftop_name}
-                    </td>
-                  </tr>
-                </table>
-              </td>
+<table width="650" border="0" cellspacing="0" cellpadding="0" style="margin-top:18px;border-collapse:collapse;">
+  <tr>
+    <td style="padding:12px 16px;border:1px solid #e2e2e2;border-radius:4px;background-color:#fafafa;">
+      <table width="100%" border="0" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+        <tr>
+          <!-- LEFT: logo + Patti text aligned to top -->
+          <td width="310" valign="top" align="left" style="vertical-align:top;padding-right:16px;">
+            <table border="0" cellspacing="0" cellpadding="0" width="100%" style="border-collapse:collapse;">
+              <tr>
+                <!-- Logo -->
+                <td width="210" valign="top" align="left" style="vertical-align:top;">
+                  <img src="{img_url}"
+                       alt="{logo_alt}"
+                       width="210"
+                       border="0"
+                       style="display:block;height:auto;max-width:210px;">
+                </td>
 
-              <!-- RIGHT: contact block -->
-              <td width="360" valign="top" align="left" style="font-family:Arial, Helvetica, sans-serif; color:#222222;">
-                
-                <div style="font-size:13px; line-height:20px; margin-bottom:8px;">
+                <!-- Patti text (moved UP next to logo) -->
+                <td valign="top" align="left" style="vertical-align:top;padding-left:10px;
+                    font-family:Arial, Helvetica, sans-serif;font-size:13px;line-height:18px;color:#333333;">
+                  <strong style="font-size:14px;line-height:18px;">Patti</strong><br>
+                  Virtual Assistant<br>
+                  <span style="color:#666666;">{rooftop_name}</span>
+                </td>
+              </tr>
+            </table>
+          </td>
+
+          <!-- RIGHT: contact block (tight + aligned with top) -->
+          <td width="320" valign="top" align="left" style="vertical-align:top;font-family:Arial, Helvetica, sans-serif;color:#222222;">
+            <table border="0" cellspacing="0" cellpadding="0" width="100%" style="border-collapse:collapse;">
+              <tr>
+                <td style="font-size:13px;line-height:20px;padding-top:1px;">
                   <div><strong>Email:</strong>
-                    <a href="mailto:{patti_email}" style="color:#0066cc; text-decoration:none;">{patti_email}</a>
+                    <a href="mailto:{patti_email}" style="color:#0066cc;text-decoration:none;">{patti_email}</a>
                   </div>
                   <div><strong>Website:</strong>
-                    <a href="{dealer_site}" style="color:#0066cc; text-decoration:none;">{clean_site}</a>
+                    <a href="{dealer_site}" style="color:#0066cc;text-decoration:none;">{clean_site}</a>
                   </div>
-                </div>
-
-                <div style="font-size:13px; line-height:20px; color:#333333;">
+                </td>
+              </tr>
+              <tr>
+                <td style="font-size:13px;line-height:20px;color:#333333;padding-top:8px;">
                   <div>{rooftop_name}</div>
                   <div>{dealer_addr}</div>
-                </div>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-    """.strip()
+                </td>
+              </tr>
+            </table>
+          </td>
 
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+    """.strip()
 
 
 def normalize_patti_body(body_html: str) -> str:
