@@ -555,6 +555,7 @@ if opportunity.get("mode") == "kbb_ico":
         token=token,
         subscription_id=subscription_id,
         SAFE_MODE=SAFE_MODE,
+        trigger="cron",
     )
 
     raise SystemExit(0)
