@@ -1588,19 +1588,34 @@ def process_kbb_ico_lead(
             )
         except Exception:
             last_agent_dt = None
-
+    
     # Only fall back to Fortellis sends when we are NOT in webhook mode
     if (last_agent_dt is None) and (not is_webhook):
         last_agent_dt_live = _last_agent_send_dt(acts_live)
         if last_agent_dt_live is not None:
             last_agent_dt = last_agent_dt_live
-
-    if is_webhook:
+    
+    # ---------------------------------
+    # Real inbound detection (CRITICAL)
+    # ---------------------------------
+    has_real_inbound = bool((inquiry_text or "").strip())
+    
+    # Single source of truth for "do we reply this run?"
+    if trigger == "email_webhook":
+        # Webhook invocation: only reply if there is real customer text
         has_new_inbound = has_real_inbound
     elif trigger == "kbb_adf":
+        # ADF notifications are system-generated. Not a customer reply.
         has_new_inbound = False
     else:
+        # Legacy CRM-based detection
         has_new_inbound = has_reply or _has_new_read_email_since(acts_live, last_agent_dt)
+    
+    # ✅ Extra safety: webhook fired but body was empty/cleaned away
+    if trigger == "email_webhook" and not has_real_inbound:
+        log.info("KBB ICO: webhook but empty inquiry_text → do not reply")
+        opportunity["_kbb_state"] = state
+        return state, action_taken
     
     if not has_new_inbound:
         log.info(
@@ -1616,7 +1631,6 @@ def process_kbb_ico_lead(
             return state, action_taken
     
         # Let cadence logic later decide if a nudge should be sent.
-        # We just don't drop into convo reply.
     
     else:
         # ✅ We have new inbound → reply, but don't clobber scheduled state
@@ -1626,12 +1640,14 @@ def process_kbb_ico_lead(
             state["mode"] = "convo"
     
         state["nudge_count"] = 0
-        if has_reply and last_cust_ts:
+    
+        # Only stamp inbound markers if the body was actually real text
+        if has_real_inbound and last_cust_ts:
             state["last_customer_msg_at"] = last_cust_ts
-        if last_inbound_activity_id:
+    
+        if has_real_inbound and last_inbound_activity_id:
             state["last_inbound_activity_id"] = last_inbound_activity_id
-
-
+    
     # If we have new inbound, prepare reply subject/body context
     if has_new_inbound:
         # Only re-fetch activities if we are in CRM mode and actually sent something new
@@ -1639,9 +1655,9 @@ def process_kbb_ico_lead(
             acts_now = _fetch_activities_live(opp_id, customer_id, token, subscription_id)
         else:
             acts_now = acts_live
-
+    
         selected_inbound_id = None
-
+    
         if is_webhook:
             # Outlook path: the inbound email *is* what we reply to
             selected_inbound_id = last_inbound_activity_id
@@ -1660,9 +1676,9 @@ def process_kbb_ico_lead(
                             newest_dt = adt
                             newest = a
                 return newest, newest_dt
-
+    
             newest_read, newest_dt = _newest_read_after(acts_now, last_agent_dt)
-
+    
             # Fallback order: newest fresh read → detector id → prior snapshot newest
             if newest_read:
                 selected_inbound_id = str(
@@ -1672,7 +1688,7 @@ def process_kbb_ico_lead(
                 selected_inbound_id = last_inbound_activity_id
             else:
                 selected_inbound_id = _latest_read_email_id(acts_now)
-
+    
         log.info(
             "KBB ICO: replying to inbound id=%s; snippet=%r",
             selected_inbound_id,
