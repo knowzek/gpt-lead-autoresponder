@@ -1216,6 +1216,43 @@ def customer_has_replied(
 
     return False, None, None
 
+def _handle_optout(opportunity, state, optout_text, *, token, subscription_id):
+    opp_id = opportunity.get("opportunityId") or opportunity.get("id")
+    now_iso = _dt.now(_tz.utc).isoformat()
+
+    # Idempotent: if already opted out, do nothing
+    if state.get("mode") == "closed_opted_out":
+        return state
+
+    # Airtable / brain
+    state["mode"] = "closed_opted_out"
+    state["email_blocked_do_not_email"] = True
+    state["opted_out_at"] = now_iso
+    state["opted_out_text"] = (optout_text or "")[:2000]
+
+    opportunity["_kbb_state"] = state
+    opportunity["is_active"] = False  # <-- your Airtable checkbox
+
+    # Optional reporting fields (only if your schema has them)
+    opportunity["patti_disposition"] = "Opted Out"
+    opportunity["patti_disposition_at"] = now_iso
+    opportunity.setdefault("checkedDict", {})["last_msg_by"] = "customer"
+
+    save_opp(opportunity)
+
+    # CRM: make opp inactive + log
+    try:
+        from fortellis import set_opportunity_inactive, add_opportunity_comment
+        set_opportunity_inactive(token, subscription_id, opp_id)
+        add_opportunity_comment(
+            token, subscription_id, opp_id,
+            "Customer opted out via email. Marked inactive + suppressed all automated outreach."
+        )
+    except Exception as e:
+        log.warning("Opt-out CRM update failed opp=%s err=%s", opp_id, e)
+
+    return state
+
 
 
 def process_kbb_ico_lead(
@@ -1277,6 +1314,9 @@ def process_kbb_ico_lead(
     # --- detect customer opt-out message ---
     state.setdefault("last_optout_seen_at", None)
     found_optout, optout_ts, optout_txt = _latest_customer_optout(opportunity)
+    if found:
+        state = _handle_optout(opportunity, state, txt, token=token, subscription_id=subscription_id)
+        return state, True
     
     # also consider the inquiry_text (sometimes we only get that)
     found_optout = found_optout or _is_optout_text(inquiry_text)
@@ -1326,7 +1366,7 @@ def process_kbb_ico_lead(
         opportunity["_kbb_state"] = state
     
         # ✅ Airtable checkbox
-        opportunity["is_active"] = False
+        opportunity["isActive"] = False
     
         # ✅ update checkedDict for reporting
         checked = dict(opportunity.get("checkedDict") or {})
