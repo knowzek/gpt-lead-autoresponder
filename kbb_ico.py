@@ -220,7 +220,16 @@ def _es_debug_update(esClient, index, id, doc, tag=""):
 
 
 def _can_email(state: dict) -> bool:
-    return not state.get("email_blocked_do_not_email") and state.get("mode") not in {"closed_declined"}
+    # Hard suppression
+    if state.get("email_blocked_do_not_email"):
+        return False
+
+    # Business logic suppression
+    if state.get("mode") in {"closed_declined"}:
+        return False
+
+    return True
+
 
 def _patch_address_placeholders(html: str, rooftop_name: str) -> str:
     addr = ((ROOFTOP_INFO.get(rooftop_name) or {}).get("address") or "").strip()
@@ -2575,13 +2584,15 @@ def process_kbb_ico_lead(
     state["last_template_day_sent"] = effective_day
     state["last_template_sent_at"]  = now_iso
     opportunity["_kbb_state"] = state
+    
+    # ✅ Persist to Airtable (your brain), not ES
     try:
-        from esQuerys import esClient
-        from es_resilient import es_update_with_retry
-        es_update_with_retry(esClient, index="opportunities", id=opp_id, doc={"_kbb_state": state})
-        log.info("Persisted _kbb_state pre-template send for opp=%s (day=%s)", opp_id, effective_day)
+        from your_airtable_module import save_opp  # wherever save_opp lives
+        save_opp(opportunity)
+        log.info("Persisted Airtable _kbb_state pre-template send opp=%s day=%s", opp_id, effective_day)
     except Exception as e:
-        log.warning("ES persist failed (pre-template send): %s", e)
+        log.warning("Airtable persist failed (pre-template send): %s", e)
+
 
     # 2) Try to send, but swallow DoNotEmail so we don’t crash or loop
     try:
@@ -2591,13 +2602,14 @@ def process_kbb_ico_lead(
             recipients=recipients, carbon_copies=[],
             subject=subject, body_html=body_html, rooftop_name=rooftop_name
         )
-        # success → update last_agent_msg_at
+        # success → update last_agent_msg_at + persist to Airtable
         state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
         opportunity["_kbb_state"] = state
         try:
-            es_update_with_retry(esClient, index="opportunities", id=opp_id, doc={"_kbb_state": state})
-        except Exception:
-            pass
+            save_opp(opportunity)  # Airtable brain
+        except Exception as ee:
+            log.warning("Airtable persist failed (post-send): %s", ee)
+
 
     except Exception as e:
         resp = getattr(e, "response", None)
@@ -2610,22 +2622,32 @@ def process_kbb_ico_lead(
         s = str(body)
 
         if "SendEmailInvalidRecipient" in s and "DoNotEmail" in s:
-            log.warning("DoNotEmail → skipping cadence email for opp %s", opp_id)
-            state["email_blocked_do_not_email"] = True
-            opportunity["_kbb_state"] = state
-            try:
-                es_update_with_retry(esClient, index="opportunities", id=opp_id, doc={"_kbb_state": state})
-            except Exception:
-                pass
-            # Optional: note in CRM for human follow-up by phone/text
-            try:
-                from fortellis import add_opportunity_comment
-                add_opportunity_comment(
-                    token, subscription_id, opp_id,
-                    comment="Auto-email not sent: customer is marked DoNotEmail. Recommend phone/text follow-up."
-                )
-            except Exception as ee:
-                log.warning("Failed to add DoNotEmail comment: %s", ee)
+        log.warning("DoNotEmail → skipping cadence email for opp %s", opp_id)
+    
+        state["email_blocked_do_not_email"] = True
+    
+        # ✅ Option B: rollback "sent" markers because the email did NOT go out
+        state["last_template_day_sent"] = None
+        state["last_template_sent_at"]  = None
+    
+        opportunity["_kbb_state"] = state
+        try:
+            save_opp(opportunity)  # Airtable brain
+        except Exception as ee:
+            log.warning("Airtable persist failed (DoNotEmail rollback): %s", ee)
+    
+        # Optional: note in CRM for human follow-up by phone/text
+        try:
+            from fortellis import add_opportunity_comment
+            add_opportunity_comment(
+                token, subscription_id, opp_id,
+                comment="Auto-email not sent: customer is marked DoNotEmail. Recommend phone/text follow-up."
+            )
+        except Exception as ee:
+            log.warning("Failed to add DoNotEmail comment: %s", ee)
+    
+        # do not re-raise
+
             # do not re-raise; proceed so we can create phone/text task below if enabled
         else:
             log.error("Cadence send failed for opp %s: %s", opp_id, e)
