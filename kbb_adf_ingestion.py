@@ -295,7 +295,7 @@ def process_kbb_adf_notification(inbound: dict) -> None:
     checked = opportunity.setdefault("checkedDict", {})
     checked.setdefault("last_msg_by", "customer")
 
-
+    
     # -----------------------------
     # 3) Store offer amount (optional) — make ADF authoritative
     # -----------------------------
@@ -322,23 +322,10 @@ def process_kbb_adf_notification(inbound: dict) -> None:
         "appt_due_local": None,
     })
 
-    # -----------------------------
-    # 4) TEST GATE (ONLY controls "active", not record creation)
-    #    If not test, DO NOT set follow_up_at=now (prevents Due Now noise)
-    # -----------------------------
-    TEST_OPP_ID = "050a81e9-78d4-f011-814f-00505690ec8c"
-    is_test = (opportunity.get("opportunityId") == TEST_OPP_ID) or (opportunity.get("id") == TEST_OPP_ID)
-
     follow_up_at = now_iso
     is_active = True
-
-    if not is_test:
-        # keep record for visibility, but do NOT wake cron while testing
-        is_active = False
-        follow_up_at = (_dt.now(_tz.utc) + _td(days=365)).isoformat()
-        opportunity["isActive"] = False
-        opportunity.setdefault("checkedDict", {})["exit_type"] = "not_test_opp"
-        opportunity["followUP_date"] = follow_up_at
+    opportunity["isActive"] = True
+    opportunity["followUP_date"] = follow_up_at
 
     # -----------------------------
     # 5) Upsert Airtable record (create OR update)
