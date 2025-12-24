@@ -158,7 +158,9 @@ def send_opportunity_email_activity(
         return
 
     from datetime import datetime, timezone
-    
+    from kbb_ico import expand_legacy_schedule_token_for_outlook
+
+    body_html = expand_legacy_schedule_token_for_outlook(body_html, rooftop_name)
     # 1) Send from Patti via Power Automate / Outlook
     send_email_via_outlook(
         to_addr=to_addr,
