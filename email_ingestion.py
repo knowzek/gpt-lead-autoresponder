@@ -198,7 +198,6 @@ def process_inbound_email(inbound: dict) -> None:
     st = opportunity.setdefault("_kbb_state", {})
     st["mode"] = "convo"
     st["last_customer_msg_at"] = now_iso
-     = now_iso
 
     # 4) Persist to Airtable (save_opp already updates follow_up_at + opp_json)
     save_opp(opportunity)
