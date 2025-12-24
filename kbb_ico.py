@@ -1315,65 +1315,59 @@ def process_kbb_ico_lead(
     if declined:
         log.info("DECLINE ENTER opp=%s mode_before=%s", opp_id, state.get("mode"))
         now_iso = _dt.now(_tz.utc).isoformat()
-        state["mode"] = "closed_declined"
-        state["nudge_count"] = 0
-        state["last_agent_msg_at"] = now_iso
-        state["email_blocked_do_not_email"] = True
-        opportunity["_kbb_state"] = state
-
-        log.debug("DECLINE ES-WRITE opp=%s payload_keys=%s", opp_id, ["_kbb_state","isActive","checkedDict"])
-
-        # Persist to ES (also mark inactive + exit_type)
-        try:
-            from esQuerys import esClient
-            from es_resilient import es_update_with_retry
-            checked = dict(opportunity.get("checkedDict") or {})
-            checked["exit_type"] = "customer_declined"
-            checked["exit_reason"] = "Stop emailing me"
-            es_update_with_retry(esClient, index="opportunities", id=opp_id,
-                                 doc={"_kbb_state": state, "isActive": False, "checkedDict": checked})
-            log.info("DECLINE ES-OK opp=%s set isActive=False", opp_id)
-
-        except Exception as e:
-            log.warning("ES persist failed (global decline): %s", e)
     
-        # Flip CRM to Not In Market + DoNotEmail on the customer
+        # If this path is true opt-out, use closed_opted_out (recommended)
+        state["mode"] = "closed_opted_out"
+        state["nudge_count"] = 0
+        state["email_blocked_do_not_email"] = True
+        state["opted_out_at"] = now_iso
+        state["opted_out_text"] = (optout_txt or inquiry_text or "")[:1000]
+    
+        opportunity["_kbb_state"] = state
+    
+        # ✅ Airtable checkbox
+        opportunity["is_active"] = False
+    
+        # ✅ update checkedDict for reporting
+        checked = dict(opportunity.get("checkedDict") or {})
+        checked["exit_type"] = "customer_opt_out"
+        checked["exit_reason"] = (optout_txt or inquiry_text or "")[:500]
+        opportunity["checkedDict"] = checked
+    
+        # ✅ Persist to Airtable (canonical)
+        try:
+            save_opp(opportunity)
+            log.info("OPT-OUT AIRTABLE OK opp=%s rec=%s", opp_id, opportunity.get("_airtable_rec_id"))
+        except Exception as e:
+            log.warning("Airtable persist failed (opt-out): %s", e)
+    
+        # ✅ CRM updates (keep these)
         try:
             from fortellis import set_opportunity_inactive, add_opportunity_comment, set_customer_do_not_email
-            log.debug("CRM INACTIVE CALL opp=%s sub_status=Not In Market", opp_id)
-
-            set_opportunity_inactive(token, subscription_id, opp_id,
-                                     sub_status="Not In Market",
-                                     comments="Customer requested no further contact — set inactive by Patti")
-
-            add_opportunity_comment(token, subscription_id, opp_id,
-                                    "Patti: Customer requested NO FURTHER CONTACT. Email/SMS suppressed; set to Not In Market.")
+    
+            set_opportunity_inactive(
+                token, subscription_id, opp_id,
+                sub_status="Not In Market",
+                comments="Customer requested no further contact — set inactive by Patti"
+            )
+    
+            add_opportunity_comment(
+                token, subscription_id, opp_id,
+                "Patti: Customer opted out (NO FURTHER CONTACT). Marked inactive; automation suppressed."
+            )
+    
             cust = (opportunity.get("customer") or {})
             customer_id = cust.get("id")
             emails = cust.get("emails") or []
             email_address = (next((e for e in emails if e.get("isPreferred")), emails[0]) if emails else {}).get("address")
             if customer_id and email_address:
                 set_customer_do_not_email(token, subscription_id, customer_id, email_address, do_not=True)
+    
         except Exception as e:
-            log.warning("CRM inactive/DoNotEmail failed (global decline): %s", e)
-
-        # ✅ Persist to Airtable so future nudges/replies stop
-        try:
-            rec_id = opportunity.get("_airtable_rec_id")
-            if rec_id:
-                from airtable_helpers import update_lead_row  # <-- use YOUR real helper
-                update_lead_row(rec_id, {
-                    "active": False,
-                    "mode": "closed_declined",
-                    "lock_until": "2099-01-01T00:00:00.000Z",
-                })
-                log.info("DECLINE AIRTABLE OK opp=%s rec=%s", opp_id, rec_id)
-            else:
-                log.warning("DECLINE AIRTABLE skipped: missing _airtable_rec_id opp=%s", opp_id)
-        except Exception as e:
-            log.warning("Airtable persist failed (decline): %s", e)
+            log.warning("CRM inactive/DoNotEmail failed (opt-out): %s", e)
     
         return state, True
+
 
 
     # [#1] HARD STOP: if this opp is declined/inactive/closed or email is blocked, do nothing
@@ -1852,7 +1846,6 @@ def process_kbb_ico_lead(
             now_iso = _dt.now(_tz.utc).isoformat()
             state["mode"] = "closed_declined"
             state["nudge_count"] = 0
-            state["last_agent_msg_at"] = now_iso
             state["email_blocked_do_not_email"] = True
             opportunity["_kbb_state"] = state
 
