@@ -1217,7 +1217,7 @@ def process_kbb_ico_lead(
     subscription_id,
     SAFE_MODE=False,
     rooftop_sender=None,
-    trigger="cron",            # "cron" (old style) or "email_webhook"
+    trigger="email_webhook",            # "cron" (old style) or "email_webhook"
     inbound_ts=None,           # timestamp string from webhook (ISO)
     inbound_msg_id=None,       # message id / synthetic id
     inbound_subject=None,      # subject of the inbound email (for reply subject)
