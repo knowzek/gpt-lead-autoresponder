@@ -31,14 +31,18 @@ def _is_decline(text: str) -> bool:
     return bool(_DECLINE_RE.search(text or ""))
 
 
+_OPT_OUT_RE = re.compile(
+    r"(?i)\b("
+    r"stop|stop\s+all|stop\s+now|end|cancel|quit|"
+    r"unsubscribe|remove\s+me|do\s+not\s+contact|do\s+not\s+email|don't\s+email|"
+    r"no\s+further\s+contact|stop\s+contacting|stop\s+emailing|opt\s*out|opt-?out|"
+    r"cease\s+and\s+desist"
+    r")\b"
+)
 
 def _is_optout_text(t: str) -> bool:
-    t = (t or "").lower()
-    return any(kw in t for kw in (
-        "stop emailing me", "stop email", "do not email", "don't email",
-        "unsubscribe", "remove me", "no further contact",
-        "stop contacting", "opt out", "opt-out", "optout", "cease and desist"
-    ))
+    t = (t or "").strip()
+    return bool(_OPT_OUT_RE.search(t))
 
 def _latest_customer_optout(opportunity):
     """
