@@ -31,7 +31,7 @@ def _is_decline(text: str) -> bool:
     return bool(_DECLINE_RE.search(text or ""))
 
 
-_OPT_OUT_RE = re.compile(
+_OPT_OUT_RE = _re.compile(
     r"(?i)\b("
     r"stop|stop\s+all|stop\s+now|end|cancel|quit|"
     r"unsubscribe|remove\s+me|do\s+not\s+contact|do\s+not\s+email|don't\s+email|"
