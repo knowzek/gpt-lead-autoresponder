@@ -1701,7 +1701,7 @@ def process_kbb_ico_lead(
         # Preserve earlier opt-out decision
         declined_optout = bool(declined)
 
-        if is_outlook_mode:
+        if is_webhook:
             # Outlook path: we already have the inbound subject/body from the webhook
             def _clean_subject(s: str) -> str:
                 s = _re.sub(r"^\s*\[.*?\]\s*", "", s or "", flags=_re.I)  # strip [CAUTION], etc.
@@ -1966,10 +1966,9 @@ def process_kbb_ico_lead(
             
             # --- PERSIST FIRST so re-runs short-circuit even if send fails ---
             now_iso = _dt.now(_tz.utc).isoformat()
-            try:
-                chosen_appt_id = new_id if (("new_id" in locals()) and new_id) else appt_id
-            except NameError:
-                chosen_appt_id = appt_id
+            # Choose an appointment activity id to store
+            chosen_appt_id = new_id or state.get("last_appt_activity_id")
+
             
             state["mode"]                  = "scheduled"
             state["last_appt_activity_id"] = chosen_appt_id
