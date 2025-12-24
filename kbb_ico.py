@@ -893,13 +893,7 @@ def build_patti_footer(rooftop_name: str) -> str:
 
               <!-- RIGHT: contact block -->
               <td width="360" valign="top" align="left" style="font-family:Arial, Helvetica, sans-serif; color:#222222;">
-                <div style="font-size:13px; line-height:20px; font-weight:bold; margin-bottom:2px;">
-                  Contact details
-                </div>
-                <div style="font-size:12px; line-height:18px; color:#666666; margin-bottom:8px;">
-                  You can reply directly to this email or use the details below.
-                </div>
-
+                
                 <div style="font-size:13px; line-height:20px; margin-bottom:8px;">
                   <div><strong>Email:</strong>
                     <a href="mailto:{patti_email}" style="color:#0066cc; text-decoration:none;">{patti_email}</a>
