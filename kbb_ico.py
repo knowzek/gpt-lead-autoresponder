@@ -1218,19 +1218,29 @@ def process_kbb_ico_lead(
     subscription_id,
     SAFE_MODE=False,
     rooftop_sender=None,
-    trigger="email_webhook",            # "cron" (old style) or "email_webhook"
-    inbound_ts=None,           # timestamp string from webhook (ISO)
-    inbound_msg_id=None,       # message id / synthetic id
-    inbound_subject=None,      # subject of the inbound email (for reply subject)
+    trigger="cron",            # "cron" or "email_webhook"
+    inbound_ts=None,
+    inbound_msg_id=None,
+    inbound_subject=None,
 ):
-
     opp_id = opportunity.get("opportunityId") or opportunity.get("id")
     created_iso = opportunity.get("createdDate") or opportunity.get("created_on")
 
     # ES-only state (no comments)
     state = dict(opportunity.get("_kbb_state") or {})
+
+    # -----------------------------
+    # Inbound detection (STRICT)
+    # -----------------------------
+    has_real_inbound = bool((inquiry_text or "").strip())
+
+    if trigger == "email_webhook" and has_real_inbound:
+        state["mode"] = "convo"
+    else:
+        # never flip to convo just because cron ran
+        state.setdefault("mode", "cadence")
+
     # normalize defaults without clobbering existing keys
-    state.setdefault("mode", "cadence")
     state.setdefault("last_template_day_sent", None)
     state.setdefault("last_template_sent_at", None)
     state.setdefault("last_customer_msg_at", None)
@@ -1240,11 +1250,12 @@ def process_kbb_ico_lead(
     state.setdefault("last_appt_activity_id", None)
     state.setdefault("appt_due_utc", None)
     state.setdefault("appt_due_local", None)
-    state.setdefault("last_confirmed_due_utc", None)    # what we last confirmed to the customer
-    state.setdefault("last_confirm_sent_at", None)       # when we last sent a confirmation
-    
+    state.setdefault("last_confirmed_due_utc", None)
+    state.setdefault("last_confirm_sent_at", None)
+
     # keep a single shared dict reference everywhere
     opportunity["_kbb_state"] = state
+
     
     # --- safety inits to avoid UnboundLocalError on non-scheduling paths ---
     created_appt_ok = False     # whether we created an appt this turn
@@ -1479,21 +1490,32 @@ def process_kbb_ico_lead(
         log.info("KBB ICO: declined → skip all outreach (opp=%s)", opp_id)
         opportunity["_kbb_state"] = state
         return state, action_taken
+        
+    # ---------------------------------
+    # Real inbound detection (CRITICAL)
+    # ---------------------------------
+    has_real_inbound = bool((inquiry_text or "").strip())
     
     # === If appointment is booked/upcoming, pause cadence but still watch for inbound ===
+
     if state.get("mode") == "scheduled" or _has_upcoming_appt(acts_live, state):
-        if is_webhook:
-            # Webhook invocation = we know this is a fresh inbound
-            log.info("KBB ICO: inbound during scheduled/appt (webhook) → keep scheduled; reply in-thread")
-            state["mode"] = "scheduled"          # ✅ do NOT switch to convo
+    
+        if is_webhook and has_real_inbound:
+            log.info(
+                "KBB ICO: inbound during scheduled/appt (webhook) → keep scheduled; reply in-thread"
+            )
+            state["mode"] = "scheduled"   # ❗ DO NOT switch to convo
             state["nudge_count"] = 0
+    
             if inbound_ts:
                 state["last_customer_msg_at"] = inbound_ts
             if inbound_msg_id:
                 state["last_inbound_activity_id"] = inbound_msg_id
-                        # fall through to convo handling
+    
+            # fall through to reply handling
+    
         else:
-            # Legacy CRM-based detection for stores not yet on Outlook
+            # Legacy CRM-based detection
             has_reply, last_cust_ts, last_inbound_activity_id = customer_has_replied(
                 opportunity,
                 token,
@@ -1501,33 +1523,44 @@ def process_kbb_ico_lead(
                 state,
                 acts=acts_live,
             )
-
+    
             if (
                 has_reply
                 and last_inbound_activity_id
                 and last_inbound_activity_id != state.get("last_inbound_activity_id")
             ):
-                log.info("KBB ICO: true customer reply after appointment → switch to convo mode")
+                log.info(
+                    "KBB ICO: true customer reply after appointment → switch to convo mode"
+                )
                 state["mode"] = "convo"
                 state["nudge_count"] = 0
+    
                 if last_cust_ts:
                     state["last_customer_msg_at"] = last_cust_ts
                 state["last_inbound_activity_id"] = last_inbound_activity_id
-                # fall through to convo handling below
+    
             else:
-                log.info("KBB ICO: appointment active, no *new* inbound → stay quiet")
+                log.info(
+                    "KBB ICO: appointment active, no *new* inbound → stay quiet"
+                )
                 state["mode"] = "scheduled"
                 opportunity["_kbb_state"] = state
                 return state, action_taken
-    # else: not scheduled and no upcoming appt → continue into normal detection/cadence logic
+
 
     # --- Detect whether we have a NEW inbound to respond to ---
 
     if is_webhook:
-        # This invocation *is* a new inbound email from Outlook
-        has_reply = True
-        last_cust_ts = inbound_ts or _dt.now(_tz.utc).isoformat()
-        last_inbound_activity_id = inbound_msg_id or f"esmsg:{last_cust_ts}"
+        has_reply = has_real_inbound
+        last_cust_ts = (
+            inbound_ts or _dt.now(_tz.utc).isoformat()
+            if has_real_inbound else None
+        )
+        last_inbound_activity_id = (
+            inbound_msg_id or f"esmsg:{last_cust_ts}"
+            if has_real_inbound else None
+        )
+
     
     elif trigger == "kbb_adf":
         # ✅ ADF notifications are system-generated. Not a customer reply.
@@ -1563,7 +1596,7 @@ def process_kbb_ico_lead(
             last_agent_dt = last_agent_dt_live
 
     if is_webhook:
-        has_new_inbound = True  # webhook itself is the signal
+        has_new_inbound = has_real_inbound
     elif trigger == "kbb_adf":
         has_new_inbound = False
     else:
