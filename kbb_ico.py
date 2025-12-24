@@ -8,6 +8,8 @@ from fortellis import (
     schedule_activity,
 )
 from fortellis import complete_activity
+from fortellis import complete_send_email_activity
+
 
 from outlook_email import send_email_via_outlook
 from fortellis import search_activities_by_opportunity
