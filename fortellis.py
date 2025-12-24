@@ -975,12 +975,12 @@ def complete_send_email_activity(
     # IMPORTANT: pass activity_type as a string so _coerce_activity_type maps it reliably
     return complete_activity(
         token,
-        subscription_id,              # dealer_key == Subscription-Id in your _headers()
+        subscription_id,              # dealer_key == Subscription-Id 
         opportunity_id,
         due_dt_iso_utc=now,
         completed_dt_iso_utc=now,
         activity_name="Send Email",
-        activity_type="send email",   # <-- this maps to 3 in your ACTIVITY_TYPE_MAP
+        activity_type=3,  
         comments=f"Patti Outlook: sent to {to_addr} | subject={subject}"
                  + (f" | {comments_extra}" if comments_extra else ""),
     )
