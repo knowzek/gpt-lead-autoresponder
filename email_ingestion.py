@@ -190,18 +190,15 @@ def process_inbound_email(inbound: dict) -> None:
     }
     opportunity.setdefault("messages", []).append(msg_dict)
     
-    # 3) Mark “new inbound” so processNewData will respond next run
+    # 3) Mark inbound + set KBB convo signals
+    now_iso = ts  # use the inbound timestamp we already computed
     opportunity.setdefault("checkedDict", {})["last_msg_by"] = "customer"
-    opportunity["followUP_date"] = _dt.now(_tz.utc).isoformat()
+    opportunity["followUP_date"] = now_iso  # due now
     
-        # 3) Mark inbound + set KBB convo signals (so nudges stop, replies can happen)
-    now_iso = _dt.now(_tz.utc).isoformat()
-    opportunity.setdefault("checkedDict", {})["last_msg_by"] = "customer"
-    opportunity["followUP_date"] = now_iso  # make Due Now immediately
-
     st = opportunity.setdefault("_kbb_state", {})
     st["mode"] = "convo"
     st["last_customer_msg_at"] = now_iso
+     = now_iso
 
     # 4) Persist to Airtable (save_opp already updates follow_up_at + opp_json)
     save_opp(opportunity)
@@ -232,6 +229,9 @@ def process_inbound_email(inbound: dict) -> None:
             subscription_id=subscription_id,
             SAFE_MODE=False,              # <-- allow send now
             rooftop_sender=rooftop_sender,
+            trigger="email_webhook",        
+            inbound_ts=ts,                  
+            inbound_subject=subject, 
         )
 
         # Persist any state changes + schedule parking if convo logic does that
