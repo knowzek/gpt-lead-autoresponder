@@ -175,11 +175,6 @@ def process_inbound_email(inbound: dict) -> None:
         log.warning("No matching opportunity found for inbound email from=%s", sender_raw)
         return
     
-    # 🔒 Optional test gate (keep during Phase 2 if you want)
-    if not is_test_opp(opportunity, opp_id):
-        log.info("Inbound email for opp %s is not TEST_OPP_ID; skipping", opp_id)
-        return
-    
     # 2) Append inbound message into the thread (in-memory)
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     msg_dict = {
