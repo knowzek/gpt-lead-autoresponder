@@ -9,7 +9,8 @@ EXIT_KEYWORDS = [
     "not interested", "no longer interested", "bought elsewhere",
     "already purchased", "stop emailing", "unsubscribe",
     "please stop", "no thanks", "do not contact",
-    "leave me alone", "sold my car", "found another dealer"
+    "leave me alone", "sold my car", "found another dealer",
+    "pass on the offer", "going to pass", "maybe later", "not right now", 
 ]
 
 def is_exit_message(msg: str) -> bool:
@@ -23,6 +24,7 @@ def is_exit_message(msg: str) -> bool:
 _DECLINE_RE = _re.compile(
     r'(?i)\b('
     r'not\s+interested|no\s+longer\s+interested|not\s+going\s+to\s+sell|'
+    r'going\s+to\s+pass|pass(?:ing)?\s+on(?:\s+the)?\s+offer|'
     r'stop\s+email|do\s+not\s+contact|please\s+stop|unsubscribe|'
     r'take\s+me\s+off|remove\s+me|leave me alone|bought elsewhere|already purchased'
     r')\b'
