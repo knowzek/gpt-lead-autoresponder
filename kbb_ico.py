@@ -1,5 +1,6 @@
 # kbb_ico.py
 from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+
 from kbb_templates import TEMPLATES, fill_merge_fields
 from kbb_cadence import events_for_day
 from fortellis import (
@@ -118,6 +119,23 @@ def _clean_html(h: str) -> str:
     h = _unesc(h)
     h = re.sub(r"\s+", " ", h).strip()
     return h
+
+def _parse_iso_utc(s):
+    if not s:
+        return None
+    try:
+        return _dt.fromisoformat(str(s).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+def _next_cadence_day(after_day: int) -> int | None:
+    # CADENCE keys are your "days": 1,2,5,6,7,8,... etc.
+    days = sorted(int(d) for d in CADENCE.keys())
+    for d in days:
+        if d > int(after_day):
+            return d
+    return None
+
 
 
 def send_opportunity_email_activity(
@@ -2437,33 +2455,47 @@ def process_kbb_ico_lead(
         log.info("KBB ICO: persisted convo mode — skip cadence.")
         opportunity["_kbb_state"] = state
         return state, action_taken
+        
     # ===== Still in cadence (never replied) =====
     state["mode"] = "cadence"
-    #_save_state_comment(token, subscription_id, opp_id, state)
-
-    # --- DEBUG: inputs to day-pick ---
-    try:
-        log.info(
-            "KBB day debug B → opp=%s created_iso=%r lead_age_days(param)=%s",
-            opp_id,
-            created_iso,
-            lead_age_days,
-        )
-    except Exception as _e:
-        log.warning("KBB day debug B failed: %s", _e)
-    # --- /DEBUG ---
-
-    # Offer-window override (if expired, jump to Day 08/09 track)
+    
+    # --- Option A: TIME GATE by follow-up due timestamp ---
+    # (Airtable "Due Now" should already be filtering, but this makes it bulletproof)
+    now_utc = _dt.now(_tz.utc)
+    
+    due_iso = opportunity.get("followUP_date") or opportunity.get("follow_up_at")
+    due_dt  = _parse_iso_utc(due_iso)
+    
+    # If it's not due yet, do nothing this cycle.
+    if due_dt and now_utc < due_dt:
+        log.info("KBB ICO: cadence not due yet (due=%s, now=%s) opp=%s", due_iso, now_utc.isoformat(), opp_id)
+        opportunity["_kbb_state"] = state
+        return state, action_taken
+    
+    # --- Option A: pick NEXT cadence day from state (NOT lead age) ---
+    last_sent = state.get("last_template_day_sent")
+    
+    if last_sent is None:
+        effective_day = 1
+    else:
+        nxt = _next_cadence_day(int(last_sent))
+        if nxt is None:
+            log.info("KBB ICO: cadence complete; no next day. opp=%s last_sent=%s", opp_id, last_sent)
+            opportunity["_kbb_state"] = state
+            return state, action_taken
+        effective_day = int(nxt)
+    
+    # Offer-window override (keep your existing behavior, but apply it to the chosen day)
     expired = _ico_offer_expired(created_iso, exclude_sunday=True)
-    effective_day = max(1, (lead_age_days or 0) + 1)
-    if expired and lead_age_days < 8:
+    if expired and effective_day < 8:
         effective_day = 8
-
+    
     plan = events_for_day(effective_day)
     if not plan:
         opportunity["_kbb_state"] = state
         return state, action_taken
-
+    
+    # If you already sent this exact cadence day, don't resend it
     if state.get("last_template_day_sent") == effective_day:
         log.info("KBB ICO: skipping Day %s (already sent)", effective_day)
         opportunity["_kbb_state"] = state
@@ -2489,9 +2521,6 @@ def process_kbb_ico_lead(
         log.warning("KBB ICO: missing template for day key=%r", tpl_key)
         opportunity["_kbb_state"] = state
         return state, action_taken
-    
-    # Use the plan's explicit day if present; otherwise KEEP prior effective_day
-    effective_day = plan.get("day") or effective_day
 
 
     # Rooftop info
@@ -2581,15 +2610,28 @@ def process_kbb_ico_lead(
             recipients=recipients, carbon_copies=[],
             subject=subject, body_html=body_html, rooftop_name=rooftop_name
         )
-        # success → update last_agent_msg_at + persist to Airtable
-        state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
+    
+        # success → update last_agent_msg_at
+        now_iso2 = _dt.now(_tz.utc).isoformat()
+        state["last_agent_msg_at"] = now_iso2
+    
+        #3: advance follow-up due date (Option A)
+        next_day = _next_cadence_day(int(effective_day))
+        if next_day is None:
+            opportunity["followUP_date"] = None
+        else:
+            delta_days = max(1, int(next_day) - int(effective_day))
+            opportunity["followUP_date"] = (_dt.now(_tz.utc) + _td(days=delta_days)).isoformat()
+    
         opportunity["_kbb_state"] = state
+    
         try:
-            save_opp(opportunity)  # Airtable brain
+            save_opp(opportunity)
+            log.info("Persisted Airtable post-send opp=%s next_followUP_date=%s", opp_id, opportunity.get("followUP_date"))
         except Exception as ee:
             log.warning("Airtable persist failed (post-send): %s", ee)
 
-
+    
     except Exception as e:
         resp = getattr(e, "response", None)
         body = ""
