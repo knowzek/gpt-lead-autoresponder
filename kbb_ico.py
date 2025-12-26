@@ -2458,25 +2458,36 @@ def process_kbb_ico_lead(
         
     # ===== Still in cadence (never replied) =====
     state["mode"] = "cadence"
-    
+
+    # ------------------------------------------------------------
+    # BELT + SUSPENDERS (anti-repeat)
+    # - If Airtable says we already sent a cadence template, do NOT
+    #   ever send Day 1 again even if follow_up_at gets weird.
+    # ------------------------------------------------------------
+    last_sent = state.get("last_template_day_sent")
+    last_sent_at = state.get("last_template_sent_at")
+    last_agent_at = state.get("last_agent_msg_at")
+
+    # If we have any evidence cadence already started, never re-run Day 1.
+    cadence_started = (last_sent is not None) or bool(last_sent_at) or bool(last_agent_at)
+
     # --- Option A: TIME GATE by follow-up due timestamp ---
-    # (Airtable "Due Now" should already be filtering, but this makes it bulletproof)
     now_utc = _dt.now(_tz.utc)
-    
+
     due_iso = opportunity.get("followUP_date") or opportunity.get("follow_up_at")
     due_dt  = _parse_iso_utc(due_iso)
-    
+
     # If it's not due yet, do nothing this cycle.
     if due_dt and now_utc < due_dt:
-        log.info("KBB ICO: cadence not due yet (due=%s, now=%s) opp=%s", due_iso, now_utc.isoformat(), opp_id)
+        log.info("KBB ICO: cadence not due yet (due=%s, now=%s) opp=%s",
+                 due_iso, now_utc.isoformat(), opp_id)
         opportunity["_kbb_state"] = state
         return state, action_taken
-    
-    # --- Option A: pick NEXT cadence day from state (NOT lead age) ---
-    last_sent = state.get("last_template_day_sent")
-    
+
+    # --- pick NEXT cadence day from state (NOT lead age) ---
+    # IMPORTANT: if cadence_started, we must advance to next day (never Day 1 again)
     if last_sent is None:
-        effective_day = 1
+        effective_day = 2 if cadence_started else 1
     else:
         nxt = _next_cadence_day(int(last_sent))
         if nxt is None:
@@ -2484,6 +2495,7 @@ def process_kbb_ico_lead(
             opportunity["_kbb_state"] = state
             return state, action_taken
         effective_day = int(nxt)
+
     
     # Offer-window override (keep your existing behavior, but apply it to the chosen day)
     expired = _ico_offer_expired(created_iso, exclude_sunday=True)
