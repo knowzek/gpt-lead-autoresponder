@@ -48,7 +48,6 @@ def _crm_appt_set(opportunity: dict) -> bool:
     status = status.strip().lower()
     return status in {"appointment set", "appt set", "appointment scheduled"}
 
-
 def expand_legacy_schedule_token_for_outlook(body_html: str, rooftop_name: str) -> str:
     """
     Fortellis expands <{LegacySalesApptSchLink}> inside the CRM.
