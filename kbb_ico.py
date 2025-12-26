@@ -11,7 +11,7 @@ from fortellis import (
 from fortellis import complete_activity
 from fortellis import complete_send_email_activity
 from airtable_store import save_opp
-
+from kbb_cadence import CADENCE
 
 from outlook_email import send_email_via_outlook
 from fortellis import search_activities_by_opportunity
