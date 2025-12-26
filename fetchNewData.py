@@ -89,6 +89,11 @@ def _merge_preserve(existing: dict, incoming: dict) -> dict:
         if (k in existing) and (k not in incoming):
             merged[k] = existing.get(k)
 
+    # --- preserve followUP_date (Airtable is the brain) ---
+    if existing.get("followUP_date"):
+        merged["followUP_date"] = existing["followUP_date"]
+
+
     return merged
 
 
@@ -230,12 +235,7 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
         docToIndex["_subscription_id"] = subscription_id  # used later when fetching activities, etc.
     
         # always present for processor
-        docToIndex.setdefault("messages", [])
-        docToIndex.setdefault("checkedDict", {
-            "patti_already_contacted": False,
-            "last_msg_by": None,
-            "is_sales_contacted": False
-        })
+        
         docToIndex.setdefault("isActive", True)
         docToIndex.setdefault("status", op.get("status") or "Active")
         docToIndex.setdefault("subStatus", op.get("subStatus") or "New")
