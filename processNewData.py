@@ -200,6 +200,13 @@ def _is_assigned_to_kristin(doc: dict) -> bool:
             return True
     return False
 
+def _parse_iso_utc(x):
+    if not x:
+        return None
+    try:
+        return _dt.fromisoformat(str(x).replace("Z", "+00:00")).astimezone(_tz.utc)
+    except Exception:
+        return None
 
 
 def checkActivities(opportunity, currDate, rooftop_name, activities_override=None):
@@ -988,9 +995,31 @@ def processHit(hit):
                     if delta_days <= 0:
                         delta_days = 1
         
-                    opportunity["followUP_date"] = (now_utc + _td(days=delta_days)).isoformat()
-                    log.info("KBB ICO: scheduled next followUP_date=%s opp=%s anchor_day=%s next_day=%s",
-                             opportunity["followUP_date"], opportunityId, anchor_day, next_day)
+                    # Anchor next due on the last template send time (or last agent send), NOT "now"
+                    anchor_iso = (state.get("last_template_sent_at")
+                                  or state.get("last_agent_msg_at")
+                                  or opportunity.get("created_at"))
+                    
+                    anchor_dt = None
+                    try:
+                        if anchor_iso:
+                            anchor_dt = _dt.fromisoformat(str(anchor_iso).replace("Z", "+00:00"))
+                    except Exception:
+                        anchor_dt = None
+                    
+                    if anchor_dt is None:
+                        anchor_dt = now_utc  # fallback only if we truly have nothing
+                    
+                    next_due = (anchor_dt + _td(days=delta_days)).astimezone(_tz.utc).isoformat()
+                    
+                    # Only update if missing OR clearly wrong (prevents "rolling forward" every run)
+                    curr_due_dt = _parse_iso_utc(opportunity.get("followUP_date"))
+                    if (curr_due_dt is None) or (abs((curr_due_dt - _parse_iso_utc(next_due)).total_seconds()) > 60):
+                        opportunity["followUP_date"] = next_due
+                    
+                    log.info("KBB ICO: scheduled next followUP_date=%s opp=%s anchor_day=%s next_day=%s anchor_iso=%s",
+                             opportunity["followUP_date"], opportunityId, anchor_day, next_day, anchor_iso)
+
                 else:
                     # No more nudges
                     opportunity["isActive"] = False
