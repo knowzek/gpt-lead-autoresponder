@@ -324,6 +324,16 @@ def process_kbb_adf_notification(inbound: dict) -> None:
     opportunity["followUP_date"] = follow_up_at
 
     # -----------------------------
+    # 4.5) Compute is_active once (used by Airtable + logs)
+    # -----------------------------
+    status = (opportunity.get("status") or "Active").strip().lower()
+    substatus = (opportunity.get("subStatus") or opportunity.get("substatus") or "New").strip().lower()
+
+    # Treat Lost/Inactive as not active; otherwise active
+    is_active = (status == "active") and (substatus not in {"lost", "inactive", "closed"})
+
+
+    # -----------------------------
     # 5) Upsert Airtable record (create OR update)
     # -----------------------------
     from airtable_store import upsert_lead, _safe_json_dumps
