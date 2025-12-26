@@ -248,9 +248,22 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
         docToIndex.setdefault("salesTeam", op.get("salesTeam") or [])
         docToIndex.setdefault("soughtVehicles", op.get("soughtVehicles") or [])
     
-        # KBB: exact match only
-        if is_kbb:
-            docToIndex.setdefault("followUP_date", now_iso)  # due now (so Day 0 runs)
+        # default follow-up only for NON-KBB (or only when brand new)
+        if not is_kbb:
+            docToIndex.setdefault("followUP_date", (_dt.now(_tz.utc) + _td(days=1)).isoformat())
+        
+        # ---- Airtable upsert ----
+        existing_rec = find_by_opp_id(opp_id)
+        created_now = existing_rec is None
+        log.info("Airtable match opp=%s exists=%s rec_id=%s", opp_id, bool(existing_rec), (existing_rec or {}).get("id"))
+        
+        if existing_rec:
+            existing_opp = opp_from_record(existing_rec)
+            docToIndex = _merge_preserve(existing_opp, docToIndex)
+        
+        # ✅ only initialize KBB cadence fields when the record is NEW
+        if created_now and is_kbb:
+            docToIndex.setdefault("followUP_date", now_iso)  # due now for Day 1
             docToIndex.setdefault("_kbb_state", {
                 "mode": "cadence",
                 "last_template_day_sent": None,
@@ -263,17 +276,6 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
                 "appt_due_utc": None,
                 "appt_due_local": None
             })
-        else:
-            docToIndex["followUP_date"] = (_dt.now(_tz.utc) + _td(days=1)).isoformat()
-    
-        # ---- Airtable upsert ----
-        existing_rec = find_by_opp_id(opp_id)
-        created_now = existing_rec is None
-        
-        # If Airtable already has a richer opp_json, DO NOT wipe it.
-        if existing_rec:
-            existing_opp = opp_from_record(existing_rec)  # <-- parses opp_json into a dict
-            docToIndex = _merge_preserve(existing_opp, docToIndex)
         
         upsert_lead(opp_id, {
             "subscription_id": subscription_id,
