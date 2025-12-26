@@ -331,7 +331,7 @@ def process_kbb_adf_notification(inbound: dict) -> None:
     rec = upsert_lead(opp_id, {
         "subscription_id": subscription_id,
         "source": opportunity.get("source") or "",
-        "is_active": bool(is_active),
+        "is_active": True,
         "follow_up_at": follow_up_at,
         "mode": (opportunity.get("_kbb_state") or {}).get("mode", ""),
         "opp_json": _safe_json_dumps(opportunity),
