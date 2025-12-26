@@ -250,7 +250,7 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
     
         # KBB: exact match only
         if is_kbb:
-            docToIndex["followUP_date"] = now_iso  # due now (so Day 0 runs)
+            docToIndex.setdefault("followUP_date", now_iso)  # due now (so Day 0 runs)
             docToIndex.setdefault("_kbb_state", {
                 "mode": "cadence",
                 "last_template_day_sent": None,
@@ -325,14 +325,16 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
         
             # mirror your init_doc behavior by mutating docToIndex
             docToIndex["completedActivities"] = completedActivities
-            docToIndex["scheduledActivities"] = []
-            docToIndex["messages"] = []
-            docToIndex["alreadyProcessedActivities"] = {}
-            docToIndex["checkedDict"] = {
+            
+            # ✅ do NOT overwrite; only default if missing
+            docToIndex.setdefault("scheduledActivities", [])
+            docToIndex.setdefault("messages", [])
+            docToIndex.setdefault("alreadyProcessedActivities", {})
+            docToIndex.setdefault("checkedDict", {
                 "is_sales_contacted": False,
                 "patti_already_contacted": False,
                 "last_msg_by": None,
-            }
+            })
         
             upsert_lead(opp_id, {
                 "subscription_id": subscription_id,
