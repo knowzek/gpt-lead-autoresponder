@@ -2458,46 +2458,43 @@ def process_kbb_ico_lead(
         
     # ===== Still in cadence (never replied) =====
     state["mode"] = "cadence"
-
+    
     # ------------------------------------------------------------
     # BELT + SUSPENDERS (anti-repeat)
     # - If Airtable says we already sent a cadence template, do NOT
     #   ever send Day 1 again even if follow_up_at gets weird.
     # ------------------------------------------------------------
-    last_sent = state.get("last_template_day_sent")
-    last_sent_at = state.get("last_template_sent_at")
+    last_sent     = state.get("last_template_day_sent")
+    last_sent_at  = state.get("last_template_sent_at")
     last_agent_at = state.get("last_agent_msg_at")
-
-    # If we have any evidence cadence already started, never re-run Day 1.
-    cadence_started = (last_sent is not None) or bool(last_sent_at) or bool(last_agent_at)
-
-    # --- Option A: TIME GATE by follow-up due timestamp ---
+    
+    # Evidence that a cadence TEMPLATE was sent previously
+    cadence_started = (last_sent is not None) or bool(last_sent_at)
+    
+    # Airtable is the only "due" gate (Due Now view selected this record)
     now_utc = _dt.now(_tz.utc)
-
-    due_iso = opportunity.get("followUP_date") or opportunity.get("follow_up_at")
-    due_dt  = _parse_iso_utc(due_iso)
-
-    # If it's not due yet, do nothing this cycle.
-    if due_dt and now_utc < due_dt:
-        log.info("KBB ICO: cadence not due yet (due=%s, now=%s) opp=%s",
-                 due_iso, now_utc.isoformat(), opp_id)
-        opportunity["_kbb_state"] = state
-        return state, action_taken
-
+    
     # --- pick NEXT cadence day from state (NOT lead age) ---
-    # IMPORTANT: if cadence_started, we must advance to next day (never Day 1 again)
     if last_sent is None:
+        # Normal: start at Day 1
+        # Recovery: if we lost the day number but have a template timestamp, assume Day 1 already happened → go Day 2
         effective_day = 2 if cadence_started else 1
     else:
         nxt = _next_cadence_day(int(last_sent))
         if nxt is None:
-            log.info("KBB ICO: cadence complete; no next day. opp=%s last_sent=%s", opp_id, last_sent)
+            # cadence complete
+            state["mode"] = "done"
+            opportunity["isActive"] = False
             opportunity["_kbb_state"] = state
+            try:
+                save_opp(opportunity)
+            except Exception:
+                pass
             return state, action_taken
-        effective_day = int(nxt)
-
     
-    # Offer-window override (keep your existing behavior, but apply it to the chosen day)
+        effective_day = int(nxt)
+    
+    # Offer-window override (apply to chosen day)
     expired = _ico_offer_expired(created_iso, exclude_sunday=True)
     if expired and effective_day < 8:
         effective_day = 8
@@ -2512,19 +2509,18 @@ def process_kbb_ico_lead(
         log.info("KBB ICO: skipping Day %s (already sent)", effective_day)
         opportunity["_kbb_state"] = state
         return state, action_taken
-
     
     # --- DEBUG: result of day-pick & duplicate check ---
     try:
         log.info(
-            "KBB day debug C → opp=%s effective_day=%s skipping_dup=%s",
-            opp_id,
-            effective_day,
-            state.get("last_template_day_sent") == effective_day
+            "KBB day debug C → opp=%s effective_day=%s last_sent=%s cadence_started=%s",
+            opp_id, effective_day, last_sent, cadence_started
         )
     except Exception as _e:
         log.warning("KBB day debug C failed: %s", _e)
     # --- /DEBUG ---
+
+
 
     # Subject/template selection zone (keep this early)
     tpl_key = plan.get("email_template_day")
@@ -2599,23 +2595,9 @@ def process_kbb_ico_lead(
         log.info("Email suppressed by state for opp=%s (cadence)", opp_id)
         opportunity["_kbb_state"] = state
         return state, action_taken
-
-    # 1) Persist cadence step BEFORE send so we don’t re-send on next run
-    now_iso = _dt.now(_tz.utc).isoformat()
-    state["last_template_day_sent"] = effective_day
-    state["last_template_sent_at"]  = now_iso
-    opportunity["_kbb_state"] = state
     
-    # ✅ Persist to Airtable (your brain), not ES
     try:
-        save_opp(opportunity)
-        log.info("Persisted Airtable _kbb_state pre-template send opp=%s day=%s", opp_id, effective_day)
-    except Exception as e:
-        log.warning("Airtable persist failed (pre-template send): %s", e)
-
-
-    # 2) Try to send, but swallow DoNotEmail so we don’t crash or loop
-    try:
+        # 1) SEND FIRST
         send_opportunity_email_activity(
             token, subscription_id, opp_id,
             sender=rooftop_sender,
@@ -2623,28 +2605,35 @@ def process_kbb_ico_lead(
             subject=subject, body_html=body_html, rooftop_name=rooftop_name
         )
     
-        # success → update last_agent_msg_at
-        now_iso2 = _dt.now(_tz.utc).isoformat()
-        state["last_agent_msg_at"] = now_iso2
+        # 2) ONLY AFTER SUCCESS: mark as sent
+        now_iso = _dt.now(_tz.utc).isoformat()
+        state["last_template_day_sent"] = effective_day
+        state["last_template_sent_at"]  = now_iso
+        state["last_agent_msg_at"]      = now_iso
     
-        #3: advance follow-up due date (Option A)
+        # 3) advance follow-up due date (next cadence day)
         next_day = _next_cadence_day(int(effective_day))
         if next_day is None:
             opportunity["followUP_date"] = None
         else:
             delta_days = max(1, int(next_day) - int(effective_day))
-            opportunity["followUP_date"] = (_dt.now(_tz.utc) + _td(days=delta_days)).isoformat()
+            # anchor from the actual send time we just recorded
+            opportunity["followUP_date"] = (_dt.fromisoformat(now_iso) + _td(days=delta_days)).isoformat()
     
         opportunity["_kbb_state"] = state
     
+        # 4) Save ONCE to Airtable
         try:
             save_opp(opportunity)
-            log.info("Persisted Airtable post-send opp=%s next_followUP_date=%s", opp_id, opportunity.get("followUP_date"))
+            log.info(
+                "KBB ICO: sent cadence day=%s opp=%s next_followUP_date=%s",
+                effective_day, opp_id, opportunity.get("followUP_date")
+            )
         except Exception as ee:
             log.warning("Airtable persist failed (post-send): %s", ee)
-
     
     except Exception as e:
+        # If send fails: DO NOT advance cadence day.
         resp = getattr(e, "response", None)
         body = ""
         if resp is not None:
@@ -2653,22 +2642,20 @@ def process_kbb_ico_lead(
             except Exception:
                 body = resp.text
         s = str(body)
-
+    
         if "SendEmailInvalidRecipient" in s and "DoNotEmail" in s:
             log.warning("DoNotEmail → skipping cadence email for opp %s", opp_id)
-    
             state["email_blocked_do_not_email"] = True
-        
-            # ✅ Option B: rollback "sent" markers because the email did NOT go out
-            state["last_template_day_sent"] = None
-            state["last_template_sent_at"]  = None
-        
+    
+            # IMPORTANT: do not change last_template_day_sent/at here.
+            # Leave them as-is so cadence doesn't pretend it sent.
+    
             opportunity["_kbb_state"] = state
             try:
                 save_opp(opportunity)  # Airtable brain
             except Exception as ee:
-                log.warning("Airtable persist failed (DoNotEmail rollback): %s", ee)
-        
+                log.warning("Airtable persist failed (DoNotEmail note): %s", ee)
+    
             # Optional: note in CRM for human follow-up by phone/text
             try:
                 from fortellis import add_opportunity_comment
@@ -2678,13 +2665,24 @@ def process_kbb_ico_lead(
                 )
             except Exception as ee:
                 log.warning("Failed to add DoNotEmail comment: %s", ee)
-        
-            # do not re-raise
+    
+            return state, action_taken
+    
+        # non-DoNotEmail error
+        log.error("Cadence send failed for opp %s: %s body=%s", opp_id, e, s)
+    
+        # Keep a short error breadcrumb in state for debugging (doesn't advance cadence)
+        state["last_send_error_at"] = _dt.now(_tz.utc).isoformat()
+        state["last_send_error"] = (str(e) or "send_failed")[:300]
+    
+        opportunity["_kbb_state"] = state
+        try:
+            save_opp(opportunity)
+        except Exception:
+            pass
+    
+        return state, action_taken
 
-            # do not re-raise; proceed so we can create phone/text task below if enabled
-        else:
-            log.error("Cadence send failed for opp %s: %s", opp_id, e)
-            # state was persisted pre-send; do not re-raise to avoid loops
 
     # Phone/Text tasks 
     if ALLOW_TEXTING and plan.get("create_text_task", False) and _customer_has_text_consent(opportunity):
