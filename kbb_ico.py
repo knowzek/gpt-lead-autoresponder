@@ -1,16 +1,23 @@
 # kbb_ico.py
 from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+
 from kbb_templates import TEMPLATES, fill_merge_fields
 from kbb_cadence import events_for_day
 from fortellis import (
     add_opportunity_comment,
-    send_opportunity_email_activity,
+    send_opportunity_email_activity as _crm_send_opportunity_email_activity,
     schedule_activity,
 )
+from fortellis import complete_activity
+from fortellis import complete_send_email_activity
+from airtable_store import save_opp
+from kbb_cadence import CADENCE
 
+from outlook_email import send_email_via_outlook
 from fortellis import search_activities_by_opportunity
 from helpers import build_calendar_links
 import json, re
+from crm_logging import log_email_to_crm
 STATE_TAG = "[PATTI_KBB_STATE]"  # marker to find the state comment quickly
 
 import os
@@ -28,6 +35,189 @@ import zoneinfo as _zi
 from html import unescape as _unesc
 
 #from rooftops import ROOFTOP_INFO as ROOFTOP_INFO
+
+# Only flip to Outlook for test opps / email mode on this branch
+TEST_EMAIL_OPP_IDS = {
+    "050a81e9-78d4-f011-814f-00505690ec8c",  # your current test
+    "e7f79ae6-0cb9-f011-814f-00505690ec8c",
+}
+EMAIL_MODE = os.getenv("EMAIL_MODE", "crm")  # "crm" or "outlook"
+
+def _crm_appt_set(opportunity: dict) -> bool:
+    status = (opportunity.get("salesStatus") or opportunity.get("sales_status") or "")
+    status = status.strip().lower()
+    return status in {"appointment set", "appt set", "appointment scheduled"}
+
+def expand_legacy_schedule_token_for_outlook(body_html: str, rooftop_name: str) -> str:
+    """
+    Fortellis expands <{LegacySalesApptSchLink}> inside the CRM.
+    Outlook/email-outside-CRM will NOT, so we replace it with a real URL
+    based on rooftop_name (ROOFTOP_INFO).
+    """
+    body_html = body_html or ""
+    rt = (ROOFTOP_INFO.get(rooftop_name) or {})
+    booking_link = (rt.get("booking_link") or rt.get("scheduler_url") or "").strip()
+
+    # If we don't have a booking link, leave token alone (or pick a safe fallback).
+    if not booking_link:
+        return body_html
+
+    # Replace the raw token wherever it appears
+    return re.sub(
+        r"(?i)<\{LegacySalesApptSchLink\}>",
+        f'<a href="{booking_link}">Schedule Your Visit</a>',
+        body_html,
+    )
+
+def wants_kbb_value(text: str) -> bool:
+    """
+    Heuristic: does the customer seem to be asking for their KBB estimate / offer amount?
+    """
+    if not text:
+        return False
+
+    t = text.lower()
+
+    # Must be about KBB / offer context
+    has_kbb_context = any(
+        phrase in t
+        for phrase in [
+            "kbb",
+            "kelley blue book",
+            "instant cash offer",
+            "cash offer",
+            "offer",
+        ]
+    )
+
+    # Must be about the amount / value / price
+    has_amount_context = any(
+        phrase in t
+        for phrase in [
+            "estimate",
+            "amount",
+            "value",
+            "price",
+            "how much",
+            "what was",
+            "what is",
+        ]
+    )
+
+    return has_kbb_context and has_amount_context
+
+
+def _clean_html(h: str) -> str:
+    """
+    Lightweight HTML → text for logging to CRM.
+    """
+    h = h or ""
+    # strip tags
+    h = _TAGS_RE.sub(" ", h) if "_TAGS_RE" in globals() else re.sub(r"<[^>]+>", " ", h)
+    # unescape & collapse whitespace
+    h = _unesc(h)
+    h = re.sub(r"\s+", " ", h).strip()
+    return h
+
+def _parse_iso_utc(s):
+    if not s:
+        return None
+    try:
+        return _dt.fromisoformat(str(s).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+def _next_cadence_day(after_day: int) -> int | None:
+    # CADENCE keys are your "days": 1,2,5,6,7,8,... etc.
+    days = sorted(int(d) for d in CADENCE.keys())
+    for d in days:
+        if d > int(after_day):
+            return d
+    return None
+
+
+
+def send_opportunity_email_activity(
+    token,
+    subscription_id,
+    opp_id,
+    sender,
+    recipients,
+    carbon_copies,
+    subject,
+    body_html,
+    rooftop_name,
+    reply_to_activity_id=None,
+):
+    """
+    KBB wrapper:
+      - If EMAIL_MODE == "outlook": send from Patti Outlook + log to CRM
+        AND create a "Send Email" completed activity (stops response-time clock).
+      - Else: send via Fortellis /sendEmail (original behavior).
+    """
+    from fortellis import complete_activity  # exists in your fortellis module (used elsewhere)
+
+    # Default CRM behavior if not in Outlook mode
+    if EMAIL_MODE != "outlook":
+        return _crm_send_opportunity_email_activity(
+            token,
+            subscription_id,
+            opp_id,
+            sender=sender,
+            recipients=recipients,
+            carbon_copies=carbon_copies,
+            subject=subject,
+            body_html=body_html,
+            rooftop_name=rooftop_name,
+            reply_to_activity_id=reply_to_activity_id,
+        )
+
+    # 📨 Outlook path (NO Fortellis email send)
+    to_addr = recipients[0] if recipients else None
+    if not to_addr:
+        return
+
+    from datetime import datetime, timezone
+    from kbb_ico import expand_legacy_schedule_token_for_outlook
+
+    body_html = expand_legacy_schedule_token_for_outlook(body_html, rooftop_name)
+    # 1) Send from Patti via Power Automate / Outlook
+    send_email_via_outlook(
+        to_addr=to_addr,
+        subject=subject,
+        html_body=body_html,
+        headers={"X-Opportunity-ID": opp_id},
+    )
+    
+  #  # 2) (Optional) Log back to CRM as a NOTE (visibility)
+  #  if token and subscription_id:
+  #      try:
+  #          preview = _clean_html(body_html)[:500]
+  #          add_opportunity_comment(
+  #              token,
+  #              subscription_id,
+  #              opp_id,
+  #              f"Outbound email (Patti Outlook) to {to_addr}: {subject}\n\n{preview}",
+  #          )
+  #      except Exception as e:
+  #          log.warning("Failed to add CRM comment for Outlook send opp=%s: %s", opp_id, e)
+    
+    # 3) ✅ Complete "Send Email" activity (stops response-time clock)
+    if token and subscription_id:
+        try:
+            complete_send_email_activity(
+                token=token,
+                subscription_id=subscription_id,
+                opportunity_id=opp_id,
+                to_addr=to_addr,
+                subject=subject,
+            )
+            log.info("Completed CRM activity: Send Email opp=%s", opp_id)
+        except Exception as e:
+            log.warning("Failed to complete 'Send Email' activity opp=%s: %s", opp_id, e)
+
+
+
 
 def _es_debug_update(esClient, index, id, doc, tag=""):
     try:
@@ -48,7 +238,13 @@ def _es_debug_update(esClient, index, id, doc, tag=""):
 
 
 def _can_email(state: dict) -> bool:
-    return not state.get("email_blocked_do_not_email") and state.get("mode") not in {"closed_declined"}
+    if state.get("email_blocked_do_not_email"):
+        return False
+    if state.get("mode") in {"closed_declined", "closed_opted_out"}:
+        return False
+    return True
+
+
 
 def _patch_address_placeholders(html: str, rooftop_name: str) -> str:
     addr = ((ROOFTOP_INFO.get(rooftop_name) or {}).get("address") or "").strip()
@@ -120,19 +316,6 @@ def _last_agent_send_dt(acts: list[dict]):
             latest = dt
     return latest
 
-def _latest_read_email_id(acts: list[dict]) -> str | None:
-    newest = None
-    newest_dt = None
-    for a in acts or []:
-        if not _is_read_email(a):
-            continue
-        dt = _activity_dt(a)
-        if dt and (newest_dt is None or dt > newest_dt):
-            newest_dt = dt
-            newest = str(a.get("activityId") or a.get("id") or "")
-    return newest
-
-
 
 def append_soft_schedule_sentence(body_html: str, rooftop_name: str) -> str:
     """
@@ -183,23 +366,32 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
         token=token, subscription_id=subscription_id,
         opp_id=opp_id, customer_id=customer_id
     )
-
+                                 
+    state = state or {}
+    action_taken = False
+    did_send = False
     # Build a quick index of current appointment activity ids returned by CRM
     def _appt_ids_from(acts):
+        items = []
+        if isinstance(acts, dict):
+            for key in ("scheduledActivities", "completedActivities", "items", "activities"):
+                items.extend(acts.get(key) or [])
+        else:
+            items = acts or []
+    
         out = set()
-        for a in (acts or []):
+        for a in items:
             raw_type = a.get("activityType") or a.get("type")
             raw_name = a.get("activityName") or a.get("name")
-    
             t = str(raw_type).strip().lower() if raw_type is not None else ""
             n = str(raw_name).strip().lower() if raw_name is not None else ""
     
-            # Match either the type *name* or the activity label text
-            if ("appointment" in t) or ("appointment" in n):
+            if ("appointment" in t) or ("appointment" in n) or (raw_type == 7) or (t == "7"):
                 aid = a.get("activityId") or a.get("id")
                 if aid:
                     out.add(str(aid))
         return out
+
 
     
     current_appt_ids = _appt_ids_from(acts_live)
@@ -208,8 +400,8 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
     prev_due = (state or {}).get("appt_due_utc")
     
     # If ES points to an appointment that no longer exists in CRM, reconcile silently.
-    if prev_id and prev_id not in current_appt_ids:
-        # If the due time matches the newly detected one, just update the id and skip send.
+    # If ES points to an appointment id that no longer exists in CRM, reconcile silently.
+    if prev_id and prev_id not in current_appt_ids and appt_id and appt_due_iso:
         new_due_norm = _norm_iso_utc(appt_due_iso)
         if prev_due and new_due_norm and prev_due == new_due_norm:
             log.info("KBB ICO: reconciling stale ES appt id (%s → %s) for same due; no resend.",
@@ -226,45 +418,59 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
             return (True, False)
 
 
+
     # 1) Nothing booked → no short-circuit and DO NOT touch state
     if not (appt_id and appt_due_iso):
         return (False, False)
-
-    st = state or {}
+    
+    # Normalize due time once
     new_due_norm = _norm_iso_utc(appt_due_iso)
     
-    # Log for visibility
+    # Capture previous markers BEFORE mutating state
+    prev_id   = state.get("last_appt_activity_id")
+    prev_due  = state.get("appt_due_utc")
+    last_conf = state.get("last_confirmed_due_utc")
+    
+    # 🔒 HARD RULE: appointment exists → scheduled mode immediately
+    state["last_appt_activity_id"] = appt_id
+    state["appt_due_utc"] = new_due_norm
+    state["mode"] = "scheduled"
+    
     log.info(
         "Idempotency check → prev_id=%r prev_due=%r last_confirmed_due=%r :: new_id=%r new_due=%r",
-        st.get("last_appt_activity_id"),
-        st.get("appt_due_utc"),
-        st.get("last_confirmed_due_utc"),
-        appt_id,
-        new_due_norm,
+        prev_id, prev_due, last_conf, appt_id, new_due_norm
     )
     
-    prev_id   = st.get("last_appt_activity_id")
-    prev_due  = st.get("appt_due_utc")
-    last_conf = st.get("last_confirmed_due_utc")
+    same_id   = prev_id == appt_id
+    same_due  = prev_due == new_due_norm
+    same_conf = last_conf == new_due_norm
     
-    same_id   = (prev_id and prev_id == appt_id)
-    same_due  = (prev_due and new_due_norm and prev_due == new_due_norm)
-    same_conf = (last_conf and new_due_norm and last_conf == new_due_norm)
-    
-    # small time jiggle tolerance
     def _parse_utc(x):
         try:
-            return _dt.fromisoformat(str(x).replace("Z","+00:00")).astimezone(_tz.utc)
+            return _dt.fromisoformat(str(x).replace("Z", "+00:00")).astimezone(_tz.utc)
         except Exception:
             return None
+    
     within_2m = False
     pdt, ndt = _parse_utc(prev_due), _parse_utc(new_due_norm)
     if pdt and ndt:
         within_2m = abs((ndt - pdt).total_seconds()) <= 120
     
     already_done = same_id or same_due or same_conf or within_2m
+    
     if already_done:
-        log.info("KBB ICO: already acknowledged (id or due matched; or last_confirmed_due matched) → skip resend")
+        log.info("KBB ICO: already acknowledged → skip resend")
+        try:
+            from esQuerys import esClient
+            from es_resilient import es_update_with_retry
+            es_update_with_retry(
+                esClient,
+                index="opportunities",
+                id=opp_id,
+                doc={"_kbb_state": state}
+            )
+        except Exception as e:
+            log.warning("ES persist failed (already_done): %s", e)
         return (True, False)
 
 
@@ -324,12 +530,6 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
         log.warning("No recipient; skip send for opp=%s", opp_id)
         return (True, False)  # handled, but no send
 
-    # choose id safely (handles reschedule reconcile paths)
-    try:
-        chosen_appt_id = new_id if (("new_id" in locals()) and new_id) else appt_id
-    except NameError:
-        chosen_appt_id = appt_id
-
     # --- PERSIST FIRST so re-runs short-circuit even if send fails ---
     now_iso = _dt.now(_tz.utc).isoformat()
     state["mode"]                  = "scheduled"
@@ -358,7 +558,8 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
             opp_id, e
         )
         # Do NOT send the email if we couldn't persist idempotency markers
-        return state, False
+        return (True, False)
+
 
 
     # Flip CRM subStatus → Appointment Set (appointment exists regardless of email)
@@ -376,7 +577,8 @@ def _short_circuit_if_booked(opportunity, acts_live, state,
         if not _can_email(state):
             log.info("Email suppressed by state for opp=%s", opp_id)
             opportunity["_kbb_state"] = state
-            return state, action_taken  # <— we DID act (substatus), just didn’t email
+            return (True, False)
+
 
         send_opportunity_email_activity(
             token, subscription_id, opp_id,
@@ -521,34 +723,48 @@ def _find_new_customer_scheduled_appt(acts_live, state, *, token=None, subscript
     """
     last_seen = (state or {}).get("last_appt_activity_id")
 
-    def _matches(a: dict) -> bool:
-        raw_name = a.get("activityName") or a.get("name")
-        nm = str(raw_name).strip().lower() if raw_name is not None else ""
-        raw_type = a.get("activityType") or a.get("type")
-        t = str(raw_type).strip().lower() if raw_type is not None else ""
-        cat = str(a.get("category") or "").strip().lower()
-
-        # Very specific match (what we expect for this tenant)
+    def _matches(a: dict, bucket: str | None = None) -> bool:
+        raw_name = a.get("activityName") or a.get("name") or ""
+        nm = str(raw_name).strip().lower()
+    
+        raw_type = a.get("activityType") or a.get("type") or ""
+        t = str(raw_type).strip().lower()
+    
+        # If this item came from scheduledActivities, it’s scheduled by definition.
+        in_scheduled_bucket = (bucket or "").lower() == "scheduledactivities"
+    
+        # Appointment-ish detection (covers "KBB ICO Appointment" and future variants)
+        is_apptish = ("appointment" in nm) or ("appointment" in t) or (str(a.get("activityType")) == "7")
+    
+        # Tenant-specific phrase (keep, but not required)
         is_customer_sched = "customer scheduled" in nm
-        # Safety net: any Scheduled Appointment
-        is_generic_appt = (("appointment" in nm) or ("appointment" in t)) and (cat == "scheduled")
+    
+        if in_scheduled_bucket and is_apptish:
+            return True
+    
+        # Older payloads might include category (optional fallback)
+        cat = str(a.get("category") or "").strip().lower()
+        is_generic_appt = is_apptish and (cat == "scheduled")
+    
         return is_customer_sched or is_generic_appt
-
-    def _scan(items):
+    
+    
+    def _scan(items, bucket: str | None = None):
         for a in items or []:
-            if not _matches(a):
+            if not _matches(a, bucket=bucket):
                 continue
             aid = str(a.get("activityId") or a.get("id") or "")
-            if not aid or (last_seen and aid == last_seen):
+            if not aid:
                 continue
             due = a.get("dueDate") or a.get("completedDate") or a.get("activityDate")
             return aid, due
         return None, None
 
+
     # 1) Scan the snapshot we were given
     if isinstance(acts_live, dict):
         for key in ("scheduledActivities", "items", "activities", "completedActivities"):
-            appt_id, due = _scan(acts_live.get(key) or [])
+            appt_id, due = _scan(acts_live.get(key) or [], bucket=key)
             if appt_id:
                 return appt_id, due
     elif isinstance(acts_live, list):
@@ -568,12 +784,28 @@ def _find_new_customer_scheduled_appt(acts_live, state, *, token=None, subscript
                     type(fresh).__name__,
                     list(fresh.keys()) if isinstance(fresh, dict) else None,
                 )
+                # 🔍 DEBUG: inspect scheduled vs completed activities from Fortellis
+                sa = (fresh or {}).get("scheduledActivities") if isinstance(fresh, dict) else None
+                ca = (fresh or {}).get("completedActivities") if isinstance(fresh, dict) else None
+
+                
+                log.info(
+                    "KBB acts_raw scheduledActivities=%s completedActivities=%s",
+                    len(sa or []) if sa is not None else "n/a",
+                    len(ca or []) if ca is not None else "n/a"
+                )
+                
+                if sa:
+                    log.info("KBB acts_raw first scheduledActivity keys=%s", list((sa[0] or {}).keys()))
+                    log.info("KBB acts_raw first scheduledActivity=%r", sa[0])
+
             except Exception:
                 pass
 
             if isinstance(fresh, dict):
                 for key in ("scheduledActivities", "items", "activities", "completedActivities"):
-                    appt_id, due = _scan(fresh.get(key) or [])
+                    appt_id, due = _scan(fresh.get(key) or [], bucket=key)
+
                     if appt_id:
                         return appt_id, due
             elif isinstance(fresh, list):
@@ -653,35 +885,65 @@ def build_patti_footer(rooftop_name: str) -> str:
     patti_email  = rt.get("patti_email")   or "patti@pattersonautos.com"
     dealer_site  = (rt.get("website") or "https://www.pattersonautos.com").rstrip("/")
     dealer_addr  = rt.get("address")       or ""
+    logo_alt     = f"Patti | {rooftop_name}"
 
-    # ✅ Use fixed widths via attributes (best for Outlook/Gmail + CRM sanitizers)
-    # Outer table keeps it from wrapping; inner row is two fixed cells.
+    clean_site = dealer_site.replace("https://", "").replace("http://", "")
+
     return f"""
-    <table width="650" border="0" cellspacing="0" cellpadding="0" style="margin-top:18px;">
-      <tr>
-        <!-- LEFT: image (fixed width) -->
-        <td width="300" valign="top" align="left" style="padding-right:16px;">
-          <img src="{img_url}" alt="Patterson Autos" width="300" border="0" style="display:block; height:auto;">
-        </td>
-    
-        <!-- RIGHT: contact block -->
-        <td width="350" valign="top" align="left" style="font-family:Arial, Helvetica, sans-serif; color:#222;">
-          <div style="font-size:13px; line-height:20px; font-weight:bold;">Patti</div>
-          <div style="font-size:12px; line-height:18px; color:#666; margin:2px 0 8px;">Virtual Assistant at {rooftop_name}</div>
-          
-          <div style="font-size:13px; line-height:20px;">
-            <div><strong>Email:</strong> <a href="mailto:{patti_email}" style="color:#0066cc; text-decoration:none;">{patti_email}</a></div>
-            <div><strong>Website:</strong> <a href="{dealer_site}" style="color:#0066cc; text-decoration:none;">{dealer_site.replace('https://','').replace('http://','')}</a></div>
-          </div>
-    
-          <div style="font-size:13px; line-height:20px; margin-top:10px; color:#333;">
-            <div>{rooftop_name}</div>
-            <div>{dealer_addr}</div>
-          </div>
-        </td>
-      </tr>
-    </table>
+<table width="650" border="0" cellspacing="0" cellpadding="0" style="margin-top:18px;border-collapse:collapse;">
+  <tr>
+    <td style="padding:14px 16px;border:1px solid #e2e2e2;border-radius:4px;background-color:#fafafa;">
+      <table width="100%" border="0" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+        <tr>
+          <!-- LEFT: logo -->
+          <td width="260" valign="top" align="left" style="padding-right:20px;">
+            <img src="{img_url}"
+                 alt="{logo_alt}"
+                 width="240"
+                 border="0"
+                 style="display:block;height:auto;max-width:240px;">
+          </td>
+
+          <!-- RIGHT: Patti + contact details -->
+          <td valign="top" align="left"
+              style="font-family:Arial, Helvetica, sans-serif;color:#222222;vertical-align:top;">
+
+            <!-- Patti block -->
+            <div style="font-size:14px;line-height:18px;margin-bottom:8px;">
+              <strong>Patti</strong><br>
+              Virtual Assistant | {rooftop_name}
+            </div>
+
+            <!-- Contact -->
+            <div style="font-size:13px;line-height:20px;margin-bottom:8px;">
+              <div>
+                <strong>Email:</strong>
+                <a href="mailto:{patti_email}" style="color:#0066cc;text-decoration:none;">
+                  {patti_email}
+                </a>
+              </div>
+              <div>
+                <strong>Website:</strong>
+                <a href="{dealer_site}" style="color:#0066cc;text-decoration:none;">
+                  {clean_site}
+                </a>
+              </div>
+            </div>
+
+            <!-- Address -->
+            <div style="font-size:13px;line-height:20px;color:#333333;">
+              <div>{rooftop_name}</div>
+              <div>{dealer_addr}</div>
+            </div>
+
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
     """.strip()
+
 
 
 def normalize_patti_body(body_html: str) -> str:
@@ -692,28 +954,62 @@ def normalize_patti_body(body_html: str) -> str:
     return body_html
 
 
-def compose_kbb_convo_body(rooftop_name: str, cust_first: str, customer_message: str, booking_link_text="Schedule Your Visit"):
+def compose_kbb_convo_body(
+    rooftop_name: str,
+    cust_first: str,
+    customer_message: str,
+    booking_link_text: str = "Schedule Your Visit",
+):
     return _tw.dedent(f"""
     You are Patti, the virtual assistant for {rooftop_name}. This thread is about a Kelley Blue Book® Instant Cash Offer (ICO).
-    Keep replies short, warm, and human—no corporate tone.
-    Write HTML with simple <p> paragraphs (no lists). Always:
-    - Begin with: "Hi {cust_first}," (exactly).
-    - Acknowledge the customer's note in 1-2 concise sentences.
-    - If relevant, mention their Kelley Blue Book® Instant Cash Offer naturally in your reply.
-    - Avoid re-explaining topics you already covered earlier in this thread unless the customer explicitly asks again; if they do, confirm briefly in one short sentence and move on.
-    - If the customer has not already specified or booked the meeting, close with a friendly nudge to pick a day/time (no links) — a short booking line with the link will be appended automatically.
-    - You may remind them to bring title, ID, and keys if appropriate, and if you haven't already done it in an earlier message
+
+    Write your reply as short, warm, human HTML using simple <p> paragraphs (no lists).
+
+    Very important behavior rules:
+    - Begin with: "Hi {cust_first}," (exactly) as the first line.
+    - FIRST, understand what the customer actually asked or said.
+    - DIRECTLY answer the customer's question or request in plain language.
+      * If they ask things like "When can I come in?" or "What time works?" you must:
+        - Explain how and when they can visit (e.g., "You can bring your vehicle in during our normal business hours; just tell me what day/time works best for you.")
+        - Invite them to share a specific day and time that works for them.
+        - You do NOT need to know exact store hours; if you don't know, say something like
+          "Let me know a day and time that works for you and we'll confirm it."
+      * If they ask you to remind them of their Kelley Blue Book® estimate (for example "What was the KBB estimate you gave me?"):
+        - ONLY mention a specific dollar amount if you can actually see a real dollar amount (like "$12,345") in your context or KBB data.
+        - If you do NOT see a real amount anywhere, DO NOT make one up. Instead say that you don’t see the exact figure yet and that the team will confirm the value when they inspect the vehicle at the visit.
+        - Never invent or guess a dollar amount.
+    - Mention the Kelley Blue Book® Instant Cash Offer only when it helps answer the question (don’t force it).
+    - Avoid re-explaining general information you already covered earlier; if they repeat something, confirm briefly and move on.
+    - Do NOT just send a generic "thank you for your interest" note. The reply should feel like you're responding to THIS message, not restarting the conversation.
+    - You may remind them to bring title, ID, and keys if appropriate, and if you haven't already done it in an earlier message.
+    - Respond ONLY to the customer's latest message shown below. Do not answer earlier questions unless the customer repeats them in this message.
+    - Do not quote or restate the customer's message verbatim; just answer it.
     - No extra signatures; we will append yours.
-    - Keep to 2–4 short paragraphs max.
+    - Keep to 2–4 short paragraphs max. Do not stop after only a greeting.
+
 
     Customer said:
     \"\"\"{customer_message}\"\"\"
 
     Produce only the HTML body (no subject).
     """).strip()
+
 _CTA_ANCHOR_RE = _re.compile(r'(?is)<a[^>]*>\s*Schedule\s+Your\s+Visit\s*</a>')
 _RAW_TOKEN_RE  = _re.compile(r'(?i)<\{LegacySalesApptSchLink\}>')
-_ANY_SCHED_LINE_RE = _re.compile(r'(?i)(reserve your time|schedule (an )?appointment|schedule your visit)[:\s]*', _re.I)
+
+_ANY_SCHED_LINE_RE = _re.compile(
+    r"(?is)"
+    r"(?:"
+    r"(?:feel\s+free\s+to\s+)?let\s+me\s+know\s+(?:a\s+)?(?:day\s+and\s+)?time\s+that\s+works[^\.!\?]*[\.!\?]?"
+    r"|please\s+let\s+us\s+know\s+a\s+convenient\s+time[^\.!\?]*[\.!\?]?"
+    r"|schedule\s+directly[^\.!\?]*[\.!\?]?"
+    r"|reserve\s+your\s+time[^\.!\?]*[\.!\?]?"
+    r"|schedule\s+(?:an\s+)?appointment[^\.!\?]*[\.!\?]?"
+    r"|schedule\s+your\s+visit[^\.!\?]*[\.!\?]?"
+    r")"
+)
+
+
 
 def enforce_standard_schedule_sentence(body_html: str) -> str:
     """Ensure exactly one standard CTA appears above visit/closing lines."""
@@ -935,17 +1231,86 @@ def customer_has_replied(
 
     return False, None, None
 
+def _handle_optout(opportunity, state, optout_text, *, token, subscription_id):
+    opp_id = opportunity.get("opportunityId") or opportunity.get("id")
+    now_iso = _dt.now(_tz.utc).isoformat()
+
+    # Idempotent: if already opted out, do nothing
+    if state.get("mode") == "closed_opted_out":
+        return state
+
+    # Airtable / brain
+    state["mode"] = "closed_opted_out"
+    state["email_blocked_do_not_email"] = True
+    opportunity["isActive"] = False
+    checked = dict(opportunity.get("checkedDict") or {})
+    checked["exit_type"] = "customer_opt_out"
+    checked["exit_reason"] = (optout_text or "")[:500]
+    opportunity["checkedDict"] = checked
+    save_opp(opportunity, extra_fields={"is_active": False, "mode": "closed_opted_out"})
+
+    opportunity["_kbb_state"] = state
+    opportunity["isActive"] = False
+
+    # Optional reporting fields (only if your schema has them)
+    opportunity["patti_disposition"] = "Opted Out"
+    opportunity["patti_disposition_at"] = now_iso
+    opportunity.setdefault("checkedDict", {})["last_msg_by"] = "customer"
+
+    save_opp(opportunity)
+
+    # CRM: make opp inactive + log
+    try:
+        from fortellis import set_opportunity_inactive, add_opportunity_comment
+        set_opportunity_inactive(
+            token, subscription_id, opp_id,
+            sub_status="Not In Market",
+            comments="Customer requested no further contact — set inactive by Patti"
+        )
+
+        add_opportunity_comment(
+            token, subscription_id, opp_id,
+            "Customer opted out via email. Marked inactive + suppressed all automated outreach."
+        )
+    except Exception as e:
+        log.warning("Opt-out CRM update failed opp=%s err=%s", opp_id, e)
+
+    return state
 
 
-def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
-                         token, subscription_id, SAFE_MODE=False, rooftop_sender=None):
+
+def process_kbb_ico_lead(
+    opportunity,
+    lead_age_days,
+    rooftop_name,
+    inquiry_text,
+    token,
+    subscription_id,
+    SAFE_MODE=False,
+    rooftop_sender=None,
+    trigger="cron",            # "cron" or "email_webhook"
+    inbound_ts=None,
+    inbound_msg_id=None,
+    inbound_subject=None,
+):
     opp_id = opportunity.get("opportunityId") or opportunity.get("id")
     created_iso = opportunity.get("createdDate") or opportunity.get("created_on")
 
     # ES-only state (no comments)
     state = dict(opportunity.get("_kbb_state") or {})
+
+    # -----------------------------
+    # Inbound detection (STRICT)
+    # -----------------------------
+    has_real_inbound = bool((inquiry_text or "").strip())
+
+    if trigger == "email_webhook" and has_real_inbound:
+        state["mode"] = "convo"
+    else:
+        # never flip to convo just because cron ran
+        state.setdefault("mode", "cadence")
+
     # normalize defaults without clobbering existing keys
-    state.setdefault("mode", "cadence")
     state.setdefault("last_template_day_sent", None)
     state.setdefault("last_template_sent_at", None)
     state.setdefault("last_customer_msg_at", None)
@@ -955,11 +1320,12 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     state.setdefault("last_appt_activity_id", None)
     state.setdefault("appt_due_utc", None)
     state.setdefault("appt_due_local", None)
-    state.setdefault("last_confirmed_due_utc", None)    # what we last confirmed to the customer
-    state.setdefault("last_confirm_sent_at", None)       # when we last sent a confirmation
-    
+    state.setdefault("last_confirmed_due_utc", None)
+    state.setdefault("last_confirm_sent_at", None)
+
     # keep a single shared dict reference everywhere
     opportunity["_kbb_state"] = state
+
     
     # --- safety inits to avoid UnboundLocalError on non-scheduling paths ---
     created_appt_ok = False     # whether we created an appt this turn
@@ -972,9 +1338,28 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     # --- detect customer opt-out message ---
     state.setdefault("last_optout_seen_at", None)
     found_optout, optout_ts, optout_txt = _latest_customer_optout(opportunity)
+    if found_optout:
+        state = _handle_optout(
+            opportunity, state, optout_txt,
+            token=token, subscription_id=subscription_id
+        )
+        return state, True
+
     
     # also consider the inquiry_text (sometimes we only get that)
     found_optout = found_optout or _is_optout_text(inquiry_text)
+
+    from os import getenv as _getenv
+
+    # Are we in Outlook mode overall?
+    is_outlook_mode = (EMAIL_MODE == "outlook")
+
+    # Is THIS invocation coming from an Outlook webhook?
+    is_webhook = is_outlook_mode and (trigger == "email_webhook")
+    log.info("KBB webhook debug: EMAIL_MODE=%s trigger=%s is_webhook=%s",
+         EMAIL_MODE, trigger, is_webhook)
+
+
     
     declined = False
     if found_optout:
@@ -998,49 +1383,59 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     if declined:
         log.info("DECLINE ENTER opp=%s mode_before=%s", opp_id, state.get("mode"))
         now_iso = _dt.now(_tz.utc).isoformat()
-        state["mode"] = "closed_declined"
-        state["nudge_count"] = 0
-        state["last_agent_msg_at"] = now_iso
-        state["email_blocked_do_not_email"] = True
-        opportunity["_kbb_state"] = state
-
-        log.debug("DECLINE ES-WRITE opp=%s payload_keys=%s", opp_id, ["_kbb_state","isActive","checkedDict"])
-
-        # Persist to ES (also mark inactive + exit_type)
-        try:
-            from esQuerys import esClient
-            from es_resilient import es_update_with_retry
-            checked = dict(opportunity.get("checkedDict") or {})
-            checked["exit_type"] = "customer_declined"
-            checked["exit_reason"] = "Stop emailing me"
-            es_update_with_retry(esClient, index="opportunities", id=opp_id,
-                                 doc={"_kbb_state": state, "isActive": False, "checkedDict": checked})
-            log.info("DECLINE ES-OK opp=%s set isActive=False", opp_id)
-
-        except Exception as e:
-            log.warning("ES persist failed (global decline): %s", e)
     
-        # Flip CRM to Not In Market + DoNotEmail on the customer
+        # If this path is true opt-out, use closed_opted_out (recommended)
+        state["mode"] = "closed_opted_out"
+        state["nudge_count"] = 0
+        state["email_blocked_do_not_email"] = True
+        state["opted_out_at"] = now_iso
+        state["opted_out_text"] = (optout_txt or inquiry_text or "")[:1000]
+    
+        opportunity["_kbb_state"] = state
+    
+        # ✅ Airtable checkbox
+        opportunity["isActive"] = False
+    
+        # ✅ update checkedDict for reporting
+        checked = dict(opportunity.get("checkedDict") or {})
+        checked["exit_type"] = "customer_opt_out"
+        checked["exit_reason"] = (optout_txt or inquiry_text or "")[:500]
+        opportunity["checkedDict"] = checked
+    
+        # ✅ Persist to Airtable (canonical)
+        try:
+            save_opp(opportunity)
+            log.info("OPT-OUT AIRTABLE OK opp=%s rec=%s", opp_id, opportunity.get("_airtable_rec_id"))
+        except Exception as e:
+            log.warning("Airtable persist failed (opt-out): %s", e)
+    
+        # ✅ CRM updates (keep these)
         try:
             from fortellis import set_opportunity_inactive, add_opportunity_comment, set_customer_do_not_email
-            log.debug("CRM INACTIVE CALL opp=%s sub_status=Not In Market", opp_id)
-
-            set_opportunity_inactive(token, subscription_id, opp_id,
-                                     sub_status="Not In Market",
-                                     comments="Customer requested no further contact — set inactive by Patti")
-
-            add_opportunity_comment(token, subscription_id, opp_id,
-                                    "Patti: Customer requested NO FURTHER CONTACT. Email/SMS suppressed; set to Not In Market.")
+    
+            set_opportunity_inactive(
+                token, subscription_id, opp_id,
+                sub_status="Not In Market",
+                comments="Customer requested no further contact — set inactive by Patti"
+            )
+    
+            add_opportunity_comment(
+                token, subscription_id, opp_id,
+                "Patti: Customer opted out (NO FURTHER CONTACT). Marked inactive; automation suppressed."
+            )
+    
             cust = (opportunity.get("customer") or {})
             customer_id = cust.get("id")
             emails = cust.get("emails") or []
             email_address = (next((e for e in emails if e.get("isPreferred")), emails[0]) if emails else {}).get("address")
             if customer_id and email_address:
                 set_customer_do_not_email(token, subscription_id, customer_id, email_address, do_not=True)
+    
         except Exception as e:
-            log.warning("CRM inactive/DoNotEmail failed (global decline): %s", e)
+            log.warning("CRM inactive/DoNotEmail failed (opt-out): %s", e)
     
         return state, True
+
 
 
     # [#1] HARD STOP: if this opp is declined/inactive/closed or email is blocked, do nothing
@@ -1064,12 +1459,18 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     selected_inbound_id = None
     reply_subject = "Re:"
     from helpers import build_kbb_ctx
+    
     kbb_ctx = build_kbb_ctx(opportunity)
 
-    # Before you compute mode/cadence, pull LIVE activities
     opp_id = opportunity.get("opportunityId") or opportunity.get("id")
     customer_id = (opportunity.get("customer") or {}).get("id")
-    acts_live = _fetch_activities_live(opp_id, customer_id, token, subscription_id)
+
+    # Only hit Fortellis activities when we're NOT Outlook-webhook-driven.
+    if is_webhook:
+        acts_live = []   # rely on ES + webhook data, no API call
+    else:
+        acts_live = _fetch_activities_live(opp_id, customer_id, token, subscription_id)
+
 
     # Track if appointment is currently booked or upcoming
     scheduled_active_now = (
@@ -1160,151 +1561,286 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         log.info("KBB ICO: declined → skip all outreach (opp=%s)", opp_id)
         opportunity["_kbb_state"] = state
         return state, action_taken
+        
+    # ---------------------------------
+    # Real inbound detection (CRITICAL)
+    # ---------------------------------
+    has_real_inbound = bool((inquiry_text or "").strip())
     
     # === If appointment is booked/upcoming, pause cadence but still watch for inbound ===
+
     if state.get("mode") == "scheduled" or _has_upcoming_appt(acts_live, state):
+    
+        if is_webhook and has_real_inbound:
+            log.info(
+                "KBB ICO: inbound during scheduled/appt (webhook) → keep scheduled; reply in-thread"
+            )
+            state["mode"] = "scheduled"   # ❗ DO NOT switch to convo
+            state["nudge_count"] = 0
+    
+            if inbound_ts:
+                state["last_customer_msg_at"] = inbound_ts
+            if inbound_msg_id:
+                state["last_inbound_activity_id"] = inbound_msg_id
+    
+            # fall through to reply handling
+    
+        else:
+            # Legacy CRM-based detection
+            has_reply, last_cust_ts, last_inbound_activity_id = customer_has_replied(
+                opportunity,
+                token,
+                subscription_id,
+                state,
+                acts=acts_live,
+            )
+    
+            if (
+                has_reply
+                and last_inbound_activity_id
+                and last_inbound_activity_id != state.get("last_inbound_activity_id")
+            ):
+                log.info(
+                    "KBB ICO: true customer reply after appointment → switch to convo mode"
+                )
+                state["mode"] = "convo"
+                state["nudge_count"] = 0
+    
+                if last_cust_ts:
+                    state["last_customer_msg_at"] = last_cust_ts
+                state["last_inbound_activity_id"] = last_inbound_activity_id
+    
+            else:
+                log.info(
+                    "KBB ICO: appointment active, no *new* inbound → stay quiet"
+                )
+                state["mode"] = "scheduled"
+                opportunity["_kbb_state"] = state
+                return state, action_taken
+
+
+    # --- Detect whether we have a NEW inbound to respond to ---
+
+    if is_webhook:
+        has_reply = has_real_inbound
+        last_cust_ts = (
+            inbound_ts or _dt.now(_tz.utc).isoformat()
+            if has_real_inbound else None
+        )
+        last_inbound_activity_id = (
+            inbound_msg_id or f"esmsg:{last_cust_ts}"
+            if has_real_inbound else None
+        )
+
+    
+    elif trigger == "kbb_adf":
+        # ✅ ADF notifications are system-generated. Not a customer reply.
+        has_reply = False
+        last_cust_ts = None
+        last_inbound_activity_id = None
+    
+    else:
+        # Legacy CRM-based detection
         has_reply, last_cust_ts, last_inbound_activity_id = customer_has_replied(
             opportunity,
             token,
             subscription_id,
             state,
-            acts=acts_live,       
+            acts=acts_live,
         )
-        
-        if has_reply and last_inbound_activity_id and last_inbound_activity_id != state.get("last_inbound_activity_id"):
-            log.info("KBB ICO: true customer reply after appointment → switch to convo mode")
-            state["mode"] = "convo"
-            state["nudge_count"] = 0
-            if last_cust_ts:
-                state["last_customer_msg_at"] = last_cust_ts
-            state["last_inbound_activity_id"] = last_inbound_activity_id
-            # fall through to convo handling below
-
-        else:
-            log.info("KBB ICO: appointment active, no *new* inbound → stay quiet")
-            state["mode"] = "scheduled"
-            opportunity["_kbb_state"] = state
-            return state, action_taken
-    # else: not scheduled and no upcoming appt → continue into normal detection/cadence logic
 
 
-    ## NOTE: pass state into the detector so it can ignore already-seen inbounds
-    has_reply, last_cust_ts, last_inbound_activity_id = customer_has_replied(
-        opportunity,
-        token,
-        subscription_id,
-        state,
-        acts=acts_live,          
-    )
-
-    # Only flip to convo when we truly have a new inbound with a timestamp
-    # Compute the last agent send time from state (if present)
-    # Prefer real Fortellis send time; fall back to state if missing
-    # === Compute last agent send time (prefer live Fortellis data) ===
-    last_agent_dt_live = _last_agent_send_dt(acts_live)
-    last_agent_dt = last_agent_dt_live
-    if (last_agent_dt is None) and state.get("last_agent_msg_at"):
+    # === Compute last agent send time (prefer ES state; avoid extra CRM calls in webhook mode) ===
+    last_agent_dt = None
+    if state.get("last_agent_msg_at"):
         try:
-            last_agent_dt = _dt.fromisoformat(str(state["last_agent_msg_at"]).replace("Z","+00:00"))
+            last_agent_dt = _dt.fromisoformat(
+                str(state["last_agent_msg_at"]).replace("Z", "+00:00")
+            )
         except Exception:
             last_agent_dt = None
     
-    # ✅ Convo mode if and only if there is a READ EMAIL newer than Patti's send
-    if has_reply or _has_new_read_email_since(acts_live, last_agent_dt):
-        state["mode"] = "convo"
+    # Only fall back to Fortellis sends when we are NOT in webhook mode
+    if (last_agent_dt is None) and (not is_webhook):
+        last_agent_dt_live = _last_agent_send_dt(acts_live)
+        if last_agent_dt_live is not None:
+            last_agent_dt = last_agent_dt_live
+    
+    # ---------------------------------
+    # Real inbound detection (CRITICAL)
+    # ---------------------------------
+    has_real_inbound = bool((inquiry_text or "").strip())
+    
+    # Single source of truth for "do we reply this run?"
+    if trigger == "email_webhook":
+        # Webhook invocation: only reply if there is real customer text
+        has_new_inbound = has_real_inbound
+    elif trigger == "kbb_adf":
+        # ADF notifications are system-generated. Not a customer reply.
+        has_new_inbound = False
+    else:
+        # Legacy CRM-based detection
+        has_new_inbound = has_reply or _has_new_read_email_since(acts_live, last_agent_dt)
+    
+    # ✅ Extra safety: webhook fired but body was empty/cleaned away
+    if trigger == "email_webhook" and not has_real_inbound:
+        log.info("KBB ICO: webhook but empty inquiry_text → do not reply")
+        opportunity["_kbb_state"] = state
+        return state, action_taken
+    
+    if not has_new_inbound:
+        log.info(
+            "KBB ICO: no new inbound detected (mode=%s, webhook=%s)",
+            state.get("mode"),
+            is_webhook,
+        )
+    
+        # ✅ Hard stop: never send a convo reply without new inbound
+        if state.get("mode") == "convo":
+            log.info("KBB ICO: convo mode but no new inbound → suppress reply (anti-duplicate)")
+            opportunity["_kbb_state"] = state
+            return state, action_taken
+    
+        # Let cadence logic later decide if a nudge should be sent.
+    
+    else:
+        # ✅ We have new inbound → reply, but don't clobber scheduled state
+        if scheduled_active_now:
+            state["mode"] = "scheduled"
+        else:
+            state["mode"] = "convo"
+    
         state["nudge_count"] = 0
-        if has_reply and last_cust_ts:
+    
+        # Only stamp inbound markers if the body was actually real text
+        if has_real_inbound and last_cust_ts:
             state["last_customer_msg_at"] = last_cust_ts
-        if last_inbound_activity_id:
+    
+        if has_real_inbound and last_inbound_activity_id:
             state["last_inbound_activity_id"] = last_inbound_activity_id
-
-        #_save_state_comment(token, subscription_id, opp_id, state)
-
-        # Only refetch if we actually sent something new in this run
-        if action_taken:
+    
+    # If we have new inbound, prepare reply subject/body context
+    if has_new_inbound:
+        # Only re-fetch activities if we are in CRM mode and actually sent something new
+        if (not is_webhook) and action_taken:
             acts_now = _fetch_activities_live(opp_id, customer_id, token, subscription_id)
         else:
             acts_now = acts_live
     
-        def _newest_read_after(acts, floor_dt):
-            newest = None
-            newest_dt = None
-            for a in acts or []:
-                if not _is_read_email(a):
-                    continue
-                adt = _activity_dt(a)
-                if not adt:
-                    continue
-                # only consider reads newer than Patti's last send (or any if floor_dt is None)
-                if (floor_dt is None) or (adt > floor_dt):
-                    if (newest_dt is None) or (adt > newest_dt):
-                        newest_dt = adt
-                        newest = a
-            return newest, newest_dt
-    
-        # Prefer the truly newest read AFTER Patti’s last send
-        newest_read, newest_dt = _newest_read_after(acts_now, last_agent_dt)
-    
-        # Fallback order: newest fresh read → detector id → prior snapshot newest
         selected_inbound_id = None
-        if newest_read:
-            selected_inbound_id = str(newest_read.get("activityId") or newest_read.get("id") or "")
-        elif last_inbound_activity_id:
+    
+        if is_webhook:
+            # Outlook path: the inbound email *is* what we reply to
             selected_inbound_id = last_inbound_activity_id
-
         else:
-            selected_inbound_id = _latest_read_email_id(acts_now)  # use fresh not stale
+            def _newest_read_after(acts, floor_dt):
+                newest = None
+                newest_dt = None
+                for a in acts or []:
+                    if not _is_read_email(a):
+                        continue
+                    adt = _activity_dt(a)
+                    if not adt:
+                        continue
+                    if (floor_dt is None) or (adt > floor_dt):
+                        if (newest_dt is None) or (adt > newest_dt):
+                            newest_dt = adt
+                            newest = a
+                return newest, newest_dt
+    
+            newest_read, newest_dt = _newest_read_after(acts_now, last_agent_dt)
+    
+            # Fallback order: newest fresh read → detector id → prior snapshot newest
+            if newest_read:
+                selected_inbound_id = str(
+                    newest_read.get("activityId") or newest_read.get("id") or ""
+                )
+            elif last_inbound_activity_id:
+                selected_inbound_id = last_inbound_activity_id
+            else:
+                selected_inbound_id = _latest_read_email_id(acts_now)
+    
+        log.info(
+            "KBB ICO: replying to inbound id=%s; snippet=%r",
+            selected_inbound_id,
+            (inquiry_text or "")[:120],
+        )
 
-        log.info("KBB ICO: replying to inbound id=%s; snippet=%r",
-            selected_inbound_id, (inquiry_text or "")[:120])
-        
-        # Initialize a safe default subject for all paths
+        # Initialize a safe default subject
         reply_subject = "Re:"
-        
-        # Keep what you already computed earlier
-        declined_optout = bool(declined)  # preserve earlier decision
-        
-        if selected_inbound_id:
-            try:
-                from fortellis import get_activity_by_id_v1
-                full = get_activity_by_id_v1(selected_inbound_id, token, subscription_id)
-        
-                # Subject (even if body extraction fails)
-                thread_subject = ((full.get("message") or {}).get("subject") or "").strip()
-        
-                def _clean_subject(s: str) -> str:
-                    s = _re.sub(r'^\s*\[.*?\]\s*', '', s or '', flags=_re.I)  # strip [CAUTION], etc.
-                    s = _re.sub(r'^\s*(re|fwd)\s*:\s*', '', s, flags=_re.I)   # strip leading RE:/FWD:
-                    return s.strip()
-        
-                reply_subject = f"Re: {_clean_subject(thread_subject)}" if thread_subject else "Re:"
-        
-                # Body (only overwrite inquiry_text if we actually extracted something)
-                latest_body_raw = ((full.get("message") or {}).get("body") or "").strip()
-                latest_body = _top_reply_only(latest_body_raw)
-        
-                if not latest_body:
-                    import re as _re2
-                    _TAGS = _re2.compile(r"<[^>]+>")
-                    _WS   = _re2.compile(r"\s+")
-                    light = _WS.sub(" ", _TAGS.sub(" ", latest_body_raw)).strip()
-                    if light:
-                        latest_body = light
-        
-                if latest_body:
-                    inquiry_text = latest_body
-                    log.info("KBB ICO: using inbound body (len=%d): %r", len(latest_body), latest_body[:120])
-                else:
-                    log.info("KBB ICO: inbound had no usable body; keeping prior inquiry_text.")
-            except Exception as e:
-                log.warning("Could not load inbound activity %s: %s", selected_inbound_id, e)
+
+        # Preserve earlier opt-out decision
+        declined_optout = bool(declined)
+
+        if is_webhook:
+            # Outlook path: we already have the inbound subject/body from the webhook
+            def _clean_subject(s: str) -> str:
+                s = _re.sub(r"^\s*\[.*?\]\s*", "", s or "", flags=_re.I)  # strip [CAUTION], etc.
+                s = _re.sub(r"^\s*(re|fwd)\s*:\s*", "", s, flags=_re.I)   # strip leading RE:/FWD:
+                return s.strip()
+
+            subj_src = inbound_subject or ""
+            subj_clean = _clean_subject(subj_src)
+            reply_subject = f"Re: {subj_clean}" if subj_clean else "Re:"
+            # `inquiry_text` is already the webhook body; no CRM fetch needed
         else:
-            log.info("KBB ICO: no selected inbound id; keeping prior inquiry_text and default subject.")
-        
-        # If we picked a concrete newest read, persist it so we won't re-answer older ones
-        if newest_read and newest_dt:
-            state["last_inbound_activity_id"] = selected_inbound_id
-            state["last_customer_msg_at"] = newest_dt.astimezone(_tz.utc).isoformat()
+            # Legacy CRM path: fetch inbound subject/body from Fortellis
+            if selected_inbound_id:
+                try:
+                    from fortellis import get_activity_by_id_v1
+
+                    full = get_activity_by_id_v1(selected_inbound_id, token, subscription_id)
+
+                    thread_subject = (
+                        (full.get("message") or {}).get("subject") or ""
+                    ).strip()
+
+                    def _clean_subject(s: str) -> str:
+                        s = _re.sub(r"^\s*\[.*?\]\s*", "", s or "", flags=_re.I)
+                        s = _re.sub(r"^\s*(re|fwd)\s*:\s*", "", s, flags=_re.I)
+                        return s.strip()
+
+                    reply_subject = (
+                        f"Re: {_clean_subject(thread_subject)}"
+                        if thread_subject
+                        else "Re:"
+                    )
+
+                    latest_body_raw = (
+                        (full.get("message") or {}).get("body") or ""
+                    ).strip()
+                    latest_body = _top_reply_only(latest_body_raw)
+
+                    if not latest_body:
+                        import re as _re2
+
+                        _TAGS = _re2.compile(r"<[^>]+>")
+                        _WS = _re2.compile(r"\s+")
+                        light = _WS.sub(" ", _TAGS.sub(" ", latest_body_raw)).strip()
+                        if light:
+                            latest_body = light
+
+                    if latest_body:
+                        inquiry_text = latest_body
+                        log.info(
+                            "KBB ICO: using inbound body (len=%d): %r",
+                            len(latest_body),
+                            latest_body[:120],
+                        )
+                    else:
+                        log.info(
+                            "KBB ICO: inbound had no usable body; keeping prior inquiry_text."
+                        )
+                except Exception as e:
+                    log.warning(
+                        "Could not load inbound activity %s: %s",
+                        selected_inbound_id,
+                        e,
+                    )
+            else:
+                log.info(
+                    "KBB ICO: no selected inbound id; keeping prior inquiry_text and default subject."
+                )
         
         # 🔐 Re-evaluate decline BUT never lose an earlier True
         declined_from_classifier = False
@@ -1372,81 +1908,16 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
         # ---------- DECLINED (opt-out) ----------
         if declined:
-            log.info("KBB ICO: decline/opt-out detected; suppressing ALL future sends for opp=%s", opp_id)
-
-            # Set local stop flags
-            now_iso = _dt.now(_tz.utc).isoformat()
-            state["mode"] = "closed_declined"
-            state["nudge_count"] = 0
-            state["last_agent_msg_at"] = now_iso
-            state["email_blocked_do_not_email"] = True
-            opportunity["_kbb_state"] = state
-
-            # Persist to ES immediately so re-runs short-circuit deterministically
-            try:
-                from esQuerys import esClient
-                from es_resilient import es_update_with_retry  # if you use a wrapper; else use your existing helper
-            except Exception:
-                es_update_with_retry = None
-            
-            try:
-                if es_update_with_retry:
-                    # also persist an explicit exit marker in checkedDict
-                    checked = dict(opportunity.get("checkedDict") or {})
-                    checked["exit_type"] = "customer_declined"
-                    checked["exit_reason"] = "Stop emailing me"
-            
-                    es_update_with_retry(
-                        esClient,
-                        index="opportunities",
-                        id=opp_id,
-                        doc={"_kbb_state": state, "isActive": False, "checkedDict": checked}
-                    )
-            except Exception as e:
-                log.warning("ES persist failed (decline): %s", e)
-            
-            # Flip CRM opp → Not In Market (no send)
-            try:
-                from fortellis import set_opportunity_inactive, add_opportunity_comment
-                set_opportunity_inactive(
-                    token,
-                    subscription_id,
-                    opp_id,
-                    sub_status="Not In Market",
-                    comments="Customer requested no further contact — set inactive by Patti"
-                )
-                # Add a clear CRM note for the team
-                add_opportunity_comment(
-                    token, subscription_id, opp_id,
-                    "Patti: Customer requested NO FURTHER CONTACT. Email/SMS suppressed; "
-                    "opportunity set to Not In Market."
-                )
-            except Exception as e:
-                log.warning("CRM inactive/comment failed (decline): %s", e)
-            
-            # Also mark the customer record as DoNotEmail=True
-            try:
-                cust = (opportunity.get("customer") or {})
-                customer_id = cust.get("id")
-            
-                # choose preferred email if present, else first, else None
-                email_address = None
-                emails = cust.get("emails") or []
-                if emails:
-                    preferred = next((e for e in emails if e.get("isPreferred")), None)
-                    email_address = (preferred or emails[0]).get("address")
-            
-                if customer_id and email_address:
-                    from fortellis import set_customer_do_not_email
-                    set_customer_do_not_email(token, subscription_id, customer_id, email_address, do_not=True)
-                    log.info("Customer marked DoNotEmail in CRM for opp=%s (email=%s)", opp_id, email_address)
-                else:
-                    log.warning("Cannot set DoNotEmail: missing customer_id or email (opp=%s)", opp_id)
-            except Exception as e:
-                log.warning("Failed to mark customer DoNotEmail in CRM: %s", e)
-            
+            txt = optout_txt or inquiry_text or ""
+            log.info("KBB ICO: decline/opt-out detected; routing to _handle_optout opp=%s", opp_id)
+        
+            state = _handle_optout(
+                opportunity, state, txt,
+                token=token, subscription_id=subscription_id
+            )
             action_taken = True
-            return state, action_taken  # important: stop here (no email)
+            return state, action_taken
+
 
 
 
@@ -1501,10 +1972,9 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             
             # --- PERSIST FIRST so re-runs short-circuit even if send fails ---
             now_iso = _dt.now(_tz.utc).isoformat()
-            try:
-                chosen_appt_id = new_id if (("new_id" in locals()) and new_id) else appt_id
-            except NameError:
-                chosen_appt_id = appt_id
+            # Choose an appointment activity id to store
+            chosen_appt_id = new_id or state.get("last_appt_activity_id")
+
             
             state["mode"]                  = "scheduled"
             state["last_appt_activity_id"] = chosen_appt_id
@@ -1639,121 +2109,41 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     "body": inquiry_text,
                     "date": _dt.now(_tz.utc).isoformat()
                 }]
+
+            cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
             # also persist for future cycles
             opportunity["messages"] = msgs
+
             
-            if False:  # KBB price shortcut — disabled
-                # === Deterministic KBB value shortcut (if customer asks for their offer amount) ===
-                from helpers import get_kbb_offer_context_simple, wants_kbb_value
-                
-                facts = get_kbb_offer_context_simple(opportunity)
-                
-                if wants_kbb_value(inquiry_text) and facts.get("amount_usd"):
-                    amt = facts["amount_usd"]
-                    veh = facts.get("vehicle") or "your vehicle"
-                    url = facts.get("offer_url")
-                
-                    # If already booked, use reschedule phrasing; otherwise add your soft schedule CTA later
-                    is_scheduled = state.get("mode") == "scheduled" or _has_upcoming_appt(acts_live, state)
-                
-                    subject = reply_subject  # keep thread subject
-                    if is_scheduled:
-                        cta_line = 'If you need to reschedule your appointment, you can do so here: <{LegacySalesApptSchLink}>'
-                    else:
-                        # same wording your soft CTA uses
-                        cta_line = 'Please let us know a convenient time for you, or you can instantly reserve your time here: <{LegacySalesApptSchLink}>'
-                
-                    extra = f' You can also view the full offer details here: <a href="{url}">View Offer</a>.' if url else ""
-                    body_html = f"""
-                        <p>Hi {cust_first},</p>
-                        <p>Your Kelley Blue Book® Instant Cash Offer for {veh} is <strong>{amt}</strong>.{extra}</p>
-                        <p>{cta_line}</p>
-                    """.strip()
-                
-                    # --- finish + send (same cleanup as GPT path) ---
-                    body_html = normalize_patti_body(body_html)
-                    body_html = _patch_address_placeholders(body_html, rooftop_name)
-                    if is_scheduled:
-                        # rewrite any stray schedule phrasing to reschedule, keep token intact
-                        from helpers import rewrite_sched_cta_for_booked
-                        body_html = rewrite_sched_cta_for_booked(body_html)
-                    else:
-                        body_html = append_soft_schedule_sentence(body_html, rooftop_name)
-                
-                    body_html = _PREFS_RE.sub("", body_html).strip()
-                    body_html = body_html + build_patti_footer(rooftop_name)
-                    if not subject.lower().startswith("re:"):
-                        subject = "Re: " + subject
-                
-                    # send
-                    cust = (opportunity.get("customer") or {})
-                    email = cust.get("emailAddress") or ((cust.get("emails") or [{}])[0].get("address"))
-                    if not email:
-                        email = (opportunity.get("_lead", {}) or {}).get("email_address")
-                    recipients = [email] if (email and not SAFE_MODE) else [TEST_TO]
-                    if not recipients:
-                        log.warning("No recipient; skip send for opp=%s", opp_id)
-                        opportunity["_kbb_state"] = state
-                        return state, action_taken
-                
-                    # only log scheduler token snippet when we expect a schedule CTA
-                    if not is_scheduled:
-                        import re as _re2
-                        m = _re2.search(r".{0,80}<\{LegacySalesApptSchLink.*?\}.{0,80}", body_html, flags=_re2.S)
-                        log.info("Scheduler token snippet (deterministic): %r", m.group(0) if m else "none")
-                
-                    send_opportunity_email_activity(
-                        token, subscription_id, opp_id,
-                        sender=rooftop_sender,
-                        recipients=recipients, carbon_copies=[],
-                        subject=subject, body_html=body_html, rooftop_name=rooftop_name
-                    )
-                
-                    # thread memo
-                    now_iso = _dt.now(_tz.utc).isoformat()
-                    _thread_body = re.sub(r"<[^>]+>", " ", body_html)
-                    _thread_body = re.sub(r"\s+", " ", _thread_body).strip()
-                    _thread_body = re.sub(
-                        r"(?i)\b(to\s+schedule\s+your\s+(appointment|visit)|if\s+you\s+need\s+to\s+reschedule\s+your\s+appointment)\b.*",
-                        "",
-                        _thread_body
-                    ).strip()
-                
-                    msgs = opportunity.get("messages", [])
-                    if not isinstance(msgs, list):
-                        msgs = []
-                    msgs.append({
-                        "msgFrom": "patti",
-                        "subject": subject.replace("Re: ", ""),
-                        "body": _thread_body,
-                        "date": now_iso
-                    })
-                    opportunity["messages"] = msgs
-                
-                    # state + return
-                    state["last_agent_msg_at"] = now_iso
-                    action_taken = True
-                    opportunity["_kbb_state"] = state
-                    return state, action_taken
-            
-            # ===== NEW: send the normal GPT convo reply =====
+            # ===== send the normal GPT convo reply =====
             cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
-            
             prompt = compose_kbb_convo_body(rooftop_name, cust_first, inquiry_text or "")
-            prompt += f"""
-            
-            messages history (python list of dicts):
-            {opportunity.get('messages', [])}
-            """
+
 
             from helpers import build_kbb_ctx
             kbb_ctx = build_kbb_ctx(opportunity)
+
+            from helpers import get_kbb_offer_context_simple
+            
+            facts = get_kbb_offer_context_simple(opportunity) or {}
+            
+            # Make sure GPT can see the amount + vehicle + url
+            if facts.get("amount_usd"):
+                kbb_ctx["offer_amount_usd"] = facts["amount_usd"]      # keep as "$27,000" string
+            if facts.get("vehicle"):
+                kbb_ctx["vehicle"] = facts["vehicle"]
+            if facts.get("offer_url"):
+                kbb_ctx["offer_url"] = facts["offer_url"]
+
+            log.info("KBB_CTX debug: offer_amount_usd=%r offer_url=%r vehicle=%r",
+             kbb_ctx.get("offer_amount_usd"), kbb_ctx.get("offer_url"), kbb_ctx.get("vehicle"))
+
             
             reply = run_gpt(
                 prompt,
                 customer_name=cust_first,
                 rooftop_name=rooftop_name,
-                prevMessages=True,
+                prevMessages=False,
                 persona="kbb_ico",
                 kbb_ctx=kbb_ctx
             )
@@ -1765,10 +2155,31 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             body_html = normalize_patti_body(body_html)
             body_html = _patch_address_placeholders(body_html, rooftop_name)
             
-            is_scheduled = state.get("mode") == "scheduled" or _has_upcoming_appt(acts_live, state)
+            is_scheduled = (
+                _crm_appt_set(opportunity)
+                or scheduled_active_now
+                or state.get("mode") == "scheduled"
+                or _has_upcoming_appt(acts_live, state)
+            )
+            log.info(
+                "KBB is_scheduled=%s (crm=%s scheduled_active_now=%s state_mode=%s upcoming_appt=%s)",
+                is_scheduled,
+                _crm_appt_set(opportunity),
+                scheduled_active_now,
+                state.get("mode"),
+                _has_upcoming_appt(acts_live, state),
+            )
+
+
             if is_scheduled:
                 from helpers import rewrite_sched_cta_for_booked
                 body_html = rewrite_sched_cta_for_booked(body_html)
+            
+                # STRIP any generic scheduling CTA variants no matter what wording GPT used
+                body_html = _ANY_SCHED_LINE_RE.sub("", body_html).strip()
+            
+                # Remove raw token if it survived
+                body_html = body_html.replace("<{LegacySalesApptSchLink}>", "").replace("<{LegacySalesApptSchLink }>", "")
             else:
                 body_html = append_soft_schedule_sentence(body_html, rooftop_name)
             
@@ -1841,9 +2252,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         # 2) Prompt with convo + appointment context (so no “we haven’t set a time yet”)
         prompt = compose_kbb_convo_body(rooftop_name, cust_first, inquiry_text or "")
         prompt += f"""
-    
-    messages history (python list of dicts):
-    {msgs_hist}
+        
     
     Context for Patti (not shown to customer):
     - appointment_scheduled: yes
@@ -1851,15 +2260,21 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
     - reschedule_link_token: <{{LegacySalesApptSchLink}}>
     Instructions:
     - If appointment_time_local is known, explicitly confirm it.
-    - Offer the reschedule line ONLY if timing/change is relevant.
+    - Do NOT ask the customer to choose a day/time or propose times.
+    - Do NOT include any scheduling CTA language such as:
+      “let me know a time/day and time that works”, “schedule directly”, “reserve your time”, or the <{LegacySalesApptSchLink}> token.
+    - Only mention rescheduling if the customer asks to change/cancel, or if they indicate a conflict.
+      If rescheduling is needed, use this exact one-liner (and nothing else about scheduling):
+      "If you need to reschedule, just reply here and we’ll help."
     - Do NOT include cadence/nudge language while appointment_scheduled is yes.
+
     """
     
         reply = run_gpt(
             prompt,
             customer_name=cust_first,
             rooftop_name=rooftop_name,
-            prevMessages=True,
+            prevMessages=False,
             persona="kbb_ico",
             kbb_ctx=kbb_ctx,
         )
@@ -1871,7 +2286,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         body_html = _patch_address_placeholders(body_html, rooftop_name)
         if scheduled_active_now:
             from helpers import rewrite_sched_cta_for_booked
-            body_html = rewrite_sched_cta_for_booked(body_html)  # converts any schedule CTA to reschedule line
+
         body_html = _PREFS_RE.sub("", body_html).strip()
         body_html = body_html + build_patti_footer(rooftop_name)
         if not subject.lower().startswith("re:"):
@@ -1886,13 +2301,15 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             log.warning("No recipient; skip send for opp=%s", opp_id)
             opportunity["_kbb_state"] = state
             return state, action_taken
-    
+            
+        thread_subject = reply_subject if (reply_subject or "").strip() else subject
+        
         send_opportunity_email_activity(
             token, subscription_id, opp_id,
             sender=rooftop_sender,
             recipients=recipients,
             carbon_copies=[],
-            subject=reply_subject,                 # keep inbound thread subject
+            subject=thread_subject,                # keep inbound thread subject
             body_html=body_html,
             rooftop_name=rooftop_name,
             reply_to_activity_id=selected_inbound_id  # <— keeps CRM thread intact
@@ -1928,7 +2345,9 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
 
         
     # If we are already in convo mode, no new inbound detected now, and enough time has passed → send a nudge
-    if state.get("mode") == "convo":
+    # 🔒 But NEVER send nudges once an appointment is scheduled/upcoming.
+    if state.get("mode") == "convo" and not scheduled_active_now:
+
         last_agent_ts = state.get("last_agent_msg_at")
         nudge_count   = int(state.get("nudge_count") or 0)
 
@@ -1951,8 +2370,7 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                     generate next Patti follow-up message for a Kelley Blue Book® Instant Cash Offer lead.
                     The customer previously replied once but has since gone silent.
                     Keep it short, warm, and helpful—remind about the ICO and next steps.
-                    messages history (python list of dicts):
-                    {opportunity.get('messages', [])}
+
                     """
 
                     from helpers import build_kbb_ctx
@@ -2036,50 +2454,72 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         log.info("KBB ICO: persisted convo mode — skip cadence.")
         opportunity["_kbb_state"] = state
         return state, action_taken
+        
     # ===== Still in cadence (never replied) =====
     state["mode"] = "cadence"
-    #_save_state_comment(token, subscription_id, opp_id, state)
-
-    # --- DEBUG: inputs to day-pick ---
-    try:
-        log.info(
-            "KBB day debug B → opp=%s created_iso=%r lead_age_days(param)=%s",
-            opp_id,
-            created_iso,
-            lead_age_days,
-        )
-    except Exception as _e:
-        log.warning("KBB day debug B failed: %s", _e)
-    # --- /DEBUG ---
-
-    # Offer-window override (if expired, jump to Day 08/09 track)
+    
+    # ------------------------------------------------------------
+    # BELT + SUSPENDERS (anti-repeat)
+    # - If Airtable says we already sent a cadence template, do NOT
+    #   ever send Day 1 again even if follow_up_at gets weird.
+    # ------------------------------------------------------------
+    last_sent     = state.get("last_template_day_sent")
+    last_sent_at  = state.get("last_template_sent_at")
+    last_agent_at = state.get("last_agent_msg_at")
+    
+    # Evidence that a cadence TEMPLATE was sent previously
+    cadence_started = (last_sent is not None) or bool(last_sent_at)
+    
+    # Airtable is the only "due" gate (Due Now view selected this record)
+    now_utc = _dt.now(_tz.utc)
+    
+    # --- pick NEXT cadence day from state (NOT lead age) ---
+    if last_sent is None:
+        # Normal: start at Day 1
+        # Recovery: if we lost the day number but have a template timestamp, assume Day 1 already happened → go Day 2
+        effective_day = 2 if cadence_started else 1
+    else:
+        nxt = _next_cadence_day(int(last_sent))
+        if nxt is None:
+            # cadence complete
+            state["mode"] = "done"
+            opportunity["isActive"] = False
+            opportunity["_kbb_state"] = state
+            try:
+                save_opp(opportunity)
+            except Exception:
+                pass
+            return state, action_taken
+    
+        effective_day = int(nxt)
+    
+    # Offer-window override (apply to chosen day)
     expired = _ico_offer_expired(created_iso, exclude_sunday=True)
-    effective_day = max(1, (lead_age_days or 0) + 1)
-    if expired and lead_age_days < 8:
+    if expired and effective_day < 8:
         effective_day = 8
-
+    
     plan = events_for_day(effective_day)
     if not plan:
         opportunity["_kbb_state"] = state
         return state, action_taken
-
+    
+    # If you already sent this exact cadence day, don't resend it
     if state.get("last_template_day_sent") == effective_day:
         log.info("KBB ICO: skipping Day %s (already sent)", effective_day)
         opportunity["_kbb_state"] = state
         return state, action_taken
-
     
     # --- DEBUG: result of day-pick & duplicate check ---
     try:
         log.info(
-            "KBB day debug C → opp=%s effective_day=%s skipping_dup=%s",
-            opp_id,
-            effective_day,
-            state.get("last_template_day_sent") == effective_day
+            "KBB day debug C → opp=%s effective_day=%s last_sent=%s cadence_started=%s",
+            opp_id, effective_day, last_sent, cadence_started
         )
     except Exception as _e:
         log.warning("KBB day debug C failed: %s", _e)
     # --- /DEBUG ---
+
+
 
     # Subject/template selection zone (keep this early)
     tpl_key = plan.get("email_template_day")
@@ -2088,9 +2528,6 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         log.warning("KBB ICO: missing template for day key=%r", tpl_key)
         opportunity["_kbb_state"] = state
         return state, action_taken
-    
-    # Use the plan's explicit day if present; otherwise KEEP prior effective_day
-    effective_day = plan.get("day") or effective_day
 
 
     # Rooftop info
@@ -2157,37 +2594,45 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
         log.info("Email suppressed by state for opp=%s (cadence)", opp_id)
         opportunity["_kbb_state"] = state
         return state, action_taken
-
-    # 1) Persist cadence step BEFORE send so we don’t re-send on next run
-    now_iso = _dt.now(_tz.utc).isoformat()
-    state["last_template_day_sent"] = effective_day
-    state["last_template_sent_at"]  = now_iso
-    opportunity["_kbb_state"] = state
+    
     try:
-        from esQuerys import esClient
-        from es_resilient import es_update_with_retry
-        es_update_with_retry(esClient, index="opportunities", id=opp_id, doc={"_kbb_state": state})
-        log.info("Persisted _kbb_state pre-template send for opp=%s (day=%s)", opp_id, effective_day)
-    except Exception as e:
-        log.warning("ES persist failed (pre-template send): %s", e)
-
-    # 2) Try to send, but swallow DoNotEmail so we don’t crash or loop
-    try:
+        # 1) SEND FIRST
         send_opportunity_email_activity(
             token, subscription_id, opp_id,
             sender=rooftop_sender,
             recipients=recipients, carbon_copies=[],
             subject=subject, body_html=body_html, rooftop_name=rooftop_name
         )
-        # success → update last_agent_msg_at
-        state["last_agent_msg_at"] = _dt.now(_tz.utc).isoformat()
+    
+        # 2) ONLY AFTER SUCCESS: mark as sent
+        now_iso = _dt.now(_tz.utc).isoformat()
+        state["last_template_day_sent"] = effective_day
+        state["last_template_sent_at"]  = now_iso
+        state["last_agent_msg_at"]      = now_iso
+    
+        # 3) advance follow-up due date (next cadence day)
+        next_day = _next_cadence_day(int(effective_day))
+        if next_day is None:
+            opportunity["followUP_date"] = None
+        else:
+            delta_days = max(1, int(next_day) - int(effective_day))
+            # anchor from the actual send time we just recorded
+            opportunity["followUP_date"] = (_dt.fromisoformat(now_iso) + _td(days=delta_days)).isoformat()
+    
         opportunity["_kbb_state"] = state
+    
+        # 4) Save ONCE to Airtable
         try:
-            es_update_with_retry(esClient, index="opportunities", id=opp_id, doc={"_kbb_state": state})
-        except Exception:
-            pass
-
+            save_opp(opportunity)
+            log.info(
+                "KBB ICO: sent cadence day=%s opp=%s next_followUP_date=%s",
+                effective_day, opp_id, opportunity.get("followUP_date")
+            )
+        except Exception as ee:
+            log.warning("Airtable persist failed (post-send): %s", ee)
+    
     except Exception as e:
+        # If send fails: DO NOT advance cadence day.
         resp = getattr(e, "response", None)
         body = ""
         if resp is not None:
@@ -2196,15 +2641,20 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
             except Exception:
                 body = resp.text
         s = str(body)
-
+    
         if "SendEmailInvalidRecipient" in s and "DoNotEmail" in s:
             log.warning("DoNotEmail → skipping cadence email for opp %s", opp_id)
             state["email_blocked_do_not_email"] = True
+    
+            # IMPORTANT: do not change last_template_day_sent/at here.
+            # Leave them as-is so cadence doesn't pretend it sent.
+    
             opportunity["_kbb_state"] = state
             try:
-                es_update_with_retry(esClient, index="opportunities", id=opp_id, doc={"_kbb_state": state})
-            except Exception:
-                pass
+                save_opp(opportunity)  # Airtable brain
+            except Exception as ee:
+                log.warning("Airtable persist failed (DoNotEmail note): %s", ee)
+    
             # Optional: note in CRM for human follow-up by phone/text
             try:
                 from fortellis import add_opportunity_comment
@@ -2214,10 +2664,24 @@ def process_kbb_ico_lead(opportunity, lead_age_days, rooftop_name, inquiry_text,
                 )
             except Exception as ee:
                 log.warning("Failed to add DoNotEmail comment: %s", ee)
-            # do not re-raise; proceed so we can create phone/text task below if enabled
-        else:
-            log.error("Cadence send failed for opp %s: %s", opp_id, e)
-            # state was persisted pre-send; do not re-raise to avoid loops
+    
+            return state, action_taken
+    
+        # non-DoNotEmail error
+        log.error("Cadence send failed for opp %s: %s body=%s", opp_id, e, s)
+    
+        # Keep a short error breadcrumb in state for debugging (doesn't advance cadence)
+        state["last_send_error_at"] = _dt.now(_tz.utc).isoformat()
+        state["last_send_error"] = (str(e) or "send_failed")[:300]
+    
+        opportunity["_kbb_state"] = state
+        try:
+            save_opp(opportunity)
+        except Exception:
+            pass
+    
+        return state, action_taken
+
 
     # Phone/Text tasks 
     if ALLOW_TEXTING and plan.get("create_text_task", False) and _customer_has_text_consent(opportunity):

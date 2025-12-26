@@ -58,6 +58,8 @@ def _headers_post(subscription_id: str, token: str) -> dict:
         "Request-Id": str(uuid.uuid4()),
     }
 
+
+
 BASE_URL = os.getenv("FORTELLIS_BASE_URL", "https://api.fortellis.io")  # prod default
 LEADS_BASE = "/cdk/sales/elead/v1/leads"
 OPPS_BASE        = "/sales/v2/elead/opportunities"   
@@ -119,6 +121,98 @@ ACTIVITY_TYPE_MAP = {
     "internet up": 13,              
 }
 
+BASE_URL = "https://api.fortellis.io"
+
+def _headers(subscription_id: str, token: str) -> dict:
+    return {
+        "Authorization": f"Bearer {token}",
+        "Subscription-Id": subscription_id,
+        "Request-Id": str(uuid.uuid4()),
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+def search_customers_by_email(email: str, token: str, subscription_id: str, page_size: int = 10) -> list[dict]:
+    url = f"{BASE_URL}/sales/v1/elead/customers/search"
+    payload = {"emailAddress": (email or "").strip()}
+    params = {"page": 1, "pageSize": page_size}
+    r = requests.post(url, headers=_headers(subscription_id, token), params=params, json=payload, timeout=30)
+    r.raise_for_status()
+    data = r.json() or {}
+    return data.get("items") or []
+
+def get_opps_by_customer_id(customer_id: str, token: str, subscription_id: str, page_size: int = 50) -> list[dict]:
+    url = f"{BASE_URL}/sales/v2/elead/opportunities/search-by-customerId/{customer_id}"
+    params = {"page": 1, "pageSize": page_size}
+    r = requests.get(url, headers=_headers(subscription_id, token), params=params, timeout=30)
+    r.raise_for_status()
+    data = r.json() or {}
+    return data.get("items") or []
+
+def _parse_dt(s: str | None) -> datetime:
+    if not s:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    # Fortellis often returns "...Z"
+    s2 = s.replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(s2)
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+def find_best_kbb_opp_for_email(
+    *,
+    shopper_email: str,
+    token: str,
+    subscription_id: str,
+    kbb_sources: set[str] | None = None,
+) -> tuple[str | None, str | None, str | None]:
+    """
+    Returns (opp_id, customer_id, reason).
+    Chooses most recent Active KBB opp for this email within this subscription.
+    """
+    kbb_sources = kbb_sources or {"kbb instant cash offer", "kbb servicedrive"}
+
+    customers = search_customers_by_email(shopper_email, token, subscription_id, page_size=10)
+    if not customers:
+        return None, None, "no_customers"
+
+    candidates: list[tuple[datetime, dict, str]] = []
+    for c in customers:
+        cid = c.get("id")
+        if not cid:
+            continue
+        try:
+            opps = get_opps_by_customer_id(cid, token, subscription_id, page_size=100)
+        except Exception:
+            continue
+
+        for o in opps or []:
+            src = (o.get("source") or "").strip().lower()
+            status = (o.get("status") or "").strip().lower()
+
+            if src not in kbb_sources:
+                continue
+            if status != "active":
+                continue
+
+            # Most reliable “freshness” field here is usually dateIn (per example),
+            # else fall back to created_at/updated_at if present.
+            dt = _parse_dt(o.get("dateIn") or o.get("createdAt") or o.get("created_at") or o.get("updatedAt"))
+            opp_id = o.get("id") or o.get("opportunityId")
+            if opp_id:
+                candidates.append((dt, o, cid))
+
+    if not candidates:
+        return None, None, "no_kbb_opps"
+
+    # pick most recent
+    candidates.sort(key=lambda t: t[0], reverse=True)
+    best_dt, best_opp, best_cid = candidates[0]
+    best_id = best_opp.get("id") or best_opp.get("opportunityId")
+    return best_id, best_cid, f"picked_most_recent={best_dt.isoformat()}"
+
+
 def normalize_activity_item(it: dict) -> dict:
     """
     Converts Sales v1 activityHistory items to Patti-safe format:
@@ -151,6 +245,61 @@ def normalize_activity_item(it: dict) -> dict:
 
     return base
 
+# fortellis.py
+
+def find_recent_kbb_opportunity_by_email(
+    *,
+    shopper_email: str,
+    subscription_id: str,
+    token: str,
+    since_minutes: int = 60 * 48,   # last 48 hours
+    page_size: int = 100,
+    max_pages: int = 10,
+):
+    """
+    Search recent opportunities in Fortellis for a KBB opp whose customer email matches shopper_email.
+    Returns (opp_id, opp_obj_from_delta) or (None, None).
+    """
+    target = (shopper_email or "").strip().lower()
+    if not target:
+        return None, None
+
+    page = 1
+    while page <= max_pages:
+        data = get_recent_opportunities(
+            token,
+            subscription_id,
+            since_minutes=since_minutes,
+            page=page,
+            page_size=page_size,
+        ) or {}
+
+        items = (data.get("items") or [])
+        if not items:
+            return None, None
+
+        for op in items:
+            src = (op.get("source") or "").strip().lower()
+            if src not in ("kbb instant cash offer", "kbb servicedrive"):
+                continue
+
+            cust = (op.get("customer") or {})
+            emails = cust.get("emails") or []
+            for e in emails:
+                addr = (e.get("address") or "").strip().lower()
+                if addr == target:
+                    opp_id = op.get("opportunityId") or op.get("id")
+                    return opp_id, op
+
+            # fallback: some payloads have customerEmail
+            addr2 = (op.get("customerEmail") or "").strip().lower()
+            if addr2 == target:
+                opp_id = op.get("opportunityId") or op.get("id")
+                return opp_id, op
+
+        page += 1
+
+    return None, None
 
 
 def get_activities(opportunity_id, customer_id, token, dealer_key):
@@ -641,12 +790,52 @@ def add_vehicle_sought(token, dealer_key, opportunity_id,
 
 def _coerce_activity_type(value):
     """
-    Accepts an int (pass-through), a numeric string ('14' -> 14),
-    or a small set of known labels -> codes.
+    Accepts an int, a numeric string, or one of the known Elead
+    activity names and returns the numeric activityType ID.
 
-    Standardized for all rooftops:
-      - "Send Email" -> 3
+    Known names/IDs (from Elead for this group):
+      1  -> Attend Meeting
+      2  -> Phone Call
+      3  -> Send Email
+      5  -> Other
+      7  -> Appointment
+      12 -> Send Letter
+      14 -> Send Email/Letter
+      20 -> Inbound Email
+      21 -> LeadLink Up
+      27 -> Service Reminder
+      28 -> Lease Reminder
+      34 -> Confirm Appointment
+      36 -> Auto Response
+      37 -> Note
+      38 -> Inbound Call
+      40 -> Duplicate Lead
+      41 -> Brochure
+      42 -> Parts Up
+      43 -> Service Appt Up
+      44 -> Miscellaneous Sold
+      45 -> DirectCall
+      46 -> IVR
+      47 -> DirectMail
+      48 -> Text Message
+      49 -> Service Appointment
+      50 -> Delivery Appointment
+      51 -> Miscellaneous Appointment
+      53 -> Credit Application
+      54 -> Appraisal Integration
+      56 -> Birthday/Anniv Survey
+      57 -> ACE Email
+      59 -> Alert Sent
+      60 -> Data Enrichment
+      63 -> In Market Notification
+      65 -> Appraisal Appointment
+      66 -> Service Plus Survey
+      67 -> Livestream
+      68 -> Credit Soft Pull
+      69 -> Bulk Text Message
     """
+
+    # Already a numeric ID? Just return it.
     if isinstance(value, int):
         return value
     if isinstance(value, str) and value.isdigit():
@@ -654,22 +843,57 @@ def _coerce_activity_type(value):
 
     label = (value or "").strip()
 
+    # Map the names we care about to their proper numeric IDs.
     BUILTIN = {
-        "Send Email": 3,   # <-- standardize on 3
-        "Task": 3,
-        "Call": 1,
-        "Appointment": 2,
-        "Note": 37
-        # note: we intentionally drop "Send Email/Letter"
+        "Attend Meeting": 1,
+        "Phone Call": 2,
+        "Send Email": 3,
+        "Other": 5,
+        "Appointment": 7,
+        "Send Letter": 12,
+        "Send Email/Letter": 14,
+        "Inbound Email": 20,
+        "LeadLink Up": 21,
+        "Service Reminder": 27,
+        "Lease Reminder": 28,
+        "Confirm Appointment": 34,
+        "Auto Response": 36,
+        "Note": 37,
+        "Inbound Call": 38,
+        "Duplicate Lead": 40,
+        "Brochure": 41,
+        "Parts Up": 42,
+        "Service Appt Up": 43,
+        "Miscellaneous Sold": 44,
+        "DirectCall": 45,
+        "IVR": 46,
+        "DirectMail": 47,
+        "Text Message": 48,
+        "Service Appointment": 49,
+        "Delivery Appointment": 50,
+        "Miscellaneous Appointment": 51,
+        "Credit Application": 53,
+        "Appraisal Integration": 54,
+        "Birthday/Anniv Survey": 56,
+        "ACE Email": 57,
+        "Alert Sent": 59,
+        "Data Enrichment": 60,
+        "In Market Notification": 63,
+        "Appraisal Appointment": 65,
+        "Service Plus Survey": 66,
+        "Livestream": 67,
+        "Credit Soft Pull": 68,
+        "Bulk Text Message": 69,
     }
+
     if label in BUILTIN:
         return BUILTIN[label]
 
     raise ValueError(
         f"Unrecognized activityType: {value!r}. "
-        "Use a numeric code or one of the supported labels: "
-        f"{', '.join(BUILTIN.keys())}"
+        "Use a numeric code or one of the supported labels."
     )
+
 
 
 def schedule_activity(
@@ -680,18 +904,30 @@ def schedule_activity(
     due_dt_iso_utc,
     activity_name,
     activity_type,
-    comments=""
+    comments="",
 ):
+    """
+    Create a scheduled activity on an opportunity.
+
+    `activity_type` can be:
+      - an int (Elead code from /activity-types),
+      - a numeric string, or
+      - one of the known names (e.g. "Appointment", "Phone Call", "Send Email").
+    """
     url = f"{BASE_URL}{ACTIVITIES_BASE}/schedule"
     payload = {
         "opportunityId": opportunity_id,
         "dueDate": due_dt_iso_utc,
         "activityName": activity_name,
-        "activityType": "Appointment",
-        "comments": comments or ""
+        "activityType": _coerce_activity_type(activity_type),
+        "comments": comments or "",
     }
-    return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
-
+    return post_and_wrap(
+        "POST",
+        url,
+        headers=_headers(dealer_key, token),
+        json=payload,
+    )
 
 def complete_activity(
     token,
@@ -718,6 +954,37 @@ def complete_activity(
         payload["activityId"] = activity_id
 
     return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
+
+from datetime import datetime, timezone
+
+def _iso_z(dt: datetime) -> str:
+    # Fortellis examples commonly accept Zulu timestamps
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+def complete_send_email_activity(
+    *,
+    token: str,
+    subscription_id: str,
+    opportunity_id: str,
+    to_addr: str,
+    subject: str,
+    comments_extra: str = "",
+):
+    now = _iso_z(datetime.now(timezone.utc))
+
+    # IMPORTANT: pass activity_type as a string so _coerce_activity_type maps it reliably
+    return complete_activity(
+        token,
+        subscription_id,              # dealer_key == Subscription-Id 
+        opportunity_id,
+        due_dt_iso_utc=now,
+        completed_dt_iso_utc=now,
+        activity_name="Send Email",
+        activity_type=14,  
+        comments=f"Patti Outlook: sent to {to_addr} | subject={subject}"
+                 + (f" | {comments_extra}" if comments_extra else ""),
+    )
+
 
 
 def search_activities_by_opportunity(opportunity_id, token, dealer_key, page=1, page_size=10, customer_id=None):

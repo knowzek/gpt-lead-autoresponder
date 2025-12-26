@@ -9,7 +9,8 @@ EXIT_KEYWORDS = [
     "not interested", "no longer interested", "bought elsewhere",
     "already purchased", "stop emailing", "unsubscribe",
     "please stop", "no thanks", "do not contact",
-    "leave me alone", "sold my car", "found another dealer"
+    "leave me alone", "sold my car", "found another dealer",
+    "pass on the offer", "going to pass", "maybe later", "not right now", 
 ]
 
 def is_exit_message(msg: str) -> bool:
@@ -23,6 +24,7 @@ def is_exit_message(msg: str) -> bool:
 _DECLINE_RE = _re.compile(
     r'(?i)\b('
     r'not\s+interested|no\s+longer\s+interested|not\s+going\s+to\s+sell|'
+    r'going\s+to\s+pass|pass(?:ing)?\s+on(?:\s+the)?\s+offer|'
     r'stop\s+email|do\s+not\s+contact|please\s+stop|unsubscribe|'
     r'take\s+me\s+off|remove\s+me|leave me alone|bought elsewhere|already purchased'
     r')\b'
@@ -31,14 +33,18 @@ def _is_decline(text: str) -> bool:
     return bool(_DECLINE_RE.search(text or ""))
 
 
+_OPT_OUT_RE = _re.compile(
+    r"(?i)\b("
+    r"stop|stop\s+all|stop\s+now|end|cancel|quit|"
+    r"unsubscribe|remove\s+me|do\s+not\s+contact|do\s+not\s+email|don't\s+email|"
+    r"no\s+further\s+contact|stop\s+contacting|stop\s+emailing|opt\s*out|opt-?out|"
+    r"cease\s+and\s+desist"
+    r")\b"
+)
 
 def _is_optout_text(t: str) -> bool:
-    t = (t or "").lower()
-    return any(kw in t for kw in (
-        "stop emailing me", "stop email", "do not email", "don't email",
-        "unsubscribe", "remove me", "no further contact",
-        "stop contacting", "opt out", "opt-out", "optout", "cease and desist"
-    ))
+    t = (t or "").strip()
+    return bool(_OPT_OUT_RE.search(t))
 
 def _latest_customer_optout(opportunity):
     """

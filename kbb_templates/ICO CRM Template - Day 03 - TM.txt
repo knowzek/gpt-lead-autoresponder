@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
-<title>Instant Cash Offer – Follow-Up</title>
+<title>Instant Cash Offer - Follow-Up</title>
 <style>
   body {margin:0;padding:0;background-color:#ffffff;font-family:Arial,Helvetica,sans-serif;}
   table {border-collapse:collapse;}
@@ -21,23 +21,35 @@
 <!-- Email Container : BEGIN -->
 <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="margin:auto;" class="email-container">
 
-<!-- Header : BEGIN -->
+<!-- Email Header : BEGIN -->
 <tr>
-  <td align="center" valign="top" style="background-color:#FFFFFF;padding:0;">
+  <td align="center" valign="top" style="background-color:#FFFFFF; padding:0px 0;">
     <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
       <tr>
-        <td align="center">
-          <a href="https://www.kbb.com/instant-cash-offer/W/54278195/43A6F9B8-DB6C-48C0-A360-F658B2176E3E/" target="_blank" style="text-decoration:none;">
-            <img src="https://www.pattersonautos.com/blogs/7684/wp-content/uploads/2025/11/image.png"
-                 width="300" border="0" alt="Tustin Mazda"
-                 style="display:block;margin:0 auto;height:auto;max-width:100%;">
+        <td align="center" style="padding-top:12px; padding-bottom:12px;">
+          <!-- Logo image (may be blocked) -->
+          <a href="https://www.tustinmazda.com" target="_blank" style="text-decoration:none;">
+            <img
+              src="https://www.pattersonautos.com/blogs/7684/wp-content/uploads/2025/11/image.png"
+              width="300"
+              border="0"
+              alt="Tustin Mazda | Kelley Blue Book Instant Cash Offer"
+              style="display:block; margin:0 auto; height:auto; max-width:100%;
+                     font-family:sans-serif; font-size:14px; line-height:18px; color:#333333;">
           </a>
+
+          <!-- Text header stays visible even when images are blocked -->
+          <div style="font-family:sans-serif; font-size:14px; line-height:18px;
+                      color:#333333; margin-top:6px;">
+            Tustin Mazda &bull; Kelley Blue Book Instant Cash Offer
+          </div>
         </td>
       </tr>
     </table>
   </td>
 </tr>
-<!-- Header : END -->
+<!-- Email Header : END -->
+
 
 <!-- Body : BEGIN -->
 <tr>
@@ -49,16 +61,16 @@
     <p style="margin:0 0 10px;">Hi <strong>&lt;{CustFirstName}&gt;</strong>,</p>
 
     <p style="margin:0 0 10px;">
-      Just checking back in — I wanted to make sure you had everything you need for your Kelley Blue Book® Instant Cash Offer.  
-      If you’re still interested, we can wrap things up with a quick 15-minute visit here at <strong>&lt;{DealershipName}&gt;</strong>.
+      Just checking back in - I wanted to make sure you had everything you need for your Kelley Blue Book® Instant Cash Offer.  
+      If you're still interested, we can wrap things up with a quick 15-minute visit here at <strong>&lt;{DealershipName}&gt;</strong>.
     </p>
 
     <p style="margin:0 0 10px;">
-      Sometimes we’re able to pay <strong>more than the KBB offer</strong> once we see the vehicle in person — it just depends on its exact condition and features.
+      Sometimes we're able to pay <strong>more than the KBB offer</strong> once we see the vehicle in person - it just depends on its exact condition and features.
     </p>
 
     <p style="margin:0 0 10px;">
-      Pick a time that works best for you, or let me know what’s easiest and I’ll get it scheduled for you:
+      Pick a time that works best for you, or let me know what's easiest and I'll get it scheduled for you:
     </p>
 
     <p style="margin:0 0 20px;">
@@ -115,13 +127,26 @@
 </tr>
 <!-- Body : END -->
 
-<!-- Footer : BEGIN -->
-<tr>
-  <td style="padding:20px;text-align:center;">
-    <img src="https://kbbico.info/wp/wp-content/email/images/ICO-participating-dealer-color.png" width="170" height="39" alt="Kelley Blue Book Instant Cash Offer" border="0" style="height:auto;">
-  </td>
-</tr>
-<!-- Footer : END -->
+<!-- Email Footer : BEGIN -->
+<table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0"
+       width="600" style="margin: auto;" class="email-container">
+  <tr>
+    <td style="padding: 8px 0 16px 0; text-align: center; font-family:sans-serif;">
+      <img
+        src="https://kbbico.info/wp/wp-content/email/images/ICO-participating-dealer-color.png"
+        width="170" height="39"
+        alt="Kelley Blue Book Instant Cash Offer"
+        border="0"
+        style="display:block; margin:0 auto; height:auto; max-width:170px;
+               font-size:13px; line-height:15px; color:#333333;">
+      <div style="font-size:12px; line-height:16px; color:#555555; margin-top:4px;">
+        Participating Kelley Blue Book Instant Cash Offer Dealer
+      </div>
+    </td>
+  </tr>
+</table>
+<!-- Email Footer : END -->
+
 
 </table>
 <!-- Email Container : END -->

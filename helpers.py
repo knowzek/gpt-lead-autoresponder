@@ -29,13 +29,18 @@ def _scan_text_for_offer(text: str) -> dict:
 
 def get_kbb_offer_context_simple(opportunity: dict) -> dict:
     """Returns {'offer_url','amount_usd','offer_id','vehicle'} if found."""
-    memo = opportunity.get("_kbb_offer_ctx") or {}
-    if memo.get("offer_url"):
+    # 1) If we already have a stored value from ADF or past scans, trust it.
+    memo = dict(opportunity.get("_kbb_offer_ctx") or {})
+    if memo.get("amount_usd") or memo.get("offer_url"):
         return memo
 
-    completed = (opportunity.get("completedActivities")
-                 or (opportunity.get("activityHistory") or {}).get("completedActivities")
-                 or [])
+    # 2) Otherwise, scan completed activities/messages for an offer URL/amount.
+    completed = (
+        opportunity.get("completedActivities")
+        or (opportunity.get("activityHistory") or {}).get("completedActivities")
+        or []
+    )
+
     texts = []
     for a in completed:
         texts.append((a.get("comments") or "") + " " + (a.get("notes") or ""))
@@ -47,17 +52,56 @@ def get_kbb_offer_context_simple(opportunity: dict) -> dict:
         bits = _scan_text_for_offer(t)
         if bits:
             found.update(bits)
-            if found.get("offer_url"): break
+            if found.get("offer_url"):
+                break
 
+    # 3) Build a vehicle string if we have trade info
     ti = (opportunity.get("tradeIns") or [{}])[0] if (opportunity.get("tradeIns") or []) else {}
-    veh = " ".join(filter(None, [str(ti.get("year") or "").strip(),
-                                 str(ti.get("make") or "").strip(),
-                                 str(ti.get("model") or "").strip()])).strip()
+    veh = " ".join(
+        filter(
+            None,
+            [
+                str(ti.get("year") or "").strip(),
+                str(ti.get("make") or "").strip(),
+                str(ti.get("model") or "").strip(),
+            ],
+        )
+    ).strip()
     if veh:
         found["vehicle"] = veh
 
+    # 4) Merge with any memo we already had, instead of wiping it.
+    if memo:
+        memo.update(found)
+        found = memo
+
     opportunity["_kbb_offer_ctx"] = found
+
+    # ✅ Persist Patti-only memo back into Airtable so it's available next run
+    try:
+        from airtable_store import save_opp
+        import json
+    
+        opp_id = opportunity.get("opportunityId") or opportunity.get("id")
+        if opp_id and found:
+            save_opp(
+                opportunity,
+                extra_fields={
+                    "opp_id": opp_id,
+                    "subscription_id": opportunity.get("_subscription_id") or "",
+                    "opp_json": json.dumps(opportunity, ensure_ascii=False),
+                },
+            )
+    except Exception as e:
+        # don't break the run if Airtable has an issue
+        import logging
+        logging.getLogger("patti.kbb").warning("Failed to persist _kbb_offer_ctx for opp=%s err=%s",
+                                              opportunity.get("opportunityId") or opportunity.get("id"),
+                                              e)
+    
     return found
+
+
 
 def build_kbb_ctx(opportunity: dict) -> dict:
     """Small, consistent payload we can hand to run_gpt."""
@@ -74,27 +118,28 @@ def build_kbb_ctx(opportunity: dict) -> dict:
 
 
 def rewrite_sched_cta_for_booked(body_html: str) -> str:
-    """
-    If the email contains a schedule CTA, replace the phrasing so it's appropriate
-    for customers who already have an appointment.
-    Keeps <{LegacySalesApptSchLink}> intact.
-    """
     if not body_html:
         return ""
 
-    # Replace any common scheduling intros with a reschedule line
     replacements = [
-        (r"(?i)(to\s+schedule\s+(your\s+)?(appointment|visit)[^<]*:)", 
-         "If you need to reschedule your appointment, you can do so here:"),
-        (r"(?i)(let\s+me\s+know\s+a\s+time\s+that\s+works\s+for\s+you[^<]*:)", 
-         "If you need to reschedule your appointment, you can do so here:"),
-        (r"(?i)(please\s+let\s+us\s+know\s+a\s+convenient\s+time\s+for\s+you[^<]*:)", 
-         "If you need to reschedule your appointment, you can do so here:")
+        # Anything that invites scheduling before a link
+        (
+            r"(?is)(let\s+me\s+know.*?(schedule|book|reserve).*?:)",
+            "If you need to reschedule your appointment, you can do so here:"
+        ),
+        (
+            r"(?is)(schedule\s+(your\s+)?(appointment|visit).*?:)",
+            "If you need to reschedule your appointment, you can do so here:"
+        ),
+        (
+            r"(?is)(please\s+let\s+us\s+know.*?:)",
+            "If you need to reschedule your appointment, you can do so here:"
+        ),
     ]
 
     new_html = body_html
     for pattern, repl in replacements:
-        new_html = re.sub(pattern, repl, new_html, flags=re.I)
+        new_html = re.sub(pattern, repl, new_html)
 
     return new_html
 

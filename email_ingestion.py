@@ -1,16 +1,26 @@
+#email_ingestion.py
+import os
 import re
-from esQuerys import esClient
-from es_resilient import es_update_with_retry
-from gpt import run_gpt
-from rooftops import get_rooftop_info
-from fortellis import get_token, send_opportunity_email_activity
-TEST_OPP_ID = "050a81e9-78d4-f011-814f-00505690ec8c"
-KBB_SOURCE_HINTS = ("kbb", "instant cash offer", "ico")
-
-
-from datetime import datetime, timezone
 import logging
+from datetime import datetime as _dt, timezone as _tz
+import json
+
+from rooftops import get_rooftop_info
+from fortellis import get_token, add_opportunity_comment
+from kbb_ico import _top_reply_only
+from airtable_store import (
+    find_by_opp_id,
+    find_by_customer_email,   # you will add this helper (below)
+    opp_from_record,
+    save_opp,
+)
+
+
 log = logging.getLogger("patti.email_ingestion")
+
+# For now we only want this running on your single test opp
+TEST_OPP_ID = "050a81e9-78d4-f011-814f-00505690ec8c"
+
 
 
 def clean_html(html: str) -> str:
@@ -18,123 +28,230 @@ def clean_html(html: str) -> str:
     text = re.sub(r"(?is)<[^>]+>", " ", html or "")
     return re.sub(r"\s+", " ", text).strip()
 
-
-def process_inbound_email(inbound):
+def _extract_email(addr: str) -> str:
     """
-    Convert an inbound email into a Patti customer message and
-    trigger Patti's reply workflow — WITHOUT calling Fortellis
-    Activity History.
+    Given "Kristin <foo@bar.com>" or just "foo@bar.com" return lowercase email.
     """
+    if not addr:
+        return ""
+    m = re.search(r"<([^>]+)>", addr)
+    email = m.group(1) if m else addr
+    return email.strip().lower()
 
-    sender = (inbound.get("from") or "").lower().strip()
+
+def _compute_lead_age_days(opportunity: dict) -> int:
+    """
+    Copy of the lead_age_days logic from processNewData.py
+    so kbb_ico sees the same value.
+    """
+    lead_age_days = 0
+    created_raw = (
+        opportunity.get("dateIn")
+        or opportunity.get("createdDate")
+        or opportunity.get("created_at")
+        or (opportunity.get("firstActivity") or {}).get("completedDate")
+    )
+    try:
+        if created_raw:
+            created_dt = _dt.fromisoformat(str(created_raw).replace("Z", "+00:00"))
+            lead_age_days = (_dt.now(_tz.utc) - created_dt).days
+    except Exception:
+        pass
+    return lead_age_days
+
+
+def _find_opportunity_by_sender(sender_email: str):
+    """
+    Find opportunity in Airtable by matching the sender email against
+    opp_json.customer.emails[].address (or a stored customer_email column if you have one).
+    """
+    if not sender_email:
+        return None, None
+
+    rec = find_by_customer_email(sender_email)  # you’ll add this in airtable_store.py
+    if not rec:
+        return None, None
+
+    opp = opp_from_record(rec)
+    return opp.get("opportunityId") or opp.get("id"), opp
+
+
+
+def is_test_opp(opp: dict, opp_id: str | None) -> bool:
+    if opp_id and opp_id == TEST_OPP_ID:
+        return True
+    if opp and opp.get("opportunityId") == TEST_OPP_ID:
+        return True
+    if opp and opp.get("id") == TEST_OPP_ID:
+        return True
+    return False
+
+
+def process_inbound_email(inbound: dict) -> None:
+    """
+    Entry point called from web_app.py when Power Automate POSTs a
+    "new email" JSON payload.
+
+    Goal:
+      - Resolve the opportunity
+      - Append this message to opportunity["messages"]
+      - Call process_kbb_ico_lead so the existing KBB brain decides
+        what (if anything) to send next.
+    """
+    sender_raw = (inbound.get("from") or "").strip()
     subject = inbound.get("subject") or ""
+    
     body_html = inbound.get("body_html") or ""
-    body_text = inbound.get("body_text") or clean_html(body_html)
-    timestamp = inbound.get("timestamp")
+    raw_text = inbound.get("body_text") or clean_html(body_html)
+
+    # Start with raw text as a fallback
+    body_text = raw_text
+
+    # 1️⃣ Try KBB's HTML reply-stripper first (when we actually have HTML)
+    if body_html:
+        try:
+            top_html = _top_reply_only(body_html) or ""
+            stripped = clean_html(top_html)
+            # Only use it if we got something non-empty back
+            if stripped:
+                body_text = stripped
+        except Exception:
+            # If anything weird happens, just stick with raw_text
+            pass
+
+    # 2️⃣ Plain-text reply stripping for Outlook-style separators
+    body_text = (body_text or "").strip()
+
+    # Cut off everything after common reply delimiters so KBB only sees
+    # the *new* line like "What was the kbb estimate?"
+    for sep in [
+        "\r\n________________________________",
+        "\n________________________________",
+
+        # HTML-cleaned versions (no underscores / newlines)
+        " From:",
+        " Sent:",
+        " On ",
+        " Subject:",
+        " To:",
+
+        # Raw newline forms, in case they survive
+        "\r\nFrom:",
+        "\nFrom:",
+        "\r\nOn ",
+        "\nOn ",
+    ]:
+        idx = body_text.find(sep)
+        if idx != -1:
+            body_text = body_text[:idx].strip()
+            break
+
+
+    # Optional but useful while testing:
+    log.info(
+        "Email ingestion text debug: raw=%r final=%r",
+        (raw_text or "")[:160],
+        (body_text or "")[:160],
+    )
+
+
+    ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     headers = inbound.get("headers") or {}
 
-    # 1️⃣ Try to extract opportunityId from header (best method)
+    # 1) Try direct opp id from header
     opp_id = headers.get("X-Opportunity-ID") or None
-
-    # 2️⃣ If no header, fallback: find opp by email address match (nested query)
-    if not opp_id:
-        import re
-        # strip display name if present, e.g. "Kristin <foo@bar.com>"
-        m = re.search(r"<([^>]+)>", sender)
-        sender_email = (m.group(1) if m else sender).strip().lower()
-
-        query = {
-            "bool": {
-                "should": [
-                    # actual structure: customer.emails[].address
-                    {"term": {"customer.emails.address.keyword": sender_email}},
-                    {"term": {"customer.emails.address": sender_email}},
-                    # keep some fallbacks in case other rooftops index differently
-                    {"term": {"customerEmail.keyword": sender_email}},
-                    {"term": {"customerEmail": sender_email}},
-                ],
-                "minimum_should_match": 1,
-            }
-        }
-
-        rsp = esClient.search(index="opportunities", query=query, size=1)
-        hits = rsp["hits"]["hits"]
-        if not hits:
-            log.warning(
-                "No matching opportunity found for inbound email %s",
-                sender_email,
-            )
-            return
-
-        opp_id = hits[0]["_id"]
-        opportunity = hits[0]["_source"]
+    
+    opportunity = None
+    
+    if opp_id:
+        rec = find_by_opp_id(opp_id)
+        if rec:
+            opportunity = opp_from_record(rec)
     else:
-        opportunity = esClient.get(index="opportunities", id=opp_id)["_source"]
-
-    # 🔒 Hard gate: only operate on your single test opportunity
-    if opp_id != TEST_OPP_ID:
-        log.info(
-            "Inbound email for opp %s – skipping due to test gate (only %s allowed)",
-            opp_id,
-            TEST_OPP_ID,
-        )
+        sender_email = _extract_email(sender_raw)
+        opp_id, opportunity = _find_opportunity_by_sender(sender_email)
+    
+    if not opp_id or not opportunity:
+        log.warning("No matching opportunity found for inbound email from=%s", sender_raw)
         return
-
-    # 3️⃣ Append the message into the ES conversation thread
+    
+    # 2) Append inbound message into the thread (in-memory)
+    ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     msg_dict = {
         "msgFrom": "customer",
         "subject": subject,
         "body": body_text,
-        "date": timestamp,
+        "date": ts,
     }
-
     opportunity.setdefault("messages", []).append(msg_dict)
+    
+    # 3) Mark inbound + set KBB convo signals
+    now_iso = ts  # use the inbound timestamp we already computed
+    opportunity.setdefault("checkedDict", {})["last_msg_by"] = "customer"
+    opportunity["followUP_date"] = now_iso  # due now
+    
+    st = opportunity.setdefault("_kbb_state", {})
+    st["mode"] = "convo"
+    st["last_customer_msg_at"] = now_iso
 
-    # Save updated opportunity in ES (same pattern as kbb_ico)
-    es_update_with_retry(
-        esClient,
-        index="opportunities",
-        id=opp_id,
-        doc={"messages": opportunity["messages"]},
-    )
+    # 4) Persist to Airtable (save_opp already updates follow_up_at + opp_json)
+    save_opp(opportunity)
 
+    # 5) IMMEDIATE reply (do NOT wait for cron)
+    try:
+        from kbb_ico import process_kbb_ico_lead
+        from rooftops import get_rooftop_info
 
+        subscription_id = opportunity.get("_subscription_id")
+        if not subscription_id:
+            log.warning("Inbound email matched opp=%s but missing _subscription_id; cannot reply", opp_id)
+            return
 
-    # 4️⃣ Generate Patti reply with existing logic
-    rooftop_name = get_rooftop_info(opportunity["_subscription_id"])["name"]
-    first_name = (opportunity.get("customer") or {}).get("firstName")
+        tok = get_token(subscription_id)
 
-    prompt = f"""
-Generate Patti's next reply based on this email thread:
-{opportunity["messages"]}
-"""
+        rt = get_rooftop_info(subscription_id) or {}
+        rooftop_name   = rt.get("name") or rt.get("rooftop_name") or "Rooftop"
+        rooftop_sender = rt.get("sender") or rt.get("patti_email") or None
 
-    response = run_gpt(
-        prompt,
-        first_name,
-        rooftop_name,
-        prevMessages=True
-    )
+        # Let the brain answer the customer's question immediately
+        state, action_taken = process_kbb_ico_lead(
+            opportunity=opportunity,
+            lead_age_days=0,              # not important for convo replies
+            rooftop_name=rooftop_name,
+            inquiry_text=body_text,       # <-- this is the customer's question
+            token=tok,
+            subscription_id=subscription_id,
+            SAFE_MODE=False,              # <-- allow send now
+            rooftop_sender=rooftop_sender,
+            trigger="email_webhook",        
+            inbound_ts=ts,                  
+            inbound_subject=subject, 
+        )
 
-    # Build email
-    subject_out = response["subject"]
-    body_out = response["body"]
+        # Persist any state changes + schedule parking if convo logic does that
+        if isinstance(state, dict):
+            opportunity["_kbb_state"] = state
+        save_opp(opportunity)
 
-    # 5️⃣ Send reply using Fortellis email endpoint
-    customer_email = (
-        ((opportunity.get("customer") or {}).get("emails") or [{}])[0].get("address")
-    )
+        log.info("Inbound email processed immediately opp=%s action_taken=%s", opp_id, action_taken)
 
-    token = get_token(opportunity["_subscription_id"])
+    except Exception as e:
+        log.exception("Immediate inbound reply failed opp=%s err=%s", opp_id, e)
 
-    send_opportunity_email_activity(
-        token,
-        opportunity["_subscription_id"],
-        opp_id,
-        sender=get_rooftop_info(opportunity["_subscription_id"])["sender"],
-        recipients=[customer_email],
-        carbon_copies=[],
-        subject=subject_out,
-        body_html=body_out,
-        rooftop_name=rooftop_name,
-    )
+    # 6) Optional: log inbound email to CRM as a comment (Fortellis writeback)
+    subscription_id = opportunity.get("_subscription_id")
+    if subscription_id:
+        try:
+            token = get_token(subscription_id)
+            preview = (body_text or "")[:500]
+            add_opportunity_comment(
+                token,
+                subscription_id,
+                opp_id,
+                f"Inbound email from {sender_raw}: {subject}\n\n{preview}",
+            )
+        except Exception as e:
+            log.warning("Failed to log inbound email comment opp=%s err=%s", opp_id, e)
+
+    log.info("Inbound email queued + processed immediately for opp=%s", opp_id)
+    return

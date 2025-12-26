@@ -9,8 +9,6 @@ from helpers import (
 )
 from kbb_ico import process_kbb_ico_lead 
 from kbb_ico import _top_reply_only, _is_optout_text as _kbb_is_optout_text, _is_decline as _kbb_is_decline
-from es_resilient import es_update_with_retry
-from esQuerys import getNewData, esClient, getNewDataByDate, getDocByID
 from rooftops import get_rooftop_info
 from constants import *
 from gpt import run_gpt, getCustomerMsgDict, extract_appt_time
@@ -18,7 +16,12 @@ import re
 import logging
 import hashlib, json, time
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 import uuid
+from airtable_store import (
+    find_by_opp_id, query_view, acquire_lock, release_lock,
+    opp_from_record, save_opp
+)
 
 from fortellis import (
     get_activities,
@@ -63,26 +66,37 @@ def is_exit_message(msg: str) -> bool:
 already_processed = get_names_in_dir("jsons/process")
 DEBUGMODE = os.getenv("DEBUGMODE", "1") == "1"
 
-def _lc(x): return str(x).strip().lower() if x is not None else ""
-def _first_present_lc(doc, *keys):
-    for k in keys:
-        if doc and k in doc and doc[k] is not None:
-            return _lc(doc[k])
-    return ""
-def _kbb_flags_from(opportunity_doc: dict, fresh_opp: dict | None) -> dict:
-    src  = _first_present_lc(fresh_opp, "source") or _first_present_lc(opportunity_doc, "source")
-    st   = _first_present_lc(fresh_opp, "status") or _first_present_lc(opportunity_doc, "status")
-    sub  = (_first_present_lc(fresh_opp, "subStatus", "substatus")
-            or _first_present_lc(opportunity_doc, "subStatus", "substatus"))
-    upt  = (_first_present_lc(fresh_opp, "upType", "uptype")
-            or _first_present_lc(opportunity_doc, "upType", "uptype"))
-    return {"source": src, "status": st, "substatus": sub, "uptype": upt}
+def airtable_save(opportunity: dict, extra_fields: dict | None = None):
+    """
+    Persist the full opp back to Airtable (opp_json + follow_up_at + is_active).
+    """
+    if OFFLINE_MODE:
+        return
+    return save_opp(opportunity, extra_fields=extra_fields or {})
 
 _KBB_SOURCES = {
     "kbb instant cash offer",
     "kbb servicedrive",
     "kbb service drive",
 }
+
+def _next_kbb_followup_iso(*, lead_age_days: int) -> str:
+    """
+    Returns the UTC iso timestamp for the next cadence day after lead_age_days.
+    Uses your kbb_cadence.CADENCE keys (day numbers).
+    """
+    from kbb_cadence import CADENCE
+
+    days_sorted = sorted(int(d) for d in CADENCE.keys())
+    # pick next cadence day strictly greater than current day
+    next_day = next((d for d in days_sorted if d > lead_age_days), None)
+
+    # if nothing left, park far in future (no more nudges)
+    if next_day is None:
+        return (_dt.now(_tz.utc) + _td(days=365)).isoformat()
+
+    delta_days = max(1, next_day - lead_age_days)  # safety: at least 1 day
+    return (_dt.now(_tz.utc) + _td(days=delta_days)).isoformat()
 
 def _is_exact_kbb_source(val) -> bool:
     return (val or "").strip().lower() in _KBB_SOURCES
@@ -149,18 +163,22 @@ def _is_kbb_ico(doc_flags: dict) -> bool:
 def _is_kbb_ico_new_active(doc: dict) -> bool:
     source    = _get_lc(doc, "source")
     status    = _get_lc(doc, "status")
-    substatus = _get_lc(doc, "subStatus", "substatus")  # ← read both
-    uptype    = _get_lc(doc, "upType", "uptype")        # ← read both
-    
-    print("KBB detect →", {"source": source, "status": status, "substatus": substatus, "uptype": uptype})
+    substatus = _get_lc(doc, "subStatus", "substatus")
+    uptype    = _get_lc(doc, "upType", "uptype")
+
+    print("KBB detect →", {
+        "source": source,
+        "status": status,
+        "substatus": substatus,
+        "uptype": uptype,
+    })
 
     return (
-        source == "kbb instant cash offer" and
+        source in _KBB_SOURCES and
         status == "active" and
-        substatus == "new" and
-        uptype == "campaign"
+        uptype == "campaign" and
+        substatus in {"new", "working"}
     )
-
 
 def _is_assigned_to_kristin(doc: dict) -> bool:
     """
@@ -182,15 +200,25 @@ def _is_assigned_to_kristin(doc: dict) -> bool:
             return True
     return False
 
+def _parse_iso_utc(x):
+    if not x:
+        return None
+    try:
+        return _dt.fromisoformat(str(x).replace("Z", "+00:00")).astimezone(_tz.utc)
+    except Exception:
+        return None
 
 
-def checkActivities(opportunity, currDate, rooftop_name):
-    if OFFLINE_MODE:
+def checkActivities(opportunity, currDate, rooftop_name, activities_override=None):
+    if activities_override is not None:
+        activities = activities_override
+    elif OFFLINE_MODE:
         activities = opportunity.get('completedActivitiesTesting', [])
     else:
         activities = opportunity.get('completedActivities', [])
+
     activities = sortActivities(activities)
-    
+
     alreadyProcessedActivities = opportunity.get('alreadyProcessedActivities', {})
 
     # Ensure checkedDict is always a dict on the opportunity
@@ -226,12 +254,14 @@ def checkActivities(opportunity, currDate, rooftop_name):
 
         if activityName == "read email" or activityType == 20:
             fullAct = act
-            if not DEBUGMODE and not OFFLINE_MODE:
+            has_msg_body = bool(((act.get("message") or {}).get("body") or "").strip())
+            
+            if (not has_msg_body) and (not DEBUGMODE) and (not OFFLINE_MODE):
                 fullAct = get_activity_by_id_v1(activityId, token, subscription_id)
 
-            customerMsg = (fullAct.get("message") or {})
 
             # --- KBB-style normalization: top reply only + plain-text fallback ---
+            customerMsg = (fullAct.get("message") or {})
             raw_body_html = (customerMsg.get("body") or "").strip()
             customer_body = _top_reply_only(raw_body_html)
 
@@ -277,12 +307,8 @@ def checkActivities(opportunity, currDate, rooftop_name):
                 opportunity["alreadyProcessedActivities"] = apa
 
                 if not OFFLINE_MODE:
-                    es_update_with_retry(
-                        esClient,
-                        index="opportunities",
-                        id=opportunity['opportunityId'],
-                        doc=opportunity,
-                    )
+                    opportunity["followUP_date"] = None
+                    airtable_save(opportunity, extra_fields={"follow_up_at": None})
 
                 wJson(opportunity, f"jsons/process/{opportunity['opportunityId']}.json")
                 return
@@ -404,12 +430,21 @@ def checkActivities(opportunity, currDate, rooftop_name):
             
             # Decide which CTA behavior to use based on appointment state
             patti_meta = opportunity.get("patti") or {}
-            mode = patti_meta.get("mode")
+            mode = (patti_meta.get("mode") or "").strip().lower()
             
-            if mode == "scheduled":
+            sub_status = (
+                (fresh_opp.get("subStatus") or fresh_opp.get("substatus") or "")
+                or (opportunity.get("subStatus") or opportunity.get("substatus") or "")
+            ).strip().lower()
+            
+            has_booked_appt = (mode == "scheduled") or ("appointment" in sub_status) or bool(patti_meta.get("appt_due_utc"))
+            
+            if has_booked_appt:
                 body_html = rewrite_sched_cta_for_booked(body_html)
+                body_html = _ANY_SCHED_LINE_RE.sub("", body_html).strip()
             else:
                 body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+
             
             # Strip any extraneous prefs/unsubscribe footer GPT might add
             body_html = _PREFS_RE.sub("", body_html).strip()
@@ -467,17 +502,20 @@ def checkActivities(opportunity, currDate, rooftop_name):
             
                 if customer_email:
                     try:
-                        send_opportunity_email_activity(
-                            token,
-                            subscription_id,
-                            opportunity["opportunityId"],
-                            sender=rooftop_sender,
-                            recipients=[customer_email],
-                            carbon_copies=[],
+                        from patti_mailer import send_patti_email
+
+                        send_patti_email(
+                            token=token,
+                            subscription_id=subscription_id,
+                            opp_id=opportunity["opportunityId"],
+                            rooftop_name=rooftop_name,
+                            rooftop_sender=rooftop_sender,
+                            to_addr=customer_email,
                             subject=subject,
                             body_html=body_html,
-                            rooftop_name=rooftop_name,
+                            cc_addrs=[],
                         )
+
                     except Exception as e:
                         log.warning(
                             "Failed to send Patti follow-up email for opp %s: %s",
@@ -486,12 +524,7 @@ def checkActivities(opportunity, currDate, rooftop_name):
                         )
             
                 # persist updated opportunity (messages, followUP_date, etc.)
-                es_update_with_retry(
-                    esClient,
-                    index="opportunities",
-                    id=opportunity["opportunityId"],
-                    doc=opportunity,
-                )
+                airtable_save(opportunity)
             
             # write debug json + stop processing this opp for this run
             wJson(opportunity, f"jsons/process/{opportunity['opportunityId']}.json")
@@ -627,10 +660,44 @@ def processHit(hit):
     # if f"{opportunityId}.json" in already_processed:
     #     return
 
-    customer = opportunity['customer']
-    customerId = customer['id']
-
-    print("opportunityId:", opportunityId)
+    # --- Customer: tolerate missing + self-heal from Fortellis ---
+    customer = opportunity.get("customer") or {}
+    customerId = customer.get("id")
+    
+    if not customerId and not OFFLINE_MODE:
+        try:
+            fresh_opp = get_opportunity(opportunityId, token, subscription_id)
+            if isinstance(fresh_opp, dict):
+                # hydrate missing customer
+                if fresh_opp.get("customer"):
+                    opportunity["customer"] = fresh_opp.get("customer") or {}
+                    customer = opportunity["customer"]
+                    customerId = customer.get("id")
+    
+                # hydrate other commonly-missing fields
+                if fresh_opp.get("salesTeam") is not None:
+                    opportunity["salesTeam"] = fresh_opp.get("salesTeam") or []
+                if fresh_opp.get("source") is not None:
+                    opportunity["source"] = fresh_opp.get("source")
+                if fresh_opp.get("upType") is not None:
+                    opportunity["upType"] = fresh_opp.get("upType")
+                if fresh_opp.get("status") is not None:
+                    opportunity["status"] = fresh_opp.get("status")
+                if fresh_opp.get("subStatus") is not None:
+                    opportunity["subStatus"] = fresh_opp.get("subStatus")
+                if fresh_opp.get("isActive") is not None:
+                    opportunity["isActive"] = fresh_opp.get("isActive")
+    
+                # persist once so future runs are clean
+                airtable_save(opportunity)
+    
+        except Exception as e:
+            log.warning("Customer hydrate failed opp=%s err=%s", opportunityId, e)
+    
+    # final safety gate
+    if not customerId:
+        log.warning("Opp %s missing customer.id after hydrate; skipping.", opportunityId)
+        return
 
 
     # getting customer email & info
@@ -699,12 +766,9 @@ def processHit(hit):
 
         # Clear any prior transient_error now that the fetch succeeded
         if not OFFLINE_MODE:
-            es_update_with_retry(
-                esClient,
-                index="opportunities",
-                id=opportunityId,
-                doc={"patti": {"transient_error": None}}
-            )
+            opportunity.setdefault("patti", {})["transient_error"] = None
+            airtable_save(opportunity)
+
 
 
     except Exception as e:
@@ -714,24 +778,21 @@ def processHit(hit):
             # increment a lightweight failure counter using what we already have in memory
             prev = (opportunity.get("patti") or {}).get("transient_error") or {}
             fail_count = (prev.get("count") or 0) + 1
-            es_update_with_retry(
-                esClient,
-                index="opportunities",
-                id=opportunityId,
-                doc={
-                    "patti": {
-                        "transient_error": {
-                            "code": "get_opportunity_failed",
-                            "message": str(e)[:200],
-                            "at": _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                            "count": fail_count
-                        },
-                        # make sure we are NOT marking as a permanent skip
-                        "skip": False,
-                        "skip_reason": None
-                    }
-                }
-            )
+            # update in-memory opp then persist to Airtable
+            patti = opportunity.setdefault("patti", {})
+            patti["transient_error"] = {
+                "code": "get_opportunity_failed",
+                "message": str(e)[:200],
+                "at": _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "count": fail_count,
+            }
+            patti["skip"] = False
+            patti["skip_reason"] = None
+            
+            # Persist blob to Airtable (instead of ES partial update)
+            if not OFFLINE_MODE:
+                airtable_save(opportunity)   # or save_opp(opportunity)
+
         # We can’t proceed without fresh_opp; exit gracefully and let the next run retry.
         return
     
@@ -739,25 +800,25 @@ def processHit(hit):
     if not is_active_opp(fresh_opp):
         log.info("Skipping opp %s (inactive from Fortellis).", opportunityId)
         if not OFFLINE_MODE:
-            es_update_with_retry(
-                esClient,
-                index="opportunities",
-                id=opportunityId,
-                doc={
-                    "patti": {
-                        "skip": True,
-                        "skip_reason": "inactive_opportunity",
-                        # clear any transient flag since this is a definitive state
-                        "transient_error": None,
-                        "inactive_at": _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                        "inactive_snapshot": {
-                            "status": fresh_opp.get("status"),
-                            "subStatus": fresh_opp.get("subStatus"),
-                            "isActive": fresh_opp.get("isActive")
-                        }
-                    }
-                }
-            )
+            patti = opportunity.setdefault("patti", {})
+            patti["skip"] = True
+            patti["skip_reason"] = "inactive_opportunity"
+            patti["transient_error"] = None
+            patti["inactive_at"] = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            patti["inactive_snapshot"] = {
+                "status": fresh_opp.get("status"),
+                "subStatus": fresh_opp.get("subStatus"),
+                "isActive": fresh_opp.get("isActive"),
+            }
+            
+            # optional (but recommended): also mark inactive at the top level so your Due Now view stops pulling it
+            opportunity["isActive"] = False
+            
+            if not OFFLINE_MODE:
+                # also clear follow-up so it won't keep showing as due
+                opportunity["followUP_date"] = None
+                airtable_save(opportunity, extra_fields={"follow_up_at": None})
+
         return
 
     
@@ -877,45 +938,120 @@ def processHit(hit):
             tok = None
             if not OFFLINE_MODE:
                 tok = token
-    
+        
             state, action_taken = process_kbb_ico_lead(
                 opportunity=opportunity,
                 lead_age_days=lead_age_days,
                 rooftop_name=rooftop_name,
                 inquiry_text=inquiry_text_safe,
                 token=tok,
+                trigger="cron",
                 subscription_id=subscription_id,
                 SAFE_MODE=os.getenv("SAFE_MODE", "1") in ("1","true","True"),
                 rooftop_sender=rooftop_sender,
             )
-    
-            # Persist updates
-            if not OFFLINE_MODE:
-                es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
-    
+        
+            # Always persist returned state back onto opp (some versions mutate, some return)
+            if isinstance(state, dict):
+                opportunity["_kbb_state"] = state
+        
+            # -----------------------------
+            # Schedule next follow-up in Airtable (cadence only)
+            # -----------------------------
+            from kbb_cadence import CADENCE
+        
+            def _next_cadence_day(after_day: int) -> int | None:
+                days = sorted(int(d) for d in CADENCE.keys())
+                for d in days:
+                    if d > int(after_day):
+                        return d
+                return None
+        
+            now_utc = _dt.now(_tz.utc)
+        
+            mode = (state.get("mode") if isinstance(state, dict) else None) or (opportunity.get("_kbb_state") or {}).get("mode")
+        
+            # If customer engaged, stop nudges (don’t keep it "Due Now")
+            if mode == "convo":
+                # Park follow-up far out (or set inactive if you prefer)
+                opportunity["followUP_date"] = (now_utc + _td(days=365)).isoformat()
+                opportunity.setdefault("checkedDict", {})["exit_type"] = opportunity.get("checkedDict", {}).get("exit_type") or "customer_engaged"
+                log.info("KBB ICO: convo mode → parked followUP_date=%s opp=%s",
+                         opportunity["followUP_date"], opportunityId)
+        
+            else:
+                # Cadence mode: schedule next based on last_template_day_sent (preferred)
+                last_sent_day = None
+                if isinstance(state, dict):
+                    last_sent_day = state.get("last_template_day_sent")
+        
+                # Fallback to lead_age_days if state didn't update
+                anchor_day = int(last_sent_day) if isinstance(last_sent_day, int) and last_sent_day > 0 else int(lead_age_days or 0)
+        
+                next_day = _next_cadence_day(anchor_day)
+        
+                if next_day is not None:
+                    delta_days = int(next_day) - int(anchor_day)
+                    if delta_days <= 0:
+                        delta_days = 1
+        
+                    # Anchor next due on the last template send time (or last agent send), NOT "now"
+                    anchor_iso = (state.get("last_template_sent_at")
+                                  or state.get("last_agent_msg_at")
+                                  or opportunity.get("created_at"))
+                    
+                    anchor_dt = None
+                    try:
+                        if anchor_iso:
+                            anchor_dt = _dt.fromisoformat(str(anchor_iso).replace("Z", "+00:00"))
+                    except Exception:
+                        anchor_dt = None
+                    
+                    if anchor_dt is None:
+                        anchor_dt = now_utc  # fallback only if we truly have nothing
+                    
+                    next_due = (anchor_dt + _td(days=delta_days)).astimezone(_tz.utc).isoformat()
+                    
+                    # Only update if missing OR clearly wrong (prevents "rolling forward" every run)
+                    curr_due_dt = _parse_iso_utc(opportunity.get("followUP_date"))
+                    if (curr_due_dt is None) or (abs((curr_due_dt - _parse_iso_utc(next_due)).total_seconds()) > 60):
+                        opportunity["followUP_date"] = next_due
+                    
+                    log.info("KBB ICO: scheduled next followUP_date=%s opp=%s anchor_day=%s next_day=%s anchor_iso=%s",
+                             opportunity["followUP_date"], opportunityId, anchor_day, next_day, anchor_iso)
+
+                else:
+                    # No more nudges
+                    opportunity["isActive"] = False
+                    opportunity.setdefault("checkedDict", {})["exit_type"] = "cadence_complete"
+                    # optional: park the date anyway for sorting/views
+                    opportunity["followUP_date"] = (now_utc + _td(days=365)).isoformat()
+                    log.info("KBB ICO: cadence complete → set inactive opp=%s", opportunityId)
+        
             # Optional: write compact state note if we acted
             if action_taken:
                 compact = {
-                    "mode": state.get("mode"),
-                    "last_template_day_sent": state.get("last_template_day_sent"),
-                    "nudge_count": state.get("nudge_count"),
-                    "last_customer_msg_at": state.get("last_customer_msg_at"),
-                    "last_agent_msg_at": state.get("last_agent_msg_at"),
-                    "last_inbound_activity_id": state.get("last_inbound_activity_id"),
-                    "last_appt_activity_id": state.get("last_appt_activity_id"),
-                    "appt_due_utc": state.get("appt_due_utc"),
-                    "appt_due_local": state.get("appt_due_local"),
+                    "mode": state.get("mode") if isinstance(state, dict) else None,
+                    "last_template_day_sent": state.get("last_template_day_sent") if isinstance(state, dict) else None,
+                    "nudge_count": state.get("nudge_count") if isinstance(state, dict) else None,
+                    "last_customer_msg_at": state.get("last_customer_msg_at") if isinstance(state, dict) else None,
+                    "last_agent_msg_at": state.get("last_agent_msg_at") if isinstance(state, dict) else None,
                 }
                 note_txt = f"[PATTI_KBB_STATE] {json.dumps(compact, separators=(',',':'))}"
                 if not OFFLINE_MODE:
                     add_opportunity_comment(tok, subscription_id, opportunityId, note_txt)
-    
+        
+            # Persist updates (writes follow_up_at from followUP_date)
+            if not OFFLINE_MODE:
+                airtable_save(opportunity)
+        
         except Exception as e:
             log.exception("KBB ICO handler failed for opp %s: %s", opportunityId, e)
-    
+        
         # Do not fall through to general flow
         wJson(opportunity, f"jsons/process/{opportunityId}.json")
         return
+
     
     # === if we got here, proceed with the normal (non-KBB) flow ===
 
@@ -943,6 +1079,13 @@ def processHit(hit):
     # (for example, via a booking link), mirror that into Patti's state so
     # she pauses cadence nudges but continues to watch for replies.
     has_appt = _derive_appointment_from_sched_activities(opportunity)
+    patti_meta = opportunity.get("patti") or {}
+    if has_appt:
+        patti_meta["mode"] = "scheduled"
+        # if _derive_appointment_from_sched_activities returns / sets due date somewhere, store it:
+        # patti_meta["appt_due_utc"] = derived_due_utc
+        opportunity["patti"] = patti_meta
+
     
     # If we now know there’s an appointment, flip the CRM substatus in Fortellis
     if has_appt and not OFFLINE_MODE:
@@ -982,12 +1125,7 @@ def processHit(hit):
 
         if not OFFLINE_MODE:
             opportunity.pop("completedActivitiesTesting", None)
-            es_update_with_retry(
-                esClient,
-                index="opportunities",
-                id=opportunityId,
-                doc=opportunity,
-            )
+            airtable_save(opportunity)
 
         wJson(opportunity, f"jsons/process/{opportunityId}.json")
         return
@@ -995,12 +1133,7 @@ def processHit(hit):
     # normal ES cleanup when there is *no* appointment yet
     if not OFFLINE_MODE:
         opportunity.pop("completedActivitiesTesting", None)
-        es_update_with_retry(
-            esClient,
-            index="opportunities",
-            id=opportunityId,
-            doc=opportunity,
-        )
+        airtable_save(opportunity)
 
 
     # === Vehicle & SRP link =============================================
@@ -1189,32 +1322,25 @@ def processHit(hit):
 
             # --- unified opt-out check on the very first inbound ---
             from patti_common import _is_optout_text, _is_decline
-
+            
             if inquiry_text and (_is_optout_text(inquiry_text) or _is_decline(inquiry_text)):
                 log.info("❌ Customer opted out on first message. Marking inactive.")
-
-                # make sure checkedDict exists
+            
                 checkedDict = opportunity.get("checkedDict") or {}
                 checkedDict["exit_type"] = "customer_declined"
                 checkedDict["exit_reason"] = (inquiry_text or "")[:250]
                 opportunity["checkedDict"] = checkedDict
+            
                 opportunity["isActive"] = False
-
-                # mark Patti as do-not-email for this opp
+                opportunity["followUP_date"] = None    
+            
                 patti_meta = opportunity.get("patti") or {}
                 patti_meta["email_blocked_do_not_email"] = True
                 opportunity["patti"] = patti_meta
-
+            
                 if not OFFLINE_MODE:
-                    # update ES
-                    es_update_with_retry(
-                        esClient,
-                        index="opportunities",
-                        id=opportunityId,
-                        doc=opportunity
-                    )
-
-                    # update CRM (best-effort)
+                    airtable_save(opportunity, extra_fields={"follow_up_at": None})
+            
                     try:
                         from fortellis import set_opportunity_inactive, set_customer_do_not_email
                         set_opportunity_inactive(
@@ -1227,21 +1353,21 @@ def processHit(hit):
                         set_customer_do_not_email(token, subscription_id, opportunityId)
                     except Exception as e:
                         log.error(f"Failed to set CRM inactive / do-not-email: {e}")
-
-                # persist local JSON + stop processing
+            
                 wJson(opportunity, f"jsons/process/{opportunityId}.json")
                 return
-
-            # TODO: check with kristin if need to add activity logic to crm that patti will not used here
+            
             if customerFirstMsgDict.get('salesAlreadyContact', False):
                 opportunity['isActive'] = False
+                opportunity["followUP_date"] = None   
                 opportunity['checkedDict']['is_sales_contacted'] = True
                 if not OFFLINE_MODE:
-                    es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+                    airtable_save(opportunity, extra_fields={"follow_up_at": None})
 
+            
                 wJson(opportunity, f"jsons/process/{opportunityId}.json")
-
                 return
+
 
             # --- Step 3: try to auto-schedule an appointment from the inquiry text ---
             proposed = extract_appt_time(inquiry_text or "", tz="America/Los_Angeles")
@@ -1392,15 +1518,22 @@ def processHit(hit):
         body_html = normalize_patti_body(body_html)
         
         # --- patch the rooftop/address placeholders ---
-        from kbb_ico import _patch_address_placeholders, build_patti_footer, _PREFS_RE
         body_html = _patch_address_placeholders(body_html, rooftop_name)
         
         # Decide which CTA behavior to use based on appointment state
         patti_meta = opportunity.get("patti") or {}
-        mode = patti_meta.get("mode")
+        mode = (patti_meta.get("mode") or "").strip().lower()
         
-        if mode == "scheduled":
+        sub_status = (
+            (fresh_opp.get("subStatus") or fresh_opp.get("substatus") or "")
+            or (opportunity.get("subStatus") or opportunity.get("substatus") or "")
+        ).strip().lower()
+        
+        has_booked_appt = (mode == "scheduled") or ("appointment" in sub_status) or bool(patti_meta.get("appt_due_utc"))
+        
+        if has_booked_appt:
             body_html = rewrite_sched_cta_for_booked(body_html)
+            body_html = _ANY_SCHED_LINE_RE.sub("", body_html).strip()
         else:
             body_html = append_soft_schedule_sentence(body_html, rooftop_name)
         
@@ -1435,17 +1568,20 @@ def processHit(hit):
         else:
             if customer_email:
                 try:
-                    send_opportunity_email_activity(
-                        token,
-                        subscription_id,        # dealer_key
-                        opportunityId,
-                        sender=rooftop_sender,
-                        recipients=[customer_email],
-                        carbon_copies=[],
+                    from patti_mailer import send_patti_email
+                    
+                    send_patti_email(
+                        token=token,
+                        subscription_id=subscription_id,
+                        opp_id=opportunity["opportunityId"],
+                        rooftop_name=rooftop_name,
+                        rooftop_sender=rooftop_sender,
+                        to_addr=customer_email,
                         subject=subject,
                         body_html=body_html,
-                        rooftop_name=rooftop_name,
+                        cc_addrs=[],
                     )
+
                     sent_ok = True   # <-- ONLY HERE DO WE MARK SUCCESS
                 except Exception as e:
                     log.warning(
@@ -1463,14 +1599,21 @@ def processHit(hit):
         #   Only update Patti's state IF sent_ok is True
         # ---------------------------
         if sent_ok:
-            # use the initialized checkedDict from above
             checkedDict["patti_already_contacted"] = True
             checkedDict["last_msg_by"] = "patti"
             opportunity["checkedDict"] = checkedDict
         
             nextDate = currDate + _td(hours=24)
-            opportunity["followUP_date"] = nextDate.isoformat()
+            next_iso = nextDate.isoformat()
+        
+            opportunity["followUP_date"] = next_iso
             opportunity["followUP_count"] = 0
+        
+            airtable_save(
+                opportunity,
+                extra_fields={"follow_up_at": next_iso}
+            )
+
         else:
             log.warning(
                 "Did NOT mark Patti as contacted for opp %s because sendEmail failed.",
@@ -1479,7 +1622,7 @@ def processHit(hit):
 
         
         # Persist Patti state + messages into ES
-        es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+        airtable_save(opportunity)
 
     else:
         # handle follow-ups messages
@@ -1497,7 +1640,9 @@ def processHit(hit):
                 # Convert stored UTC ISO to local time for human-friendly text
                 appt_dt_utc = _dt.fromisoformat(str(appt_due_utc).replace("Z", "+00:00"))
                 # TODO: if you have per-rooftop timezones, swap this out
-                local_tz = _tz.timezone("America/Los_Angeles")
+                local_tz = ZoneInfo("America/Los_Angeles")
+                appt_dt_local = appt_dt_utc.astimezone(local_tz)
+
                 appt_dt_local = appt_dt_utc.astimezone(local_tz)
                 appt_human = fmt_local_human(appt_dt_local)
             except Exception:
@@ -1533,11 +1678,22 @@ def processHit(hit):
             from kbb_ico import _patch_address_placeholders, build_patti_footer, _PREFS_RE
             body_html = _patch_address_placeholders(body_html, rooftop_name)
 
-            mode = patti_meta.get("mode")
-            if mode == "scheduled":
+            patti_meta = opportunity.get("patti") or {}
+            mode = (patti_meta.get("mode") or "").strip().lower()
+            
+            sub_status = (
+                (fresh_opp.get("subStatus") or fresh_opp.get("substatus") or "")
+                or (opportunity.get("subStatus") or opportunity.get("substatus") or "")
+            ).strip().lower()
+            
+            has_booked_appt = (mode == "scheduled") or ("appointment" in sub_status) or bool(patti_meta.get("appt_due_utc"))
+            
+            if has_booked_appt:
                 body_html = rewrite_sched_cta_for_booked(body_html)
+                body_html = _ANY_SCHED_LINE_RE.sub("", body_html).strip()
             else:
                 body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+
 
             body_html = _PREFS_RE.sub("", body_html).strip()
             body_html = body_html + build_patti_footer(rooftop_name)
@@ -1578,17 +1734,20 @@ def processHit(hit):
 
                 if customer_email:
                     try:
-                        send_opportunity_email_activity(
-                            token,
-                            subscription_id,
-                            opportunity["opportunityId"],
-                            sender=rooftop_sender,
-                            recipients=[customer_email],
-                            carbon_copies=[],
+                        from patti_mailer import send_patti_email
+                        
+                        send_patti_email(
+                            token=token,
+                            subscription_id=subscription_id,
+                            opp_id=opportunity["opportunityId"],
+                            rooftop_name=rooftop_name,
+                            rooftop_sender=rooftop_sender,
+                            to_addr=customer_email,
                             subject=subject,
                             body_html=body_html,
-                            rooftop_name=rooftop_name,
+                            cc_addrs=[],
                         )
+
                     except Exception as e:
                         log.warning(
                             "Failed to send Patti booking-link appt confirmation for opp %s: %s",
@@ -1596,12 +1755,7 @@ def processHit(hit):
                             e,
                         )
 
-                es_update_with_retry(
-                    esClient,
-                    index="opportunities",
-                    id=opportunity["opportunityId"],
-                    doc=opportunity,
-                )
+                airtable_save(opportunity)
 
             # Debug JSON + stop this run
             wJson(opportunity, f"jsons/process/{opportunity['opportunityId']}.json")
@@ -1621,7 +1775,7 @@ def processHit(hit):
             opportunity['followUP_date'] = dt.isoformat()
             opportunity.setdefault('followUP_count', 0)
             if not OFFLINE_MODE:
-                es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+                airtable_save(opportunity)
             wJson(opportunity, f"jsons/process/{opportunityId}.json")
             return  # ⬅️ important: skip the cadence logic below for this run
         
@@ -1669,10 +1823,12 @@ def processHit(hit):
         last_by = (opportunity.get('checkedDict') or {}).get('last_msg_by', '')
         if followUP_date <= currDate and followUP_count > 3:
             opportunity['isActive'] = False
+            opportunity["followUP_date"] = None   
             if not OFFLINE_MODE:
-                es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+                airtable_save(opportunity, extra_fields={"follow_up_at": None})
             wJson(opportunity, f"jsons/process/{opportunityId}.json")
             return
+
         elif followUP_date <= currDate:
             # Use full thread history but be explicit that this is NOT a first email.
             messages = opportunity.get("messages") or []
@@ -1722,72 +1878,108 @@ def processHit(hit):
                 body_html
             )
 
-            opportunity['messages'].append(
-                {
-                    "msgFrom": "patti",
-                    "subject": subject,
-                    "body": body_html,
-                    "date": currDate,
-                    "action": response.get("action"),
-                    "notes": response.get("notes")
-                }
-            )
-
-            # TODO: fix in which line
-            opportunity['checkedDict']['last_msg_by'] = "patti"
-
-            nextDate = currDate + _td(days=1)
-            opportunity['followUP_date'] = nextDate.isoformat()
-            opportunity['followUP_count'] += 1
+            # ✅ SEND the follow-up (currently missing)
+            sent_ok = False
+            customer_email = None
+            
             if not OFFLINE_MODE:
-                es_update_with_retry(esClient, index="opportunities", id=opportunityId, doc=opportunity)
+                from patti_mailer import send_patti_email  # wrapper: Outlook send + CRM comment
+            
+                cust = opportunity.get("customer") or {}
+                emails = cust.get("emails") or []
+            
+                # pick preferred + not doNotEmail, else first not doNotEmail
+                for e in emails:
+                    if e.get("doNotEmail"):
+                        continue
+                    if e.get("isPreferred") and e.get("address"):
+                        customer_email = e["address"]
+                        break
+            
+                if not customer_email:
+                    for e in emails:
+                        if e.get("doNotEmail"):
+                            continue
+                        if e.get("address"):
+                            customer_email = e["address"]
+                            break
+            
+                if customer_email:
+                    try:
+                        send_patti_email(
+                            token=token,
+                            subscription_id=subscription_id,
+                            opp_id=opportunityId,
+                            rooftop_name=rooftop_name,
+                            rooftop_sender=rooftop_sender,
+                            to_addr=customer_email,
+                            subject=subject,
+                            body_html=body_html,
+                            cc_addrs=[],
+                        )
+                        sent_ok = True
+                    except Exception as e:
+                        log.warning("Follow-up send failed for opp %s: %s", opportunityId, e)
+            
+            # Only record + advance cadence if we actually sent (or you're in OFFLINE_MODE)
+            if sent_ok or OFFLINE_MODE:
+                opportunity.setdefault("messages", []).append(
+                    {
+                        "msgFrom": "patti",
+                        "subject": subject,
+                        "body": body_html,
+                        "date": currDate,
+                        "action": response.get("action"),
+                        "notes": response.get("notes"),
+                    }
+                )
+            
+                opportunity.setdefault("checkedDict", {})["last_msg_by"] = "patti"
+            
+                nextDate = currDate + _td(days=1)
+                next_iso = nextDate.isoformat()
+                
+                opportunity["followUP_date"] = next_iso
+                opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
+                
+                airtable_save(
+                    opportunity,
+                    extra_fields={"follow_up_at": next_iso}
+                )
+
+            
+                if not OFFLINE_MODE:
+                    airtable_save(opportunity)
     
     wJson(opportunity, f"jsons/process/{opportunityId}.json")
 
 
 # ---- Rolling ES lookback window (default 6 days) ----
-LOOKBACK_DAYS = int(os.getenv("ES_LOOKBACK_DAYS", "6"))
-
 if __name__ == "__main__":
-    # Optional single-opportunity test switch:
-    # If TEST_OPPORTUNITY_ID is set, we only process that one opp and exit.
     test_opp_id = os.getenv("TEST_OPPORTUNITY_ID", "").strip()
 
     if test_opp_id:
-        log.info(
-            "TEST_OPPORTUNITY_ID=%s set; running single-opportunity test mode",
-            test_opp_id,
-        )
-
-        # Grab the document directly from ES
-        hit = getDocByID(test_opp_id)
-
-        if not hit.get("found"):
-            log.warning(
-                "TEST_OPPORTUNITY_ID %s not found in Elasticsearch index '%s'; exiting.",
-                test_opp_id,
-                os.getenv("ELASTIC_INDEX", "opportunities"),
-            )
+        log.info("TEST_OPPORTUNITY_ID=%s set; running single-opportunity test mode", test_opp_id)
+        rec = find_by_opp_id(test_opp_id)
+        if not rec:
+            log.warning("TEST_OPPORTUNITY_ID %s not found in Airtable; exiting.", test_opp_id)
         else:
-            # getDocByID returns a doc like {"_index":..., "_id":..., "_source":{...}}
-            # processHit() already handles both hit['_source'] and bare dicts.
-            processHit(hit)
+            opp = opp_from_record(rec)
+            processHit(opp)
 
     else:
-        # Normal multi-opp behavior
         if not OFFLINE_MODE:
-            # Start date = now - LOOKBACK_DAYS (UTC), formatted YYYY-MM-DD
-            start_date = (_dt.now(_tz.utc) - _td(days=LOOKBACK_DAYS)).date().isoformat()
-            log.info("ES lookback start_date=%s (last %s days)", start_date, LOOKBACK_DAYS)
+            # pull from Airtable view instead of ES
+            records = query_view("Due Now", max_records=200)
 
-            data = getNewDataByDate(start_date)
+            for rec in records:
+                rec_id = rec.get("id")
+                token = acquire_lock(rec_id, lock_minutes=10)
+                if not token:
+                    continue
 
-            # Process ALL hits (no early exit)
-            for hit in data:
-                processHit(hit)
-        # playground drives processHit() via Flask; nothing to run here when OFFLINE_MODE=1
-
-
-    
-
-    
+                try:
+                    opp = opp_from_record(rec)
+                    processHit(opp)
+                finally:
+                    release_lock(rec_id, token)

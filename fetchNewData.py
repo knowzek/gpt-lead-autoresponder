@@ -6,7 +6,6 @@ from rooftops import get_rooftop_info
 from gpt import run_gpt
 from emailer import send_email
 import requests
-from es_resilient import es_upsert_with_retry
 
 import html as _html
 
@@ -15,7 +14,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from constants import *
-from esQuerys import esClient, isIdExist
+from airtable_store import upsert_lead, find_by_opp_id, _safe_json_dumps, opp_from_record
+
 
 DRY_RUN = int(os.getenv("DRY_RUN", "1"))  # 1 = DO NOT write to CRM, 0 = allow writes
 
@@ -54,6 +54,80 @@ def _is_assigned_to_kristin_doc(doc: dict) -> bool:
         if (fn == "kristin" and ln == "nowzek") or em in {"knowzek@pattersonautos.com","knowzek@gmail.com"}:
             return True
     return False
+
+def _merge_preserve(existing: dict, incoming: dict) -> dict:
+    """
+    Merge two opp dicts:
+      - incoming wins for normal scalar fields
+      - BUT we do not allow incoming to wipe out certain rich/nested structures
+        when it doesn't have them (or has empty shells).
+
+    Airtable is the brain: preserve cadence progress + followUP_date from existing.
+    """
+    existing = dict(existing or {})
+    incoming = dict(incoming or {})
+
+    merged = dict(existing)
+    merged.update(incoming)  # incoming wins broadly
+
+    # --- preserve customer if incoming customer is missing or "thin" ---
+    ex_cust = existing.get("customer") or {}
+    in_cust = incoming.get("customer") or {}
+
+    def _cust_has_emails(c: dict) -> bool:
+        emails = c.get("emails") or []
+        return any((e.get("address") or "").strip() for e in emails)
+
+    if ex_cust and (not in_cust or not _cust_has_emails(in_cust)):
+        merged["customer"] = ex_cust
+
+    # --- preserve offer ctx/state if missing in incoming ---
+    for k in ("_kbb_offer_ctx", "_kbb_state"):
+        if (k in existing) and (not incoming.get(k)):
+            merged[k] = existing.get(k)
+
+    # --- preserve these if incoming omitted them entirely ---
+    for k in ("checkedDict", "messages", "alreadyProcessedActivities"):
+        if (k in existing) and (k not in incoming):
+            merged[k] = existing.get(k)
+
+    # --- preserve followUP_date (Airtable is the brain) ---
+    if existing.get("followUP_date"):
+        merged["followUP_date"] = existing["followUP_date"]
+
+    # ============================================================
+    # HARD PRESERVE cadence progress (prevents Day 1 re-sends)
+    # Even if incoming has a partial/empty _kbb_state, keep Airtable's.
+    # ============================================================
+    ex_state = existing.get("_kbb_state") or {}
+    if isinstance(ex_state, dict) and ex_state:
+        merged.setdefault("_kbb_state", {})
+        if not isinstance(merged["_kbb_state"], dict):
+            merged["_kbb_state"] = {}
+
+        # If Airtable has these, they win.
+        for key in (
+            "mode",
+            "last_template_day_sent",
+            "last_template_sent_at",
+            "last_agent_msg_at",
+            "last_customer_msg_at",
+            "nudge_count",
+            "last_inbound_activity_id",
+            "last_appt_activity_id",
+            "appt_due_utc",
+            "appt_due_local",
+            "last_confirmed_due_utc",
+            "last_confirm_sent_at",
+            "last_optout_seen_at",
+            "email_blocked_do_not_email",
+        ):
+            if key in ex_state and ex_state.get(key) is not None:
+                merged["_kbb_state"][key] = ex_state.get(key)
+
+    return merged
+
+
 
 # ── Logging (compact) ────────────────────────────────────────────────
 LOG_LEVEL = os.getenv("APP_LOG_LEVEL", "INFO").upper()
@@ -193,12 +267,7 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
         docToIndex["_subscription_id"] = subscription_id  # used later when fetching activities, etc.
     
         # always present for processor
-        docToIndex.setdefault("messages", [])
-        docToIndex.setdefault("checkedDict", {
-            "patti_already_contacted": False,
-            "last_msg_by": None,
-            "is_sales_contacted": False
-        })
+        
         docToIndex.setdefault("isActive", True)
         docToIndex.setdefault("status", op.get("status") or "Active")
         docToIndex.setdefault("subStatus", op.get("subStatus") or "New")
@@ -206,15 +275,33 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
         docToIndex.setdefault("upType", op.get("upType"))
         docToIndex.setdefault("uptype", op.get("upType"))            # alias
         docToIndex["updated_at"] = now_iso
-        docToIndex.setdefault("created_at", now_iso)
         docToIndex.setdefault("tradeIns", op.get("tradeIns") or [])
         docToIndex.setdefault("salesTeam", op.get("salesTeam") or [])
         docToIndex.setdefault("soughtVehicles", op.get("soughtVehicles") or [])
     
-        # KBB: exact match only
-        if is_kbb:
-            docToIndex["followUP_date"] = now_iso  # due now (so Day 0 runs)
-            docToIndex.setdefault("_kbb_state", {
+        # default follow-up only for NON-KBB (or only when brand new)
+        if not is_kbb:
+            docToIndex.setdefault("followUP_date", (_dt.now(_tz.utc) + _td(days=1)).isoformat())
+        
+        # ---- Airtable upsert ----
+        existing_rec = find_by_opp_id(opp_id)
+        created_now = existing_rec is None
+        
+        log.info("Airtable match opp=%s exists=%s rec_id=%s", opp_id, bool(existing_rec), (existing_rec or {}).get("id"))
+        
+        if existing_rec:
+            existing_opp = opp_from_record(existing_rec)
+            docToIndex = _merge_preserve(existing_opp, docToIndex)
+        
+        # ✅ created_at ONLY for newly created records, AFTER merge
+        if created_now:
+            docToIndex["created_at"] = now_iso
+
+        
+        # ✅ only initialize KBB cadence fields when the record is NEW
+        if created_now and is_kbb:
+            docToIndex["followUP_date"] = now_iso  # due now for Day 1
+            docToIndex["_kbb_state"] = {
                 "mode": "cadence",
                 "last_template_day_sent": None,
                 "last_template_sent_at": None,
@@ -224,50 +311,80 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
                 "last_inbound_activity_id": None,
                 "last_appt_activity_id": None,
                 "appt_due_utc": None,
-                "appt_due_local": None
-            })
-        else:
-            docToIndex["followUP_date"] = (_dt.now(_tz.utc) + _td(days=1)).isoformat()
-    
-        # Single, safe upsert (no HEAD)
-        resp = es_upsert_with_retry(
-            esClient, index="opportunities", id=opp_id, document=docToIndex
-        )
-    
-        # If created now, optionally hydrate with activities and init state, then upsert again
-        if resp and resp.get("result") == "created":
-            # fetch richer customer only on create (optional)
+                "appt_due_local": None,
+            }
+
+        
+        upsert_lead(opp_id, {
+            "subscription_id": subscription_id,
+            "source": docToIndex.get("source") or "",
+            "is_active": bool(docToIndex.get("isActive", True)),
+            "follow_up_at": docToIndex.get("followUP_date"),
+            "mode": (docToIndex.get("_kbb_state") or {}).get("mode", ""),
+            "opp_json": _safe_json_dumps(docToIndex),
+        })
+        
+        # If created now, optionally hydrate customer+activities then upsert again
+        if created_now:
             if customerID:
                 try:
-                    richer = get_customer_by_url(f"{CUSTOMER_URL}/{customerID}", token, subscription_id) or {}
-                    if richer:
+                    # Prefer the exact self-link provided by the opportunity
+                    cust = op.get("customer") or {}
+                    links = cust.get("links") or []
+                    self_href = None
+                    for lk in links:
+                        if (lk.get("rel") == "self") and lk.get("href"):
+                            self_href = lk["href"]
+                            break
+            
+                    # Fallback to the known-good Sales v1 URL format
+                    if not self_href:
+                        self_href = f"{BASE_URL}/sales/v1/elead/customers/{customerID}"
+            
+                    richer = get_customer_by_url(self_href, token, subscription_id) or {}
+            
+                    # If we got a richer record, store it; otherwise keep the stub
+                    if richer and isinstance(richer, dict):
                         docToIndex["customer"] = richer
+            
+                        # Hard assertion-style log so you can SEE if emails are present
+                        has_emails = bool((richer.get("emails") or []))
+                        log.info("Customer hydrate ok opp=%s customer=%s emails=%s url=%s",
+                                 opp_id, customerID, has_emails, self_href)
+            
                 except Exception as e:
-                    log.warning("customer hydrate failed opp_id=%s err=%s", opp_id, e)
-    
+                    log.warning("customer hydrate failed opp_id=%s customer=%s err=%s", opp_id, customerID, e)
+
+        
             completedActivities = []
             try:
                 acts = get_activities(opp_id, customerID, token, subscription_id) or {}
                 completedActivities = acts.get("items") or acts.get("activities") or []
             except Exception as e:
                 log.warning("get_activities failed opp_id=%s err=%s", opp_id, e)
-    
-            init_doc = {
-                "customer": docToIndex.get("customer"),
-                "completedActivities": completedActivities,
-                "scheduledActivities": [],
-                "messages": [],
-                "alreadyProcessedActivities": {},
-                "checkedDict": {
-                    "is_sales_contacted": False,
-                    "patti_already_contacted": False,
-                    "last_msg_by": None
-                }
-            }
-            es_upsert_with_retry(  # ← write the init fields too
-                esClient, index="opportunities", id=opp_id, document=init_doc
-            )
-    
+        
+            # mirror your init_doc behavior by mutating docToIndex
+            docToIndex["completedActivities"] = completedActivities
+            
+            # ✅ do NOT overwrite; only default if missing
+            docToIndex.setdefault("scheduledActivities", [])
+            docToIndex.setdefault("messages", [])
+            docToIndex.setdefault("alreadyProcessedActivities", {})
+            docToIndex.setdefault("checkedDict", {
+                "is_sales_contacted": False,
+                "patti_already_contacted": False,
+                "last_msg_by": None,
+            })
+        
+            upsert_lead(opp_id, {
+                "subscription_id": subscription_id,
+                "source": docToIndex.get("source") or "",
+                "is_active": bool(docToIndex.get("isActive", True)),
+                "follow_up_at": docToIndex.get("followUP_date"),
+                "mode": (docToIndex.get("_kbb_state") or {}).get("mode", ""),
+                "opp_json": _safe_json_dumps(docToIndex),
+            })
+
         # keep what we’re sending for logging/return
         items.append(docToIndex)
 

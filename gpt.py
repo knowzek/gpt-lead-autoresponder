@@ -157,8 +157,47 @@ def _build_system_stack(persona: str, customer_first: str, rooftop_name: str | N
         ]
         # KBB cadence follow-ups are handled by your template scheduler, so we usually
         # do NOT include the generic follow-up generator here. Keep it optional:
+        
         if include_followup_rules:
             base.append({"role": "system", "content": _getFollowUPRules()})
+            
+        # ---- Inject concrete KBB facts so the model can actually see them ----
+        if kbb_ctx:
+            amt = kbb_ctx.get("offer_amount_usd") or kbb_ctx.get("amount_usd")
+            veh = kbb_ctx.get("vehicle")
+            url = kbb_ctx.get("offer_url")
+        
+            if amt:
+                facts_lines = [f"Kelley Blue Book® Instant Cash Offer amount: {amt}."]
+                if veh:
+                    facts_lines.append(f"Vehicle: {veh}.")
+                if url:
+                    facts_lines.append(f"Offer details URL: {url}.")
+        
+                # (1) FACTS message
+                base.append({
+                    "role": "system",
+                    "content": (
+                        "Internal KBB facts (authoritative; use to answer customer questions accurately; "
+                        "do not volunteer unless asked):\n" + " ".join(facts_lines)
+                    )
+                })
+                log.info("KBB FACTS SYSTEM MSG: %r", base[-1]["content"])
+        
+                # (2) OVERRIDE rule message
+                base.append({
+                    "role": "system",
+                    "content": (
+                        "CRITICAL OVERRIDE: If the customer asks for their KBB/ICO offer/estimate/value/amount "
+                        "and an internal KBB facts message contains a dollar amount, you MUST state that exact "
+                        "dollar amount in your reply. Do NOT say you 'don't have access' or 'can't see it' when "
+                        "the amount is provided internally. Only say you don't have the amount if no dollar amount "
+                        "is present internally."
+                    )
+                })
+
+                log.info("KBB FACTS SYSTEM MSG: %r", base[-1]["content"])
+
         return base
 
     # default "sales" persona (your current stack)
@@ -431,6 +470,11 @@ def run_gpt(prompt: str,
            
     # Build system stack (persona-aware)
     # For KBB ICO, we typically exclude generic follow-up rules because cadence uses templates.
+                
+    log.info("RUN_GPT debug: kbb_ctx keys=%s offer_amount=%r",
+         list((kbb_ctx or {}).keys()),
+         (kbb_ctx or {}).get("offer_amount_usd"))
+
     system_msgs = _build_system_stack(
         persona=persona,
         customer_first=customer_name,
@@ -438,6 +482,11 @@ def run_gpt(prompt: str,
         kbb_ctx=kbb_ctx,
         include_followup_rules=(persona != "kbb_ico")
     )
+                
+    if persona == "kbb_ico":
+        joined = "\n---\n".join([m.get("content","") for m in system_msgs if m.get("role") == "system"])
+        log.info("KBB SYSTEM STACK (trunc): %s", joined[:4000])
+
 
     # --- Tustin Kia new-location flavor (subscription c27d7f4f...) ---
     # That subscription maps to rooftop_name == "Tustin Kia" in rooftops.py.
@@ -455,6 +504,12 @@ def run_gpt(prompt: str,
         messages = system_msgs + [
             {"role": "user", "content": prompt}
         ]
+
+        import json, re
+        dump = json.dumps(messages, ensure_ascii=False)
+        log.info("RUN_GPT debug: kbb_ctx_in_messages=%s", "$27,000" in dump)
+        log.info("RUN_GPT debug: messages_preview=%s", dump[:1500])
+
         
         model_used, resp = chat_complete_with_fallback(messages, want_json=True, temperature=0.6)
         text = _safe_extract_text(resp)
@@ -485,7 +540,12 @@ def run_gpt(prompt: str,
     messages = system_msgs + [
         {"role": "user", "content": prompt}
     ]
-    
+
+    import json, re
+    dump = json.dumps(messages, ensure_ascii=False)
+    log.info("RUN_GPT debug: kbb_ctx_in_messages=%s", "$27,000" in dump)
+    log.info("RUN_GPT debug: messages_preview=%s", dump[:1500])
+
     model_used, resp = chat_complete_with_fallback(messages, want_json=True, temperature=0.6)
     text = _safe_extract_text(resp)
     if not text:
