@@ -190,18 +190,18 @@ def send_opportunity_email_activity(
         headers={"X-Opportunity-ID": opp_id},
     )
     
-    # 2) (Optional) Log back to CRM as a NOTE (visibility)
-    if token and subscription_id:
-        try:
-            preview = _clean_html(body_html)[:500]
-            add_opportunity_comment(
-                token,
-                subscription_id,
-                opp_id,
-                f"Outbound email (Patti Outlook) to {to_addr}: {subject}\n\n{preview}",
-            )
-        except Exception as e:
-            log.warning("Failed to add CRM comment for Outlook send opp=%s: %s", opp_id, e)
+  #  # 2) (Optional) Log back to CRM as a NOTE (visibility)
+  #  if token and subscription_id:
+  #      try:
+  #          preview = _clean_html(body_html)[:500]
+  #          add_opportunity_comment(
+  #              token,
+  #              subscription_id,
+  #              opp_id,
+  #              f"Outbound email (Patti Outlook) to {to_addr}: {subject}\n\n{preview}",
+  #          )
+  #      except Exception as e:
+  #          log.warning("Failed to add CRM comment for Outlook send opp=%s: %s", opp_id, e)
     
     # 3) ✅ Complete "Send Email" activity (stops response-time clock)
     if token and subscription_id:
