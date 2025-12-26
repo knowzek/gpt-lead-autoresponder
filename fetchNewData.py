@@ -61,6 +61,8 @@ def _merge_preserve(existing: dict, incoming: dict) -> dict:
       - incoming wins for normal scalar fields
       - BUT we do not allow incoming to wipe out certain rich/nested structures
         when it doesn't have them (or has empty shells).
+
+    Airtable is the brain: preserve cadence progress + followUP_date from existing.
     """
     existing = dict(existing or {})
     incoming = dict(incoming or {})
@@ -93,8 +95,38 @@ def _merge_preserve(existing: dict, incoming: dict) -> dict:
     if existing.get("followUP_date"):
         merged["followUP_date"] = existing["followUP_date"]
 
+    # ============================================================
+    # HARD PRESERVE cadence progress (prevents Day 1 re-sends)
+    # Even if incoming has a partial/empty _kbb_state, keep Airtable's.
+    # ============================================================
+    ex_state = existing.get("_kbb_state") or {}
+    if isinstance(ex_state, dict) and ex_state:
+        merged.setdefault("_kbb_state", {})
+        if not isinstance(merged["_kbb_state"], dict):
+            merged["_kbb_state"] = {}
+
+        # If Airtable has these, they win.
+        for key in (
+            "mode",
+            "last_template_day_sent",
+            "last_template_sent_at",
+            "last_agent_msg_at",
+            "last_customer_msg_at",
+            "nudge_count",
+            "last_inbound_activity_id",
+            "last_appt_activity_id",
+            "appt_due_utc",
+            "appt_due_local",
+            "last_confirmed_due_utc",
+            "last_confirm_sent_at",
+            "last_optout_seen_at",
+            "email_blocked_do_not_email",
+        ):
+            if key in ex_state and ex_state.get(key) is not None:
+                merged["_kbb_state"][key] = ex_state.get(key)
 
     return merged
+
 
 
 # ── Logging (compact) ────────────────────────────────────────────────
