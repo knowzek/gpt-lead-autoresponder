@@ -1068,12 +1068,14 @@ def processHit(hit):
         activities = {"scheduledActivities": [], "completedActivities": activities}
     
     currDate = _dt.now(_tz.utc)
+
     docToUpdate = {
         "scheduledActivities": activities.get("scheduledActivities", []),
         "completedActivities": activities.get("completedActivities", []),
-        "updated_at": currDate
+        "updated_at": currDate.strftime("%Y-%m-%dT%H:%M:%SZ")  # or currDate.isoformat()
     }
     opportunity.update(docToUpdate)
+
     
     # Best-effort: if the CRM already has a future appointment scheduled
     # (for example, via a booking link), mirror that into Patti's state so
