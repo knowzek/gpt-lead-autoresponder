@@ -457,7 +457,7 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
                 "msgFrom": "patti",
                 "subject": subject,
                 "body": body_html,
-                "date": currDate,
+                "date": currDate_iso,
                 "action": response.get("action"),
                 "notes": response.get("notes"),
             })
@@ -612,6 +612,7 @@ def _derive_appointment_from_sched_activities(opportunity, tz_name="America/Los_
 
 def processHit(hit):
     currDate = _dt.now(_tz.utc)
+    currDate_iso = currDate.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     # remove later
     global already_processed
@@ -1552,7 +1553,7 @@ def processHit(hit):
             "msgFrom": "patti",
             "subject": subject,
             "body": body_html,
-            "date": currDate
+            "date": currDate_iso
         }
         
         if "messages" in opportunity:
@@ -1704,7 +1705,7 @@ def processHit(hit):
                 "msgFrom": "patti",
                 "subject": subject,
                 "body": body_html,
-                "date": currDate,
+                "date": currDate_iso,
                 "action": response.get("action"),
                 "notes": response.get("notes"),
             })
@@ -1929,7 +1930,7 @@ def processHit(hit):
                         "msgFrom": "patti",
                         "subject": subject,
                         "body": body_html,
-                        "date": currDate,
+                        "date": currDate_iso,
                         "action": response.get("action"),
                         "notes": response.get("notes"),
                     }
