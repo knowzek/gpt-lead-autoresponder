@@ -9,6 +9,7 @@ from helpers import (
 )
 from kbb_ico import process_kbb_ico_lead 
 from kbb_ico import _top_reply_only, _is_optout_text as _kbb_is_optout_text, _is_decline as _kbb_is_decline
+from kbb_ico import _patch_address_placeholders, build_patti_footer, _PREFS_RE
 from rooftops import get_rooftop_info
 from constants import *
 from gpt import run_gpt, getCustomerMsgDict, extract_appt_time
@@ -420,7 +421,6 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
             )
 
             # --- Normalize Patti body & add CTA + footer (same as initial email) ---
-            from kbb_ico import _patch_address_placeholders, build_patti_footer, _PREFS_RE
             
             # Clean up paragraphs / bullets
             body_html = normalize_patti_body(body_html)
