@@ -1677,7 +1677,6 @@ def processHit(hit):
 
             # Normalize + patch + CTA + footer (same as other Patti emails)
             body_html = normalize_patti_body(body_html)
-            from kbb_ico import _patch_address_placeholders, build_patti_footer, _PREFS_RE
             body_html = _patch_address_placeholders(body_html, rooftop_name)
 
             patti_meta = opportunity.get("patti") or {}
