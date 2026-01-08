@@ -6,13 +6,22 @@ from datetime import datetime as _dt, timezone as _tz
 import json
 
 from rooftops import get_rooftop_info
-from fortellis import get_token, add_opportunity_comment
+from fortellis import (
+    get_token,
+    add_opportunity_comment,
+    get_opportunity,
+    search_customers_by_email,
+    get_opps_by_customer_id,
+)
+
 from kbb_ico import _top_reply_only
 from airtable_store import (
     find_by_opp_id,
-    find_by_customer_email,   # you will add this helper (below)
+    find_by_customer_email,
     opp_from_record,
     save_opp,
+    upsert_lead,
+    _safe_json_dumps,
 )
 
 
@@ -20,6 +29,63 @@ log = logging.getLogger("patti.email_ingestion")
 
 # For now we only want this running on your single test opp
 TEST_OPP_ID = "050a81e9-78d4-f011-814f-00505690ec8c"
+
+DEFAULT_SUBSCRIPTION_ID = os.getenv("DEFAULT_SUBSCRIPTION_ID")  # set this to Tustin Kia's subscription id
+
+def _resolve_subscription_id(inbound: dict, headers: dict) -> str | None:
+    # If your Flow sends it, use it.
+    sid = (
+        inbound.get("subscription_id")
+        or inbound.get("SubscriptionId")
+        or headers.get("X-Subscription-ID")
+    )
+    if sid:
+        return sid
+
+    # Otherwise fall back to deployment default (Patti@ = Tustin Kia)
+    return DEFAULT_SUBSCRIPTION_ID
+
+def _find_best_active_opp_for_email(*, shopper_email: str, token: str, subscription_id: str) -> str | None:
+    target = (shopper_email or "").strip().lower()
+    if not target:
+        return None
+
+    customers = search_customers_by_email(target, token, subscription_id, page_size=10) or []
+    if not customers:
+        return None
+
+    candidates = []
+
+    for c in customers:
+        cid = c.get("id") or c.get("customerId")
+        if not cid:
+            continue
+
+        opps = get_opps_by_customer_id(cid, token, subscription_id, page_size=100) or []
+        for o in opps:
+            status = (o.get("status") or "").strip().lower()
+            if status != "active":
+                continue
+
+            opp_id = o.get("id") or o.get("opportunityId")
+            if not opp_id:
+                continue
+
+            # pick most recently touched
+            dt_str = (
+                o.get("updatedAt")
+                or o.get("updated_at")
+                or o.get("createdAt")
+                or o.get("created_at")
+                or ""
+            )
+            candidates.append((str(dt_str), opp_id))
+
+    if not candidates:
+        return None
+
+    candidates.sort(reverse=True)
+    return candidates[0][1]
 
 
 
@@ -154,26 +220,60 @@ def process_inbound_email(inbound: dict) -> None:
         (body_text or "")[:160],
     )
 
-
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     headers = inbound.get("headers") or {}
 
-    # 1) Try direct opp id from header
-    opp_id = headers.get("X-Opportunity-ID") or None
-    
-    opportunity = None
-    
-    if opp_id:
-        rec = find_by_opp_id(opp_id)
-        if rec:
-            opportunity = opp_from_record(rec)
-    else:
-        sender_email = _extract_email(sender_raw)
-        opp_id, opportunity = _find_opportunity_by_sender(sender_email)
-    
-    if not opp_id or not opportunity:
-        log.warning("No matching opportunity found for inbound email from=%s", sender_raw)
+    # 1) find opp
+    subscription_id = _resolve_subscription_id(inbound, headers)
+    if not subscription_id:
+        log.warning("No subscription_id resolved; cannot lookup opp in Fortellis")
         return
+    
+    tok = get_token(subscription_id)
+    
+    # Prefer header opp_id if present (nice when available)
+    opp_id = headers.get("X-Opportunity-ID") or headers.get("x-opportunity-id")
+    
+    # If missing, lookup opp_id in Fortellis by sender email
+    if not opp_id:
+        sender_email = _extract_email(sender_raw)
+        opp_id = _find_best_active_opp_for_email(
+            shopper_email=sender_email,
+            token=tok,
+            subscription_id=subscription_id,
+        )
+        if not opp_id:
+            log.warning("No active opp found in Fortellis for sender=%s (sub=%s)", sender_raw, subscription_id)
+            return
+    
+    # Now try Airtable
+    rec = find_by_opp_id(opp_id)
+    if rec:
+        opportunity = opp_from_record(rec)
+    else:
+        # Bootstrap from Fortellis by opp_id, then create Airtable lead
+        opp = get_opportunity(opp_id, tok, subscription_id)
+        opp["_subscription_id"] = subscription_id
+    
+        now_iso = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
+        opp.setdefault("followUP_date", now_iso)
+    
+        upsert_lead(opp_id, {
+            "subscription_id": subscription_id,
+            "source": opp.get("source") or "",
+            "is_active": bool(opp.get("isActive", True)),
+            "follow_up_at": opp.get("followUP_date"),
+            "mode": "",
+            "opp_json": _safe_json_dumps(opp),
+        })
+    
+        rec2 = find_by_opp_id(opp_id)
+        if not rec2:
+            log.warning("Bootstrap upsert did not produce record opp=%s", opp_id)
+            return
+    
+        opportunity = opp_from_record(rec2)
+
     
     # 2) Append inbound message into the thread (in-memory)
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
