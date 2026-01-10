@@ -87,6 +87,13 @@ def _find_best_active_opp_for_email(*, shopper_email: str, token: str, subscript
     candidates.sort(reverse=True)
     return candidates[0][1]
 
+def _safe_mode_from(inbound: dict) -> bool:
+    # Prefer the PA flag
+    if inbound.get("test_mode") is True:
+        return True
+
+    # Fall back to Render env vars
+    return (os.getenv("PATTI_SAFE_MODE", "0") == "1") or (os.getenv("SAFE_MODE", "0") == "1")
 
 
 def clean_html(html: str) -> str:
@@ -314,6 +321,7 @@ def process_inbound_email(inbound: dict) -> None:
         rooftop_sender = rt.get("sender") or rt.get("patti_email") or None
 
         # Let the brain answer the customer's question immediately
+        safe_mode = _safe_mode_from(inbound)
         state, action_taken = process_kbb_ico_lead(
             opportunity=opportunity,
             lead_age_days=0,              # not important for convo replies
@@ -321,7 +329,7 @@ def process_inbound_email(inbound: dict) -> None:
             inquiry_text=body_text,       # <-- this is the customer's question
             token=tok,
             subscription_id=subscription_id,
-            SAFE_MODE=False,              # <-- allow send now
+            SAFE_MODE=safe_mode,
             rooftop_sender=rooftop_sender,
             trigger="email_webhook",        
             inbound_ts=ts,                  
