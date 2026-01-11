@@ -2076,9 +2076,9 @@ In your email:
     if inquiry_text and inquiry_text.strip():
         customer_email_text = inquiry_text
     else:
-        # minimal hint so the matcher can still try (e.g., "Honda Pilot 2021 SUV")
-        hint_bits = [str(year or "").strip(), (make or "").strip(), (model or "").strip(), (trim or "").strip()]
-        customer_email_text = " ".join([b for b in hint_bits if b]) or "SUV car"
+        # If inquiry_text is empty, feed the vehicle string as a hint
+        customer_email_text = (inquiry_text or "").strip() or clean_html(vehicle_str) or "SUV car"
+
     
     recommendation_text = ""
 
@@ -2182,6 +2182,7 @@ In your email:
     #   Only update Patti's state IF sent_ok is True
     # ---------------------------
     if sent_ok:
+        checkedDict = opportunity.get("checkedDict") or {}
         checkedDict["patti_already_contacted"] = True
         checkedDict["last_msg_by"] = "patti"
         opportunity["checkedDict"] = checkedDict
