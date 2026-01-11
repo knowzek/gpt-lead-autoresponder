@@ -10,6 +10,28 @@ from kbb_adf_ingestion import process_kbb_adf_notification
 log = logging.getLogger("patti.web")
 app = Flask(__name__)
 
+def _looks_like_kbb(inbound: dict) -> bool:
+    """
+    Conservative KBB detector. If this returns True, we DO NOT want this
+    internet-leads service touching Airtable at all.
+    """
+    subj = (inbound.get("subject") or "").lower()
+    frm = (inbound.get("from") or "").lower()
+    body = ((inbound.get("body_text") or "") + " " + (inbound.get("body_html") or "")).lower()
+
+    # Subject/body keywords commonly found in KBB ICO / offer emails
+    kbb_keywords = [
+        "kbb", "kelley blue book", "instant cash offer", "offer alert", "trade in",
+        "autotrader-tradein", "tradein@",
+    ]
+
+    # If any strong signal hits, treat as KBB.
+    for kw in kbb_keywords:
+        if kw in subj or kw in frm or kw in body:
+            return True
+
+    return False
+
 
 # -----------------------------
 #   KBB ADF Inbound Endpoint
@@ -71,6 +93,13 @@ def email_inbound():
         }
 
         log.info("📥 Incoming email: from=%s subject=%s", inbound["from"], inbound["subject"])
+
+        # ✅ Guard rail: KBB should NEVER be handled by the internet-leads service
+        if _looks_like_kbb(inbound):
+            log.warning("🛑 KBB detected on /email-inbound. Ignoring to prevent wrong Airtable routing. from=%s subject=%s",
+                        inbound["from"], inbound["subject"])
+            return jsonify({"status": "ignored", "reason": "kbb_routed_elsewhere"}), 200
+
         process_inbound_email(inbound)
 
         return jsonify({"status": "ok"}), 200
