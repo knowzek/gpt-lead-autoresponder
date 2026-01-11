@@ -101,6 +101,13 @@ def kbb_email_inbound():
 def health():
     return jsonify({"status": "ok"}), 200
 
+@app.route("/lead-notification-inbound", methods=["POST"])
+def lead_notification_inbound():
+    inbound = request.get_json(force=True) or {}
+    from email_ingestion import process_lead_notification
+    process_lead_notification(inbound)
+    return jsonify({"ok": True}), 200
+
 
 # -----------------------------
 #   Standard Email Inbound
