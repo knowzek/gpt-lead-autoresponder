@@ -202,25 +202,113 @@ def process_lead_notification(inbound: dict) -> None:
 
     # ✅ Call YOUR existing internet lead first-touch logic (the extracted helper)
     from processNewData import send_first_touch_email
-    fresh_opp = get_opportunity(opp_id, tok, subscription_id)
+    from rooftops import get_rooftop_info
 
-    safe_mode = _safe_mode_from(inbound)
-    test_recipient = inbound.get("test_email") or os.getenv("INTERNET_TEST_EMAIL")
+    fresh_opp = get_opportunity(opp_id, tok, subscription_id) or {}
 
-    send_first_touch_email(
+    # Rooftop / sender
+    rt = get_rooftop_info(subscription_id) or {}
+    rooftop_name   = rt.get("name") or rt.get("rooftop_name") or "Rooftop"
+    rooftop_sender = rt.get("sender") or rt.get("patti_email") or os.getenv("TEST_FROM") or ""
+
+    # Customer name/email (prefer CRM customer block)
+    cust = fresh_opp.get("customer") or opportunity.get("customer") or {}
+    customer_name = (
+        (cust.get("firstName") or "").strip() + " " + (cust.get("lastName") or "").strip()
+    ).strip() or "there"
+
+    customer_email = None
+    emails = cust.get("emails") or []
+    if isinstance(emails, list):
+        # preferred + not DNE
+        for e in emails:
+            if not isinstance(e, dict):
+                continue
+            if e.get("doNotEmail"):
+                continue
+            if e.get("isPreferred") and e.get("address"):
+                customer_email = e["address"]
+                break
+        # fallback
+        if not customer_email:
+            for e in emails:
+                if not isinstance(e, dict):
+                    continue
+                if e.get("doNotEmail"):
+                    continue
+                if e.get("address"):
+                    customer_email = e["address"]
+                    break
+
+    # Salesperson (best-effort)
+    salesperson = ""
+    sp = fresh_opp.get("salesperson") or fresh_opp.get("owner") or {}
+    if isinstance(sp, dict):
+        salesperson = (sp.get("name") or sp.get("fullName") or "").strip()
+    elif isinstance(sp, str):
+        salesperson = sp.strip()
+    if not salesperson:
+        salesperson = "our team"
+
+    # Vehicle string (best-effort)
+    vehicle_str = "one of our vehicles"
+    sought = fresh_opp.get("soughtVehicles") or opportunity.get("soughtVehicles") or []
+    if isinstance(sought, list) and sought:
+        primary = None
+        for v in sought:
+            if isinstance(v, dict) and v.get("isPrimary"):
+                primary = v
+                break
+        if not primary and isinstance(sought[0], dict):
+            primary = sought[0]
+
+        if primary:
+            make  = str(primary.get("make") or "").strip()
+            model = str(primary.get("model") or "").strip()
+            year  = str(primary.get("yearFrom") or primary.get("year") or "").strip()
+            trim  = str(primary.get("trim") or "").strip()
+            tmp = f"{year} {make} {model} {trim}".strip()
+            if tmp:
+                vehicle_str = tmp
+
+    # Source label for the email copy
+    source_label = (inbound.get("source") or "internet lead").strip()
+
+    # Timing
+    currDate = _dt.now(_tz.utc)
+    currDate_iso = ts  # keep inbound timestamp as the sent timestamp
+
+    # OFFLINE_MODE (however you store it)
+    OFFLINE_MODE = bool(os.getenv("OFFLINE_MODE", "").strip().lower() in ["1", "true", "yes"])
+
+    # We are NOT auto-scheduling from provider emails
+    created_appt_ok = False
+    appt_human = None
+
+    sent_ok = send_first_touch_email(
         opportunity=opportunity,
         fresh_opp=fresh_opp,
         token=tok,
         subscription_id=subscription_id,
+        rooftop_name=rooftop_name,
+        rooftop_sender=rooftop_sender,
+        customer_name=customer_name,
+        customer_email=customer_email,
+        source=source_label,
+        vehicle_str=vehicle_str,
+        salesperson=salesperson,
         inquiry_text="",  # provider emails usually don’t contain a real “question”
-        trigger="lead_notification_webhook",
-        SAFE_MODE=safe_mode,
-        test_recipient=test_recipient,
-        inbound_ts=ts,
-        inbound_subject=subject,
+        created_appt_ok=created_appt_ok,
+        appt_human=appt_human,
+        currDate=currDate,
+        currDate_iso=currDate_iso,
+        opportunityId=opp_id,
+        OFFLINE_MODE=OFFLINE_MODE,
     )
 
+    log.info("Lead notification first-touch sent_ok=%s opp=%s shopper=%s", sent_ok, opp_id, shopper_email)
     return
+
 
 
 def _safe_mode_from(inbound: dict) -> bool:
