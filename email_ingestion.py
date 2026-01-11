@@ -306,6 +306,8 @@ def process_lead_notification(inbound: dict) -> None:
         currDate_iso=currDate_iso,
         opportunityId=opp_id,
         OFFLINE_MODE=OFFLINE_MODE,
+        SAFE_MODE=safe_mode,                
+        test_recipient=test_recipient,  
     )
 
     log.info("Lead notification first-touch sent_ok=%s opp=%s shopper=%s", sent_ok, opp_id, shopper_email)
