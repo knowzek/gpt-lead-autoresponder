@@ -209,6 +209,109 @@ def _parse_iso_utc(x):
     except Exception:
         return None
 
+def process_general_lead_convo_reply(
+    *,
+    opportunity: dict,
+    inquiry_text: str,
+    token: str,
+    subscription_id: str,
+    rooftop_name: str,
+    rooftop_sender: str | None,
+    SAFE_MODE: bool,
+    test_recipient: str | None,
+    inbound_ts: str | None = None,
+    inbound_subject: str | None = None,
+):
+    """
+    Instant reply for NON-KBB leads when a customer emails back.
+    Reuses the same GPT + normalization + footer logic already used in processNewData.
+    Sends to test_recipient when SAFE_MODE is True.
+    Returns: (state_dict_or_none, action_taken_str)
+    """
+
+    customer_name = ((opportunity.get("customer") or {}).get("firstName") or "").strip() or "there"
+    messages = opportunity.get("messages") or []
+
+    prompt = f"""
+    You are Patti, a helpful internet leads assistant for {rooftop_name}.
+    Reply to the customer's latest message using the thread.
+
+    Customer's latest message:
+    \"\"\"{inquiry_text}\"\"\"
+
+    Thread (Python list of dicts):
+    {messages}
+
+    Write a short email reply. Do not include any signature/footer; it will be appended.
+    """
+
+    response = run_gpt(
+        prompt,
+        customer_name,
+        rooftop_name,
+        prevMessages=True
+    )
+    subject   = response["subject"]
+    body_html = response["body"]
+
+    body_html = normalize_patti_body(body_html)
+    body_html = _patch_address_placeholders(body_html, rooftop_name)
+
+    # If your general-lead logic has appointment/booked logic, reuse it.
+    # If not, default to soft CTA:
+    body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+
+    body_html = _PREFS_RE.sub("", body_html).strip()
+    body_html = body_html + build_patti_footer(rooftop_name)
+
+    # Persist into thread
+    opportunity.setdefault("messages", []).append({
+        "msgFrom": "patti",
+        "subject": subject,
+        "body": body_html,
+        "date": inbound_ts or _dt.now(_tz.utc).isoformat(),
+        "action": response.get("action"),
+        "notes": response.get("notes"),
+    })
+
+    # === SEND ===
+    # When SAFE_MODE: send to your test inbox, NOT the customer
+    # When not SAFE_MODE: send to customer and log/send activity as normal
+    to_addr = None
+    if SAFE_MODE:
+        to_addr = test_recipient
+    else:
+        # pull customer email from opportunity.customer.emails
+        cust = opportunity.get("customer") or {}
+        emails = cust.get("emails") or []
+        for e in emails:
+            if e.get("doNotEmail"):
+                continue
+            if e.get("isPreferred"):
+                to_addr = e.get("address")
+                break
+        if not to_addr and emails:
+            to_addr = emails[0].get("address")
+
+    if not to_addr:
+        raise ValueError("No recipient email resolved for general lead reply")
+
+    from patti_mailer import send_patti_email
+    send_patti_email(
+        token=token,
+        subscription_id=subscription_id,
+        opp_id=opportunity.get("opportunityId") or opportunity.get("id"),
+        rooftop_name=rooftop_name,
+        rooftop_sender=rooftop_sender,
+        to_addr=to_addr,
+        subject=subject,
+        body_html=body_html,
+        cc_addrs=[],
+        # if your wrapper supports flags, pass safe/test metadata here
+    )
+
+    return ({"mode": "convo", "last_customer_msg_at": inbound_ts}, "replied_general_convo")
+
 
 def checkActivities(opportunity, currDate, rooftop_name, activities_override=None):
     if activities_override is not None:
