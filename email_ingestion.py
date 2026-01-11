@@ -116,6 +116,11 @@ def process_lead_notification(inbound: dict) -> None:
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     headers = inbound.get("headers") or {}
 
+    log.info("DEBUG inbound.subscription_id=%r inbound.subscriptionId=%r",
+         inbound.get("subscription_id"),
+         inbound.get("subscriptionId"))
+
+
     subscription_id = _resolve_subscription_id(inbound, headers)
     if not subscription_id:
         log.warning("No subscription_id resolved; cannot process lead notification")
