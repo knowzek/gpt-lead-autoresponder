@@ -201,13 +201,13 @@ def process_lead_notification(inbound: dict) -> None:
     save_opp(opportunity)
 
     # ✅ Call YOUR existing internet lead first-touch logic (the extracted helper)
-    from processNewData import send_first_touch_now
+    from processNewData import send_first_touch_email
     fresh_opp = get_opportunity(opp_id, tok, subscription_id)
 
     safe_mode = _safe_mode_from(inbound)
     test_recipient = inbound.get("test_email") or os.getenv("INTERNET_TEST_EMAIL")
 
-    send_first_touch_now(
+    send_first_touch_email(
         opportunity=opportunity,
         fresh_opp=fresh_opp,
         token=tok,
