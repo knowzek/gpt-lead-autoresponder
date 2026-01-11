@@ -260,8 +260,6 @@ def process_inbound_email(inbound: dict) -> None:
     else:
         # Bootstrap from Fortellis by opp_id, then create Airtable lead
         opp = get_opportunity(opp_id, tok, subscription_id)
-        source = (opportunity.get("source") or opportunity.get("opp_json", {}).get("source") or "").lower()
-        is_kbb = ("kbb" in source) or ("kelley blue book" in source) or ("instant cash offer" in source)
 
         opp["_subscription_id"] = subscription_id
     
@@ -283,6 +281,16 @@ def process_inbound_email(inbound: dict) -> None:
             return
     
         opportunity = opp_from_record(rec2)
+        
+    source = (opportunity.get("source") or "").lower()
+    # if opp_json is a dict in your normalized object, include it too:
+    try:
+        source2 = (opportunity.get("opp_json", {}) or {}).get("source", "")
+    except Exception:
+        source2 = ""
+    source = (source + " " + str(source2)).lower()
+    
+    is_kbb = ("kbb" in source) or ("kelley blue book" in source) or ("instant cash offer" in source)
 
     
     # 2) Append inbound message into the thread (in-memory)
@@ -333,7 +341,6 @@ def process_inbound_email(inbound: dict) -> None:
         safe_mode = _safe_mode_from(inbound)
 
         if is_kbb:
-            from kbb_ico import process_kbb_ico_lead
             state, action_taken = process_kbb_ico_lead(
                 opportunity=opportunity,
                 lead_age_days=0,
