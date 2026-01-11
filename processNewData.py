@@ -1526,210 +1526,31 @@ def processHit(hit):
                         e,
                     )
 
+        # Fallback inquiry text so we can still email even if parsing failed
+        if not inquiry_text:
+            inquiry_text = (opportunity.get("inquiry_text_body") or "").strip() or None
 
-
-        # === Compose with GPT ===============================================
-        fallback_mode = not inquiry_text or inquiry_text.strip().lower() in ["", "request a quote", "interested", "info", "information", "looking"]
-
-        if fallback_mode:
-            prompt = f"""
-        Your job is to write personalized, dealership-branded emails from Patti, a friendly virtual assistant.
-        The guest submitted a lead through {source}. They’re interested in: {vehicle_str}. Salesperson: {salesperson}
-        They didn’t leave a detailed message.
-
-        Please write a warm, professional email reply that:
-        - Begin with exactly `Hi {customer_name},`
-        - Start with 1–2 appealing vehicle features or dealership Why Buys
-        - Welcome the guest and highlight our helpfulness
-        - Invite specific questions or preferences
-        - Mention the salesperson by name
-
-        Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
-
-        """
-        else:
-            prompt = f"""
-        Your job is to write personalized, dealership-branded emails from Patti, a friendly virtual assistant.
-
-        When writing:
-        - Begin with exactly `Hi {customer_name},`
-        - Lead with value (features / Why Buy)
-        - If a specific vehicle is mentioned, answer directly and link if possible
-        - If a specific question exists, answer it first
-        - Include the salesperson’s name
-        - Keep it warm, clear, and human
-
-        Info (may None):
-        - salesperson’s name: {salesperson}
-        - vehicle: {vehicle_str}
-
-
-        Guest inquiry:
-        \"\"\"{inquiry_text}\"\"\"
-
-        Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
-        """
-            
-        # --- NEW: if Patti auto-scheduled an appointment, tell GPT to confirm it ---
-        if created_appt_ok and appt_human:
-            prompt += f"""
-
-    IMPORTANT APPOINTMENT CONTEXT (do not skip):
-    - The guest proposed a time and Patti already scheduled a dealership appointment for {appt_human}.
-    
-    In your email:
-    - Clearly confirm that date and time in plain language.
-    - Thank them for scheduling.
-    - Invite them to reply if they need to adjust the time or have any questions.
-    - Do NOT ask them to pick a time; the appointment is already scheduled. Focus on confirming it.
-    """
-            
-        # === Inventory recommendations =====================================
-
-        # Get live inventory XML
-        # NOTE: when you need to use just uncomment and uncomment in import section also
-        # try:
-        #     inventory_xml = get_vehicle_inventory_xml("Patterson2", "FjX^PGwk63", "ZE", "ZE7")
-        # except Exception as e:
-        #     # log.warning(f"❌ Could not retrieve inventory XML: {e}")
-        #     inventory_xml = None
-
-        # 🔁 Use the same inquiry text you already computed.
-        # If it's empty (fallback mode), feed a lightweight hint from the parsed vehicle fields.
-        if inquiry_text and inquiry_text.strip():
-            customer_email_text = inquiry_text
-        else:
-            # minimal hint so the matcher can still try (e.g., "Honda Pilot 2021 SUV")
-            hint_bits = [str(year or "").strip(), (make or "").strip(), (model or "").strip(), (trim or "").strip()]
-            customer_email_text = " ".join([b for b in hint_bits if b]) or "SUV car"
+        sent_ok = send_first_touch_email(
+            opportunity=opportunity,
+            fresh_opp=fresh_opp,
+            token=token,
+            subscription_id=subscription_id,
+            rooftop_name=rooftop_name,
+            rooftop_sender=rooftop_sender,
+            customer_name=customer_name,
+            customer_email=customer_email,
+            source=source,
+            vehicle_str=vehicle_str,
+            salesperson=salesperson,
+            inquiry_text=inquiry_text,
+            created_appt_ok=created_appt_ok,
+            appt_human=appt_human,
+            currDate=currDate,
+            currDate_iso=currDate_iso,
+            opportunityId=opportunityId,
+            OFFLINE_MODE=OFFLINE_MODE,
+        )
         
-        recommendation_text = ""
-
-        # NOTE: (cont with line: 523)when you need to use just uncomment and uncomment in import section also
-        # if inventory_xml:
-        #     try:
-        #         recommendation_text = recommend_from_xml(inventory_xml, customer_email_text).strip()
-        #         if recommendation_text:
-        #             prompt += f"\n\nInventory suggestions to include:\n{recommendation_text}\n"
-        #             # log.info("✅ Added inventory suggestions to prompt.")
-        #     except Exception as e:
-        #         pass
-        #         # log.warning(f"Recommendation failed: {e}")
-            
-        response  = run_gpt(prompt, customer_name, rooftop_name)
-        subject   = response["subject"]
-        body_html = response["body"]
-        
-        # --- Normalize Patti body ---
-        body_html = normalize_patti_body(body_html)
-        
-        # --- patch the rooftop/address placeholders ---
-        body_html = _patch_address_placeholders(body_html, rooftop_name)
-        
-        # Decide which CTA behavior to use based on appointment state
-        patti_meta = opportunity.get("patti") or {}
-        mode = (patti_meta.get("mode") or "").strip().lower()
-        
-        sub_status = (
-            (fresh_opp.get("subStatus") or fresh_opp.get("substatus") or "")
-            or (opportunity.get("subStatus") or opportunity.get("substatus") or "")
-        ).strip().lower()
-        
-        has_booked_appt = (mode == "scheduled") or ("appointment" in sub_status) or bool(patti_meta.get("appt_due_utc"))
-        
-        if has_booked_appt:
-            body_html = rewrite_sched_cta_for_booked(body_html)
-            body_html = _ANY_SCHED_LINE_RE.sub("", body_html).strip()
-        else:
-            body_html = append_soft_schedule_sentence(body_html, rooftop_name)
-        
-        # Strip GPT footer if added
-        body_html = _PREFS_RE.sub("", body_html).strip()
-        
-        # --- add Patti’s signature/footer (same as KBB) ---
-        body_html = body_html + build_patti_footer(rooftop_name)
-        
-        opportunity["body_html"] = body_html
-        
-        # Append message to opportunity log
-        msg_entry = {
-            "msgFrom": "patti",
-            "subject": subject,
-            "body": body_html,
-            "date": currDate_iso
-        }
-        
-        if "messages" in opportunity:
-            opportunity["messages"].append(msg_entry)
-        else:
-            opportunity["messages"] = [msg_entry]
-        
-        # ---------------------------
-        #   FIX: Only mark as sent if actual success
-        # ---------------------------
-        sent_ok = False
-        
-        if OFFLINE_MODE:
-            sent_ok = True
-        else:
-            if customer_email:
-                try:
-                    from patti_mailer import send_patti_email
-                    
-                    send_patti_email(
-                        token=token,
-                        subscription_id=subscription_id,
-                        opp_id=opportunity["opportunityId"],
-                        rooftop_name=rooftop_name,
-                        rooftop_sender=rooftop_sender,
-                        to_addr=customer_email,
-                        subject=subject,
-                        body_html=body_html,
-                        cc_addrs=[],
-                    )
-
-                    sent_ok = True   # <-- ONLY HERE DO WE MARK SUCCESS
-                except Exception as e:
-                    log.warning(
-                        "Failed to send Patti general lead email for opp %s: %s",
-                        opportunityId,
-                        e,
-                    )
-            else:
-                log.warning(
-                    "No customer_email for opp %s – cannot send Patti general lead email.",
-                    opportunityId,
-                )
-        
-        # ---------------------------
-        #   Only update Patti's state IF sent_ok is True
-        # ---------------------------
-        if sent_ok:
-            checkedDict["patti_already_contacted"] = True
-            checkedDict["last_msg_by"] = "patti"
-            opportunity["checkedDict"] = checkedDict
-        
-            nextDate = currDate + _td(hours=24)
-            next_iso = nextDate.isoformat()
-        
-            opportunity["followUP_date"] = next_iso
-            opportunity["followUP_count"] = 0
-        
-            airtable_save(
-                opportunity,
-                extra_fields={"follow_up_at": next_iso}
-            )
-
-        else:
-            log.warning(
-                "Did NOT mark Patti as contacted for opp %s because sendEmail failed.",
-                opportunityId,
-            )
-
-        
-        # Persist Patti state + messages into ES
-        airtable_save(opportunity)
-
     else:
         # handle follow-ups messages
         checkActivities(opportunity, currDate, rooftop_name)
@@ -2057,6 +1878,456 @@ def processHit(hit):
                     airtable_save(opportunity)
     
     wJson(opportunity, f"jsons/process/{opportunityId}.json")
+
+def _build_email_context(*, opportunity: dict, fresh_opp: dict, subscription_id: str, token: str | None):
+    """
+    Reuse the exact same context derivation processHit uses:
+    - customer_name, customer_email
+    - salesperson
+    - rooftop_name, rooftop_sender
+    - vehicle_str
+    - source/sub_source/dealership
+    """
+    # --- Customer ---
+    customer = opportunity.get("customer") or {}
+    customer_name = customer.get("firstName") or "there"
+
+    # customer email (preferred, not doNotEmail)
+    customer_emails = customer.get("emails", []) or []
+    customer_email = None
+    for e in customer_emails:
+        if e.get("doNotEmail") or not e.get("isPreferred"):
+            continue
+        customer_email = e.get("address")
+        break
+    if not customer_email:
+        for e in customer_emails:
+            if e.get("doNotEmail"):
+                continue
+            if e.get("address"):
+                customer_email = e.get("address")
+                break
+
+    # --- Salesperson ---
+    salesTeam = opportunity.get("salesTeam") or []
+    if not isinstance(salesTeam, list):
+        salesTeam = []
+
+    salesPersonObj = None
+    for s in salesTeam:
+        if not isinstance(s, dict):
+            continue
+        if str(s.get("isPrimary")).lower() in ("true", "1", "yes"):
+            salesPersonObj = s
+            break
+    if not isinstance(salesPersonObj, dict):
+        salesPersonObj = (salesTeam[0] if salesTeam and isinstance(salesTeam[0], dict) else {})
+
+    first_name = (salesPersonObj.get("firstName") or "").strip()
+    last_name  = (salesPersonObj.get("lastName") or "").strip()
+    full_name  = (f"{first_name} {last_name}").strip()
+
+    salesperson = (
+        SALES_PERSON_MAP.get(first_name)
+        or SALES_PERSON_MAP.get(full_name)
+        or full_name
+        or "our team"
+    )
+
+    # --- Rooftop ---
+    rt = get_rooftop_info(subscription_id) or {}
+    rooftop_name   = rt.get("name")   or "Patterson Auto Group"
+    rooftop_sender = rt.get("sender") or TEST_FROM
+
+    # --- Vehicle ---
+    soughtVehicles = opportunity.get("soughtVehicles") or []
+    if not isinstance(soughtVehicles, list):
+        soughtVehicles = []
+
+    vehicleObj = None
+    for v in soughtVehicles:
+        if v.get("isPrimary"):
+            vehicleObj = v
+            break
+    if not vehicleObj:
+        vehicleObj = (soughtVehicles[0] if soughtVehicles and isinstance(soughtVehicles[0], dict) else {})
+
+    make  = str(vehicleObj.get("make") or "")
+    model = str(vehicleObj.get("model") or "")
+    year  = str(vehicleObj.get("yearFrom") or vehicleObj.get("year") or "")
+    trim  = str(vehicleObj.get("trim") or "")
+
+    vehicle_str = f"{year} {make} {model} {trim}".strip() or "one of our vehicles"
+
+    # linkify if possible (same as processHit)
+    dealership = rooftop_name  # keep it simple here; your mapping logic can be added if needed
+    base_url = DEALERSHIP_URL_MAP.get(dealership)
+    if base_url and (make and model):
+        vehicle_str = f'<a href="{base_url}?make={make}&model={model}">{vehicle_str}</a>'
+
+    source = opportunity.get("source", "") or (fresh_opp.get("source") or "")
+    sub_source = opportunity.get("subSource", "") or (fresh_opp.get("subSource") or "")
+
+    return {
+        "customer_name": customer_name,
+        "customer_email": customer_email,
+        "salesperson": salesperson,
+        "rooftop_name": rooftop_name,
+        "rooftop_sender": rooftop_sender,
+        "vehicle_str": vehicle_str,
+        "source": source,
+        "sub_source": sub_source,
+    }
+    
+def send_first_touch_email(
+    *,
+    opportunity: dict,
+    fresh_opp: dict,
+    token: str,
+    subscription_id: str,
+    rooftop_name: str,
+    rooftop_sender: str,
+    customer_name: str,
+    customer_email: str | None,
+    source: str,
+    vehicle_str: str,
+    salesperson: str,
+    inquiry_text: str | None,
+    created_appt_ok: bool,
+    appt_human: str | None,
+    currDate,
+    currDate_iso: str,
+    opportunityId: str,
+    OFFLINE_MODE: bool,
+) -> bool:
+    """
+    Returns sent_ok (True only if actually sent or OFFLINE_MODE).
+    Mutates opportunity in-place like your existing code.
+    """
+
+    # === Compose with GPT ===============================================
+    fallback_mode = not inquiry_text or inquiry_text.strip().lower() in ["", "request a quote", "interested", "info", "information", "looking"]
+
+    if fallback_mode:
+        prompt = f"""
+    Your job is to write personalized, dealership-branded emails from Patti, a friendly virtual assistant.
+    The guest submitted a lead through {source}. They’re interested in: {vehicle_str}. Salesperson: {salesperson}
+    They didn’t leave a detailed message.
+
+    Please write a warm, professional email reply that:
+    - Begin with exactly `Hi {customer_name},`
+    - Start with 1–2 appealing vehicle features or dealership Why Buys
+    - Welcome the guest and highlight our helpfulness
+    - Invite specific questions or preferences
+    - Mention the salesperson by name
+
+    Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
+
+    """
+    else:
+        prompt = f"""
+    Your job is to write personalized, dealership-branded emails from Patti, a friendly virtual assistant.
+
+    When writing:
+    - Begin with exactly `Hi {customer_name},`
+    - Lead with value (features / Why Buy)
+    - If a specific vehicle is mentioned, answer directly and link if possible
+    - If a specific question exists, answer it first
+    - Include the salesperson’s name
+    - Keep it warm, clear, and human
+
+    Info (may None):
+    - salesperson’s name: {salesperson}
+    - vehicle: {vehicle_str}
+
+
+    Guest inquiry:
+    \"\"\"{inquiry_text}\"\"\"
+
+    Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
+    """
+        
+    # --- NEW: if Patti auto-scheduled an appointment, tell GPT to confirm it ---
+    if created_appt_ok and appt_human:
+        prompt += f"""
+
+IMPORTANT APPOINTMENT CONTEXT (do not skip):
+- The guest proposed a time and Patti already scheduled a dealership appointment for {appt_human}.
+
+In your email:
+- Clearly confirm that date and time in plain language.
+- Thank them for scheduling.
+- Invite them to reply if they need to adjust the time or have any questions.
+- Do NOT ask them to pick a time; the appointment is already scheduled. Focus on confirming it.
+"""
+        
+    # === Inventory recommendations =====================================
+
+    # Get live inventory XML
+    # NOTE: when you need to use just uncomment and uncomment in import section also
+    # try:
+    #     inventory_xml = get_vehicle_inventory_xml("Patterson2", "FjX^PGwk63", "ZE", "ZE7")
+    # except Exception as e:
+    #     # log.warning(f"❌ Could not retrieve inventory XML: {e}")
+    #     inventory_xml = None
+
+    # 🔁 Use the same inquiry text you already computed.
+    # If it's empty (fallback mode), feed a lightweight hint from the parsed vehicle fields.
+    if inquiry_text and inquiry_text.strip():
+        customer_email_text = inquiry_text
+    else:
+        # minimal hint so the matcher can still try (e.g., "Honda Pilot 2021 SUV")
+        hint_bits = [str(year or "").strip(), (make or "").strip(), (model or "").strip(), (trim or "").strip()]
+        customer_email_text = " ".join([b for b in hint_bits if b]) or "SUV car"
+    
+    recommendation_text = ""
+
+    # NOTE: (cont with line: 523)when you need to use just uncomment and uncomment in import section also
+    # if inventory_xml:
+    #     try:
+    #         recommendation_text = recommend_from_xml(inventory_xml, customer_email_text).strip()
+    #         if recommendation_text:
+    #             prompt += f"\n\nInventory suggestions to include:\n{recommendation_text}\n"
+    #             # log.info("✅ Added inventory suggestions to prompt.")
+    #     except Exception as e:
+    #         pass
+    #         # log.warning(f"Recommendation failed: {e}")
+        
+    response  = run_gpt(prompt, customer_name, rooftop_name)
+    subject   = response["subject"]
+    body_html = response["body"]
+    
+    # --- Normalize Patti body ---
+    body_html = normalize_patti_body(body_html)
+    
+    # --- patch the rooftop/address placeholders ---
+    body_html = _patch_address_placeholders(body_html, rooftop_name)
+    
+    # Decide which CTA behavior to use based on appointment state
+    patti_meta = opportunity.get("patti") or {}
+    mode = (patti_meta.get("mode") or "").strip().lower()
+    
+    sub_status = (
+        (fresh_opp.get("subStatus") or fresh_opp.get("substatus") or "")
+        or (opportunity.get("subStatus") or opportunity.get("substatus") or "")
+    ).strip().lower()
+    
+    has_booked_appt = (mode == "scheduled") or ("appointment" in sub_status) or bool(patti_meta.get("appt_due_utc"))
+    
+    if has_booked_appt:
+        body_html = rewrite_sched_cta_for_booked(body_html)
+        body_html = _ANY_SCHED_LINE_RE.sub("", body_html).strip()
+    else:
+        body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+    
+    # Strip GPT footer if added
+    body_html = _PREFS_RE.sub("", body_html).strip()
+    
+    # --- add Patti’s signature/footer (same as KBB) ---
+    body_html = body_html + build_patti_footer(rooftop_name)
+    
+    opportunity["body_html"] = body_html
+    
+    # Append message to opportunity log
+    msg_entry = {
+        "msgFrom": "patti",
+        "subject": subject,
+        "body": body_html,
+        "date": currDate_iso
+    }
+    
+    if "messages" in opportunity:
+        opportunity["messages"].append(msg_entry)
+    else:
+        opportunity["messages"] = [msg_entry]
+    
+    # ---------------------------
+    #   FIX: Only mark as sent if actual success
+    # ---------------------------
+    sent_ok = False
+    
+    if OFFLINE_MODE:
+        sent_ok = True
+    else:
+        if customer_email:
+            try:
+                from patti_mailer import send_patti_email
+                
+                send_patti_email(
+                    token=token,
+                    subscription_id=subscription_id,
+                    opp_id=opportunity["opportunityId"],
+                    rooftop_name=rooftop_name,
+                    rooftop_sender=rooftop_sender,
+                    to_addr=customer_email,
+                    subject=subject,
+                    body_html=body_html,
+                    cc_addrs=[],
+                )
+
+                sent_ok = True   # <-- ONLY HERE DO WE MARK SUCCESS
+            except Exception as e:
+                log.warning(
+                    "Failed to send Patti general lead email for opp %s: %s",
+                    opportunityId,
+                    e,
+                )
+        else:
+            log.warning(
+                "No customer_email for opp %s – cannot send Patti general lead email.",
+                opportunityId,
+            )
+    
+    # ---------------------------
+    #   Only update Patti's state IF sent_ok is True
+    # ---------------------------
+    if sent_ok:
+        checkedDict["patti_already_contacted"] = True
+        checkedDict["last_msg_by"] = "patti"
+        opportunity["checkedDict"] = checkedDict
+    
+        nextDate = currDate + _td(hours=24)
+        next_iso = nextDate.isoformat()
+    
+        opportunity["followUP_date"] = next_iso
+        opportunity["followUP_count"] = 0
+    
+        airtable_save(
+            opportunity,
+            extra_fields={"follow_up_at": next_iso}
+        )
+
+    else:
+        log.warning(
+            "Did NOT mark Patti as contacted for opp %s because sendEmail failed.",
+            opportunityId,
+        )
+
+    
+    # Persist Patti state + messages into ES
+    airtable_save(opportunity)
+
+
+    return sent_ok
+
+
+def send_thread_reply_now(
+    *,
+    opportunity: dict,
+    fresh_opp: dict,
+    token: str | None,
+    subscription_id: str,
+    trigger: str = "webhook_reply",
+    SAFE_MODE: bool = False,
+    test_recipient: str | None = None,
+    inbound_ts: str | None = None,
+    inbound_subject: str | None = None,
+) -> tuple[bool, dict]:
+    currDate = _dt.now(_tz.utc)
+    currDate_iso = currDate.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    opportunityId = opportunity.get("opportunityId") or opportunity.get("id")
+    checkedDict = opportunity.get("checkedDict", {}) or {}
+
+    ctx = _build_email_context(opportunity=opportunity, fresh_opp=fresh_opp, subscription_id=subscription_id, token=token)
+    customer_name   = ctx["customer_name"]
+    customer_email  = ctx["customer_email"]
+    rooftop_name    = ctx["rooftop_name"]
+    rooftop_sender  = ctx["rooftop_sender"]
+    vehicle_str     = ctx["vehicle_str"]
+
+    messages = opportunity.get("messages") or []
+
+    prompt = f"""
+You are replying to an ACTIVE email thread (not a first welcome message).
+
+Context:
+- The guest originally inquired about: {vehicle_str}
+
+Use the full message history below, then write Patti’s next reply that answers
+the customer’s latest question. Keep it warm, direct, and helpful.
+
+messages between Patti and the customer (python list of dicts):
+{messages}
+
+Return ONLY valid JSON with keys: subject, body.
+""".strip()
+
+    response = run_gpt(prompt, customer_name, rooftop_name, prevMessages=True)
+    subject   = response["subject"]
+    body_html = response["body"]
+
+    body_html = normalize_patti_body(body_html)
+    body_html = _patch_address_placeholders(body_html, rooftop_name)
+
+    # CTA rules (same as elsewhere)
+    patti_meta = opportunity.get("patti") or {}
+    mode = (patti_meta.get("mode") or "").strip().lower()
+    sub_status = (
+        (fresh_opp.get("subStatus") or fresh_opp.get("substatus") or "")
+        or (opportunity.get("subStatus") or opportunity.get("substatus") or "")
+    ).strip().lower()
+    has_booked_appt = (mode == "scheduled") or ("appointment" in sub_status) or bool(patti_meta.get("appt_due_utc"))
+
+    if has_booked_appt:
+        body_html = rewrite_sched_cta_for_booked(body_html)
+        body_html = _ANY_SCHED_LINE_RE.sub("", body_html).strip()
+    else:
+        body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+
+    body_html = _PREFS_RE.sub("", body_html).strip()
+    body_html = body_html + build_patti_footer(rooftop_name)
+
+    opportunity.setdefault("messages", []).append({
+        "msgFrom": "patti",
+        "subject": subject,
+        "body": body_html,
+        "date": currDate_iso,
+        "action": response.get("action"),
+        "notes": response.get("notes"),
+        "trigger": trigger,
+        "inbound_subject": inbound_subject,
+        "inbound_ts": inbound_ts,
+    })
+
+    to_addr = customer_email
+    if SAFE_MODE and test_recipient:
+        to_addr = test_recipient
+
+    sent_ok = False
+    if OFFLINE_MODE:
+        sent_ok = True
+    else:
+        if to_addr:
+            try:
+                from patti_mailer import send_patti_email
+                send_patti_email(
+                    token=token,
+                    subscription_id=subscription_id,
+                    opp_id=opportunityId,
+                    rooftop_name=rooftop_name,
+                    rooftop_sender=rooftop_sender,
+                    to_addr=to_addr,
+                    subject=subject,
+                    body_html=body_html,
+                    cc_addrs=[],
+                )
+                sent_ok = True
+            except Exception as e:
+                log.warning("Thread reply send failed opp %s: %s", opportunityId, e)
+
+    if sent_ok:
+        checkedDict["last_msg_by"] = "patti"
+        opportunity["checkedDict"] = checkedDict
+        # Important: on real customer engagement, you may want to “pause” nudges:
+        # keep your existing behavior OR park followUP_date.
+        if not OFFLINE_MODE:
+            airtable_save(opportunity)
+
+    if not OFFLINE_MODE:
+        airtable_save(opportunity)
+
+    return sent_ok, opportunity
 
 
 # ---- Rolling ES lookback window (default 6 days) ----
