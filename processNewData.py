@@ -2160,7 +2160,7 @@ In your email:
                 send_patti_email(
                     token=token,
                     subscription_id=subscription_id,
-                    opp_id=opportunity["opportunityId"],
+                    opp_id=opportunity.get("opportunityId") or opportunity.get("id") or opportunityId,
                     rooftop_name=rooftop_name,
                     rooftop_sender=rooftop_sender,
                     to_addr=customer_email,
