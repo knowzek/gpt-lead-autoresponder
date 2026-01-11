@@ -87,6 +87,114 @@ def _find_best_active_opp_for_email(*, shopper_email: str, token: str, subscript
     candidates.sort(reverse=True)
     return candidates[0][1]
 
+EMAIL_RE = re.compile(r"([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})", re.I)
+
+def _extract_shopper_email_from_provider(body_text: str) -> str | None:
+    body_text = body_text or ""
+    m = re.search(r"(?im)^\s*email\s*:\s*([^\s<]+@[^\s<]+)\s*$", body_text)
+    if m:
+        return m.group(1).strip().lower()
+
+    # fallback: pick first email that isn't the sender/provider
+    candidates = [e.lower() for e in EMAIL_RE.findall(body_text)]
+    block = {"noreplylead@carfax.com", "salesleads@cars.com", "reply@messages.kbb.com", "patti@pattersonautos.com"}
+    for e in candidates:
+        if e in block:
+            continue
+        if "carfax" in e or "cars.com" in e:
+            continue
+        return e
+    return None
+
+
+def process_lead_notification(inbound: dict) -> None:
+    subject = inbound.get("subject") or ""
+    body_html = inbound.get("body_html") or ""
+    raw_text = inbound.get("body_text") or clean_html(body_html)
+    body_text = (raw_text or "").strip()
+
+    ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
+    headers = inbound.get("headers") or {}
+
+    subscription_id = _resolve_subscription_id(inbound, headers)
+    if not subscription_id:
+        log.warning("No subscription_id resolved; cannot process lead notification")
+        return
+
+    tok = get_token(subscription_id)
+
+    shopper_email = _extract_shopper_email_from_provider(body_text)
+    if not shopper_email:
+        log.warning("No shopper email found in provider lead email. subj=%r", subject[:120])
+        return
+
+    opp_id = _find_best_active_opp_for_email(
+        shopper_email=shopper_email,
+        token=tok,
+        subscription_id=subscription_id,
+    )
+    if not opp_id:
+        log.warning("No active opp found for shopper=%s subj=%r", shopper_email, subject[:120])
+        return
+
+    # Airtable bootstrap
+    rec = find_by_opp_id(opp_id)
+    if rec:
+        opportunity = opp_from_record(rec)
+    else:
+        opp = get_opportunity(opp_id, tok, subscription_id)
+        opp["_subscription_id"] = subscription_id
+        now_iso = ts
+        opp.setdefault("followUP_date", now_iso)
+        upsert_lead(opp_id, {
+            "subscription_id": subscription_id,
+            "source": opp.get("source") or "",
+            "is_active": bool(opp.get("isActive", True)),
+            "follow_up_at": opp.get("followUP_date"),
+            "mode": "",
+            "opp_json": _safe_json_dumps(opp),
+        })
+        rec2 = find_by_opp_id(opp_id)
+        if not rec2:
+            log.warning("Bootstrap upsert did not produce record opp=%s", opp_id)
+            return
+        opportunity = opp_from_record(rec2)
+
+    # Seed message into thread for GPT context (optional, but useful)
+    opportunity.setdefault("messages", []).append({
+        "msgFrom": "customer",
+        "subject": subject,
+        "body": body_text[:1500],
+        "date": ts,
+        "source": "lead_notification",
+    })
+    opportunity.setdefault("checkedDict", {})["last_msg_by"] = "customer"
+
+    save_opp(opportunity)
+
+    # ✅ Call YOUR existing internet lead first-touch logic (the extracted helper)
+    from processNewData import send_first_touch_now
+    fresh_opp = get_opportunity(opp_id, tok, subscription_id)
+
+    safe_mode = _safe_mode_from(inbound)
+    test_recipient = inbound.get("test_email") or os.getenv("INTERNET_TEST_EMAIL")
+
+    send_first_touch_now(
+        opportunity=opportunity,
+        fresh_opp=fresh_opp,
+        token=tok,
+        subscription_id=subscription_id,
+        inquiry_text="",  # provider emails usually don’t contain a real “question”
+        trigger="lead_notification_webhook",
+        SAFE_MODE=safe_mode,
+        test_recipient=test_recipient,
+        inbound_ts=ts,
+        inbound_subject=subject,
+    )
+
+    return
+
+
 def _safe_mode_from(inbound: dict) -> bool:
     # Prefer the PA flag
     if inbound.get("test_mode") is True:
@@ -395,25 +503,27 @@ def process_inbound_email(inbound: dict) -> None:
             if isinstance(state, dict):
                 opportunity["_kbb_state"] = state
         else:
-            from processNewData import process_general_lead_convo_reply
-
-            state, action_taken = process_general_lead_convo_reply(
+            from processNewData import send_thread_reply_now
+    
+            # Always fetch a fresh opp so subStatus / scheduled appt state is current
+            fresh_opp = get_opportunity(opp_id, tok, subscription_id)
+    
+            safe_mode = _safe_mode_from(inbound)
+            test_recipient = inbound.get("test_email") or os.getenv("INTERNET_TEST_EMAIL")
+    
+            state, action_taken = send_thread_reply_now(
                 opportunity=opportunity,
-                inquiry_text=body_text,
+                fresh_opp=fresh_opp,
                 token=tok,
                 subscription_id=subscription_id,
-                rooftop_name=rooftop_name,
-                rooftop_sender=rooftop_sender,
-                SAFE_MODE=_safe_mode_from(inbound),  
-                test_recipient=os.getenv("TEST_TO"), 
+                SAFE_MODE=safe_mode,
+                test_recipient=test_recipient,
                 inbound_ts=ts,
                 inbound_subject=subject,
             )
-            
+    
             if isinstance(state, dict):
                 opportunity["_internet_state"] = state
-
-
 
         log.info("Inbound email processed immediately opp=%s action_taken=%s", opp_id, action_taken)
 
