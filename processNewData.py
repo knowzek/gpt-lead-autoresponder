@@ -2077,7 +2077,11 @@ In your email:
         customer_email_text = inquiry_text
     else:
         # If inquiry_text is empty, feed the vehicle string as a hint
-        customer_email_text = (inquiry_text or "").strip() or clean_html(vehicle_str) or "SUV car"
+        import re
+
+        plain_vehicle = re.sub(r"<[^>]+>", "", vehicle_str or "").strip()
+        customer_email_text = (inquiry_text or "").strip() or plain_vehicle or "SUV car"
+
 
     
     recommendation_text = ""
