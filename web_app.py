@@ -64,6 +64,35 @@ def kbb_adf_inbound():
         log.exception("KBB ADF ingestion failed: %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route("/kbb-email-inbound", methods=["POST"])
+def kbb_email_inbound():
+    try:
+        payload = request.get_json(force=True) or {}
+
+        inbound = {
+            "from": payload.get("from"),
+            "to": payload.get("to"),
+            "cc": payload.get("cc"),
+            "subject": (payload.get("subject") or "").strip(),
+            "body_html": payload.get("body_html") or "",
+            "body_text": payload.get("body_text") or "",
+            "timestamp": payload.get("timestamp") or _dt.utcnow().isoformat(),
+            "headers": payload.get("headers") or {},
+        }
+
+        log.info("📥 KBB email inbound: from=%s subject=%s", inbound["from"], inbound["subject"])
+
+        # If you have a dedicated KBB reply handler, call it here.
+        # If not, and your existing process_inbound_email handles KBB threads properly,
+        # you can call it directly.
+        process_inbound_email(inbound)
+
+        return jsonify({"status": "ok"}), 200
+
+    except Exception as e:
+        log.exception("KBB email ingestion failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
 # -----------------------------
 #   Health Check
