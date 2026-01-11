@@ -285,6 +285,8 @@ def process_lead_notification(inbound: dict) -> None:
     created_appt_ok = False
     appt_human = None
 
+    customer_email = shopper_email
+
     sent_ok = send_first_touch_email(
         opportunity=opportunity,
         fresh_opp=fresh_opp,
