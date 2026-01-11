@@ -32,18 +32,36 @@ TEST_OPP_ID = "050a81e9-78d4-f011-814f-00505690ec8c"
 
 DEFAULT_SUBSCRIPTION_ID = os.getenv("DEFAULT_SUBSCRIPTION_ID")  # set this to Tustin Kia's subscription id
 
-def _resolve_subscription_id(inbound: dict, headers: dict) -> str | None:
-    # If your Flow sends it, use it.
-    sid = (
-        inbound.get("subscription_id")
-        or inbound.get("SubscriptionId")
-        or headers.get("X-Subscription-ID")
-    )
-    if sid:
-        return sid
+def _resolve_subscription_id(inbound: dict, headers: dict | None) -> str | None:
+    # 1) Prefer body fields (Power Automate is sending these)
+    for k in ("subscription_id", "subscriptionId", "subscription", "sub_id"):
+        v = inbound.get(k)
+        if isinstance(v, str):
+            v = v.strip()
+        if v:
+            return v
 
-    # Otherwise fall back to deployment default (Patti@ = Tustin Kia)
-    return DEFAULT_SUBSCRIPTION_ID
+    # 2) Then check headers (case-insensitive)
+    headers = headers or {}
+    if isinstance(headers, dict):
+        lower = {str(k).lower(): v for k, v in headers.items()}
+        for k in ("x-subscription-id", "subscription_id", "subscriptionid"):
+            v = lower.get(k)
+            if isinstance(v, str):
+                v = v.strip()
+            if v:
+                return v
+
+    # 3) Optional fallback: infer from the "to" mailbox if you want
+    # (super useful for vendor leads like carfax/cars.com)
+    to_addr = (inbound.get("to") or "").lower().strip()
+    if to_addr:
+        # Example mapping (you can wire this to env vars)
+        # if "patti@pattersonautos.com" in to_addr: return os.getenv("DEFAULT_SUBSCRIPTION_ID")
+        pass
+
+    return None
+
 
 def _find_best_active_opp_for_email(*, shopper_email: str, token: str, subscription_id: str) -> str | None:
     target = (shopper_email or "").strip().lower()
@@ -116,10 +134,15 @@ def process_lead_notification(inbound: dict) -> None:
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     headers = inbound.get("headers") or {}
 
-    log.info("DEBUG inbound.subscription_id=%r inbound.subscriptionId=%r",
-         inbound.get("subscription_id"),
-         inbound.get("subscriptionId"))
-
+    log.info(
+        "DEBUG resolve_subscription: inbound.subscription_id=%r inbound.subscriptionId=%r inbound.source=%r inbound.to=%r headers_keys=%s headers=%r",
+        inbound.get("subscription_id"),
+        inbound.get("subscriptionId"),
+        inbound.get("source"),
+        inbound.get("to"),
+        list(headers.keys()) if isinstance(headers, dict) else None,
+        headers,
+    )
 
     subscription_id = _resolve_subscription_id(inbound, headers)
     if not subscription_id:
@@ -373,6 +396,16 @@ def process_inbound_email(inbound: dict) -> None:
 
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     headers = inbound.get("headers") or {}
+
+    log.info(
+        "DEBUG resolve_subscription from process_inbound_email function - the kbb flow?: inbound.subscription_id=%r inbound.subscriptionId=%r inbound.source=%r inbound.to=%r headers_keys=%s headers=%r",
+        inbound.get("subscription_id"),
+        inbound.get("subscriptionId"),
+        inbound.get("source"),
+        inbound.get("to"),
+        list(headers.keys()) if isinstance(headers, dict) else None,
+        headers,
+    )
 
     # 1) find opp
     subscription_id = _resolve_subscription_id(inbound, headers)
