@@ -260,6 +260,9 @@ def process_inbound_email(inbound: dict) -> None:
     else:
         # Bootstrap from Fortellis by opp_id, then create Airtable lead
         opp = get_opportunity(opp_id, tok, subscription_id)
+        source = (opportunity.get("source") or opportunity.get("opp_json", {}).get("source") or "").lower()
+        is_kbb = ("kbb" in source) or ("kelley blue book" in source) or ("instant cash offer" in source)
+
         opp["_subscription_id"] = subscription_id
     
         now_iso = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
@@ -297,9 +300,15 @@ def process_inbound_email(inbound: dict) -> None:
     opportunity.setdefault("checkedDict", {})["last_msg_by"] = "customer"
     opportunity["followUP_date"] = now_iso  # due now
     
-    st = opportunity.setdefault("_kbb_state", {})
-    st["mode"] = "convo"
-    st["last_customer_msg_at"] = now_iso
+    if is_kbb:
+        st = opportunity.setdefault("_kbb_state", {})
+        st["mode"] = "convo"
+        st["last_customer_msg_at"] = now_iso
+    else:
+        st = opportunity.setdefault("_internet_state", {})
+        st["last_customer_msg_at"] = now_iso
+        st["mode"] = "convo"
+
 
     # 4) Persist to Airtable (save_opp already updates follow_up_at + opp_json)
     save_opp(opportunity)
@@ -322,24 +331,40 @@ def process_inbound_email(inbound: dict) -> None:
 
         # Let the brain answer the customer's question immediately
         safe_mode = _safe_mode_from(inbound)
-        state, action_taken = process_kbb_ico_lead(
-            opportunity=opportunity,
-            lead_age_days=0,              # not important for convo replies
-            rooftop_name=rooftop_name,
-            inquiry_text=body_text,       # <-- this is the customer's question
-            token=tok,
-            subscription_id=subscription_id,
-            SAFE_MODE=safe_mode,
-            rooftop_sender=rooftop_sender,
-            trigger="email_webhook",        
-            inbound_ts=ts,                  
-            inbound_subject=subject, 
-        )
 
-        # Persist any state changes + schedule parking if convo logic does that
-        if isinstance(state, dict):
-            opportunity["_kbb_state"] = state
-        save_opp(opportunity)
+        if is_kbb:
+            from kbb_ico import process_kbb_ico_lead
+            state, action_taken = process_kbb_ico_lead(
+                opportunity=opportunity,
+                lead_age_days=0,
+                rooftop_name=rooftop_name,
+                inquiry_text=body_text,
+                token=tok,
+                subscription_id=subscription_id,
+                SAFE_MODE=safe_mode,
+                rooftop_sender=rooftop_sender,
+                trigger="email_webhook",
+                inbound_ts=ts,
+                inbound_subject=subject,
+            )
+            if isinstance(state, dict):
+                opportunity["_kbb_state"] = state
+        else:
+            from internet_leads import process_internet_lead  # you’ll create this
+            state, action_taken = process_internet_lead(
+                opportunity=opportunity,
+                inquiry_text=body_text,
+                token=tok,
+                subscription_id=subscription_id,
+                SAFE_MODE=True,  # force test mode for internet leads
+                test_recipient=os.getenv("INTERNET_TEST_EMAIL"),
+                trigger="email_webhook",
+                inbound_ts=ts,
+                inbound_subject=subject,
+            )
+            if isinstance(state, dict):
+                opportunity["_internet_state"] = state
+
 
         log.info("Inbound email processed immediately opp=%s action_taken=%s", opp_id, action_taken)
 
