@@ -100,6 +100,17 @@ def email_inbound():
                         inbound["from"], inbound["subject"])
             return jsonify({"status": "ignored", "reason": "kbb_routed_elsewhere"}), 200
 
+        log.info(
+            "📦 inbound keys=%s from=%s subject=%s body_text_len=%s to=%s cc=%s headers_keys=%s",
+            list(payload.keys()),
+            inbound.get("from"),
+            inbound.get("subject"),
+            len(inbound.get("body_text") or ""),
+            inbound.get("to"),
+            inbound.get("cc"),
+            list((inbound.get("headers") or {}).keys()),
+        )
+
         process_inbound_email(inbound)
 
         return jsonify({"status": "ok"}), 200
