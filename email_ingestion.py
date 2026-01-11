@@ -159,6 +159,37 @@ def is_test_opp(opp: dict, opp_id: str | None) -> bool:
         return True
     return False
 
+EMAIL_RE = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.I)
+
+def _extract_customer_email_from_lead_body(body_text: str) -> str | None:
+    """
+    Best-effort: find the first plausible customer email in the lead body.
+    Filters out known provider / dealership domains if you add them.
+    """
+    if not body_text:
+        return None
+
+    candidates = EMAIL_RE.findall(body_text) or []
+    if not candidates:
+        return None
+
+    # filter obvious non-customer addresses
+    bad_substrings = [
+        "carfax.com",
+        "cars.com",
+        "autotrader",
+        "kbb.com",
+        "pattersonautos.com",
+    ]
+    for e in candidates:
+        el = e.lower()
+        if any(b in el for b in bad_substrings):
+            continue
+        return el
+
+    # if all filtered, fall back to first
+    return candidates[0].lower()
+
 
 def process_inbound_email(inbound: dict) -> None:
     """
@@ -244,6 +275,13 @@ def process_inbound_email(inbound: dict) -> None:
     # If missing, lookup opp_id in Fortellis by sender email
     if not opp_id:
         sender_email = _extract_email(sender_raw)
+
+        # If sender is a provider/no-reply, pull customer email from the body
+        if any(x in sender_email for x in ["carfax.com", "cars.com"]) or "noreply" in sender_email:
+            maybe_customer = _extract_customer_email_from_lead_body(raw_text or body_text)
+            if maybe_customer:
+                sender_email = maybe_customer
+
         opp_id = _find_best_active_opp_for_email(
             shopper_email=sender_email,
             token=tok,
@@ -357,20 +395,24 @@ def process_inbound_email(inbound: dict) -> None:
             if isinstance(state, dict):
                 opportunity["_kbb_state"] = state
         else:
-            from internet_leads import process_internet_lead  # you’ll create this
-            state, action_taken = process_internet_lead(
+            from processNewData import process_general_lead_convo_reply
+
+            state, action_taken = process_general_lead_convo_reply(
                 opportunity=opportunity,
                 inquiry_text=body_text,
                 token=tok,
                 subscription_id=subscription_id,
-                SAFE_MODE=True,  # force test mode for internet leads
-                test_recipient=os.getenv("INTERNET_TEST_EMAIL"),
-                trigger="email_webhook",
+                rooftop_name=rooftop_name,
+                rooftop_sender=rooftop_sender,
+                SAFE_MODE=_safe_mode_from(inbound),  
+                test_recipient=os.getenv("TEST_TO"), 
                 inbound_ts=ts,
                 inbound_subject=subject,
             )
+            
             if isinstance(state, dict):
                 opportunity["_internet_state"] = state
+
 
 
         log.info("Inbound email processed immediately opp=%s action_taken=%s", opp_id, action_taken)
