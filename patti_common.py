@@ -96,9 +96,9 @@ def normalize_patti_body(body_html: str) -> str:
 
 def append_soft_schedule_sentence(body_html: str, rooftop_name: str) -> str:
     """
-    Add a single polite 'schedule your visit' line using LegacySalesApptSchLink
-    (or a real booking link if configured). If a schedule token/link already
-    exists, do nothing.
+    Append one polite scheduling CTA with a clickable booking link.
+    - If body already contains any scheduler token/link, do nothing.
+    - If no booking link is configured for the rooftop, do nothing (don't insert Legacy token).
     """
     body_html = body_html or ""
 
@@ -107,17 +107,20 @@ def append_soft_schedule_sentence(body_html: str, rooftop_name: str) -> str:
         return body_html
 
     rt = (ROOFTOP_INFO.get(rooftop_name) or {})
-    href = (
-        rt.get("booking_link")
-        or rt.get("scheduler_url")
-        or "<{LegacySalesApptSchLink}>"
+    href = (rt.get("booking_link") or rt.get("scheduler_url") or "").strip()
+
+    # No configured booking link? Don't add anything.
+    if not href or href.startswith("<{"):
+        return body_html
+
+    # Make it clickable
+    link_html = (
+        f'<a href="{href}" style="color:#0B66C3; text-decoration:none;" target="_blank" rel="noopener">'
+        "schedule directly here"
+        "</a>"
     )
 
-    # Soft CTA text
-    soft_line = (
-        '<p>Let me know a time that works for you, or schedule directly here: '
-        f'{href}</p>'
-    )
+    soft_line = f"<p>Let me know a time that works for you, or {link_html}.</p>"
 
     # If body has <p> tags, just append; otherwise wrap it
     if _re2.search(r'(?is)<p[^>]*>.*?</p>', body_html):
