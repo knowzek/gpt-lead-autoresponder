@@ -724,18 +724,33 @@ def processHit(hit):
 
     inquiry_text = None  # ensure defined
 
-    try:
-        opportunity : dict = hit['_source']
-    except:
-        opportunity : dict = hit
+    # Airtable mode: hit is an Airtable record
+    fields = (hit.get("fields") or {})
+    opportunityId = fields.get("opp_id")  # canonical
+    if not opportunityId:
+        log.warning("Skipping Airtable record missing opp_id")
+        return
     
+    opportunity = fields.get("opp_json") or {}
+    if isinstance(opportunity, str):
+        try:
+            opportunity = json.loads(opportunity)
+        except Exception:
+            log.warning("Skipping opp_id=%s (bad opp_json)", opportunityId)
+            return
+    
+    # (optional) ensure the blob has opportunityId too
+    opportunity["opportunityId"] = opportunity.get("opportunityId") or opportunityId  
 
     if not opportunity.get('isActive', True):
         print("pass...")
         return
 
-    subscription_id = opportunity['_subscription_id']
-    opportunityId = opportunity['opportunityId']
+    subscription_id = opportunity.get("_subscription_id") or fields.get("subscription_id") or fields.get("Subscription ID")
+    if not subscription_id:
+        log.warning("Skipping opp %s (missing subscription_id)", opportunityId)
+        return
+
 
     # Reuse a single token for this whole processHit run
     if OFFLINE_MODE:
