@@ -931,12 +931,13 @@ def processHit(hit):
     # === KBB routing ===
     flags = _kbb_flags_from(opportunity, fresh_opp)
     log.info("KBB detect → %s", flags)
-    is_kbb = bool(flags)  # or be stricter if you only mean ICO
+    is_kbb = _is_exact_kbb_ico_flags(flags, opportunity)
     
-    # Early eligibility gate: pass if Kristin-assigned OR exact KBB (ICO/ServiceDrive)
-    if not (_is_assigned_to_kristin(opportunity) or _is_exact_kbb_ico_flags(flags, opportunity)):
-        log.info("Skip opp %s (neither Kristin-assigned nor exact KBB source)", opportunityId)
-        return
+    # Ensure is_kbb is always defined before use
+    if is_kbb and not RUN_KBB:
+        log.info("Skipping KBB on this service (RUN_KBB=0). opp=%s", opportunityId)
+        return  # skip this opp and stop processing this hit
+    
 
     # --- BEGIN: ensure dateIn is present for cadence math (no external vars required) ---
     def _parse_iso_safe(s):
@@ -1036,11 +1037,6 @@ def processHit(hit):
         except Exception as _e:
             log.warning("KBB age calc debug failed: %s", _e)
         # --- /DEBUG ---
-
-        # Ensure is_kbb is always defined before use
-        if is_kbb and not RUN_KBB:
-            log.info("Skipping KBB on this service (RUN_KBB=0). opp=%s", opportunityId)
-            return  # skip this opp and stop processing this hit
             
         # Try to surface any inquiry text we may already have; safe default to ""
         inquiry_text_safe = (opportunity.get("inquiry_text_body") or "").strip()
