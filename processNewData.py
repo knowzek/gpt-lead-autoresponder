@@ -931,6 +931,7 @@ def processHit(hit):
     # === KBB routing ===
     flags = _kbb_flags_from(opportunity, fresh_opp)
     log.info("KBB detect → %s", flags)
+    is_kbb = bool(flags)  # or be stricter if you only mean ICO
     
     # Early eligibility gate: pass if Kristin-assigned OR exact KBB (ICO/ServiceDrive)
     if not (_is_assigned_to_kristin(opportunity) or _is_exact_kbb_ico_flags(flags, opportunity)):
@@ -1036,6 +1037,7 @@ def processHit(hit):
             log.warning("KBB age calc debug failed: %s", _e)
         # --- /DEBUG ---
 
+        # Ensure is_kbb is always defined before use
         if is_kbb and not RUN_KBB:
             log.info("Skipping KBB on this service (RUN_KBB=0). opp=%s", opportunityId)
             return  # skip this opp and stop processing this hit
