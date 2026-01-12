@@ -1038,7 +1038,7 @@ def processHit(hit):
 
         if is_kbb and not RUN_KBB:
             log.info("Skipping KBB on this service (RUN_KBB=0). opp=%s", opportunityId)
-            continue  # skip this opp and move to the next one
+            return  # skip this opp and stop processing this hit
             
         # Try to surface any inquiry text we may already have; safe default to ""
         inquiry_text_safe = (opportunity.get("inquiry_text_body") or "").strip()
