@@ -300,8 +300,9 @@ def _personalization_rules_system():
 def _appointment_cta_system():
     return (
         "Scheduling CTA:\n"
-        "- Do NOT include a scheduling line. The system will append this exact sentence later:\n"
-        "  Please let us know a convenient time for you, or you can instantly reserve your time here: <{LegacySalesApptSchLink}>\n"
+        "- Do NOT include any scheduling link or scheduling sentence.\n"
+        "- The system will append the correct dealership booking link automatically.\n"
+
     )
 
 def _compliance_system():
