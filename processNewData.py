@@ -2024,9 +2024,11 @@ def send_first_touch_email(
 
     Please write a warm, professional email reply that:
     - Begin with exactly `Hi {customer_name},`
+    - Immediately acknowledge their inquiry in ONE sentence, like: "Thanks for your inquiry on our {vehicle_str}."
     - Start with 1–2 appealing vehicle features or dealership Why Buys
     - Welcome the guest and highlight our helpfulness
     - Invite specific questions or preferences
+    - The goal in your responses is to be helpful but also encourage the person to book an appointment to see the vehicle without sounding salesly or high-pressure
     - Mention the salesperson by name
 
     Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
@@ -2038,9 +2040,11 @@ def send_first_touch_email(
 
     When writing:
     - Begin with exactly `Hi {customer_name},`
+    - Immediately acknowledge their inquiry in ONE sentence, like: "Thanks for your inquiry on our {vehicle_str}."
     - Lead with value (features / Why Buy)
     - If a specific vehicle is mentioned, answer directly and link if possible
     - If a specific question exists, answer it first
+    - The goal in your responses is to be helpful but also encourage the person to book an appointment to see the vehicle without sounding salesly or high-pressure
     - Include the salesperson’s name
     - Keep it warm, clear, and human
 
