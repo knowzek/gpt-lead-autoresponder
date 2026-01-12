@@ -2163,37 +2163,45 @@ In your email:
 
     # Decide recipient (Safe Mode reroutes to test inbox)
     actual_to = customer_email
+
     if SAFE_MODE:
-        actual_to = test_recipient or os.getenv("INTERNET_TEST_EMAI") or os.getenv("TEST_TO")
+        actual_to = (
+            test_recipient
+            or os.getenv("INTERNET_TEST_EMAIL") 
+            or os.getenv("TEST_TO")
+        )
         log.warning(
             "SAFE_MODE enabled: rerouting email for opp %s from %r -> %r",
             opportunityId,
             customer_email,
             actual_to,
         )
-
+    
+    # ✅ Send in both modes (SAFE_MODE just changes actual_to)
+    if actual_to:
+        try:
+            from patti_mailer import send_patti_email
+    
+            send_patti_email(
+                token=token,
+                subscription_id=subscription_id,
+                opp_id=opportunity.get("opportunityId") or opportunityId,
+                rooftop_name=rooftop_name,
+                rooftop_sender=rooftop_sender,
+                to_addr=actual_to,
+                subject=subject,
+                body_html=body_html,
+                cc_addrs=[],
+            )
+            sent_ok = True
+        except Exception as e:
+            log.warning("Failed to send Patti general lead email for opp %s: %s", opportunityId, e)
     else:
-        if actual_to:
-            try:
-                from patti_mailer import send_patti_email
-        
-                send_patti_email(
-                    token=token,
-                    subscription_id=subscription_id,
-                    opp_id=opportunity.get("opportunityId") or opportunityId,
-                    rooftop_name=rooftop_name,
-                    rooftop_sender=rooftop_sender,
-                    to_addr=actual_to,      # ✅ use actual_to
-                    subject=subject,
-                    body_html=body_html,
-                    cc_addrs=[],
-                )
-                sent_ok = True
-            except Exception as e:
-                log.warning("Failed to send Patti general lead email for opp %s: %s", opportunityId, e)
-        else:
-            log.warning("No recipient resolved for opp %s (customer_email=%r SAFE_MODE=%r test_recipient=%r)",
-                        opportunityId, customer_email, SAFE_MODE, test_recipient)
+        log.warning(
+            "No recipient resolved for opp %s (customer_email=%r SAFE_MODE=%r test_recipient=%r)",
+            opportunityId, customer_email, SAFE_MODE, test_recipient
+        )
+
 
     
     # ---------------------------
