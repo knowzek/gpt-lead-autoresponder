@@ -663,20 +663,25 @@ def process_inbound_email(inbound: dict) -> None:
     except Exception as e:
         log.exception("Immediate inbound reply failed opp=%s err=%s", opp_id, e)
 
-    # 6) Optional: log inbound email to CRM as a comment (Fortellis writeback)
+    # 6) Optional: log inbound email to CRM as a COMPLETED ACTIVITY (not a Note)
     subscription_id = opportunity.get("_subscription_id")
     if subscription_id:
         try:
             token = get_token(subscription_id)
             preview = (body_text or "")[:500]
-            add_opportunity_comment(
+
+            # Prefer the same "numeric type" pattern as KBB to avoid mapping confusion
+            complete_activity(
                 token,
                 subscription_id,
                 opp_id,
-                f"Inbound email from {sender_raw}: {subject}\n\n{preview}",
+                activity_name="Inbound Email",
+                activity_type=20,  # Inbound Email (matches your ACTIVITY_TYPE_MAP)
+                comments=f"From: {sender_raw}\nSubject: {subject}\n\n{preview}",
             )
         except Exception as e:
-            log.warning("Failed to log inbound email comment opp=%s err=%s", opp_id, e)
+            log.warning("Failed to log inbound email activity opp=%s err=%s", opp_id, e)
+
 
     log.info("Inbound email queued + processed immediately for opp=%s", opp_id)
     return
