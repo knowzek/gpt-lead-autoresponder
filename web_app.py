@@ -118,6 +118,15 @@ def email_inbound():
         payload = request.get_json(force=True) or {}
 
         inbound = {
+            # pass-through keys that help routing + reply threading
+            "source": payload.get("source"),
+            "subscription_id": payload.get("subscription_id") or payload.get("subscriptionId"),
+            "conversation_id": payload.get("conversation_id"),
+            "message_id": payload.get("message_id"),
+            "test_mode": payload.get("test_mode"),
+            "test_email": payload.get("test_email"),
+
+            # email content
             "from": payload.get("from"),
             "to": payload.get("to"),
             "cc": payload.get("cc"),
@@ -125,30 +134,32 @@ def email_inbound():
             "body_html": payload.get("body_html") or "",
             "body_text": payload.get("body_text") or "",
             "timestamp": payload.get("timestamp") or _dt.utcnow().isoformat(),
-            "headers": payload.get("headers") or {},
+
+            # combine any payload headers with actual HTTP headers
+            "headers": {
+                **(payload.get("headers") or {}),
+                **{k: v for k, v in request.headers.items()},
+            },
         }
 
         log.info("📥 Incoming email: from=%s subject=%s", inbound["from"], inbound["subject"])
 
-        # ✅ Guard rail: KBB should NEVER be handled by the internet-leads service
         if _looks_like_kbb(inbound):
-            log.warning("🛑 KBB detected on /email-inbound. Ignoring to prevent wrong Airtable routing. from=%s subject=%s",
+            log.warning("🛑 KBB detected on /email-inbound. Ignoring. from=%s subject=%s",
                         inbound["from"], inbound["subject"])
             return jsonify({"status": "ignored", "reason": "kbb_routed_elsewhere"}), 200
 
         log.info(
-            "📦 inbound keys=%s from=%s subject=%s body_text_len=%s to=%s cc=%s headers_keys=%s",
+            "📦 inbound keys=%s resolved_sub=%s from=%s subject=%s body_text_len=%s to=%s",
             list(payload.keys()),
+            inbound.get("subscription_id"),
             inbound.get("from"),
             inbound.get("subject"),
             len(inbound.get("body_text") or ""),
             inbound.get("to"),
-            inbound.get("cc"),
-            list((inbound.get("headers") or {}).keys()),
         )
 
         process_inbound_email(inbound)
-
         return jsonify({"status": "ok"}), 200
 
     except Exception as e:
