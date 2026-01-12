@@ -2,7 +2,10 @@ import os
 import logging
 from email_ingestion import clean_html as _clean_html
 from outlook_email import send_email_via_outlook
-from fortellis import send_opportunity_email_activity, add_opportunity_comment
+from fortellis import send_opportunity_email_activity
+from datetime import datetime, timezone
+from fortellis import complete_send_email_activity
+
 
 log = logging.getLogger("patti.mailer")
 
@@ -46,15 +49,18 @@ def send_patti_email(
         headers={"X-Opportunity-ID": opp_id},
     )
 
-    # Always log the outbound to CRM as a comment
-    if token and subscription_id:
-        try:
-            preview = _clean_html(body_html)[:500]
-            add_opportunity_comment(
-                token,
-                subscription_id,
-                opp_id,
-                f"Outbound email to {to_addr}: {subject}\n\n{preview}",
-            )
-        except Exception as e:
-            log.warning("Failed to log Outlook outbound email for opp %s: %s", opp_id, e)
+    # Log the outbound to CRM as a COMPLETED ACTIVITY (not a Note)
+   if token and subscription_id:
+       try:
+           complete_send_email_activity(
+               token=token,
+               subscription_id=subscription_id,
+               opportunity_id=opp_id,
+               to_addr=to_addr,
+               subject=subject,
+           )
+           log.info("Completed CRM activity: Send Email opp=%s", opp_id)
+       except Exception as e:
+           log.warning("Failed to complete 'Send Email' activity opp=%s: %s", opp_id, e)
+
+
