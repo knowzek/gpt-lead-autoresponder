@@ -133,6 +133,9 @@ def process_lead_notification(inbound: dict) -> None:
 
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     headers = inbound.get("headers") or {}
+    safe_mode = _safe_mode_from(inbound)
+    test_recipient = (inbound.get("test_email") or os.getenv("TEST_TO")) if safe_mode else None
+
 
     log.info(
         "DEBUG resolve_subscription: inbound.subscription_id=%r inbound.subscriptionId=%r inbound.source=%r inbound.to=%r headers_keys=%s headers=%r",
