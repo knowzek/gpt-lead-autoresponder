@@ -47,6 +47,8 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
+RUN_KBB = os.getenv("RUN_KBB", "0").lower() in ("1", "true", "yes")
+
 log = logging.getLogger(__name__)
 OFFLINE_MODE = os.getenv("OFFLINE_MODE", "0").lower() in ("1", "true", "yes")
 
@@ -1034,6 +1036,10 @@ def processHit(hit):
             log.warning("KBB age calc debug failed: %s", _e)
         # --- /DEBUG ---
 
+        if is_kbb and not RUN_KBB:
+            log.info("Skipping KBB on this service (RUN_KBB=0). opp=%s", opportunityId)
+            continue  # skip this opp and move to the next one
+            
         # Try to surface any inquiry text we may already have; safe default to ""
         inquiry_text_safe = (opportunity.get("inquiry_text_body") or "").strip()
     
@@ -1042,7 +1048,7 @@ def processHit(hit):
             tok = None
             if not OFFLINE_MODE:
                 tok = token
-        
+
             state, action_taken = process_kbb_ico_lead(
                 opportunity=opportunity,
                 lead_age_days=lead_age_days,
