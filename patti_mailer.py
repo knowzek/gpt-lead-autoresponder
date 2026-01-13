@@ -50,17 +50,15 @@ def send_patti_email(
     )
 
     # Log the outbound to CRM as a COMPLETED ACTIVITY (not a Note)
-   if token and subscription_id:
-       try:
-           complete_send_email_activity(
-               token=token,
-               subscription_id=subscription_id,
-               opportunity_id=opp_id,
-               to_addr=to_addr,
-               subject=subject,
-           )
-           log.info("Completed CRM activity: Send Email opp=%s", opp_id)
-       except Exception as e:
-           log.warning("Failed to complete 'Send Email' activity opp=%s: %s", opp_id, e)
-
-
+    if token and subscription_id:
+        try:
+            complete_send_email_activity(
+                token=token,
+                subscription_id=subscription_id,
+                opportunity_id=opp_id,
+                to_addr=to_addr,
+                subject=subject,
+            )
+            log.info("Completed CRM activity: Send Email opp=%s", opp_id)
+        except Exception as e:
+            log.warning("Failed to complete 'Send Email' activity opp=%s: %s", opp_id, e)
