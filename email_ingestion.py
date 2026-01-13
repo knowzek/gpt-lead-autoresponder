@@ -13,6 +13,7 @@ from fortellis import (
     search_customers_by_email,
     get_opps_by_customer_id,
 )
+from fortellis import complete_activity
 
 from kbb_ico import _top_reply_only
 from airtable_store import (
