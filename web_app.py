@@ -70,6 +70,17 @@ def kbb_email_inbound():
         payload = request.get_json(force=True) or {}
 
         inbound = {
+            # ✅ pass-through fields your downstream expects
+            "subscription_id": payload.get("subscription_id") or payload.get("subscriptionId"),
+            "source": payload.get("source") or "reply",
+
+            "conversation_id": payload.get("conversation_id") or payload.get("conversationId"),
+            "message_id": payload.get("message_id") or payload.get("messageId"),
+
+            "test_mode": payload.get("test_mode"),
+            "test_email": payload.get("test_email"),
+
+            # existing fields
             "from": payload.get("from"),
             "to": payload.get("to"),
             "cc": payload.get("cc"),
@@ -80,11 +91,11 @@ def kbb_email_inbound():
             "headers": payload.get("headers") or {},
         }
 
-        log.info("📥 KBB email inbound: from=%s subject=%s", inbound["from"], inbound["subject"])
+        log.info(
+            "📥 KBB email inbound: from=%s subject=%s sub_id=%s source=%s",
+            inbound["from"], inbound["subject"], inbound.get("subscription_id"), inbound.get("source")
+        )
 
-        # If you have a dedicated KBB reply handler, call it here.
-        # If not, and your existing process_inbound_email handles KBB threads properly,
-        # you can call it directly.
         process_inbound_email(inbound)
 
         return jsonify({"status": "ok"}), 200
@@ -92,7 +103,6 @@ def kbb_email_inbound():
     except Exception as e:
         log.exception("KBB email ingestion failed: %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500
-
 
 # -----------------------------
 #   Health Check
