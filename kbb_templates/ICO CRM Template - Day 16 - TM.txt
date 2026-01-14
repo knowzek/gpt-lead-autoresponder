@@ -266,11 +266,24 @@ Are you ready for your next vehicle? If so, <{DealershipName}> wants to buy your
       Whether you’re trading in or selling outright, your KBB Offer makes it easy — just a quick visit to finalize the offer.
     </p>
 
-    <p style="margin:0 0 10px;">Choose a time that works best for you:</p>
+    <p style="margin:0 0 10px;">
+      Choose your preferred time below:
+    </p>
+    
+    <p style="margin:0 0 20px;">
+      <a href="https://www.tustinmazda.com/scheduleservice"
+         style="color:#0B66C3; text-decoration:none;"
+         target="_blank"
+         rel="noopener">
+        Schedule your visit
+      </a>
+    </p>
+    
+    <p style="margin:0 0 10px;">
+      Best,<br>
+      Patti
+    </p>
 
-    <p style="margin:0 0 20px;"><{LegacySalesApptSchLink}></p>
-
-    <p style="margin:0 0 10px;">Talk soon,<br>Patti</p>
 
 <!-- Patti signature (hard-coded, 600px, fully linked) -->
 <table role="presentation" width="600" border="0" cellspacing="0" cellpadding="0" align="center" style="margin-top:18px;">
@@ -489,6 +502,7 @@ Are you ready for your next vehicle? If so, <{DealershipName}> wants to buy your
 </center>
 </body>
 </html>
+
 
 
 
