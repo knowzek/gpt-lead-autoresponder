@@ -14,6 +14,7 @@ from fortellis import (
     get_opps_by_customer_id,
 )
 from fortellis import complete_activity
+from patti_triage import classify_inbound_email, handoff_to_human, should_triage
 
 from kbb_ico import _top_reply_only
 from airtable_store import (
@@ -206,7 +207,6 @@ def process_lead_notification(inbound: dict) -> None:
 
     # ✅ Call YOUR existing internet lead first-touch logic (the extracted helper)
     from processNewData import send_first_touch_email
-    from rooftops import get_rooftop_info
 
     fresh_opp = get_opportunity(opp_id, tok, subscription_id) or {}
 
@@ -601,11 +601,75 @@ def process_inbound_email(inbound: dict) -> None:
     # 4) Persist to Airtable (save_opp already updates follow_up_at + opp_json)
     save_opp(opportunity)
 
+    # 4.5) TRIAGE (classify BEFORE any immediate reply)
+    try:
+        if should_triage(is_kbb):
+            triage = classify_inbound_email(body_text)
+            cls = triage.get("classification")
+    
+            if cls == "HUMAN_REVIEW_REQUIRED":
+                fresh_opp_for_triage = None
+                try:
+                    fresh_opp_for_triage = get_opportunity(opp_id, tok, subscription_id)
+                except Exception:
+                    fresh_opp_for_triage = None
+    
+                rt = get_rooftop_info(subscription_id) or {}
+                rooftop_name_triage = rt.get("name") or rt.get("rooftop_name") or "Rooftop"
+    
+                handoff_to_human(
+                    opportunity=opportunity,
+                    fresh_opp=fresh_opp_for_triage,
+                    token=tok,
+                    subscription_id=subscription_id,
+                    rooftop_name=rooftop_name_triage,
+                    inbound_subject=subject,
+                    inbound_text=body_text,
+                    inbound_ts=ts,
+                    triage=triage,
+                )
+    
+                # extra safety persist
+                try:
+                    save_opp(opportunity)
+                except Exception:
+                    pass
+    
+                log.info(
+                    "Triage routed to human opp=%s reason=%s",
+                    opp_id,
+                    triage.get("reason"),
+                )
+                return  # 🚫 STOP: do not auto-reply
+    
+            if cls == "NON_LEAD":
+                log.info("Triage NON_LEAD opp=%s - ignoring", opp_id)
+                return
+    
+            if cls == "EXPLICIT_OPTOUT":
+                if not is_kbb:
+                    log.info(
+                        "Triage EXPLICIT_OPTOUT non-KBB opp=%s - stopping auto reply",
+                        opp_id,
+                    )
+                    return
+                log.info(
+                    "Triage EXPLICIT_OPTOUT KBB opp=%s - letting KBB brain handle",
+                    opp_id,
+                )
+    
+    except Exception as e:
+        log.exception(
+            "Triage failure opp=%s err=%s - defaulting to normal flow",
+            opp_id,
+            e,
+        )
+
+
     # 5) IMMEDIATE reply (do NOT wait for cron)
     try:
         from kbb_ico import process_kbb_ico_lead
-        from rooftops import get_rooftop_info
-
+    
         subscription_id = opportunity.get("_subscription_id")
         if not subscription_id:
             log.warning("Inbound email matched opp=%s but missing _subscription_id; cannot reply", opp_id)
