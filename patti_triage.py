@@ -355,9 +355,10 @@ def handoff_to_human(
             opp_id,
             due_dt_iso_utc=due_utc,
             activity_name="Patti: Human Review Needed",
-            activity_type="Task",
-            comments=_clip(comments, 1800),
+            activity_type="Send Email",  
+            comments=activity_comments,
         )
+
     except Exception as e:
         log.warning("schedule_activity failed (ignored): %s", e)
 
