@@ -425,55 +425,47 @@ def handoff_to_human(
     # -----------------------
     # Outlook email notify
     # -----------------------
-    # to_addr = resolve_primary_sales_email(fresh_opp) or os.getenv("HUMAN_REVIEW_FALLBACK_TO", "")
-
-    to_addr = "knowzek@gmail.com"
-    cc_list = _parse_cc_list(HUMAN_REVIEW_CC)
-    headers = {"cc": ",".join(cc_list)} if cc_list else {}
-
-    subj = f"[Patti] Human review needed — {rooftop_name} — {customer_name}"
+    to_addr = resolve_primary_sales_email(fresh_opp) or os.getenv("HUMAN_REVIEW_FALLBACK_TO", "") or "knowzek@gmail.com"
+    
+    subj = f"[Patti] Human review needed - {rooftop_name} - {customer_name}"
     if vehicle:
         subj += f" — {vehicle}"
-
-    html = f"""
-    <p><b>Patti flagged a lead for human attention.</b></p>
-
-    <p><b>Rooftop:</b> {rooftop_name}<br>
-    <b>Opp ID:</b> {opp_id}<br>
-    <b>Salesperson:</b> {salesperson_name} ({salesperson_email or "unknown"})</p>
-
-    <p><b>Customer:</b> {customer_name}<br>
-    <b>Email:</b> {customer_email or "unknown"}<br>
-    <b>Phone:</b> {customer_phone or "unknown"}<br>
-    <b>Vehicle:</b> {vehicle or "unknown"}</p>
-
-    <p><b>Classification:</b> HUMAN_REVIEW_REQUIRED<br>
-    <b>Reason:</b> {reason or "N/A"}<br>
-    <b>Confidence:</b> {conf}</p>
-
-    <p><b>Inbound subject:</b> {inbound_subject or ""}</p>
-
-    <p><b>Latest customer message:</b><br>
-    <pre style="white-space:pre-wrap;font-family:Arial,Helvetica,sans-serif;">{_clip(inbound_text, 2000)}</pre></p>
-
-    <p><b>Next step:</b> Please take over this lead in the CRM and reply to the customer directly.</p>
-
-    <p style="color:#666;font-size:12px;">
-    Logged by Patti (Fortellis task + comment). Sent from: {rooftop_sender or "Patti inbox"}<br>
-    {rooftop_addr}
-    </p>
-    """.strip()
-
+    
+    html = f""" ... same html ... """.strip()
+    
+    # Build CC list from env
+    raw_cc = (os.getenv("HUMAN_REVIEW_CC") or "").strip()
+    cc_addrs = []
+    if raw_cc:
+        parts = raw_cc.replace(",", ";").split(";")
+        cc_addrs = [p.strip() for p in parts if p.strip()]
+    
+    # Remove duplicates + avoid duplicating To
+    to_lower = (to_addr or "").lower()
+    seen = set()
+    cc_clean = []
+    for e in cc_addrs:
+        el = e.lower()
+        if not el or el == to_lower:
+            continue
+        if el in seen:
+            continue
+        seen.add(el)
+        cc_clean.append(e)
+    cc_addrs = cc_clean
+    
     send_email_via_outlook(
         to_addr=to_addr,
         subject=_clip(subj, 180),
         html_body=html,
-        cc_addrs=cc_addrs,    
-        headers=headers,
+        cc_addrs=cc_addrs,
         timeout=20,
     )
+    
+    log.info("TRIAGE EMAIL: to=%s cc=%s", to_addr, cc_addrs)
+    
+    return {"ok": True, "skipped": False, "opp_id": opp_id, "to": to_addr, "cc": cc_addrs, "due_utc": due_utc}
 
-    return {"ok": True, "skipped": False, "opp_id": opp_id, "to": to_addr, "cc": cc_list, "due_utc": due_utc}
 
 
 def should_triage(is_kbb: bool) -> bool:
