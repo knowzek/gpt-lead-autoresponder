@@ -15,7 +15,6 @@ logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO),
                     format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("fortellis")
 
-
 SENSITIVE_HEADERS = {"Authorization"}
 
 def _mask_headers(h: dict) -> dict:
