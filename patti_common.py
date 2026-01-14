@@ -105,9 +105,15 @@ def normalize_patti_body(body_html: str) -> str:
 
 def append_soft_schedule_sentence(body_html: str, rooftop_name: str) -> str:
     """
-    Append one polite scheduling CTA with a clickable booking link.
+    Append a simple, low-friction scheduling CTA (no link for now).
+
+    Current behavior:
     - If body already contains any scheduler token/link, do nothing.
-    - If no booking link is configured for the rooftop, do nothing (don't insert Legacy token).
+    - Always append a plain-text CTA asking for a day/time.
+
+    NOTE:
+    - The dynamic booking-link logic is intentionally commented out
+      so it can be re-enabled later without rewriting this function.
     """
     body_html = body_html or ""
 
@@ -115,27 +121,37 @@ def append_soft_schedule_sentence(body_html: str, rooftop_name: str) -> str:
     if _SCHED_ANY_RE.search(body_html):
         return body_html
 
-    rt = (ROOFTOP_INFO.get(rooftop_name) or {})
-    href = (rt.get("booking_link") or rt.get("scheduler_url") or "").strip()
+    # ------------------------------------------------------------------
+    # 🔕 TEMPORARILY DISABLED: dynamic booking link logic
+    # ------------------------------------------------------------------
+    # rt = (ROOFTOP_INFO.get(rooftop_name) or {})
+    # href = (rt.get("booking_link") or rt.get("scheduler_url") or "").strip()
+    #
+    # # No configured booking link? Previously we did nothing.
+    # if not href or href.startswith("<{"):
+    #     return body_html
+    #
+    # link_html = (
+    #     f'<a href="{href}" style="color:#0B66C3; text-decoration:none;" '
+    #     'target="_blank" rel="noopener">schedule directly here</a>'
+    # )
+    #
+    # soft_line = f"<p>Let me know a time that works for you, or {link_html}.</p>"
+    # ------------------------------------------------------------------
 
-    # No configured booking link? Don't add anything.
-    if not href or href.startswith("<{"):
-        return body_html
-
-    # Make it clickable
-    link_html = (
-        f'<a href="{href}" style="color:#0B66C3; text-decoration:none;" target="_blank" rel="noopener">'
-        "schedule directly here"
-        "</a>"
+    # ✅ New simplified CTA (no link)
+    soft_line = (
+        "<p>"
+        "I'd love to set up a time for you to come by and visit our showroom - is there a day and time that works best for you?"
+        "</p>"
     )
 
-    soft_line = f"<p>Let me know a time that works for you, or {link_html}.</p>"
-
-    # If body has <p> tags, just append; otherwise wrap it
+    # If body already has <p> tags, just append; otherwise wrap it
     if _re2.search(r'(?is)<p[^>]*>.*?</p>', body_html):
         return body_html.rstrip() + soft_line
 
     return f"<p>{body_html.strip()}</p>{soft_line}" if body_html.strip() else soft_line
+
 
 
 def rewrite_sched_cta_for_booked(body_html: str) -> str:
