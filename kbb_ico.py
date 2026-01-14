@@ -881,7 +881,7 @@ def _has_new_read_email_since(acts: list[dict], since_dt):
 def build_patti_footer(rooftop_name: str) -> str:
     rt = (ROOFTOP_INFO.get(rooftop_name) or {})
 
-    img_url      = rt.get("signature_img") or "https://www.pattersonautos.com/blogs/7684/wp-content/uploads/2025/11/image.png"
+    img_url      = rt.get("signature_img") or "https://prod.tvmimageservice.com/images/GetLibraryImage?fileNameOrId=664005&Width=0&Height=0&logo=y"
     patti_email  = rt.get("patti_email")   or "patti@pattersonautos.com"
     dealer_site  = (rt.get("website") or "https://www.pattersonautos.com").rstrip("/")
     dealer_addr  = rt.get("address")       or ""
