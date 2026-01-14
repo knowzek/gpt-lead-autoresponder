@@ -43,6 +43,27 @@ AT_NOTIFIED_AT = os.getenv("AT_HUMAN_REVIEW_NOTIFIED_AT", "Human Review Notified
 
 _oai = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
+# Fortellis salesTeam[].id -> email
+SALESTEAM_ID_TO_EMAIL = {
+    # --- Tustin Kia / Internet leads ---
+    "486120e6-c7b5-f011-814f-00505690ec8c": "roozbehb@pattersonautos.com",   # Roozbeh Behrangi
+    "250ddd78-cab5-f011-814f-00505690ec8c": "ashleym@pattersonautos.com",  # Ashley Madrigal
+    "5cf595e6-c8b5-f011-814f-00505690ec8c": "Aydenc@pattersonautos.com",  # Ayden Chanthavong
+    "54316e4e-cab5-f011-814f-00505690ec8c": "Gustavol@pattersonautos.com",  # Gustavo Lopez
+    "85fa8c85-cdb5-f011-814f-00505690ec8c": "TommyV@pattersonautos.com",  # Tommy Vilayphonh (S + DM)
+    "448c97cd-cab5-f011-814f-00505690ec8c": "Gabrielm@pattersonautos.com",  # Gabriel Martinez
+    "a7201e67-cdb5-f011-814f-00505690ec8c": "Joannet@pattersonautos.com",  # Joanne Tran
+    "033b8d23-cbb5-f011-814f-00505690ec8c": "Damianp@pattersonautos.com",  # Damian Perez
+    "2b0e5005-c7b5-f011-814f-00505690ec8c": "dannyam@pattersonautos.com",  # Danny Amezcua
+
+    "268a74af-ccb5-f011-814f-00505690ec8c": "donalds@pattersonautos.com",  # Donald Smalley (Desk Manager)
+    "0084c9ba-94a8-f011-814f-00505690ec8c": "ala@pattersonautos.com",  # Al Alcontin (BDC)
+    "ea44fdc0-c1c7-f011-814f-00505690ec8c": "Juliem@pattersonautos.com",  # Julie Manallo (BDC)
+    "598a45a3-efca-f011-814f-00505690ec8c": "Jhoannec@pattersonautos.com",  # Jhoanne Canceran (BDC)
+
+    "8f693b1a-7966-ea11-a977-005056b72b57": "joshuaw@pattersonautos.com",  # Joshua Wheelan
+}
+
 
 # -----------------------
 # Helpers
@@ -138,6 +159,28 @@ def resolve_salesperson_contact(opportunity: dict, fresh_opp: Optional[dict]) ->
     name, email = _primary_salesperson(st)
     return {"name": name or "Sales Team", "email": email or ""}
 
+def resolve_primary_sales_email(fresh_opp: dict) -> str | None:
+    st = (fresh_opp or {}).get("salesTeam") or []
+    if not isinstance(st, list) or not st:
+        return None
+
+    # Prefer primary salesperson/BDC
+    primary = None
+    for p in st:
+        if isinstance(p, dict) and p.get("isPrimary"):
+            primary = p
+            break
+    if not primary:
+        primary = st[0] if isinstance(st[0], dict) else None
+
+    if not primary:
+        return None
+
+    sid = (primary.get("id") or "").strip()
+    if not sid:
+        return None
+
+    return SALESTEAM_ID_TO_EMAIL.get(sid)
 
 # -----------------------
 # Fast triage rules
@@ -382,7 +425,9 @@ def handoff_to_human(
     # -----------------------
     # Outlook email notify
     # -----------------------
-    to_addr = salesperson_email or "knowzek@gmail.com"
+    # to_addr = resolve_primary_sales_email(fresh_opp) or os.getenv("HUMAN_REVIEW_FALLBACK_TO", "")
+
+    to_addr = "knowzek@gmail.com"
     cc_list = _parse_cc_list(HUMAN_REVIEW_CC)
     headers = {"cc": ",".join(cc_list)} if cc_list else {}
 
