@@ -944,19 +944,17 @@ def complete_activity(
 ):
     """
     Complete an activity.
-    Fallback logic:
-      - Try activity_type as provided
-      - If Fortellis returns InvalidActivityType, retry with 14 (Send Email/Letter)
+    Tries known-good (name,type) combos to avoid InvalidActivityType per-rooftop issues.
     """
     url = f"{BASE_URL}{ACTIVITIES_BASE}/complete"
 
-    def _post(activity_type_id: int):
+    def _post(name: str, type_id: int):
         payload = {
             "opportunityId": opportunity_id,
             "dueDate": due_dt_iso_utc,
             "completedDate": completed_dt_iso_utc,
-            "activityName": activity_name,
-            "activityType": activity_type_id,
+            "activityName": name,
+            "activityType": type_id,
             "comments": comments or "",
         }
         if activity_id:
@@ -969,24 +967,53 @@ def complete_activity(
             json=payload,
         )
 
-    # --- First attempt ---
-    try:
-        return _post(_coerce_activity_type(activity_type))
+    # Always try the caller's requested combo first, then known fallback.
+    # If caller passes Send Email/3 already, this still works.
+    combos = [
+        (activity_name, _coerce_activity_type(activity_type)),
+        ("Send Email", 3),
+        ("Send Email/Letter", 14),
+    ]
 
-    except HTTPError as e:
-        msg = str(e)
-        if "InvalidActivityType" not in msg:
-            raise  # real error, bubble it up
+    # de-dupe while preserving order
+    seen = set()
+    ordered = []
+    for n, t in combos:
+        key = (n, int(t))
+        if key not in seen:
+            seen.add(key)
+            ordered.append(key)
 
-        # --- Fallback to Send Email/Letter (14) ---
-        log.warning(
-            "complete_activity: activityType=%s invalid for sub=%s opp=%s — retrying with 14",
-            activity_type,
-            dealer_key,
-            opportunity_id,
-        )
+    last_err = None
+    for name, type_id in ordered:
+        try:
+            return _post(name, type_id)
+        except HTTPError as e:
+            # Identify InvalidActivityType
+            try:
+                err_json = e.response.json()
+                err_code = err_json.get("code")
+            except Exception:
+                err_code = None
 
-        return _post(14)
+            msg = str(e)
+            is_invalid_type = (err_code == "InvalidActivityType") or ("InvalidActivityType" in msg)
+
+            if not is_invalid_type:
+                raise  # not a type issue, bubble it up
+
+            log.warning(
+                "complete_activity: InvalidActivityType for combo (%s/%s) dealer_key=%s opp=%s — trying next",
+                name, type_id, dealer_key, opportunity_id
+            )
+
+            last_err = e
+
+    # If we exhausted combos, raise the last InvalidActivityType error
+    raise last_err
+
+
+
 
 from datetime import datetime, timezone
 
@@ -1005,19 +1032,17 @@ def complete_send_email_activity(
 ):
     now = _iso_z(datetime.now(timezone.utc))
 
-    # IMPORTANT: pass activity_type as a string so _coerce_activity_type maps it reliably
     return complete_activity(
         token,
-        subscription_id,              # dealer_key == Subscription-Id 
+        subscription_id,
         opportunity_id,
         due_dt_iso_utc=now,
         completed_dt_iso_utc=now,
         activity_name="Send Email",
-        activity_type=3,  
+        activity_type=3,
         comments=f"Patti Outlook: sent to {to_addr} | subject={subject}"
                  + (f" | {comments_extra}" if comments_extra else ""),
     )
-
 
 
 def search_activities_by_opportunity(opportunity_id, token, dealer_key, page=1, page_size=10, customer_id=None):
