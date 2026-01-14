@@ -291,6 +291,13 @@ def process_lead_notification(inbound: dict) -> None:
 
     customer_email = shopper_email
 
+    patti = opportunity.get("patti") or {}
+    checked = opportunity.get("checkedDict") or {}
+    
+    if patti.get("needs_human_review") or checked.get("needs_human_review") or checked.get("triage") == "HUMAN_REVIEW_REQUIRED":
+        log.warning("Blocking first-touch because opp is flagged for human review opp=%s", opp_id)
+        return
+
     sent_ok = send_first_touch_email(
         opportunity=opportunity,
         fresh_opp=fresh_opp,
