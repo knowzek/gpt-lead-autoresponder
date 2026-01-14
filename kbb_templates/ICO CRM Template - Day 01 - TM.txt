@@ -230,7 +230,7 @@ To complete the Kelley Blue Book&#174; Instant Cash Offer for your <{TradeModel}
           <!-- Logo image (may be blocked) -->
           <a href="https://www.tustinmazda.com" target="_blank" style="text-decoration:none;">
             <img
-              src="https://www.pattersonautos.com/blogs/7684/wp-content/uploads/2025/11/image.png"
+              src="https://service.secureoffersites.com/images/GetLibraryImage?fileNameOrId=511894"
               width="300"
               border="0"
               alt="Tustin Mazda | Kelley Blue Book Instant Cash Offer"
@@ -277,7 +277,7 @@ To complete the Kelley Blue Book&#174; Instant Cash Offer for your <{TradeModel}
     <!-- LEFT: logo, clickable -->
     <td class="stack-column" width="280" valign="top" align="left" style="padding-right:16px;">
       <a href="https://www.tustinmazda.com" target="_blank" style="text-decoration:none;">
-        <img src="https://www.pattersonautos.com/blogs/7684/wp-content/uploads/2025/11/image.png"
+        <img src="https://service.secureoffersites.com/images/GetLibraryImage?fileNameOrId=511894"
              alt="Patterson Autos - Your KBB Buying Center"
              width="280" border="0" style="display:block; height:auto;">
       </a>
