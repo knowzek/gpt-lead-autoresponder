@@ -468,6 +468,7 @@ def handoff_to_human(
         to_addr=to_addr,
         subject=_clip(subj, 180),
         html_body=html,
+        cc_addrs=cc_addrs,    
         headers=headers,
         timeout=20,
     )
