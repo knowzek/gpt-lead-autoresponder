@@ -2026,6 +2026,14 @@ def send_first_touch_email(
     Mutates opportunity in-place like your existing code.
     """
 
+    if opportunity.get("needs_human_review") is True:
+        log.warning(
+            "Blocked first-touch send: Needs Human Review checked opp=%s",
+            opportunity.get("opportunityId") or opportunity.get("id")
+        )
+        return False
+
+
     # === Compose with GPT ===============================================
     fallback_mode = not inquiry_text or inquiry_text.strip().lower() in ["", "request a quote", "interested", "info", "information", "looking"]
 
@@ -2266,12 +2274,22 @@ def send_thread_reply_now(
     test_recipient: str | None = None,
     inbound_ts: str | None = None,
     inbound_subject: str | None = None,
-) -> tuple[bool, dict]:
+) -> tuple[dict, str]:
+
     currDate = _dt.now(_tz.utc)
     currDate_iso = currDate.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     opportunityId = opportunity.get("opportunityId") or opportunity.get("id")
     checkedDict = opportunity.get("checkedDict", {}) or {}
+
+    if opportunity.get("needs_human_review") is True:
+        log.warning(
+            "Blocked thread reply: Needs Human Review checked opp=%s",
+            opportunity.get("opportunityId") or opportunity.get("id")
+        )
+        state = opportunity.get("_internet_state") or {}
+        return state, "blocked_human_review"
+
 
     ctx = _build_email_context(opportunity=opportunity, fresh_opp=fresh_opp, subscription_id=subscription_id, token=token)
     customer_name   = ctx["customer_name"]
