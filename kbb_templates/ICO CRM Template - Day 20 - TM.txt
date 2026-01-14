@@ -256,10 +256,8 @@ Could you update me on your interest in trading or selling your vehicle? If you 
     </p>
 
     <p style="margin:0 0 10px;">
-      I’d be happy to update your offer and schedule a quick visit at <strong><{DealershipName}></strong>.
+      I’d be happy to update your offer and schedule a quick visit at <strong><{DealershipName}></strong>. What day and time works best for you?
     </p>
-
-    <p style="margin:0 0 20px;"><{LegacySalesApptSchLink}></p>
 
     <p style="margin:0 0 10px;">Best,<br>Patti</p>
 
@@ -398,6 +396,7 @@ Could you update me on your interest in trading or selling your vehicle? If you 
 </center>
 </body>
 </html>
+
 
 
 
