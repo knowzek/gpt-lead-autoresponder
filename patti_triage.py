@@ -28,7 +28,7 @@ TRIAGE_DUE_HOURS = int(os.getenv("HUMAN_REVIEW_DUE_HOURS", "2"))
 # CC leadership
 HUMAN_REVIEW_CC = os.getenv(
     "HUMAN_REVIEW_CC",
-    "alexc@pattersonautos.com,austiny@pattersonautos.com,donalds@pattersonautos.com"
+    "kristin@blackoctopusai.com"
 ).strip()
 
 # Optional: also triage KBB inbound replies (default off)
