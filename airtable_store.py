@@ -155,6 +155,22 @@ def opp_from_record(rec: dict) -> dict:
     if fields.get("customer_email") and not opp.get("customer_email"):
         opp["customer_email"] = fields.get("customer_email")
 
+        # --- Hydrate human review flags from Airtable columns ---
+    # Airtable checkbox returns True/False when present.
+    if "Needs Human Review" in fields:
+        opp["needs_human_review"] = bool(fields.get("Needs Human Review"))
+    else:
+        # default if column missing in this base/table
+        opp.setdefault("needs_human_review", False)
+
+    # hydrate reason + timestamp for logging/debugging
+    if fields.get("Human Review Reason") and not opp.get("human_review_reason"):
+        opp["human_review_reason"] = fields.get("Human Review Reason")
+
+    if fields.get("Human Review At") and not opp.get("human_review_at"):
+        opp["human_review_at"] = fields.get("Human Review At")
+
+
     return opp
 
 def get_by_id(rec_id: str) -> dict:
