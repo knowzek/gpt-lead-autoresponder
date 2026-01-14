@@ -257,9 +257,7 @@ Your Kelley Blue Book&#174; Instant Cash Offer has expired, but we'd still like 
       and get you your updated value right away.
     </p>
 
-    <p style="margin:0 0 10px;">Use the link below to start again when it’s convenient for you:</p>
-
-    <p style="margin:0 0 20px;"><{LegacySalesApptSchLink}></p>
+    <p style="margin:0 0 10px;">Let me know a day and time that's convenient for you!</p>
 
     <p style="margin:0 0 10px;">Talk soon,<br>Patti</p>
 
@@ -398,6 +396,7 @@ Your Kelley Blue Book&#174; Instant Cash Offer has expired, but we'd still like 
 </center>
 </body>
 </html>
+
 
 
 
