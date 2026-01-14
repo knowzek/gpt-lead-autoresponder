@@ -980,7 +980,7 @@ def complete_send_email_activity(
         due_dt_iso_utc=now,
         completed_dt_iso_utc=now,
         activity_name="Send Email",
-        activity_type=14,  
+        activity_type=3,  
         comments=f"Patti Outlook: sent to {to_addr} | subject={subject}"
                  + (f" | {comments_extra}" if comments_extra else ""),
     )
