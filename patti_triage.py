@@ -431,7 +431,34 @@ def handoff_to_human(
     if vehicle:
         subj += f" — {vehicle}"
     
-    html = f""" ... same html ... """.strip()
+    html = f"""
+    <p><b>Patti flagged a lead for human attention.</b></p>
+    
+    <p><b>Rooftop:</b> {rooftop_name}<br>
+    <b>Opp ID:</b> {opp_id}<br>
+    <b>Salesperson:</b> {salesperson_name} ({salesperson_email or "unknown"})</p>
+    
+    <p><b>Customer:</b> {customer_name}<br>
+    <b>Email:</b> {customer_email or "unknown"}<br>
+    <b>Phone:</b> {customer_phone or "unknown"}<br>
+    <b>Vehicle:</b> {vehicle or "unknown"}</p>
+    
+    <p><b>Classification:</b> HUMAN_REVIEW_REQUIRED<br>
+    <b>Reason:</b> {reason or "N/A"}<br>
+    <b>Confidence:</b> {conf}</p>
+    
+    <p><b>Inbound subject:</b> {inbound_subject or ""}</p>
+    
+    <p><b>Latest customer message:</b><br>
+    <pre style="white-space:pre-wrap;font-family:Arial,Helvetica,sans-serif;">{_clip(inbound_text, 2000)}</pre></p>
+    
+    <p><b>Next step:</b> Please take over this lead in the CRM and reply to the customer directly.</p>
+    
+    <p style="color:#666;font-size:12px;">
+    Logged by Patti (Fortellis task + comment). Sent from: {rooftop_sender or "Patti inbox"}<br>
+    {rooftop_addr}
+    </p>
+    """.strip()
     
     # Build CC list from env
     raw_cc = (os.getenv("HUMAN_REVIEW_CC") or "").strip()
