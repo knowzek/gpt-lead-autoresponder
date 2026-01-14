@@ -259,9 +259,7 @@ Fluctuations on the used car market have driven values up considerably over the 
       If you’d like, we can re-issue your Kelley Blue Book® Instant Cash Offer and schedule a quick 15-minute visit here at <strong><{DealershipName}></strong>.
     </p>
 
-    <p style="margin:0 0 10px;">Use the link below to pick a time that works best for you:</p>
-
-    <p style="margin:0 0 20px;"><{LegacySalesApptSchLink}></p>
+    <p style="margin:0 0 10px;">What day and time works best for you?</p>
 
     <p style="margin:0 0 10px;">All the best,<br>Patti</p>
   </td>
@@ -401,6 +399,7 @@ Fluctuations on the used car market have driven values up considerably over the 
 </center>
 </body>
 </html>
+
 
 
 
