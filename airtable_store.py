@@ -157,15 +157,44 @@ def opp_from_record(rec: dict) -> dict:
 
     return opp
 
+def get_by_id(rec_id: str) -> dict:
+    return _request("GET", f"{BASE_URL}/{rec_id}")
+
+
 
 def save_opp(opp: dict, *, extra_fields: dict | None = None):
     """
     Persist the full opportunity dict back to Airtable as opp_json,
     plus key index fields used for filtering.
+
+    IMPORTANT: always preserve identity fields (opportunityId/_subscription_id)
+    even if this in-memory opp dict is a slim "state blob".
     """
     rec_id = opp.get("_airtable_rec_id")
     if not rec_id:
         raise RuntimeError("Missing opp['_airtable_rec_id']; cannot save to Airtable")
+
+    # --- Re-hydrate identity from Airtable record fields when missing ---
+    try:
+        # If you have a "get by id" helper, use it.
+        # Otherwise, patch_by_id works without fetching — so we need a fetch helper.
+        # Assuming you have _request or get_by_id; if not, add it (see below).
+        rec = get_by_id(rec_id)  # <-- add this helper in airtable_store if you don't have it
+        fields = (rec or {}).get("fields", {}) or {}
+
+        airtable_opp_id = (fields.get("opp_id") or "").strip()
+        airtable_sub_id = (fields.get("subscription_id") or "").strip()
+
+        if airtable_opp_id:
+            opp.setdefault("opportunityId", airtable_opp_id)
+            opp.setdefault("id", airtable_opp_id)
+
+        if airtable_sub_id:
+            opp.setdefault("_subscription_id", airtable_sub_id)
+
+    except Exception:
+        # Don't block save_opp if fetch fails; we'll still write what we have.
+        pass
 
     # Normalize common fields
     is_active = bool(opp.get("isActive", True))
@@ -188,3 +217,4 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
         patch.update(extra_fields)
 
     return patch_by_id(rec_id, patch)
+)
