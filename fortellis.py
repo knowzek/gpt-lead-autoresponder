@@ -928,6 +928,8 @@ def schedule_activity(
         json=payload,
     )
 
+from requests.exceptions import HTTPError
+
 def complete_activity(
     token,
     dealer_key,
@@ -940,29 +942,51 @@ def complete_activity(
     comments="",
     activity_id=None,
 ):
+    """
+    Complete an activity.
+    Fallback logic:
+      - Try activity_type as provided
+      - If Fortellis returns InvalidActivityType, retry with 14 (Send Email/Letter)
+    """
     url = f"{BASE_URL}{ACTIVITIES_BASE}/complete"
-    payload = {
-        "opportunityId": opportunity_id,
-        "dueDate": due_dt_iso_utc,
-        "completedDate": completed_dt_iso_utc,
-        "activityName": activity_name,
-        "activityType": _coerce_activity_type(activity_type),
-        "comments": comments or ""
-    }
-    if activity_id:
-        payload["activityId"] = activity_id
 
-    log.info(
-      "complete_activity DEBUG: dealer_key=%s opp=%s activityType=%r (%s) activityName=%r url=%s",
-      dealer_key,
-      opportunity_id,
-      payload.get("activityType"),
-      type(payload.get("activityType")).__name__,
-      payload.get("activityName"),
-      url,
-  )
+    def _post(activity_type_id: int):
+        payload = {
+            "opportunityId": opportunity_id,
+            "dueDate": due_dt_iso_utc,
+            "completedDate": completed_dt_iso_utc,
+            "activityName": activity_name,
+            "activityType": activity_type_id,
+            "comments": comments or "",
+        }
+        if activity_id:
+            payload["activityId"] = activity_id
 
-    return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
+        return post_and_wrap(
+            "POST",
+            url,
+            headers=_headers(dealer_key, token),
+            json=payload,
+        )
+
+    # --- First attempt ---
+    try:
+        return _post(_coerce_activity_type(activity_type))
+
+    except HTTPError as e:
+        msg = str(e)
+        if "InvalidActivityType" not in msg:
+            raise  # real error, bubble it up
+
+        # --- Fallback to Send Email/Letter (14) ---
+        log.warning(
+            "complete_activity: activityType=%s invalid for sub=%s opp=%s — retrying with 14",
+            activity_type,
+            dealer_key,
+            opportunity_id,
+        )
+
+        return _post(14)
 
 from datetime import datetime, timezone
 
