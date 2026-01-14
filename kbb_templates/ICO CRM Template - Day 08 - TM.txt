@@ -255,9 +255,7 @@ Your Kelley Blue Book&#174; Instant Cash Offer has expired, but we'd still like 
       We can get you in and out in one short visit here at <strong><{DealershipName}></strong>.
     </p>
 
-    <p style="margin:0 0 10px;">Here’s the link to reserve your spot:</p>
-
-    <p style="margin:0 0 20px;"><{LegacySalesApptSchLink}></p>
+    <p style="margin:0 0 10px;">Let me know what day and time works for you!</p>
 
     <p style="margin:0 0 10px;">Thanks again,<br>Patti</p>
 
@@ -399,6 +397,7 @@ Your Kelley Blue Book&#174; Instant Cash Offer has expired, but we'd still like 
 </center>
 </body>
 </html>
+
 
 
 
