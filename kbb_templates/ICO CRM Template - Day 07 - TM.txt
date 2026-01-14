@@ -256,11 +256,24 @@ Urgent! Today is the FINAL day that your Kelley Blue Book&#174; Instant Cash Off
       If you’d still like to redeem it, let’s get you scheduled before it lapses — the process is quick and easy at <strong><{DealershipName}></strong>.
     </p>
 
-    <p style="margin:0 0 10px;">Choose your preferred time below:</p>
+    <p style="margin:0 0 10px;">
+      Choose your preferred time below:
+    </p>
+    
+    <p style="margin:0 0 20px;">
+      <a href="https://www.tustinmazda.com/scheduleservice"
+         style="color:#0B66C3; text-decoration:none;"
+         target="_blank"
+         rel="noopener">
+        Schedule your visit
+      </a>
+    </p>
+    
+    <p style="margin:0 0 10px;">
+      Best,<br>
+      Patti
+    </p>
 
-    <p style="margin:0 0 20px;"><{LegacySalesApptSchLink}></p>
-
-    <p style="margin:0 0 10px;">Best,<br>Patti</p>
 
     <!-- Patti signature (kept inside the SAME td; no extra </td></tr> before or after) -->
     <table role="presentation" width="600" border="0" cellspacing="0" cellpadding="0" align="center" style="margin-top:18px;">
@@ -334,6 +347,7 @@ Urgent! Today is the FINAL day that your Kelley Blue Book&#174; Instant Cash Off
 </center>
 </body>
 </html>
+
 
 
 
