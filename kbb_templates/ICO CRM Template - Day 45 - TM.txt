@@ -228,7 +228,7 @@ font-size: 17px !important;
       <tr>
         <td align="center">
           <a href="https://www.kbb.com/instant-cash-offer/W/54278195/43A6F9B8-DB6C-48C0-A360-F658B2176E3E/" target="_blank" style="text-decoration:none;">
-            <img src="https://www.pattersonautos.com/blogs/7684/wp-content/uploads/2025/11/image.png"
+            <img src="https://service.secureoffersites.com/images/GetLibraryImage?fileNameOrId=511894"
                  width="300"
                  border="0"
                  alt="Tustin Mazda"
@@ -432,5 +432,6 @@ font-size: 17px !important;
 </center>
 </body>
 </html>
+
 
 
