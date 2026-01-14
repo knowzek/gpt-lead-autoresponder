@@ -228,7 +228,7 @@ Urgent! Today is the FINAL day that your Kelley Blue Book&#174; Instant Cash Off
       <tr>
         <td align="center">
           <a href="https://www.kbb.com/instant-cash-offer/W/54278195/43A6F9B8-DB6C-48C0-A360-F658B2176E3E/" target="_blank" style="text-decoration:none;">
-            <img src="https://www.pattersonautos.com/blogs/7684/wp-content/uploads/2025/11/image.png"
+            <img src="https://service.secureoffersites.com/images/GetLibraryImage?fileNameOrId=511894"
                  width="300"
                  border="0"
                  alt="Tustin Mazda"
@@ -268,7 +268,7 @@ Urgent! Today is the FINAL day that your Kelley Blue Book&#174; Instant Cash Off
         <!-- LEFT: logo, clickable -->
         <td width="280" valign="top" align="left" style="padding-right:16px;">
           <a href="https://www.tustinmazda.com" target="_blank" style="text-decoration:none;">
-            <img src="https://www.pattersonautos.com/blogs/7684/wp-content/uploads/2025/11/image.png"
+            <img src="https://service.secureoffersites.com/images/GetLibraryImage?fileNameOrId=511894"
                  alt="Patterson Autos • Your KBB Buying Center"
                  width="280" border="0" style="display:block;height:auto;">
           </a>
@@ -334,6 +334,7 @@ Urgent! Today is the FINAL day that your Kelley Blue Book&#174; Instant Cash Off
 </center>
 </body>
 </html>
+
 
 
 
