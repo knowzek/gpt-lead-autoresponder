@@ -133,19 +133,48 @@ def _extract_kbb_amount(text: str) -> str | None:
 
 
 
+EMAIL_RE = re.compile(r"([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})", re.I)
+
 def _extract_shopper_email(body_text: str) -> str | None:
     """
-    Parse the ADF notification email text to find shopper's email.
-    Example lines:
-      Email: knowzek@gmail.com
+    Parse KBB ADF notification text to find shopper email.
+
+    Handles:
+      - Email: foo@bar.com
+      - email appearing on its own line (common in KBB alerts)
     """
     if not body_text:
         return None
 
-    m = re.search(r"Email:\s*([^\s]+@[^\s]+)", body_text, re.IGNORECASE)
-    if not m:
+    # 1) Preferred: explicit Email: label
+    m = re.search(r"(?im)^\s*email\s*:\s*([^\s<]+@[^\s<]+)\s*$", body_text)
+    if m:
+        return m.group(1).strip().lower()
+
+    # 2) Fallback: any standalone email in body
+    matches = EMAIL_RE.findall(body_text)
+    if not matches:
         return None
-    return m.group(1).strip().lower()
+
+    # Filter out system / sender addresses
+    block = {
+        "reply@messages.kbb.com",
+        "noreply@kbb.com",
+        "noreplylead@carfax.com",
+        "patti@pattersonautos.com",
+    }
+
+    for email in matches:
+        e = email.strip().lower()
+        if e in block:
+            continue
+        if "kbb" in e or "pattersonautos.com" in e:
+            continue
+        return e
+
+    # Last-resort fallback
+    return matches[0].strip().lower()
+
 
 def _find_kbb_opp_by_email_via_fortellis(shopper_email: str) -> tuple[str, str] | None:
     """
