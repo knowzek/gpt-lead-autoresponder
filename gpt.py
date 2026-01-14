@@ -2,6 +2,7 @@ import os, time, json, logging, re
 from datetime import datetime
 from openai import OpenAI
 from openai import APIStatusError, NotFoundError  # available in recent SDKs; if import fails, just catch Exception
+from rooftops import ROOFTOP_INFO
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -586,10 +587,22 @@ def run_gpt(prompt: str,
         body = re.sub(r"(?i)<\{LegacySalesApptSchLink\}>", "", body)
         body = re.sub(r"(?im)^\s*looking forward to[^\n]*\n?", "", body)
     
-        schedule_sentence = (
-            "Please let us know a convenient time for you, or you can instantly reserve your time here: "
-            "<{LegacySalesApptSchLink}>"
+        booking_link = (
+            ROOFTOP_INFO
+                .get(rooftop_name, {})
+                .get("booking_link")
         )
+    
+        if booking_link:
+            schedule_sentence = (
+                "Please let us know a convenient time for you, or you can instantly reserve your time here: "
+                f"{booking_link}"
+            )
+        else:
+            schedule_sentence = (
+                "Please let us know a convenient time for you and I’ll help coordinate next steps."
+            )
+    
         signature_lines = ["", "Patti", rooftop_name]
         if rooftop_addr:
             signature_lines.append(rooftop_addr)
@@ -601,6 +614,7 @@ def run_gpt(prompt: str,
             + "\n\n"
             + "\n".join(signature_lines)
         )
+
     
     reply["messages"] = messages
     log.debug("OpenAI model_used=%s, chars=%d", model_used, len(text or ""))
