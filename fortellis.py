@@ -953,6 +953,16 @@ def complete_activity(
     if activity_id:
         payload["activityId"] = activity_id
 
+    log.info(
+      "complete_activity DEBUG: dealer_key=%s opp=%s activityType=%r (%s) activityName=%r url=%s",
+      dealer_key,
+      opportunity_id,
+      payload.get("activityType"),
+      type(payload.get("activityType")).__name__,
+      payload.get("activityName"),
+      url,
+  )
+
     return post_and_wrap("POST", url, headers=_headers(dealer_key, token), json=payload)
 
 from datetime import datetime, timezone
