@@ -340,7 +340,7 @@ def handoff_to_human(
     # -----------------------
     due_utc = (datetime.now(timezone.utc) + timedelta(hours=TRIAGE_DUE_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    comments = (
+    activity_comments = (
         "Patti flagged this lead for HUMAN REVIEW.\n"
         f"Reason: {reason} (conf={conf})\n"
         f"Customer: {customer_name} | {customer_email} | {customer_phone}\n"
@@ -382,7 +382,7 @@ def handoff_to_human(
     # -----------------------
     # Outlook email notify
     # -----------------------
-    to_addr = salesperson_email or "alexc@pattersonautos.com"
+    to_addr = salesperson_email or "knowzek@gmail.com"
     cc_list = _parse_cc_list(HUMAN_REVIEW_CC)
     headers = {"cc": ",".join(cc_list)} if cc_list else {}
 
