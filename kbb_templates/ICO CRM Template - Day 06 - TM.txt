@@ -268,11 +268,24 @@ Urgent! Your Kelley Blue Book&#174; Instant Cash Offer expires soon. To complete
       We can wrap things up right here at <strong><{DealershipName}></strong> in about 15 minutes.
     </p>
 
-    <p style="margin:0 0 10px;">Let's pick a time that works for you:</p>
+    <p style="margin:0 0 10px;">
+      Pick a time that works best for you below, or reply to let me know what's easiest:
+    </p>
+    
+    <p style="margin:0 0 20px;">
+      <a href="https://www.tustinmazda.com/scheduleservice"
+         style="color:#0B66C3; text-decoration:none;"
+         target="_blank"
+         rel="noopener">
+        Schedule your visit
+      </a>
+    </p>
+    
+    <p style="margin:0 0 10px;">
+      Thanks,<br>
+      Patti
+    </p>
 
-    <p style="margin:0 0 20px;"><{LegacySalesApptSchLink}></p>
-
-    <p style="margin:0 0 10px;">Talk soon,<br>Patti</p>
 
 <br><br>
 <!-- Patti signature (hard-coded, 600px, fully linked) -->
@@ -369,6 +382,7 @@ Urgent! Your Kelley Blue Book&#174; Instant Cash Offer expires soon. To complete
 </center>
 </body>
 </html>
+
 
 
 
