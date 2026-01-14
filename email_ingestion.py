@@ -294,8 +294,8 @@ def process_lead_notification(inbound: dict) -> None:
     patti = opportunity.get("patti") or {}
     checked = opportunity.get("checkedDict") or {}
     
-    if patti.get("needs_human_review") or checked.get("needs_human_review") or checked.get("triage") == "HUMAN_REVIEW_REQUIRED":
-        log.warning("Blocking first-touch because opp is flagged for human review opp=%s", opp_id)
+    if opportunity.get("needs_human_review") is True or patti.get("human_review_reason"):
+        log.warning("Blocking first-touch: human review lock opp=%s", opp_id)
         return
 
     sent_ok = send_first_touch_email(
@@ -568,6 +568,10 @@ def process_inbound_email(inbound: dict) -> None:
             return
     
         opportunity = opp_from_record(rec2)
+        
+    if opportunity.get("needs_human_review") is True:
+        log.info("Blocking inbound auto-reply: Needs Human Review checked opp=%s", opp_id)
+        return
         
     source = (opportunity.get("source") or "").lower()
     # if opp_json is a dict in your normalized object, include it too:
