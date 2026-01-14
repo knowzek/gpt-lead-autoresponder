@@ -217,4 +217,3 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
         patch.update(extra_fields)
 
     return patch_by_id(rec_id, patch)
-)
