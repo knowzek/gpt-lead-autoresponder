@@ -71,11 +71,14 @@
 
     <p style="margin:0 0 10px;">
       Pick a time that works best for you, or let me know what's easiest and I'll get it scheduled for you:
+      <a href="https://www.tustinmazda.com/scheduleservice"
+         style="color:#0B66C3; text-decoration:none;"
+         target="_blank"
+         rel="noopener">
+        schedule your visit here
+      </a>.
     </p>
 
-    <p style="margin:0 0 20px;">
-      &lt;{LegacySalesApptSchLink}&gt;
-    </p>
 
     <p style="margin:0 0 10px;">Talk soon,<br>Patti</p>
 
