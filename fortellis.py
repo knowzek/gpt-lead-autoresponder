@@ -987,7 +987,15 @@ def complete_activity(
     last_err = None
     for name, type_id in ordered:
         try:
-            return _post(name, type_id)
+            resp = _post(name, type_id)
+            log.info(
+                "Completed CRM activity: %s (%s) dealer_key=%s opp=%s",
+                name,
+                type_id,
+                dealer_key,
+                opportunity_id,
+            )
+            return resp
         except HTTPError as e:
             # Identify InvalidActivityType
             try:
@@ -995,17 +1003,18 @@ def complete_activity(
                 err_code = err_json.get("code")
             except Exception:
                 err_code = None
+    
+            msg = str(e)
+            is_invalid_type = (err_code == "InvalidActivityType") or ("InvalidActivityType" in msg)
+    
+            if not is_invalid_type:
+                raise  # not a type issue, bubble it up
 
             msg = str(e)
             is_invalid_type = (err_code == "InvalidActivityType") or ("InvalidActivityType" in msg)
 
             if not is_invalid_type:
                 raise  # not a type issue, bubble it up
-
-            log.warning(
-                "complete_activity: InvalidActivityType for combo (%s/%s) dealer_key=%s opp=%s — trying next",
-                name, type_id, dealer_key, opportunity_id
-            )
 
             last_err = e
 
