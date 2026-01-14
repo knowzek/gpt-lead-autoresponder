@@ -580,40 +580,15 @@ def run_gpt(prompt: str,
             .replace("[Guest’s Name]", customer_name)
         )
     
-    # --- Append dynamic schedule link + closing signature (skip for KBB persona) ---
+
+    # --- Clean up any stray scheduling tokens/phrases; footer will handle CTA ---
     if rooftop_name and persona != "kbb_ico":
         body = (reply.get("body") or "")
         body = re.sub(r"(?im)^\s*schedule appointment\s*$", "", body)
         body = re.sub(r"(?i)<\{LegacySalesApptSchLink\}>", "", body)
         body = re.sub(r"(?im)^\s*looking forward to[^\n]*\n?", "", body)
+        reply["body"] = body.rstrip()
     
-        booking_link = (
-            ROOFTOP_INFO
-                .get(rooftop_name, {})
-                .get("booking_link")
-        )
-    
-        if booking_link:
-            schedule_sentence = (
-                "Please let us know a convenient time for you, or you can instantly reserve your time here: "
-                f"{booking_link}"
-            )
-        else:
-            schedule_sentence = (
-                "Please let us know a convenient time for you and I’ll help coordinate next steps."
-            )
-    
-        signature_lines = ["", "Patti", rooftop_name]
-        if rooftop_addr:
-            signature_lines.append(rooftop_addr)
-    
-        reply["body"] = (
-            body.rstrip()
-            + "\n\n"
-            + schedule_sentence
-            + "\n\n"
-            + "\n".join(signature_lines)
-        )
 
     
     reply["messages"] = messages
