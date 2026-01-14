@@ -230,7 +230,7 @@ Fluctuations on the used car market have driven values up considerably over the 
       <tr>
         <td align="center">
           <a href="https://www.kbb.com/instant-cash-offer/W/54278195/43A6F9B8-DB6C-48C0-A360-F658B2176E3E/" target="_blank" style="text-decoration:none;">
-            <img src="https://www.pattersonautos.com/blogs/7684/wp-content/uploads/2025/11/image.png"
+            <img src="https://service.secureoffersites.com/images/GetLibraryImage?fileNameOrId=511894"
                  width="300"
                  border="0"
                  alt="Tustin Mazda"
@@ -274,7 +274,7 @@ Fluctuations on the used car market have driven values up considerably over the 
     <!-- LEFT: logo, clickable -->
     <td class="stack-column" width="280" valign="top" align="left" style="padding-right:16px;">
       <a href="https://www.tustinmazda.com" target="_blank" style="text-decoration:none;">
-        <img src="https://www.pattersonautos.com/blogs/7684/wp-content/uploads/2025/11/image.png"
+        <img src="https://service.secureoffersites.com/images/GetLibraryImage?fileNameOrId=511894"
              alt="Patterson Autos • Your KBB Buying Center"
              width="280" border="0" style="display:block; height:auto;">
       </a>
@@ -401,6 +401,7 @@ Fluctuations on the used car market have driven values up considerably over the 
 </center>
 </body>
 </html>
+
 
 
 
