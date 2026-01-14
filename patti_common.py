@@ -74,7 +74,16 @@ def fmt_local_human(dt: _dt, tz_name: str = "America/Los_Angeles") -> str:
     return f"{local.strftime('%A')}, {local.strftime('%b')} {local.day} at {time_str}"
 
 # Detect any existing booking token/link so we don't double-insert a CTA
-_SCHED_ANY_RE = _re2.compile(r'(?is)(LegacySalesApptSchLink|Schedule\s+Your\s+Visit</a>)')
+_SCHED_ANY_RE = re2.compile(
+    r"(?is)("
+    r"LegacySalesApptSchLink|"
+    r"schedule\s+directly\s+here|"
+    r"reserve\s+your\s+time|"
+    r"scheduleservice|"
+    r"https?://[^\s\"']*(schedule|scheduleservice)[^\s\"']*"
+    r")"
+)
+
 
 
 def normalize_patti_body(body_html: str) -> str:
