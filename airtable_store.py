@@ -128,11 +128,35 @@ def opp_from_record(rec: dict) -> dict:
     """
     Return the opportunity dict from Airtable record (opp_json).
     Also attaches the record id for persistence.
+    Hydrates key identity fields from Airtable columns so downstream code
+    can rely on them even if opp_json is partial.
     """
-    fields = rec.get("fields", {})
+    fields = rec.get("fields", {}) or {}
     opp = _safe_json_loads(fields.get("opp_json")) or {}
+
+    # Always attach Airtable record id
     opp["_airtable_rec_id"] = rec.get("id")
+
+    # --- Hydrate canonical opp id ---
+    airtable_opp_id = (fields.get("opp_id") or fields.get("opportunityId") or fields.get("id") or "").strip()
+    if airtable_opp_id:
+        opp.setdefault("opportunityId", airtable_opp_id)
+        opp.setdefault("id", airtable_opp_id)
+
+    # --- Hydrate subscription id for Fortellis calls ---
+    airtable_sub = (fields.get("subscription_id") or fields.get("_subscription_id") or "").strip()
+    if airtable_sub:
+        opp.setdefault("_subscription_id", airtable_sub)
+
+    # Optional: hydrate useful display fields (won’t hurt anything)
+    if fields.get("source") and not opp.get("source"):
+        opp["source"] = fields.get("source")
+
+    if fields.get("customer_email") and not opp.get("customer_email"):
+        opp["customer_email"] = fields.get("customer_email")
+
     return opp
+
 
 def save_opp(opp: dict, *, extra_fields: dict | None = None):
     """
