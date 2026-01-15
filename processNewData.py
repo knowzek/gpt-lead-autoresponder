@@ -2339,7 +2339,7 @@ def send_thread_reply_now(
     test_recipient: str | None = None,
     inbound_ts: str | None = None,
     inbound_subject: str | None = None,
-) -> tuple[dict, str]:
+) -> tuple[bool, dict]:
 
     currDate = _dt.now(_tz.utc)
     currDate_iso = currDate.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -2365,22 +2365,120 @@ def send_thread_reply_now(
 
     messages = opportunity.get("messages") or []
 
-    prompt = f"""
-You are replying to an ACTIVE email thread (not a first welcome message).
-
-Context:
-- The guest originally inquired about: {vehicle_str}
-
-Use the full message history below, then write Patti’s next reply that answers
-the customer’s latest question. Keep it warm, direct, and helpful.
-
-messages between Patti and the customer (python list of dicts):
-{messages}
-
-Return ONLY valid JSON with keys: subject, body.
-""".strip()
-
+    # --- Step 1: get latest customer message text (for appointment detection) ---
+    def _latest_customer_body(msgs: list[dict]) -> str:
+        for m in reversed(msgs or []):
+            # Outbound is commonly marked msgFrom="patti"
+            if (m.get("msgFrom") or "").strip().lower() != "patti":
+                return (m.get("body") or m.get("body_text") or m.get("text") or "").strip()
+        return ""
+    
+    customer_body = _latest_customer_body(messages)
+    
+    # --- Step 2: try to auto-schedule an appointment from this reply (WEBHOOK PATH) ---
+    created_appt_ok = False
+    appt_human = None
+    
+    # NOTE: no SAFE_MODE gating here by request (SAFE_MODE can still create Fortellis appts)
+    if (not OFFLINE_MODE) and token and subscription_id and opportunityId:
+        try:
+            patti_meta = opportunity.get("patti") or {}
+    
+            # Skip if we already know about a future appointment
+            appt_due_utc = patti_meta.get("appt_due_utc")
+            already_scheduled = False
+            if appt_due_utc:
+                try:
+                    appt_dt = _dt.fromisoformat(str(appt_due_utc).replace("Z", "+00:00"))
+                    if appt_dt > _dt.now(_tz.utc):
+                        already_scheduled = True
+                except Exception:
+                    pass
+    
+            appt_iso = ""
+            conf = 0.0
+            if (not already_scheduled) and customer_body:
+                proposed = extract_appt_time(customer_body, tz="America/Los_Angeles")
+                appt_iso = (proposed.get("iso") or "").strip()
+                conf = float(proposed.get("confidence") or 0.0)
+    
+            if appt_iso and conf >= 0.60:
+                # appt_iso is expected to be parseable by fromisoformat when Z->+00:00
+                dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
+    
+                due_dt_iso_utc = dt_local.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+                schedule_activity(
+                    token,
+                    subscription_id,
+                    opportunityId,
+                    due_dt_iso_utc=due_dt_iso_utc,
+                    activity_name="Sales Appointment",
+                    activity_type="Appointment",
+                    comments=f"Auto-scheduled from Patti based on customer reply: {customer_body[:200]}",
+                )
+    
+                created_appt_ok = True
+                appt_human = fmt_local_human(dt_local)
+    
+                # Persist appointment state in Airtable “brain”
+                patti_meta["mode"] = "scheduled"
+                patti_meta["appt_due_utc"] = due_dt_iso_utc
+                # We’re about to confirm in the reply, so mark it to prevent duplicates.
+                patti_meta["appt_confirm_email_sent"] = True
+                opportunity["patti"] = patti_meta
+    
+                log.info(
+                    "✅ Auto-scheduled appointment from webhook reply for %s at %s (conf=%.2f)",
+                    opportunityId,
+                    appt_human,
+                    conf,
+                )
+    
+        except Exception as e:
+            log.warning(
+                "Webhook reply appointment detection failed opp=%s: %s",
+                opportunityId,
+                e,
+            )
+    
+    # --- Step 3: choose the right GPT prompt (confirmation vs normal reply) ---
+    if created_appt_ok and appt_human:
+        prompt = f"""
+    The customer and Patti have been emailing about a potential sales appointment.
+    
+    Patti has just scheduled an appointment in the CRM based on the most recent customer reply.
+    Appointment time (local dealership time): {appt_human}.
+    
+    Write Patti's next email reply using the messages list below. Patti should:
+    - Warmly confirm the appointment for {appt_human}
+    - Thank the customer and set expectations for the visit
+    - NOT ask the customer to choose a time again.
+    
+    Here are the messages (Python list of dicts):
+    {messages}
+    
+    Return ONLY valid JSON with keys: subject, body.
+    """.strip()
+    else:
+        prompt = f"""
+    You are replying to an ACTIVE email thread (not a first welcome message).
+    
+    Context:
+    - The guest originally inquired about: {vehicle_str}
+    
+    Use the full message history below, then write Patti’s next reply that answers
+    the customer’s latest question. Keep it warm, direct, and helpful.
+    
+    messages between Patti and the customer (python list of dicts):
+    {messages}
+    
+    Return ONLY valid JSON with keys: subject, body.
+    """.strip()
+    
     response = run_gpt(prompt, customer_name, rooftop_name, prevMessages=True)
+
+
     subject   = response["subject"]
     body_html = response["body"]
 
