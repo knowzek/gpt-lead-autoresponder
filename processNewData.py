@@ -1918,33 +1918,87 @@ def processHit(hit):
     
     wJson(opportunity, f"jsons/process/{opportunityId}.json")
 
+_EMAIL_RE = re.compile(r"(?i)\b([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})\b")
+_CARFAX_EMAIL_RE = re.compile(r"(?i)\bEmail:\s*([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})\b")
+
+def _first_email_in_text(text: str) -> str | None:
+    if not text:
+        return None
+    m = _CARFAX_EMAIL_RE.search(text) or _EMAIL_RE.search(text)
+    return m.group(1).strip() if m else None
+
 def _build_email_context(*, opportunity: dict, fresh_opp: dict, subscription_id: str, token: str | None):
     """
-    Reuse the exact same context derivation processHit uses:
-    - customer_name, customer_email
+    Resilient context derivation:
+    - customer_name, customer_email (with fallbacks for internet leads)
     - salesperson
     - rooftop_name, rooftop_sender
     - vehicle_str
-    - source/sub_source/dealership
+    - source/sub_source
     """
     # --- Customer ---
     customer = opportunity.get("customer") or {}
     customer_name = customer.get("firstName") or "there"
 
-    # customer email (preferred, not doNotEmail)
-    customer_emails = customer.get("emails", []) or []
+    # 1) Preferred email from opportunity.customer.emails
     customer_email = None
+    customer_emails = customer.get("emails", []) or []
     for e in customer_emails:
+        if not isinstance(e, dict):
+            continue
         if e.get("doNotEmail") or not e.get("isPreferred"):
             continue
-        customer_email = e.get("address")
-        break
+        if e.get("address"):
+            customer_email = e.get("address")
+            break
     if not customer_email:
         for e in customer_emails:
+            if not isinstance(e, dict):
+                continue
             if e.get("doNotEmail"):
                 continue
             if e.get("address"):
                 customer_email = e.get("address")
+                break
+
+    # 2) Try fresh_opp customer-ish fields (varies by endpoint/schema)
+    if not customer_email:
+        cust = (
+            fresh_opp.get("customer")
+            or fresh_opp.get("customerInfo")
+            or fresh_opp.get("customer_info")
+            or {}
+        )
+        if isinstance(cust, dict):
+            # common variants
+            for key in ("email", "emailAddress", "primaryEmail", "email_address"):
+                val = cust.get(key)
+                if val and isinstance(val, str) and "@" in val:
+                    customer_email = val.strip()
+                    break
+            # sometimes emails are a list of dicts too
+            if not customer_email:
+                emails2 = cust.get("emails") or []
+                if isinstance(emails2, list):
+                    for e in emails2:
+                        if isinstance(e, dict) and e.get("address") and not e.get("doNotEmail"):
+                            customer_email = str(e["address"]).strip()
+                            break
+
+    # 3) Parse from message history (CARFAX bodies contain "Email: ...")
+    if not customer_email:
+        msgs = opportunity.get("messages") or []
+        for m in reversed(msgs):
+            if not isinstance(m, dict):
+                continue
+            txt = " ".join([
+                str(m.get("body") or ""),
+                str(m.get("body_text") or ""),
+                str(m.get("text") or ""),
+            ]).strip()
+            found = _first_email_in_text(txt)
+            if found:
+                customer_email = found
                 break
 
     # --- Salesperson ---
@@ -1985,7 +2039,7 @@ def _build_email_context(*, opportunity: dict, fresh_opp: dict, subscription_id:
 
     vehicleObj = None
     for v in soughtVehicles:
-        if v.get("isPrimary"):
+        if isinstance(v, dict) and v.get("isPrimary"):
             vehicleObj = v
             break
     if not vehicleObj:
@@ -1998,8 +2052,7 @@ def _build_email_context(*, opportunity: dict, fresh_opp: dict, subscription_id:
 
     vehicle_str = f"{year} {make} {model} {trim}".strip() or "one of our vehicles"
 
-    # linkify if possible (same as processHit)
-    dealership = rooftop_name  # keep it simple here; your mapping logic can be added if needed
+    dealership = rooftop_name
     base_url = DEALERSHIP_URL_MAP.get(dealership)
     if base_url and (make and model):
         vehicle_str = f'<a href="{base_url}?make={make}&model={model}">{vehicle_str}</a>'
@@ -2017,7 +2070,7 @@ def _build_email_context(*, opportunity: dict, fresh_opp: dict, subscription_id:
         "source": source,
         "sub_source": sub_source,
     }
-    
+
 def send_first_touch_email(
     *,
     opportunity: dict,
