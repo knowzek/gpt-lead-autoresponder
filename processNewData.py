@@ -2346,7 +2346,7 @@ def send_thread_reply_now(
             opportunity.get("opportunityId") or opportunity.get("id")
         )
         state = opportunity.get("_internet_state") or {}
-        return state, "blocked_human_review"
+        return False, opportunity
 
 
     ctx = _build_email_context(opportunity=opportunity, fresh_opp=fresh_opp, subscription_id=subscription_id, token=token)
@@ -2522,7 +2522,7 @@ def send_thread_reply_now(
         if to_addr:
             try:
                 from patti_mailer import send_patti_email
-                send_patti_email(
+                sent_ok = bool(send_patti_email(
                     token=token,
                     subscription_id=subscription_id,
                     opp_id=opportunityId,
@@ -2532,8 +2532,7 @@ def send_thread_reply_now(
                     subject=subject,
                     body_html=body_html,
                     cc_addrs=[],
-                )
-                sent_ok = True
+                ))
             except Exception as e:
                 log.warning("Thread reply send failed opp %s: %s", opportunityId, e)
 
@@ -2541,7 +2540,6 @@ def send_thread_reply_now(
         patti_meta = opportunity.get("patti") or {}
         patti_meta["appt_confirm_email_sent"] = True
         opportunity["patti"] = patti_meta
-
 
         if not OFFLINE_MODE:
             airtable_save(opportunity)
