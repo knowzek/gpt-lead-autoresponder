@@ -2418,7 +2418,6 @@ def send_thread_reply_now(
                 patti_meta["mode"] = "scheduled"
                 patti_meta["appt_due_utc"] = due_dt_iso_utc
                 # We’re about to confirm in the reply, so mark it to prevent duplicates.
-                patti_meta["appt_confirm_email_sent"] = True
                 opportunity["patti"] = patti_meta
     
                 log.info(
@@ -2434,25 +2433,21 @@ def send_thread_reply_now(
                 opportunityId,
                 e,
             )
+            
+    skip_gpt = bool(created_appt_ok and appt_human)
     
-    # --- Step 3: choose the right GPT prompt (confirmation vs normal reply) ---
+    # --- Step 3: choose the right reply (short confirmation vs normal reply) ---
+    skip_footer = False
+    response = {}  # <--- IMPORTANT: always defined
+    
     if created_appt_ok and appt_human:
-        prompt = f"""
-    The customer and Patti have been emailing about a potential sales appointment.
-    
-    Patti has just scheduled an appointment in the CRM based on the most recent customer reply.
-    Appointment time (local dealership time): {appt_human}.
-    
-    Write Patti's next email reply using the messages list below. Patti should:
-    - Warmly confirm the appointment for {appt_human}
-    - Thank the customer and set expectations for the visit
-    - NOT ask the customer to choose a time again.
-    
-    Here are the messages (Python list of dicts):
-    {messages}
-    
-    Return ONLY valid JSON with keys: subject, body.
-    """.strip()
+        subject = inbound_subject or f"Re: {vehicle_str}"
+        body_html = (
+            f"<p>Hi {customer_name},</p>"
+            f"<p>Perfect — you’re all set for <strong>{appt_human}</strong> at {rooftop_name}.</p>"
+            f"<p>If anything changes, just reply here and we’ll adjust.</p>"
+        )
+        skip_footer = True
     else:
         prompt = f"""
     You are replying to an ACTIVE email thread (not a first welcome message).
@@ -2469,32 +2464,36 @@ def send_thread_reply_now(
     Return ONLY valid JSON with keys: subject, body.
     """.strip()
     
-    response = run_gpt(prompt, customer_name, rooftop_name, prevMessages=True)
-
-
-    subject   = response["subject"]
-    body_html = response["body"]
+        response = run_gpt(prompt, customer_name, rooftop_name, prevMessages=True)
+        subject   = response["subject"]
+        body_html = response["body"]
 
     body_html = normalize_patti_body(body_html)
     body_html = _patch_address_placeholders(body_html, rooftop_name)
 
-    # CTA rules (same as elsewhere)
-    patti_meta = opportunity.get("patti") or {}
-    mode = (patti_meta.get("mode") or "").strip().lower()
-    sub_status = (
-        (fresh_opp.get("subStatus") or fresh_opp.get("substatus") or "")
-        or (opportunity.get("subStatus") or opportunity.get("substatus") or "")
-    ).strip().lower()
-    has_booked_appt = (mode == "scheduled") or ("appointment" in sub_status) or bool(patti_meta.get("appt_due_utc"))
+    if not skip_footer:
+        
+        # CTA rules (same as elsewhere)
+        patti_meta = opportunity.get("patti") or {}
+        mode = (patti_meta.get("mode") or "").strip().lower()
+        sub_status = (
+            (fresh_opp.get("subStatus") or fresh_opp.get("substatus") or "")
+            or (opportunity.get("subStatus") or opportunity.get("substatus") or "")
+        ).strip().lower()
+        has_booked_appt = (mode == "scheduled") or ("appointment" in sub_status) or bool(patti_meta.get("appt_due_utc"))
+    
+        if has_booked_appt:
+            body_html = rewrite_sched_cta_for_booked(body_html)
+            body_html = _SCHED_ANY_RE.sub("", body_html).strip()
+        else:
+            body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+    
+        body_html = _PREFS_RE.sub("", body_html).strip()
+        body_html = body_html + build_patti_footer(rooftop_name)
 
-    if has_booked_appt:
-        body_html = rewrite_sched_cta_for_booked(body_html)
-        body_html = _SCHED_ANY_RE.sub("", body_html).strip()
     else:
-        body_html = append_soft_schedule_sentence(body_html, rooftop_name)
-
-    body_html = _PREFS_RE.sub("", body_html).strip()
-    body_html = body_html + build_patti_footer(rooftop_name)
+        # still strip prefs, but keep it short
+        body_html = _PREFS_RE.sub("", body_html).strip()
 
     opportunity.setdefault("messages", []).append({
         "msgFrom": "patti",
@@ -2511,7 +2510,11 @@ def send_thread_reply_now(
     to_addr = customer_email
     if SAFE_MODE and test_recipient:
         to_addr = test_recipient
-
+    
+    log.info("📨 Thread reply composed opp=%s subject=%s short_confirm=%s", opportunityId, subject, bool(created_appt_ok and appt_human))
+    log.info("📤 Thread reply send attempt opp=%s to_addr=%s SAFE_MODE=%s test_recipient=%s EMAIL_MODE=%s",
+             opportunityId, to_addr, SAFE_MODE, test_recipient, os.getenv("EMAIL_MODE", "crm"))
+    
     sent_ok = False
     if OFFLINE_MODE:
         sent_ok = True
@@ -2534,16 +2537,14 @@ def send_thread_reply_now(
             except Exception as e:
                 log.warning("Thread reply send failed opp %s: %s", opportunityId, e)
 
-    if sent_ok:
-        checkedDict["last_msg_by"] = "patti"
-        opportunity["checkedDict"] = checkedDict
-        # Important: on real customer engagement, you may want to “pause” nudges:
-        # keep your existing behavior OR park followUP_date.
+    if sent_ok and created_appt_ok and appt_human:
+        patti_meta = opportunity.get("patti") or {}
+        patti_meta["appt_confirm_email_sent"] = True
+        opportunity["patti"] = patti_meta
+
+
         if not OFFLINE_MODE:
             airtable_save(opportunity)
-
-    if not OFFLINE_MODE:
-        airtable_save(opportunity)
 
     return sent_ok, opportunity
 
