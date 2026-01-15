@@ -208,8 +208,6 @@ def process_lead_notification(inbound: dict) -> None:
     opportunity["customer_email"] = shopper_email
     
     extra = {"customer_email": shopper_email}
-    if shopper_email:
-        extra["customer_email_lower"] = shopper_email.strip().lower()
     
     save_opp(opportunity, extra_fields=extra)
 
