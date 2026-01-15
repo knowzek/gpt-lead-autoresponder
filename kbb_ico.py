@@ -2119,7 +2119,7 @@ def process_kbb_ico_lead(
                 body_html = rewrite_sched_cta_for_booked(body_html)
             
                 # STRIP any generic scheduling CTA variants no matter what wording GPT used
-                body_html = _ANY_SCHED_LINE_RE.sub("", body_html).strip()
+                body_html = _SCHED_ANY_RE.sub("", body_html).strip()
             
                 # Remove raw token if it survived
                 body_html = body_html.replace("<{LegacySalesApptSchLink}>", "").replace("<{LegacySalesApptSchLink }>", "")
