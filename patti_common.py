@@ -88,19 +88,35 @@ _SCHED_ANY_RE = _re2.compile(
 
 def normalize_patti_body(body_html: str) -> str:
     """
-    Tidy GPT output: strip stray Patti signatures and collapse whitespace.
-    This is a simplified version of the KBB normalizer.
+    Tidy GPT output: strip stray Patti signatures/sign-offs and collapse whitespace.
     """
-    body_html = body_html or ""
-    # Strip any trailing Patti signature junk if GPT adds it
+    body_html = (body_html or "").strip()
+
+    # 1) Strip common plain-text sign-offs at the very end (Best, Patti / Thanks, Patti, etc.)
     body_html = _re.sub(
-        r'(?is)(?:\n\s*)?patti\s*(?:<br/?>|\r?\n)+.*?$', 
-        '', 
-        body_html.strip()
-    )
+        r"(?is)\b(?:best|thanks|thank you|regards|sincerely|warmly|cheers)\b\s*,?\s*patti\s*$",
+        "",
+        body_html,
+    ).strip()
+
+    # 2) Strip HTML-ish sign-offs near the end (<br> Best,<br>Patti ...)
+    body_html = _re.sub(
+        r"(?is)(?:<br\s*/?>\s*){0,3}\b(?:best|thanks|thank you|regards|sincerely|warmly|cheers)\b\s*,?\s*(?:<br\s*/?>\s*){0,3}patti\s*(?:<br\s*/?>\s*)*$",
+        "",
+        body_html,
+    ).strip()
+
+    # 3) Your existing “Patti + Virtual Assistant …” cleanup (keep, but broaden slightly)
+    body_html = _re.sub(
+        r"(?is)(?:\n\s*)?patti\s*(?:<br/?>|\r?\n)+.*?$",
+        "",
+        body_html,
+    ).strip()
+
     # Collapse multiple blank lines
-    body_html = _re.sub(r'\n{2,}', '\n', body_html)
+    body_html = _re.sub(r"\n{2,}", "\n", body_html)
     return body_html
+
 
 
 def append_soft_schedule_sentence(body_html: str, rooftop_name: str) -> str:
