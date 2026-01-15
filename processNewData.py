@@ -2037,9 +2037,27 @@ def send_first_touch_email(
     # === Compose with GPT ===============================================
     fallback_mode = not inquiry_text or inquiry_text.strip().lower() in ["", "request a quote", "interested", "info", "information", "looking"]
 
+    SUBJECT_RULES = f"""
+    IMPORTANT — SUBJECT LINE RULES:
+    This is the FIRST email in a new conversation thread.
+    
+    - Do NOT reuse, reference, or paraphrase the inbound lead email subject.
+    - Do NOT use words like "lead", "listing"
+    
+    Write a short, friendly, customer-facing subject line that feels like a human reaching out.
+    
+    Preferred formats:
+    - "Quick question about the {vehicle_str} at {rooftop_name}"
+    - "Your interest in the {vehicle_str} at {rooftop_name}"
+    - "Hi {customer_name} - your vehicle inquiry at {rooftop_name}"
+    
+    """
+
+
     if fallback_mode:
         prompt = f"""
-    Your job is to write personalized, dealership-branded emails from Patti, a friendly virtual assistant.
+    You are Patti, a helpful sales assistant for {rooftop_name}.
+    Your job is to write personalized, dealership-branded emails from Patti.
     The guest submitted a lead through {source}. They’re interested in: {vehicle_str}. Salesperson: {salesperson}
     They didn’t leave a detailed message.
 
@@ -2057,7 +2075,8 @@ def send_first_touch_email(
     """
     else:
         prompt = f"""
-    Your job is to write personalized, dealership-branded emails from Patti, a friendly virtual assistant.
+    You are Patti, a helpful sales assistant for {rooftop_name}.
+    Your job is to write personalized, dealership-branded emails from Patti.
 
     When writing:
     - Begin with exactly `Hi {customer_name},`
@@ -2066,20 +2085,19 @@ def send_first_touch_email(
     - If a specific vehicle is mentioned, answer directly and link if possible
     - If a specific question exists, answer it first
     - The goal in your responses is to be helpful but also encourage the person to book an appointment to see the vehicle without sounding salesly or high-pressure
-    - Include the salesperson’s name
     - Keep it warm, clear, and human
 
     Info (may None):
     - salesperson’s name: {salesperson}
     - vehicle: {vehicle_str}
 
-
     Guest inquiry:
     \"\"\"{inquiry_text}\"\"\"
 
     Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
     """
-        
+    prompt += SUBJECT_RULES
+    
     # --- NEW: if Patti auto-scheduled an appointment, tell GPT to confirm it ---
     if created_appt_ok and appt_human:
         prompt += f"""
