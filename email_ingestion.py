@@ -14,6 +14,7 @@ from fortellis import (
     get_opps_by_customer_id,
 )
 from fortellis import complete_activity
+from fortellis import complete_read_email_activity
 from patti_triage import classify_inbound_email, handoff_to_human, should_triage
 
 from kbb_ico import _top_reply_only
@@ -739,22 +740,36 @@ def process_inbound_email(inbound: dict) -> None:
     except Exception as e:
         log.exception("Immediate inbound reply failed opp=%s err=%s", opp_id, e)
 
-    # 6) Optional: log inbound email to CRM as a COMPLETED ACTIVITY (not a Note)
+    # 6) Optional: log inbound email to CRM as a COMPLETED "Read Email" activity (type 20)
     subscription_id = opportunity.get("_subscription_id")
     if subscription_id:
         try:
+            from datetime import datetime, timezone
+    
             token = get_token(subscription_id)
             preview = (body_text or "")[:500]
-
-            # Prefer the same "numeric type" pattern as KBB to avoid mapping confusion
-            complete_activity(
-                token,
-                subscription_id,
-                opp_id,
-                activity_name="Inbound Email",
-                activity_type=20,  # Inbound Email (matches your ACTIVITY_TYPE_MAP)
+    
+            # Convert inbound ts (your ts is usually like 2026-01-15T18:59:19+00:00)
+            # into Zulu "YYYY-MM-DDTHH:MM:SSZ" for Fortellis.
+            def _to_z(iso_str: str | None) -> str:
+                if iso_str:
+                    try:
+                        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+                        return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                    except Exception:
+                        pass
+                return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+            completed_z = _to_z(ts)
+    
+            complete_read_email_activity(
+                token=token,
+                subscription_id=subscription_id,
+                opportunity_id=opp_id,
+                completed_dt_iso_utc=completed_z,
                 comments=f"From: {sender_raw}\nSubject: {subject}\n\n{preview}",
             )
+    
         except Exception as e:
             log.warning("Failed to log inbound email activity opp=%s err=%s", opp_id, e)
 
