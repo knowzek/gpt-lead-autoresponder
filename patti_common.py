@@ -73,16 +73,68 @@ def fmt_local_human(dt: _dt, tz_name: str = "America/Los_Angeles") -> str:
     time_str = local.strftime("%I:%M %p").lstrip("0")
     return f"{local.strftime('%A')}, {local.strftime('%b')} {local.day} at {time_str}"
 
-# Detect any existing booking token/link so we don't double-insert a CTA
-_SCHED_ANY_RE = _re2.compile(
+# Detect any scheduling token/link/CTA so we can skip inserting,
+# or remove scheduling verbiage cleanly.
+_SCHED_ANY_RE = _re.compile(
     r"(?is)("
     r"LegacySalesApptSchLink|"
-    r"schedule\s+directly\s+here|"
-    r"reserve\s+your\s+time|"
     r"scheduleservice|"
-    r"https?://[^\s\"']*(schedule|scheduleservice)[^\s\"']*"
+    r"https?://[^\s\"']*(?:schedule|scheduleservice)[^\s\"']*|"
+    r"schedule\s+directly(?:\s+here)?|"
+    r"reserve\s+your\s+time|"
+    r"schedule\s+(?:an\s+)?appointment|"
+    r"schedule\s+your\s+visit|"
+    r"(?:feel\s+free\s+to\s+)?let\s+me\s+know\s+(?:a\s+)?(?:day\s+and\s+)?time\s+that\s+works[^\.!\?]*[\.!\?]?|"
+    r"please\s+let\s+us\s+know\s+a\s+convenient\s+time[^\.!\?]*[\.!\?]?"
     r")"
 )
+
+
+def enforce_standard_schedule_sentence(body_html: str) -> str:
+    """Ensure exactly one standard CTA appears above visit/closing lines."""
+    if not body_html:
+        body_html = ""
+
+    # 0) Normalize whitespace a bit so paragraph regex works better
+    body_html = re.sub(r'\s+', ' ', body_html).strip()
+
+    standard_html = (
+        '<p>Please let us know a convenient time for you, or you can instantly reserve your time here: '
+        '<{LegacySalesApptSchLink}></p>'
+    )
+
+    # 1) Remove any <p> paragraphs that already contain scheduling verbiage or the CRM token
+    #    (so we don't leave behind "instantly here: ." fragments)
+    PARA = r'(?is)<p[^>]*>.*?</p>'
+    SCHED_PAT = r'(?i)(LegacySalesApptSchLink|reserve your time|schedule (an )?appointment|schedule your visit)'
+    def _kill_sched_paras(m):
+        para = m.group(0)
+        return '' if re.search(SCHED_PAT, para) else para
+
+    body_html = re.sub(PARA, _kill_sched_paras, body_html).strip()
+
+    # 2) Split into paragraphs to position the CTA
+    parts = re.findall(PARA, body_html)  # list of <p>…</p>
+    if not parts:
+        parts = [f"<p>{body_html}</p>"]  # fallback if model didn't use <p> tags
+
+    # Insert CTA before the first visit/closing paragraph; else prepend
+    insert_at = None
+    for i, p in enumerate(parts):
+        if re.search(r'(?i)(ready to visit|bring|looking forward)', p):
+            insert_at = i
+            break
+    if insert_at is None:
+        insert_at = 0
+    parts.insert(insert_at, standard_html)
+
+    # 3) Join and ensure we don't have duplicate CTAs
+    combined = ''.join(parts)
+    combined = re.sub(r'(?is)(<p>[^<]*LegacySalesApptSchLink[^<]*</p>)(.*?)\1', r'\1\2', combined).strip()
+    return combined
+
+
+
 
 
 
