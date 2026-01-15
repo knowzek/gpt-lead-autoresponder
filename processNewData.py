@@ -69,6 +69,33 @@ def is_exit_message(msg: str) -> bool:
 already_processed = get_names_in_dir("jsons/process")
 DEBUGMODE = os.getenv("DEBUGMODE", "1") == "1"
 
+import random
+
+VARIANT_LONG = "A_long"
+VARIANT_SHORT = "B_short"
+
+def get_or_assign_ab_variant(opportunity: dict) -> str:
+    """
+    Assign once per opportunity and persist in opportunity['patti']['ab_variant'].
+    Never re-randomize.
+    """
+    patti = opportunity.setdefault("patti", {})
+    v = (patti.get("ab_variant") or "").strip()
+    if v in (VARIANT_LONG, VARIANT_SHORT):
+        return v
+
+    # 50/50 split
+    v = VARIANT_SHORT if random.random() < 0.5 else VARIANT_LONG
+    patti["ab_variant"] = v
+    return v
+
+def build_short_first_touch_html(rooftop_name: str) -> str:
+    # Keep it consistent with your HTML style (simple <p>)
+    return (
+        "<p>Thank you for your internet inquiry. I’d love to set up a time for you to come by and visit our showroom - is there a day and time that works best for you?</p>"
+    )
+
+
 def airtable_save(opportunity: dict, extra_fields: dict | None = None):
     """
     Persist the full opp back to Airtable (opp_json + follow_up_at + is_active).
@@ -1637,8 +1664,8 @@ def processHit(hit):
                 body_html = rewrite_sched_cta_for_booked(body_html)
                 body_html = _ANY_SCHED_LINE_RE.sub("", body_html).strip()
             else:
-                body_html = append_soft_schedule_sentence(body_html, rooftop_name)
-
+                if variant != VARIANT_SHORT:
+                    body_html = append_soft_schedule_sentence(body_html, rooftop_name)
 
             body_html = _PREFS_RE.sub("", body_html).strip()
             body_html = body_html + build_patti_footer(rooftop_name)
@@ -2033,124 +2060,134 @@ def send_first_touch_email(
         )
         return False
 
+    variant = get_or_assign_ab_variant(opportunity)
 
-    # === Compose with GPT ===============================================
-    fallback_mode = not inquiry_text or inquiry_text.strip().lower() in ["", "request a quote", "interested", "info", "information", "looking"]
-
-    SUBJECT_RULES = f"""
-    IMPORTANT — SUBJECT LINE RULES:
-    This is the FIRST email in a new conversation thread.
+    VARIANT_LONG = "A_long"
+    VARIANT_SHORT = "B_short"
     
-    - Do NOT reuse, reference, or paraphrase the inbound lead email subject.
-    - Do NOT use words like "lead", "listing"
+    if variant == VARIANT_SHORT:
+        subject = f"Quick question about the {vehicle_str} at {rooftop_name}"
+        body_html = (
+            f"<p>Hi {customer_name},</p>"
+            "<p>Thank you for your internet inquiry. I’d love to set up a time for you to come by and visit our showroom - is there a day and time that works best for you?</p>"
+        )
+
+    if variant != VARIANT_SHORT:
+        # === Compose with GPT ===============================================
+        fallback_mode = not inquiry_text or inquiry_text.strip().lower() in ["", "request a quote", "interested", "info", "information", "looking"]
     
-    Write a short, friendly, customer-facing subject line that feels like a human reaching out.
-    
-    Preferred formats:
-    - "Quick question about the {vehicle_str} at {rooftop_name}"
-    - "Your interest in the {vehicle_str} at {rooftop_name}"
-    - "Hi {customer_name} - your vehicle inquiry at {rooftop_name}"
-    
-    """
-
-
-    if fallback_mode:
-        prompt = f"""
-    You are Patti, a helpful sales assistant for {rooftop_name}.
-    Your job is to write personalized, dealership-branded emails from Patti.
-    The guest submitted a lead through {source}. They’re interested in: {vehicle_str}. Salesperson: {salesperson}
-    They didn’t leave a detailed message.
-
-    Please write a warm, professional email reply that:
-    - Begin with exactly `Hi {customer_name},`
-    - Immediately acknowledge their inquiry in ONE sentence, like: "Thanks for your inquiry on our {vehicle_str}."
-    - Start with 1–2 appealing vehicle features or dealership Why Buys
-    - Welcome the guest and highlight our helpfulness
-    - Invite specific questions or preferences
-    - The goal in your responses is to be helpful but also encourage the person to book an appointment to see the vehicle without sounding salesly or high-pressure
-    - Mention the salesperson by name
-
-    Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
-
-    """
-    else:
-        prompt = f"""
-    You are Patti, a helpful sales assistant for {rooftop_name}.
-    Your job is to write personalized, dealership-branded emails from Patti.
-
-    When writing:
-    - Begin with exactly `Hi {customer_name},`
-    - Immediately acknowledge their inquiry in ONE sentence, like: "Thanks for your inquiry on our {vehicle_str}."
-    - Lead with value (features / Why Buy)
-    - If a specific vehicle is mentioned, answer directly and link if possible
-    - If a specific question exists, answer it first
-    - The goal in your responses is to be helpful but also encourage the person to book an appointment to see the vehicle without sounding salesly or high-pressure
-    - Keep it warm, clear, and human
-
-    Info (may None):
-    - salesperson’s name: {salesperson}
-    - vehicle: {vehicle_str}
-
-    Guest inquiry:
-    \"\"\"{inquiry_text}\"\"\"
-
-    Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
-    """
-    prompt += SUBJECT_RULES
-    
-    # --- NEW: if Patti auto-scheduled an appointment, tell GPT to confirm it ---
-    if created_appt_ok and appt_human:
-        prompt += f"""
-
-IMPORTANT APPOINTMENT CONTEXT (do not skip):
-- The guest proposed a time and Patti already scheduled a dealership appointment for {appt_human}.
-
-In your email:
-- Clearly confirm that date and time in plain language.
-- Thank them for scheduling.
-- Invite them to reply if they need to adjust the time or have any questions.
-- Do NOT ask them to pick a time; the appointment is already scheduled. Focus on confirming it.
-"""
+        SUBJECT_RULES = f"""
+        IMPORTANT — SUBJECT LINE RULES:
+        This is the FIRST email in a new conversation thread.
         
-    # === Inventory recommendations =====================================
-
-    # Get live inventory XML
-    # NOTE: when you need to use just uncomment and uncomment in import section also
-    # try:
-    #     inventory_xml = get_vehicle_inventory_xml("Patterson2", "FjX^PGwk63", "ZE", "ZE7")
-    # except Exception as e:
-    #     # log.warning(f"❌ Could not retrieve inventory XML: {e}")
-    #     inventory_xml = None
-
-    # 🔁 Use the same inquiry text you already computed.
-    # If it's empty (fallback mode), feed a lightweight hint from the parsed vehicle fields.
-    if inquiry_text and inquiry_text.strip():
-        customer_email_text = inquiry_text
-    else:
-        # If inquiry_text is empty, feed the vehicle string as a hint
-        import re
-
-        plain_vehicle = re.sub(r"<[^>]+>", "", vehicle_str or "").strip()
-        customer_email_text = (inquiry_text or "").strip() or plain_vehicle or "SUV car"
-
-
-    
-    recommendation_text = ""
-
-    # NOTE: (cont with line: 523)when you need to use just uncomment and uncomment in import section also
-    # if inventory_xml:
-    #     try:
-    #         recommendation_text = recommend_from_xml(inventory_xml, customer_email_text).strip()
-    #         if recommendation_text:
-    #             prompt += f"\n\nInventory suggestions to include:\n{recommendation_text}\n"
-    #             # log.info("✅ Added inventory suggestions to prompt.")
-    #     except Exception as e:
-    #         pass
-    #         # log.warning(f"Recommendation failed: {e}")
+        - Do NOT reuse, reference, or paraphrase the inbound lead email subject.
+        - Do NOT use words like "lead", "listing"
         
-    response  = run_gpt(prompt, customer_name, rooftop_name)
-    subject   = response["subject"]
-    body_html = response["body"]
+        Write a short, friendly, customer-facing subject line that feels like a human reaching out.
+        
+        Preferred formats:
+        - "Quick question about the {vehicle_str} at {rooftop_name}"
+        - "Your interest in the {vehicle_str} at {rooftop_name}"
+        - "Hi {customer_name} - your vehicle inquiry at {rooftop_name}"
+        
+        """
+    
+    
+        if fallback_mode:
+            prompt = f"""
+        You are Patti, a helpful sales assistant for {rooftop_name}.
+        Your job is to write personalized, dealership-branded emails from Patti.
+        The guest submitted a lead through {source}. They’re interested in: {vehicle_str}. Salesperson: {salesperson}
+        They didn’t leave a detailed message.
+    
+        Please write a warm, professional email reply that:
+        - Begin with exactly `Hi {customer_name},`
+        - Immediately acknowledge their inquiry in ONE sentence, like: "Thanks for your inquiry on our {vehicle_str}."
+        - Start with 1–2 appealing vehicle features or dealership Why Buys
+        - Welcome the guest and highlight our helpfulness
+        - Invite specific questions or preferences
+        - The goal in your responses is to be helpful but also encourage the person to book an appointment to see the vehicle without sounding salesly or high-pressure
+        - Mention the salesperson by name
+    
+        Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
+    
+        """
+        else:
+            prompt = f"""
+        You are Patti, a helpful sales assistant for {rooftop_name}.
+        Your job is to write personalized, dealership-branded emails from Patti.
+    
+        When writing:
+        - Begin with exactly `Hi {customer_name},`
+        - Immediately acknowledge their inquiry in ONE sentence, like: "Thanks for your inquiry on our {vehicle_str}."
+        - Lead with value (features / Why Buy)
+        - If a specific vehicle is mentioned, answer directly and link if possible
+        - If a specific question exists, answer it first
+        - The goal in your responses is to be helpful but also encourage the person to book an appointment to see the vehicle without sounding salesly or high-pressure
+        - Keep it warm, clear, and human
+    
+        Info (may None):
+        - salesperson’s name: {salesperson}
+        - vehicle: {vehicle_str}
+    
+        Guest inquiry:
+        \"\"\"{inquiry_text}\"\"\"
+    
+        Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
+        """
+        prompt += SUBJECT_RULES
+        
+        # --- NEW: if Patti auto-scheduled an appointment, tell GPT to confirm it ---
+        if created_appt_ok and appt_human:
+            prompt += f"""
+    
+    IMPORTANT APPOINTMENT CONTEXT (do not skip):
+    - The guest proposed a time and Patti already scheduled a dealership appointment for {appt_human}.
+    
+    In your email:
+    - Clearly confirm that date and time in plain language.
+    - Thank them for scheduling.
+    - Invite them to reply if they need to adjust the time or have any questions.
+    - Do NOT ask them to pick a time; the appointment is already scheduled. Focus on confirming it.
+    """
+            
+        # === Inventory recommendations =====================================
+    
+        # Get live inventory XML
+        # NOTE: when you need to use just uncomment and uncomment in import section also
+        # try:
+        #     inventory_xml = get_vehicle_inventory_xml("Patterson2", "FjX^PGwk63", "ZE", "ZE7")
+        # except Exception as e:
+        #     # log.warning(f"❌ Could not retrieve inventory XML: {e}")
+        #     inventory_xml = None
+    
+        # 🔁 Use the same inquiry text you already computed.
+        # If it's empty (fallback mode), feed a lightweight hint from the parsed vehicle fields.
+        if inquiry_text and inquiry_text.strip():
+            customer_email_text = inquiry_text
+        else:
+            # If inquiry_text is empty, feed the vehicle string as a hint
+            import re
+    
+            plain_vehicle = re.sub(r"<[^>]+>", "", vehicle_str or "").strip()
+            customer_email_text = (inquiry_text or "").strip() or plain_vehicle or "SUV car"
+        
+        recommendation_text = ""
+    
+        # NOTE: (cont with line: 523)when you need to use just uncomment and uncomment in import section also
+        # if inventory_xml:
+        #     try:
+        #         recommendation_text = recommend_from_xml(inventory_xml, customer_email_text).strip()
+        #         if recommendation_text:
+        #             prompt += f"\n\nInventory suggestions to include:\n{recommendation_text}\n"
+        #             # log.info("✅ Added inventory suggestions to prompt.")
+        #     except Exception as e:
+        #         pass
+        #         # log.warning(f"Recommendation failed: {e}")
+            
+        response  = run_gpt(prompt, customer_name, rooftop_name)
+        subject   = response["subject"]
+        body_html = response["body"]
     
     # --- Normalize Patti body ---
     body_html = normalize_patti_body(body_html)
@@ -2173,7 +2210,8 @@ In your email:
         body_html = rewrite_sched_cta_for_booked(body_html)
         body_html = _ANY_SCHED_LINE_RE.sub("", body_html).strip()
     else:
-        body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+        if variant != VARIANT_SHORT:
+            body_html = append_soft_schedule_sentence(body_html, rooftop_name)
     
     # Strip GPT footer if added
     body_html = _PREFS_RE.sub("", body_html).strip()
@@ -2262,10 +2300,19 @@ In your email:
         opportunity["followUP_date"] = next_iso
         opportunity["followUP_count"] = 0
     
+        patti_meta = opportunity.setdefault("patti", {})
+        patti_meta["ab_variant"] = variant
+        patti_meta.setdefault("first_email_sent_at", currDate_iso)
+        
         airtable_save(
             opportunity,
-            extra_fields={"follow_up_at": next_iso}
+            extra_fields={
+                "follow_up_at": next_iso,
+                "ab_variant": variant,
+                "first_email_sent_at": patti_meta["first_email_sent_at"],
+            }
         )
+
 
     else:
         log.warning(
