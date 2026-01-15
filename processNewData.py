@@ -35,7 +35,7 @@ from fortellis import (
     set_opportunity_substatus,
 )
 
-
+from patti_common import _SCHED_ANY_RE, enforce_standard_schedule_sentence
 from patti_common import fmt_local_human, normalize_patti_body, append_soft_schedule_sentence, rewrite_sched_cta_for_booked
 
 #from fortellis import get_vehicle_inventory_xml  
@@ -566,7 +566,7 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
             
             if has_booked_appt:
                 body_html = rewrite_sched_cta_for_booked(body_html)
-                body_html = _ANY_SCHED_LINE_RE.sub("", body_html).strip()
+                body_html = _SCHED_ANY_RE.sub("", body_html).strip()
             else:
                 body_html = append_soft_schedule_sentence(body_html, rooftop_name)
 
@@ -1655,7 +1655,7 @@ def processHit(hit):
             
             if has_booked_appt:
                 body_html = rewrite_sched_cta_for_booked(body_html)
-                body_html = _ANY_SCHED_LINE_RE.sub("", body_html).strip()
+                body_html = _SCHED_ANY_RE.sub("", body_html).strip()
             else:
                 if variant != VARIANT_SHORT:
                     body_html = append_soft_schedule_sentence(body_html, rooftop_name)
@@ -2201,7 +2201,7 @@ def send_first_touch_email(
     
     if has_booked_appt:
         body_html = rewrite_sched_cta_for_booked(body_html)
-        body_html = _ANY_SCHED_LINE_RE.sub("", body_html).strip()
+        body_html = _SCHED_ANY_RE.sub("", body_html).strip()
     else:
         if variant != VARIANT_SHORT:
             body_html = append_soft_schedule_sentence(body_html, rooftop_name)
@@ -2489,7 +2489,7 @@ def send_thread_reply_now(
 
     if has_booked_appt:
         body_html = rewrite_sched_cta_for_booked(body_html)
-        body_html = _ANY_SCHED_LINE_RE.sub("", body_html).strip()
+        body_html = _SCHED_ANY_RE.sub("", body_html).strip()
     else:
         body_html = append_soft_schedule_sentence(body_html, rooftop_name)
 
