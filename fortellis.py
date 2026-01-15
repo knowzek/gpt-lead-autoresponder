@@ -471,6 +471,26 @@ def get_token(dealer_key: str):
     resp.raise_for_status()
     return resp.json()["access_token"]
 
+def complete_read_email_activity(
+    *,
+    token: str,
+    subscription_id: str,
+    opportunity_id: str,
+    completed_dt_iso_utc: str,
+    comments: str = "",
+):
+    # If caller passes a valid ISO already, keep it; otherwise they should pass Z.
+    return complete_activity(
+        token,
+        subscription_id,
+        opportunity_id,
+        due_dt_iso_utc=completed_dt_iso_utc,
+        completed_dt_iso_utc=completed_dt_iso_utc,
+        activity_name="Read Email",
+        activity_type=20,
+        comments=comments,
+    )
+
 
 def _headers(id_or_key: str, token: str, extra: dict | None = None) -> dict:
     """
