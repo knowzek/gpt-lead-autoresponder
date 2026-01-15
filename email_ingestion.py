@@ -187,6 +187,7 @@ def process_lead_notification(inbound: dict) -> None:
             "follow_up_at": opp.get("followUP_date"),
             "mode": "",
             "opp_json": _safe_json_dumps(opp),
+            "customer_email": shopper_email,
         })
         rec2 = find_by_opp_id(opp_id)
         if not rec2:
