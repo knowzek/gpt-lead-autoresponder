@@ -204,7 +204,15 @@ def process_lead_notification(inbound: dict) -> None:
     })
     opportunity.setdefault("checkedDict", {})["last_msg_by"] = "customer"
 
-    save_opp(opportunity)
+    # Persist guest email once, forever
+    opportunity["customer_email"] = shopper_email
+    
+    extra = {"customer_email": shopper_email}
+    if shopper_email:
+        extra["customer_email_lower"] = shopper_email.strip().lower()
+    
+    save_opp(opportunity, extra_fields=extra)
+
 
     # ✅ Call YOUR existing internet lead first-touch logic (the extracted helper)
     from processNewData import send_first_touch_email
