@@ -89,13 +89,6 @@ def get_or_assign_ab_variant(opportunity: dict) -> str:
     patti["ab_variant"] = v
     return v
 
-def build_short_first_touch_html(rooftop_name: str) -> str:
-    # Keep it consistent with your HTML style (simple <p>)
-    return (
-        "<p>Thank you for your internet inquiry. I’d love to set up a time for you to come by and visit our showroom - is there a day and time that works best for you?</p>"
-    )
-
-
 def airtable_save(opportunity: dict, extra_fields: dict | None = None):
     """
     Persist the full opp back to Airtable (opp_json + follow_up_at + is_active).
