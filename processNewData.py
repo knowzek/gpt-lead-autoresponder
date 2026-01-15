@@ -2536,11 +2536,12 @@ def send_thread_reply_now(
             except Exception as e:
                 log.warning("Thread reply send failed opp %s: %s", opportunityId, e)
 
-    if sent_ok and created_appt_ok and appt_human:
-        patti_meta = opportunity.get("patti") or {}
-        patti_meta["appt_confirm_email_sent"] = True
-        opportunity["patti"] = patti_meta
-
+    if sent_ok:
+        if created_appt_ok and appt_human:
+            patti_meta = opportunity.get("patti") or {}
+            patti_meta["appt_confirm_email_sent"] = True
+            opportunity["patti"] = patti_meta
+    
         if not OFFLINE_MODE:
             airtable_save(opportunity)
 
