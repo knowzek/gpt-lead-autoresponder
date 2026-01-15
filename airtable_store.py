@@ -179,23 +179,13 @@ def get_by_id(rec_id: str) -> dict:
 
 
 def save_opp(opp: dict, *, extra_fields: dict | None = None):
-    """
-    Persist the full opportunity dict back to Airtable as opp_json,
-    plus key index fields used for filtering.
-
-    IMPORTANT: always preserve identity fields (opportunityId/_subscription_id)
-    even if this in-memory opp dict is a slim "state blob".
-    """
     rec_id = opp.get("_airtable_rec_id")
     if not rec_id:
         raise RuntimeError("Missing opp['_airtable_rec_id']; cannot save to Airtable")
 
-    # --- Re-hydrate identity from Airtable record fields when missing ---
+    # (optional) re-hydrate identity — keep if you want it
     try:
-        # If you have a "get by id" helper, use it.
-        # Otherwise, patch_by_id works without fetching — so we need a fetch helper.
-        # Assuming you have _request or get_by_id; if not, add it (see below).
-        rec = get_by_id(rec_id)  # <-- add this helper in airtable_store if you don't have it
+        rec = get_by_id(rec_id)
         fields = (rec or {}).get("fields", {}) or {}
 
         airtable_opp_id = (fields.get("opp_id") or "").strip()
@@ -204,19 +194,14 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
         if airtable_opp_id:
             opp.setdefault("opportunityId", airtable_opp_id)
             opp.setdefault("id", airtable_opp_id)
-
         if airtable_sub_id:
             opp.setdefault("_subscription_id", airtable_sub_id)
-
     except Exception:
-        # Don't block save_opp if fetch fails; we'll still write what we have.
         pass
 
-    # Normalize common fields
     is_active = bool(opp.get("isActive", True))
     follow_up_at = opp.get("followUP_date") or opp.get("follow_up_at")
 
-    # Some flows store meta in _kbb_state or patti.mode; pick the best available
     mode = None
     if isinstance(opp.get("_kbb_state"), dict):
         mode = opp["_kbb_state"].get("mode")
@@ -229,7 +214,16 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
         "mode": (mode or ""),
         "opp_json": _safe_json_dumps(opp),
     }
+
     if extra_fields:
         patch.update(extra_fields)
+
+    # ✅ Never PATCH computed/formula/rollup fields in Airtable
+    COMPUTED_FIELDS = {
+        "customer_email_lower",
+    }
+    for k in list(patch.keys()):
+        if k in COMPUTED_FIELDS:
+            patch.pop(k, None)
 
     return patch_by_id(rec_id, patch)
