@@ -208,7 +208,26 @@ def opp_from_record(rec: dict) -> dict:
     if fields.get("customer_email") and not opp.get("customer_email"):
         opp["customer_email"] = fields.get("customer_email")
 
-        # --- Hydrate human review flags from Airtable columns ---
+    # ✅ NEW: hydrate customer first/last name from Airtable columns
+    afn = (fields.get("Customer First Name") or "").strip()
+    aln = (fields.get("Customer Last Name") or "").strip()
+    if afn or aln:
+        cust = opp.get("customer")
+        if not isinstance(cust, dict):
+            cust = {}
+            opp["customer"] = cust
+
+        if afn and not (cust.get("firstName") or "").strip():
+            cust["firstName"] = afn
+        if aln and not (cust.get("lastName") or "").strip():
+            cust["lastName"] = aln
+
+        # optional convenience copies
+        opp.setdefault("customer_first_name", afn)
+        opp.setdefault("customer_last_name", aln)
+
+
+    # --- Hydrate human review flags from Airtable columns ---
     # Airtable checkbox returns True/False when present.
     if "Needs Human Review" in fields:
         opp["needs_human_review"] = bool(fields.get("Needs Human Review"))
