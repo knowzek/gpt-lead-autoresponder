@@ -2789,9 +2789,27 @@ def send_thread_reply_now(
         "inbound_ts": inbound_ts,
     })
 
-    to_addr = customer_email
-    if SAFE_MODE and test_recipient:
-        to_addr = test_recipient
+    to_addr = resolve_customer_email(
+        opportunity,
+        SAFE_MODE=SAFE_MODE,
+        test_recipient=test_recipient,
+    )
+    
+    if not to_addr:
+        log.warning(
+            "No customer email resolved; blocking send and escalating opp=%s",
+            opportunityId,
+        )
+        opportunity["needs_human_review"] = True
+        airtable_save(
+            opportunity,
+            extra_fields={
+                "Needs Human Review": True,
+                "Human Review Reason": "Missing customer email for reply",
+            },
+        )
+        return False, opportunity
+
     
     log.info("📨 Thread reply composed opp=%s subject=%s short_confirm=%s", opportunityId, subject, bool(created_appt_ok and appt_human))
     log.info("📤 Thread reply send attempt opp=%s to_addr=%s SAFE_MODE=%s test_recipient=%s EMAIL_MODE=%s",
