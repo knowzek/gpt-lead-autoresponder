@@ -19,11 +19,38 @@ HEADERS = {
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
-from datetime import datetime, timezone
-
 def _now_iso_utc():
     return datetime.now(timezone.utc).isoformat()
 
+def mark_customer_reply(opp: dict, *, when_iso: str | None = None):
+    when_iso = when_iso or _now_iso_utc()
+    m = opp.setdefault("patti_metrics", {})
+
+    if not m.get("first_customer_reply_at"):
+        m["first_customer_reply_at"] = when_iso
+    m["last_customer_reply_at"] = when_iso
+    m["customer_replied"] = True
+
+    return save_opp(opp, extra_fields={
+        "Customer Replied": True,
+        "First Customer Reply At": m["first_customer_reply_at"],
+        "Last Customer Reply At": m["last_customer_reply_at"],
+    })
+
+def mark_unsubscribed(opp: dict, *, when_iso: str | None = None, reason: str = ""):
+    when_iso = when_iso or _now_iso_utc()
+    m = opp.setdefault("patti_metrics", {})
+    m["unsubscribed"] = True
+    m["unsubscribed_at"] = when_iso
+    if reason:
+        m["unsubscribed_reason"] = reason[:500]
+
+    opp["isActive"] = False  # stop future sends
+
+    return save_opp(opp, extra_fields={
+        "Unsubscribed": True,
+        "is_active": False,
+    })
 
 def mark_customer_reply(opp: dict, *, when_iso: str | None = None):
     when_iso = when_iso or _now_iso_utc()
