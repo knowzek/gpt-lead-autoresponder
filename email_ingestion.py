@@ -129,6 +129,53 @@ def _extract_shopper_email_from_provider(body_text: str) -> str | None:
         return e
     return None
 
+import re
+
+def _clean_first_name(name: str) -> str:
+    n = (name or "").strip()
+    if not n:
+        return ""
+    n = n.split()[0]  # first token only
+    if n.isupper():
+        n = n.title()
+    return n
+
+def _extract_first_last_from_provider(body_text: str) -> tuple[str, str]:
+    """
+    Best-effort extraction of first/last name from provider lead bodies.
+    Works for common patterns like:
+      First Name: Elle
+      Last Name: Baker
+    and CARFAX-style:
+      NEW CUSTOMER LEAD FOR Tustin Kia Elle Baker is interested...
+    """
+    t = body_text or ""
+    first = ""
+    last = ""
+
+    # Strong signal lines
+    m1 = re.search(r"(?im)^\s*First\s*Name\s*:\s*(.+?)\s*$", t)
+    m2 = re.search(r"(?im)^\s*Last\s*Name\s*:\s*(.+?)\s*$", t)
+    if m1:
+        first = m1.group(1).strip()
+    if m2:
+        last = m2.group(1).strip()
+
+    # CARFAX pattern fallback
+    if not first:
+        m = re.search(
+            r"(?i)\bNEW CUSTOMER LEAD FOR .*?\b([A-Z][a-zA-Z'’-]+)\s+([A-Z][a-zA-Z'’-]+)\b\s+is interested\b",
+            t,
+        )
+        if m:
+            first = first or m.group(1).strip()
+            last = last or m.group(2).strip()
+
+    first = _clean_first_name(first)
+    last = (last or "").strip()
+    return first, last
+
+
 _KBB_SOURCES = {"kbb instant cash offer", "kbb servicedrive", "kbb service drive"}
 
 def _is_kbb_opp(opp: dict) -> bool:
@@ -141,6 +188,8 @@ def process_lead_notification(inbound: dict) -> None:
     body_html = inbound.get("body_html") or ""
     raw_text = inbound.get("body_text") or clean_html(body_html)
     body_text = (raw_text or "").strip()
+    first_name, last_name = _extract_first_last_from_provider(body_text)
+
 
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     headers = inbound.get("headers") or {}
@@ -196,6 +245,8 @@ def process_lead_notification(inbound: dict) -> None:
             "mode": "",
             "opp_json": _safe_json_dumps(opp),
             "customer_email": shopper_email,
+            "Customer First Name": first_name,
+            "Customer Last Name": last_name,
         })
         rec2 = find_by_opp_id(opp_id)
         if not rec2:
@@ -216,7 +267,11 @@ def process_lead_notification(inbound: dict) -> None:
     # Persist guest email once, forever
     opportunity["customer_email"] = shopper_email
     
-    extra = {"customer_email": shopper_email}
+    extra = {
+        "customer_email": shopper_email,
+        "Customer First Name": first_name,
+        "Customer Last Name": last_name,
+    }
     
     save_opp(opportunity, extra_fields=extra)
 
@@ -232,10 +287,12 @@ def process_lead_notification(inbound: dict) -> None:
     rooftop_sender = rt.get("sender") or rt.get("patti_email") or os.getenv("TEST_FROM") or ""
 
     # Customer name/email (prefer CRM customer block)
-    cust = fresh_opp.get("customer") or opportunity.get("customer") or {}
-    customer_name = (
-        (cust.get("firstName") or "").strip() + " " + (cust.get("lastName") or "").strip()
-    ).strip() or "there"
+    # ✅ Prefer Airtable first/last name (already attached to opportunity via opp_from_record + save_opp)
+    afn = (opportunity.get("customer_first_name") or (opportunity.get("customer") or {}).get("firstName") or "").strip()
+    aln = (opportunity.get("customer_last_name") or (opportunity.get("customer") or {}).get("lastName") or "").strip()
+    
+    customer_name = f"{afn} {aln}".strip() or "there"
+
 
     customer_email = None
     emails = cust.get("emails") or []
