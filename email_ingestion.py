@@ -4,6 +4,8 @@ import re
 import logging
 from datetime import datetime as _dt, timezone as _tz
 import json
+from airtable_store import mark_customer_reply, mark_unsubscribed
+from kbb_ico import _is_optout_text as _kbb_is_optout_text, _is_decline as _kbb_is_decline
 
 from rooftops import get_rooftop_info
 from fortellis import (
@@ -571,8 +573,7 @@ def process_inbound_email(inbound: dict) -> None:
         if _is_kbb_opp(opp):
             log.info("Skipping General Leads bootstrap for KBB opp=%s source=%r", opp_id, opp.get("source"))
             return
-
-    
+            
         upsert_lead(opp_id, {
             "subscription_id": subscription_id,
             "source": opp.get("source") or "",
@@ -589,9 +590,7 @@ def process_inbound_email(inbound: dict) -> None:
     
         opportunity = opp_from_record(rec2)
         
-    if opportunity.get("needs_human_review") is True:
-        log.info("Blocking inbound auto-reply: Needs Human Review checked opp=%s", opp_id)
-        return
+    block_auto_reply = bool(opportunity.get("needs_human_review") is True)
         
     source = (opportunity.get("source") or "").lower()
     # if opp_json is a dict in your normalized object, include it too:
@@ -614,6 +613,22 @@ def process_inbound_email(inbound: dict) -> None:
     }
     opportunity.setdefault("messages", []).append(msg_dict)
     
+    # ✅ PATCH 2A: Mark engagement (customer replied)
+    mark_customer_reply(opportunity, when_iso=ts)
+    
+    # ✅ PATCH 2B: If opt-out detected, mark unsubscribed and stop
+    if _kbb_is_optout_text(body_text) or _kbb_is_decline(body_text):
+        mark_unsubscribed(opportunity, when_iso=ts, reason=body_text[:300])
+        opportunity.setdefault("checkedDict", {})["last_msg_by"] = "customer"
+        opportunity["followUP_date"] = ts
+        save_opp(opportunity)  # ✅ ensures latest thread + flags are persisted
+        log.info("Inbound opt-out detected; unsubscribed opp=%s", opp_id)
+        return
+
+    if block_auto_reply:
+        log.info("Blocking inbound auto-reply (but reply logged): Needs Human Review opp=%s", opp_id)
+        return
+
     # 3) Mark inbound + set KBB convo signals
     now_iso = ts  # use the inbound timestamp we already computed
     opportunity.setdefault("checkedDict", {})["last_msg_by"] = "customer"
