@@ -526,6 +526,17 @@ def process_inbound_email(inbound: dict) -> None:
         headers,
     )
 
+    # 🚫 Skip internal Patterson emails (Patti gets CC'd on vendor/internal threads)
+    sender_email = _extract_email(sender_raw).strip().lower()
+    if sender_email.endswith("@pattersonautos.com"):
+        log.info(
+            "Skipping inbound email opp-match (internal sender): sender=%r subject=%r to=%r",
+            sender_email,
+            (subject or "")[:120],
+            inbound.get("to"),
+        )
+        return
+
     # 1) find opp
     subscription_id = _resolve_subscription_id(inbound, headers)
     if not subscription_id:
