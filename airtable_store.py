@@ -205,7 +205,7 @@ def opp_from_record(rec: dict) -> dict:
     if fields.get("source") and not opp.get("source"):
         opp["source"] = fields.get("source")
 
-    if fields.get("customer_email") and not opp.get("customer_email"):
+    if fields.get("customer_email"):
         opp["customer_email"] = fields.get("customer_email")
 
     # ✅ NEW: hydrate customer first/last name from Airtable columns
