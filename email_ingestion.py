@@ -127,6 +127,12 @@ def _extract_shopper_email_from_provider(body_text: str) -> str | None:
         return e
     return None
 
+_KBB_SOURCES = {"kbb instant cash offer", "kbb servicedrive", "kbb service drive"}
+
+def _is_kbb_opp(opp: dict) -> bool:
+    src = (opp or {}).get("source")
+    return (src or "").strip().lower() in _KBB_SOURCES
+
 
 def process_lead_notification(inbound: dict) -> None:
     subject = inbound.get("subject") or ""
@@ -560,6 +566,12 @@ def process_inbound_email(inbound: dict) -> None:
     
         now_iso = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
         opp.setdefault("followUP_date", now_iso)
+
+        # 🚫 Guard: do not allow KBB opportunities into General Leads Airtable
+        if _is_kbb_opp(opp):
+            log.info("Skipping General Leads bootstrap for KBB opp=%s source=%r", opp_id, opp.get("source"))
+            return
+
     
         upsert_lead(opp_id, {
             "subscription_id": subscription_id,
