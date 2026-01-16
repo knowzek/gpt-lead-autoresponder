@@ -156,6 +156,42 @@ def build_tk_gm_day2_html(customer_name: str) -> str:
 </p>
 """.strip()
 
+def resolve_customer_email(
+    opportunity: dict,
+    *,
+    SAFE_MODE: bool = False,
+    test_recipient: str | None = None
+) -> str | None:
+    if SAFE_MODE:
+        return (test_recipient or "").strip() or None
+
+    # ✅ Canonical: Airtable hydrated field
+    air_email = (opportunity.get("customer_email") or "").strip()
+    if air_email:
+        return air_email
+
+    # Fallback: Fortellis customer.emails
+    cust = opportunity.get("customer") or {}
+    emails = cust.get("emails") or []
+    preferred = None
+    first_ok = None
+    if isinstance(emails, list):
+        for e in emails:
+            if not isinstance(e, dict):
+                continue
+            if e.get("doNotEmail"):
+                continue
+            addr = (e.get("address") or "").strip()
+            if not addr:
+                continue
+            if not first_ok:
+                first_ok = addr
+            if e.get("isPreferred"):
+                preferred = addr
+                break
+    return preferred or first_ok
+
+
 def maybe_send_tk_gm_day2_email(
     *,
     opportunity: dict,
