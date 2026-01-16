@@ -19,6 +19,32 @@ HEADERS = {
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
+from datetime import datetime, timezone
+
+def _now_iso_utc():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def mark_customer_reply(opp: dict, *, when_iso: str | None = None):
+    when_iso = when_iso or _now_iso_utc()
+
+    m = opp.setdefault("patti_metrics", {})
+
+    # First reply only gets set once
+    if not m.get("first_customer_reply_at"):
+        m["first_customer_reply_at"] = when_iso
+
+    # Last reply always updates
+    m["last_customer_reply_at"] = when_iso
+    m["customer_replied"] = True
+
+    save_opp(opp, extra_fields={
+        "Customer Replied": True,
+        "First Customer Reply At": m["first_customer_reply_at"],
+        "Last Customer Reply At": m["last_customer_reply_at"],
+    })
+
+
 def find_by_customer_email(email: str):
     email = (email or "").strip().lower()
     if not email:
