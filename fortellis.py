@@ -57,8 +57,6 @@ def _headers_post(subscription_id: str, token: str) -> dict:
         "Request-Id": str(uuid.uuid4()),
     }
 
-
-
 BASE_URL = os.getenv("FORTELLIS_BASE_URL", "https://api.fortellis.io")  # prod default
 LEADS_BASE = "/cdk/sales/elead/v1/leads"
 OPPS_BASE        = "/sales/v2/elead/opportunities"   
@@ -969,6 +967,9 @@ def complete_activity(
     url = f"{BASE_URL}{ACTIVITIES_BASE}/complete"
 
     def _post(name: str, type_id: int):
+        log.info("complete_activity payload: name=%s type=%s due=%s completed=%s activity_id=%s",
+                 name, type_id, due_dt_iso_utc, completed_dt_iso_utc, activity_id)
+
         payload = {
             "opportunityId": opportunity_id,
             "dueDate": due_dt_iso_utc,
