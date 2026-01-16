@@ -103,6 +103,163 @@ _KBB_SOURCES = {
     "kbb service drive",
 }
 
+# --- Tustin Kia GM Day-2 email -------------------------------------------------
+
+TK_GM_DAY2_SUBJECT = "Thank you for your inquiry – Patterson Tustin Kia"
+
+def is_tustin_kia_rooftop(rooftop_name: str) -> bool:
+    return (rooftop_name or "").strip().lower() == "patterson tustin kia" or (rooftop_name or "").strip().lower() == "tustin kia"
+
+def build_tk_gm_day2_html(customer_name: str) -> str:
+    cn = (customer_name or "there").strip()
+    # HTML-safe, no emojis, email-client friendly
+    return f"""
+<p>Hi {cn},</p>
+
+<p>Thank you for your recent inquiry with Patterson Tustin Kia. I wanted to personally reach out and make sure you’re being taken care of.</p>
+
+<p>We recently opened our doors and have already earned over 160 five-star Google reviews in just our first 45 days, thanks to our transparent, no-pressure approach. You can see what our customers are saying here:</p>
+
+<p>
+  <a href="https://www.google.com/search?q=tustin+kia#mpd=~14551332690025579345/customers/reviews" target="_blank" rel="noopener noreferrer">
+    Read our Google reviews
+  </a>
+</p>
+
+<p>When you work with us, you can expect:</p>
+
+<ul>
+  <li>No dealer add-ons or surprises</li>
+  <li>Clear, upfront pricing</li>
+  <li>Located in the heart of the Tustin Auto Mall</li>
+  <li>Access to over 10,000 new and used vehicles across the auto mall when you visit</li>
+</ul>
+
+<p>If you have any questions, need availability, or would like a quick price check, simply reply to this email or reach me directly at <a href="mailto:alexc@pattersonautos.com">alexc@pattersonautos.com</a>.</p>
+
+<p>We’d love the opportunity to earn your business.</p>
+
+<p style="margin:18px 0 0;">
+  Best regards,<br>
+  <strong>Alex Chung</strong><br>
+  General Manager<br>
+  Patterson Tustin Kia<br>
+  <a href="mailto:alexc@pattersonautos.com">alexc@pattersonautos.com</a><br>
+  <a href="https://www.tustinkia.com" target="_blank" rel="noopener noreferrer">www.tustinkia.com</a>
+</p>
+
+<p style="margin:12px 0 0;">
+  <img src="https://d36urhup7zbd7q.cloudfront.net/u/wDG9w8Vme8n/3a102c62-58ff-4e9f-b200-b81fa572837f__400x256__.png"
+       alt="Patterson Tustin Kia"
+       width="200"
+       style="display:block;border:0;outline:none;text-decoration:none;height:auto;">
+</p>
+""".strip()
+
+def maybe_send_tk_gm_day2_email(
+    *,
+    opportunity: dict,
+    opportunityId: str,
+    token: str,
+    subscription_id: str,
+    rooftop_name: str,
+    rooftop_sender: str,
+    customer_name: str,
+    currDate,
+    currDate_iso: str,
+) -> bool:
+    """
+    Returns True if it sent (or OFFLINE_MODE), else False.
+    Uses Airtable-stored state to avoid re-sends.
+    Sends even if appointment is scheduled or opp is inactive.
+    Still respects DoNotEmail on the email address itself.
+    """
+
+    # Rooftop gate
+    if not is_tustin_kia_rooftop(rooftop_name):
+        return False
+
+    patti_meta = opportunity.setdefault("patti", {})
+    if patti_meta.get("tk_gm_day2_sent") is True:
+        return False
+
+    # Resolve customer email (preferred + not doNotEmail)
+    cust = opportunity.get("customer") or {}
+    emails = cust.get("emails") or []
+    to_addr = None
+
+    for e in emails:
+        if not isinstance(e, dict):
+            continue
+        if e.get("doNotEmail"):
+            continue
+        if e.get("isPreferred") and e.get("address"):
+            to_addr = e["address"]
+            break
+
+    if not to_addr:
+        for e in emails:
+            if not isinstance(e, dict):
+                continue
+            if e.get("doNotEmail"):
+                continue
+            if e.get("address"):
+                to_addr = e["address"]
+                break
+
+    if not to_addr:
+        log.warning("TK GM Day2: no deliverable email for opp=%s", opportunityId)
+        return False
+
+    body_html = build_tk_gm_day2_html(customer_name)
+
+    if OFFLINE_MODE:
+        sent_ok = True
+    else:
+        from patti_mailer import send_patti_email
+        try:
+            send_patti_email(
+                token=token,
+                subscription_id=subscription_id,
+                opp_id=opportunityId,
+                rooftop_name=rooftop_name,
+                rooftop_sender=rooftop_sender,
+                to_addr=to_addr,
+                subject=TK_GM_DAY2_SUBJECT,
+                body_html=body_html,
+                cc_addrs=[],
+            )
+            sent_ok = True
+        except Exception as e:
+            log.warning("TK GM Day2 send failed opp=%s: %s", opportunityId, e)
+            sent_ok = False
+
+    if sent_ok:
+        # Persist state so we never resend
+        patti_meta["tk_gm_day2_sent"] = True
+        patti_meta["tk_gm_day2_sent_at"] = currDate_iso
+        opportunity["patti"] = patti_meta
+
+        # Optional: record in thread history (helps auditing)
+        opportunity.setdefault("messages", []).append({
+            "msgFrom": "patti",  # still sent by Patti system, but content is Alex
+            "subject": TK_GM_DAY2_SUBJECT,
+            "body": body_html,
+            "date": currDate_iso,
+            "trigger": "tk_gm_day2",
+        })
+        opportunity.setdefault("checkedDict", {})["last_msg_by"] = "patti"
+
+        # Write explicit Airtable fields for dashboarding
+        airtable_save(opportunity, extra_fields={
+            "TK GM Day 2 Sent": True,
+            "TK GM Day 2 Sent At": currDate_iso,
+            "TK GM Day 2 Subject": TK_GM_DAY2_SUBJECT,
+        })
+
+    return sent_ok
+    
+
 def _next_kbb_followup_iso(*, lead_age_days: int) -> str:
     """
     Returns the UTC iso timestamp for the next cadence day after lead_age_days.
@@ -1762,7 +1919,35 @@ def processHit(hit):
         followUP_count = int(opportunity.get("followUP_count") or 0)
 
     
-        # --- NEW: Step 4 — pause cadence if there is an upcoming appointment ---
+        # --- Step 4A: Tustin Kia GM Day-2 email (send even if appointment exists) ---
+        # Day-2 in your system = first follow-up run (followUP_count == 0) when followUP_date is due.
+        if followUP_date <= currDate and followUP_count == 0:
+            sent_gm = maybe_send_tk_gm_day2_email(
+                opportunity=opportunity,
+                opportunityId=opportunityId,
+                token=token,
+                subscription_id=subscription_id,
+                rooftop_name=rooftop_name,
+                rooftop_sender=rooftop_sender,
+                customer_name=customer_name,
+                currDate=currDate,
+                currDate_iso=currDate_iso,
+            )
+        
+            if sent_gm:
+                # Advance cadence like a normal follow-up, so we don't also send GPT follow-up today
+                nextDate = currDate + _td(days=1)
+                next_iso = nextDate.isoformat()
+                opportunity["followUP_date"] = next_iso
+                opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
+        
+                if not OFFLINE_MODE:
+                    airtable_save(opportunity, extra_fields={"follow_up_at": next_iso})
+        
+                wJson(opportunity, f"jsons/process/{opportunityId}.json")
+                return
+        
+        # --- Step 4B: pause cadence if there is an upcoming appointment (normal behavior) ---
         patti_meta = opportunity.get("patti") or {}
         appt_due_utc = patti_meta.get("appt_due_utc")
         if appt_due_utc:
@@ -1777,6 +1962,14 @@ def processHit(hit):
                     )
                     wJson(opportunity, f"jsons/process/{opportunityId}.json")
                     return
+            except Exception as e:
+                log.warning(
+                    "Failed to parse appt_due_utc %r for %s: %s",
+                    appt_due_utc,
+                    opportunityId,
+                    e,
+                )
+
             except Exception as e:
                 log.warning(
                     "Failed to parse appt_due_utc %r for %s: %s",
