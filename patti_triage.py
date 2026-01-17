@@ -338,12 +338,20 @@ def handoff_to_human(
 
     sp = resolve_salesperson_contact(opportunity, fresh_opp)
     salesperson_name = sp.get("name") or "Sales Team"
-    salesperson_email = sp.get("email") or ""
+    
+    # ✅ Use your Fortellis-ID→email mapping (the same one you use to route the email)
+    resolved_sales_email = resolve_primary_sales_email(fresh_opp) or ""
+    salesperson_email = resolved_sales_email  # for the body
 
-    cust = (fresh_opp or {}).get("customer") or opportunity.get("customer") or {}
-    customer_name = (f"{(cust.get('firstName') or '').strip()} {(cust.get('lastName') or '').strip()}").strip() or "Customer"
-    customer_email = _first_preferred_email(cust) or ""
-    customer_phone = _first_phone(cust) or ""
+
+    # ✅ Source of truth is what ingestion saved into the opp blob (Airtable)
+    first = (opportunity.get("customer_first_name") or "").strip()
+    last  = (opportunity.get("customer_last_name") or "").strip()
+    customer_name = (f"{first} {last}").strip() or "Customer"
+    
+    customer_email = (opportunity.get("customer_email") or "").strip() or "unknown"
+    customer_phone = (opportunity.get("customer_phone") or "").strip() or "unknown"
+
     vehicle = _vehicle_str(opportunity, fresh_opp) or ""
 
     reason = (triage.get("reason") or "").strip()
@@ -425,7 +433,7 @@ def handoff_to_human(
     # -----------------------
     # Outlook email notify
     # -----------------------
-    to_addr = resolve_primary_sales_email(fresh_opp) or os.getenv("HUMAN_REVIEW_FALLBACK_TO", "") or "knowzek@gmail.com"
+    to_addr = resolved_sales_email or os.getenv("HUMAN_REVIEW_FALLBACK_TO", "") or "knowzek@gmail.com"
     
     subj = f"[Patti] Human review needed - {rooftop_name} - {customer_name}"
     if vehicle:
