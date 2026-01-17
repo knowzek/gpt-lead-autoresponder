@@ -463,7 +463,7 @@ def handoff_to_human(
     <p><b>Next step:</b> Please take over this lead in the CRM and reply to the customer directly.</p>
     
     <p style="color:#666;font-size:12px;">
-    Logged by Patti (Fortellis task + comment). Sent from: {rooftop_sender or "Patti inbox"}<br>
+    Human Review Needed logged by Patti in eLead. Sent from: patti@pattersonautos.com<br>
     {rooftop_addr}
     </p>
     """.strip()
