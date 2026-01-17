@@ -207,6 +207,11 @@ def opp_from_record(rec: dict) -> dict:
 
     if fields.get("customer_email"):
         opp["customer_email"] = fields.get("customer_email")
+        
+    aph = (fields.get("Phone") or "").strip()
+    if aph:
+        opp["customer_phone"] = aph
+
 
     # ✅ NEW: hydrate customer first/last name from Airtable columns
     afn = (fields.get("Customer First Name") or "").strip()
