@@ -314,6 +314,17 @@ def process_lead_notification(inbound: dict) -> None:
         log.warning("No active opp found for shopper=%s subj=%r", shopper_email, subject[:120])
         return
 
+    # ✅ Guard KBB opps from General Leads
+    opp = get_opportunity(opp_id, tok, subscription_id)
+    
+    if _is_kbb_opp(opp):
+        log.info(
+            "Skipping General Leads lead_notification bootstrap for KBB opp=%s source=%r",
+            opp_id,
+            opp.get("source"),
+        )
+        return
+
     # Airtable bootstrap
     rec = find_by_opp_id(opp_id)
     if rec:
