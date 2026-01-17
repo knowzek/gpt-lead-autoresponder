@@ -304,7 +304,7 @@ def process_lead_notification(inbound: dict) -> None:
     cust = fresh_opp.get("customer") or opportunity.get("customer") or {}
     afn = (opportunity.get("customer_first_name") or (cust.get("firstName") or "")).strip()
     aln = (opportunity.get("customer_last_name") or (cust.get("lastName") or "")).strip()
-    customer_name = f"{afn} {aln}".strip() or "there"
+    customer_name = afn or "there"
     
     # ✅ For provider lead notifications, always send to the provider-extracted shopper email
     customer_email = shopper_email
