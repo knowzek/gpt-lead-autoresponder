@@ -67,6 +67,15 @@ def _resolve_subscription_id(inbound: dict, headers: dict | None) -> str | None:
 
     return None
 
+def extract_phone_from_text(body_text: str) -> str | None:
+    t = body_text or ""
+    # Apollo: Telephone<TAB>2069993915
+    m = re.search(r"(?im)^\s*(telephone|phone)\s*(?:[:\t ]+)\s*([0-9\-\(\)\.\s\+]{7,})\s*$", t)
+    if m:
+        return re.sub(r"\s+", " ", m.group(2)).strip()
+    return None
+
+
 
 def _find_best_active_opp_for_email(*, shopper_email: str, token: str, subscription_id: str) -> str | None:
     target = (shopper_email or "").strip().lower()
@@ -192,7 +201,7 @@ def process_lead_notification(inbound: dict) -> None:
     raw_text = inbound.get("body_text") or clean_html(body_html)
     body_text = (raw_text or "").strip()
     first_name, last_name = _extract_first_last_from_provider(body_text)
-
+    phone = extract_phone_from_text(body_text) or ""
 
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     headers = inbound.get("headers") or {}
@@ -250,6 +259,7 @@ def process_lead_notification(inbound: dict) -> None:
             "customer_email": shopper_email,
             "Customer First Name": first_name,
             "Customer Last Name": last_name,
+            "Phone": phone,
         })
         rec2 = find_by_opp_id(opp_id)
         if not rec2:
@@ -274,6 +284,7 @@ def process_lead_notification(inbound: dict) -> None:
         "customer_email": shopper_email,
         "Customer First Name": first_name,
         "Customer Last Name": last_name,
+        "Phone": phone,
     }
     
     save_opp(opportunity, extra_fields=extra)
