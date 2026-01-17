@@ -140,6 +140,65 @@ def _extract_shopper_email_from_provider(body_text: str) -> str | None:
         return e
     return None
 
+PHONE_RE = re.compile(r"(?i)\b(\+?1[\s\-\.]?)?\(?\d{3}\)?[\s\-\.]?\d{3}[\s\-\.]?\d{4}\b")
+
+def _extract_carscom_name_email_phone(body_text: str) -> tuple[str, str, str]:
+    """
+    Cars.com format (as plain text) tends to look like:
+      Travis Marshall
+      jdmarshall.cras@gmail.com
+      661-433-7553
+    """
+    t = (body_text or "").strip()
+    if not t:
+        return "", "", ""
+
+    lines = [ln.strip() for ln in t.splitlines() if ln.strip()]
+
+    # best-effort email
+    email = ""
+    for ln in lines[:25]:
+        m = EMAIL_RE.search(ln)
+        if m and "cars.com" not in m.group(1).lower():
+            email = m.group(1).lower()
+            break
+
+    # best-effort phone
+    phone = ""
+    for ln in lines[:40]:
+        m = PHONE_RE.search(ln)
+        if m:
+            phone = m.group(0).strip()
+            break
+
+    # best-effort name: look for a 2–3 word line near the top (before email)
+    name_line = ""
+    email_idx = None
+    if email:
+        for i, ln in enumerate(lines[:25]):
+            if email in ln.lower():
+                email_idx = i
+                break
+
+    scan = lines[: (email_idx if email_idx is not None else 12)]
+    for ln in scan:
+        if EMAIL_RE.search(ln) or PHONE_RE.search(ln):
+            continue
+        if re.search(r"(?i)\byou have a new lead\b|\bcars\.com\b|view shopper details", ln):
+            continue
+        # simple: "First Last" (allow 2-3 tokens)
+        toks = ln.split()
+        if 2 <= len(toks) <= 3 and all(tok[:1].isalpha() for tok in toks):
+            name_line = ln
+            break
+
+    first, last = "", ""
+    if name_line:
+        parts = name_line.split()
+        first = parts[0]
+        last = " ".join(parts[1:])
+
+    return _clean_first_name(first), (last or "").strip().title(), phone
 
 
 def _clean_first_name(name: str) -> str:
@@ -201,7 +260,22 @@ def process_lead_notification(inbound: dict) -> None:
     raw_text = inbound.get("body_text") or clean_html(body_html)
     body_text = (raw_text or "").strip()
     first_name, last_name = _extract_first_last_from_provider(body_text)
-    phone = extract_phone_from_text(body_text) or ""
+
+    phone = ""  # single source of truth
+    
+    sender = (inbound.get("from") or "").lower()
+    is_cars = ("cars.com" in sender) or ("salesleads@cars.com" in sender) or ("you have a new lead from cars.com" in body_text.lower())
+    
+    if is_cars:
+        cf, cl, ph = _extract_carscom_name_email_phone(body_text)
+        if cf: first_name = cf
+        if cl: last_name = cl
+        if ph: phone = ph
+    
+    # If Cars.com didn't yield a phone, try Apollo-style Telephone line
+    if not phone:
+        phone = extract_phone_from_text(body_text) or ""
+
 
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     headers = inbound.get("headers") or {}
