@@ -114,7 +114,9 @@ EMAIL_RE = re.compile(r"([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})", re.I)
 
 def _extract_shopper_email_from_provider(body_text: str) -> str | None:
     body_text = body_text or ""
-    m = re.search(r"(?im)^\s*email\s*:\s*([^\s<]+@[^\s<]+)\s*$", body_text)
+
+    # Apollo (tab), or colon, or spaces
+    m = re.search(r"(?im)^\s*email\s*(?:[:\t ]+)\s*([^\s<]+@[^\s<]+)\s*$", body_text)
     if m:
         return m.group(1).strip().lower()
 
@@ -129,7 +131,7 @@ def _extract_shopper_email_from_provider(body_text: str) -> str | None:
         return e
     return None
 
-import re
+
 
 def _clean_first_name(name: str) -> str:
     n = (name or "").strip()
@@ -142,26 +144,24 @@ def _clean_first_name(name: str) -> str:
 
 def _extract_first_last_from_provider(body_text: str) -> tuple[str, str]:
     """
-    Best-effort extraction of first/last name from provider lead bodies.
-    Works for common patterns like:
-      First Name: Elle
-      Last Name: Baker
-    and CARFAX-style:
-      NEW CUSTOMER LEAD FOR Tustin Kia Elle Baker is interested...
+    Handles:
+      First Name: Michael
+      First Name\tMichael
+      First Name Michael
     """
     t = body_text or ""
     first = ""
     last = ""
 
-    # Strong signal lines
-    m1 = re.search(r"(?im)^\s*First\s*Name\s*:\s*(.+?)\s*$", t)
-    m2 = re.search(r"(?im)^\s*Last\s*Name\s*:\s*(.+?)\s*$", t)
+    # Accept colon OR tab OR spaces as separator
+    m1 = re.search(r"(?im)^\s*First\s*Name\s*(?:[:\t ]+)\s*(.+?)\s*$", t)
+    m2 = re.search(r"(?im)^\s*Last\s*Name\s*(?:[:\t ]+)\s*(.+?)\s*$", t)
     if m1:
         first = m1.group(1).strip()
     if m2:
         last = m2.group(1).strip()
 
-    # CARFAX pattern fallback
+    # CARFAX pattern fallback (keep this)
     if not first:
         m = re.search(
             r"(?i)\bNEW CUSTOMER LEAD FOR .*?\b([A-Z][a-zA-Z'’-]+)\s+([A-Z][a-zA-Z'’-]+)\b\s+is interested\b",
@@ -173,7 +173,10 @@ def _extract_first_last_from_provider(body_text: str) -> tuple[str, str]:
 
     first = _clean_first_name(first)
     last = (last or "").strip()
+    if last.isupper():
+        last = last.title()
     return first, last
+
 
 
 _KBB_SOURCES = {"kbb instant cash offer", "kbb servicedrive", "kbb service drive"}
