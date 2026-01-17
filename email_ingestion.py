@@ -286,36 +286,14 @@ def process_lead_notification(inbound: dict) -> None:
     rooftop_name   = rt.get("name") or rt.get("rooftop_name") or "Rooftop"
     rooftop_sender = rt.get("sender") or rt.get("patti_email") or os.getenv("TEST_FROM") or ""
 
-    # Customer name/email (prefer CRM customer block)
-    # ✅ Prefer Airtable first/last name (already attached to opportunity via opp_from_record + save_opp)
-    afn = (opportunity.get("customer_first_name") or (opportunity.get("customer") or {}).get("firstName") or "").strip()
-    aln = (opportunity.get("customer_last_name") or (opportunity.get("customer") or {}).get("lastName") or "").strip()
-    
+    # Customer name (prefer Airtable-hydrated first/last, then Fortellis, else "there")
+    cust = fresh_opp.get("customer") or opportunity.get("customer") or {}
+    afn = (opportunity.get("customer_first_name") or (cust.get("firstName") or "")).strip()
+    aln = (opportunity.get("customer_last_name") or (cust.get("lastName") or "")).strip()
     customer_name = f"{afn} {aln}".strip() or "there"
-
-
-    customer_email = None
-    emails = cust.get("emails") or []
-    if isinstance(emails, list):
-        # preferred + not DNE
-        for e in emails:
-            if not isinstance(e, dict):
-                continue
-            if e.get("doNotEmail"):
-                continue
-            if e.get("isPreferred") and e.get("address"):
-                customer_email = e["address"]
-                break
-        # fallback
-        if not customer_email:
-            for e in emails:
-                if not isinstance(e, dict):
-                    continue
-                if e.get("doNotEmail"):
-                    continue
-                if e.get("address"):
-                    customer_email = e["address"]
-                    break
+    
+    # ✅ For provider lead notifications, always send to the provider-extracted shopper email
+    customer_email = shopper_email
 
     # Salesperson (best-effort)
     salesperson = ""
