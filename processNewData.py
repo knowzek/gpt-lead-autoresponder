@@ -89,6 +89,19 @@ def get_or_assign_ab_variant(opportunity: dict) -> str:
     patti["ab_variant"] = v
     return v
 
+_VAGUE_TIME_WORDS_RE = re.compile(r"\b(later|tonight|this evening|this afternoon|after work)\b", re.I)
+_HAS_DIGIT_RE = re.compile(r"\d")
+
+def explicit_time_ok(text: str) -> bool:
+    t = text or ""
+    if not has_explicit_time(t):
+        return False
+    # if they used vague words but no digits, block (extra cautious)
+    if _VAGUE_TIME_WORDS_RE.search(t) and not _HAS_DIGIT_RE.search(t):
+        return False
+    return True
+
+
 def airtable_save(opportunity: dict, extra_fields: dict | None = None):
     """
     Persist the full opp back to Airtable (opp_json + follow_up_at + is_active).
@@ -651,9 +664,14 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
                 appt_iso = ""
                 conf = 0.0
                 if not already_scheduled:
-                    proposed = extract_appt_time(customer_body or "", tz="America/Los_Angeles")
-                    appt_iso = (proposed.get("iso") or "").strip()
-                    conf = float(proposed.get("confidence") or 0.0)
+                    # ✅ HARD GATE: do not auto-schedule unless customer gave an explicit time
+                    if explicit_time_ok(customer_body):
+                        proposed = extract_appt_time(customer_body or "", tz="America/Los_Angeles")
+                        appt_iso = (proposed.get("iso") or "").strip()
+                        conf = float(proposed.get("confidence") or 0.0)
+                    else:
+                        appt_iso = ""
+                        conf = 0.0
 
                 if appt_iso and conf >= 0.60:
                     try:
@@ -2672,10 +2690,16 @@ def send_thread_reply_now(
     
             appt_iso = ""
             conf = 0.0
+            
             if (not already_scheduled) and customer_body:
-                proposed = extract_appt_time(customer_body, tz="America/Los_Angeles")
-                appt_iso = (proposed.get("iso") or "").strip()
-                conf = float(proposed.get("confidence") or 0.0)
+                # ✅ HARD GATE: only auto-schedule if customer provided an explicit time
+                if explicit_time_ok(customer_body):
+                    proposed = extract_appt_time(customer_body, tz="America/Los_Angeles")
+                    appt_iso = (proposed.get("iso") or "").strip()
+                    conf = float(proposed.get("confidence") or 0.0)
+                else:
+                    log.info("Not auto-scheduling: no explicit time found in customer reply: %r", customer_body[:200])
+
     
             if appt_iso and conf >= 0.60:
                 # appt_iso is expected to be parseable by fromisoformat when Z->+00:00
@@ -2737,14 +2761,20 @@ def send_thread_reply_now(
     Context:
     - The guest originally inquired about: {vehicle_str}
     
-    Use the full message history below, then write Patti’s next reply that answers
-    the customer’s latest question. Keep it warm, direct, and helpful.
+    Rules:
+    - If the customer gives vague availability (e.g. "later today", "this evening") WITHOUT a specific time,
+      you must NOT confirm or schedule an appointment yet.
+    - Instead: in ONE sentence, share today's store hours, then ask what exact time works best, offering 2–3 options.
+    - Keep it short and natural.
+    
+    Store hours: If it’s after-hours, tell the guest you can set the appointment for the next available time.
     
     messages between Patti and the customer (python list of dicts):
     {messages}
     
     Return ONLY valid JSON with keys: subject, body.
     """.strip()
+
     
         response = run_gpt(prompt, customer_name, rooftop_name, prevMessages=True)
         subject   = response["subject"]
