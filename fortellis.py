@@ -1058,9 +1058,22 @@ def complete_send_email_activity(
     opportunity_id: str,
     to_addr: str,
     subject: str,
+    body_html: str = "",
     comments_extra: str = "",
 ):
     now = _iso_z(datetime.now(timezone.utc))
+
+    # ✅ strip footer
+    body_no_footer = body_html or ""
+    footer_marker = "<!-- PATTI_FOOTER_START -->"
+    if footer_marker in body_no_footer:
+        body_no_footer = body_no_footer.split(footer_marker, 1)[0]
+
+    full_comments = (
+        f"Patti Outlook: sent to {to_addr} | subject={subject}"
+        + (f" | {comments_extra}" if comments_extra else "")
+        + ("\n\n--- EMAIL BODY ---\n" + (body_no_footer or "") if (body_no_footer or "").strip() else "")
+    )
 
     return complete_activity(
         token,
@@ -1070,8 +1083,7 @@ def complete_send_email_activity(
         completed_dt_iso_utc=now,
         activity_name="Send Email",
         activity_type=3,
-        comments=f"Patti Outlook: sent to {to_addr} | subject={subject}"
-                 + (f" | {comments_extra}" if comments_extra else ""),
+        comments=full_comments,
     )
 
 
