@@ -142,9 +142,15 @@ def get_opps_by_customer_id(customer_id: str, token: str, subscription_id: str, 
     url = f"{BASE_URL}/sales/v2/elead/opportunities/search-by-customerId/{customer_id}"
     params = {"page": 1, "pageSize": page_size}
     r = requests.get(url, headers=_headers(subscription_id, token), params=params, timeout=30)
+
+    if r.status_code == 404:
+        log.warning("search-by-customerId not found (404). sub=%s customer_id=%s", subscription_id, customer_id)
+        return []
+
     r.raise_for_status()
     data = r.json() or {}
     return data.get("items") or []
+
 
 def _parse_dt(s: str | None) -> datetime:
     if not s:
