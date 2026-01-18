@@ -13,6 +13,7 @@ from fortellis import (
     add_opportunity_comment,
     get_opportunity,
     search_customers_by_email,
+    find_recent_opportunity_by_email,
     get_opps_by_customer_id,
 )
 from fortellis import complete_activity
@@ -82,42 +83,114 @@ def _find_best_active_opp_for_email(*, shopper_email: str, token: str, subscript
     if not target:
         return None
 
-    customers = search_customers_by_email(target, token, subscription_id, page_size=10) or []
-    if not customers:
-        return None
+    candidates: list[tuple[str, str]] = []
 
-    candidates = []
-
-    for c in customers:
-        cid = c.get("id") or c.get("customerId")
-        if not cid:
-            continue
-
-        opps = get_opps_by_customer_id(cid, token, subscription_id, page_size=100) or []
-        for o in opps:
-            status = (o.get("status") or "").strip().lower()
-            if status != "active":
+    # ----------------------------
+    # Path A: customerId -> opps
+    # ----------------------------
+    try:
+        customers = search_customers_by_email(target, token, subscription_id, page_size=10) or []
+        for c in customers:
+            cid = c.get("id") or c.get("customerId")
+            if not cid:
                 continue
 
-            opp_id = o.get("id") or o.get("opportunityId")
-            if not opp_id:
-                continue
+            try:
+                opps = get_opps_by_customer_id(cid, token, subscription_id, page_size=100) or []
+            except Exception as e:
+                # Key fix: don't crash reply handling because one endpoint isn't supported.
+                log.warning("get_opps_by_customer_id failed (will fallback): sub=%s cid=%s err=%r", subscription_id, cid, e)
+                opps = []
 
-            # pick most recently touched
-            dt_str = (
-                o.get("updatedAt")
-                or o.get("updated_at")
-                or o.get("createdAt")
-                or o.get("created_at")
-                or ""
-            )
-            candidates.append((str(dt_str), opp_id))
+            for o in opps:
+                status = (o.get("status") or "").strip().lower()
+                if status != "active":
+                    continue
 
-    if not candidates:
+                opp_id = o.get("id") or o.get("opportunityId")
+                if not opp_id:
+                    continue
+
+                dt_str = (
+                    o.get("updatedAt")
+                    or o.get("updated_at")
+                    or o.get("createdAt")
+                    or o.get("created_at")
+                    or ""
+                )
+                candidates.append((str(dt_str), opp_id))
+
+        if candidates:
+            candidates.sort(reverse=True)
+            return candidates[0][1]
+
+    except Exception as e:
+        # If customer search itself blows up, still try Path B.
+        log.warning("customerId-based opp match failed (will fallback): sub=%s email=%s err=%r", subscription_id, target, e)
+
+    # ----------------------------
+    # Path B: searchDelta fallback
+    # ----------------------------
+    # Uses your existing get_recent_opportunities() which already handles 404 "empty window".
+    try:
+        best: tuple[str, str] | None = None  # (dt_str, opp_id)
+
+        page = 1
+        max_pages = 20
+        since_minutes = 60 * 24 * 14  # 14 days
+        page_size = 100
+
+        while page <= max_pages:
+            data = get_recent_opportunities(token, subscription_id, since_minutes=since_minutes, page=page, page_size=page_size) or {}
+            items = data.get("items") or []
+            if not items:
+                break
+
+            for op in items:
+                status = (op.get("status") or "").strip().lower()
+                if status and status != "active":
+                    continue
+
+                # Match email either in customer.emails[] or customerEmail
+                match = False
+                cust = op.get("customer") or {}
+                for e in (cust.get("emails") or []):
+                    addr = (e.get("address") or "").strip().lower()
+                    if addr == target:
+                        match = True
+                        break
+                if not match:
+                    addr2 = (op.get("customerEmail") or "").strip().lower()
+                    if addr2 == target:
+                        match = True
+
+                if not match:
+                    continue
+
+                opp_id = op.get("opportunityId") or op.get("id")
+                if not opp_id:
+                    continue
+
+                dt_str = (
+                    op.get("updatedAt")
+                    or op.get("updated_at")
+                    or op.get("createdAt")
+                    or op.get("created_at")
+                    or op.get("dateIn")
+                    or ""
+                )
+
+                cand = (str(dt_str), str(opp_id))
+                if (best is None) or (cand[0] > best[0]):
+                    best = cand
+
+            page += 1
+
+        return best[1] if best else None
+
+    except Exception as e:
+        log.warning("searchDelta fallback opp match failed: sub=%s email=%s err=%r", subscription_id, target, e)
         return None
-
-    candidates.sort(reverse=True)
-    return candidates[0][1]
 
 EMAIL_RE = re.compile(r"([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})", re.I)
 
