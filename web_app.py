@@ -21,7 +21,7 @@ def _looks_like_kbb(inbound: dict) -> bool:
 
     # Subject/body keywords commonly found in KBB ICO / offer emails
     kbb_keywords = [
-        "kbb", "kelley blue book", "instant cash offer", "offer alert", "trade in",
+        "kbb", "kelley blue book", "instant cash offer", "offer alert",
         "autotrader-tradein", "tradein@",
     ]
 
