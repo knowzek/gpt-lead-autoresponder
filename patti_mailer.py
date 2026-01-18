@@ -111,6 +111,7 @@ def send_patti_email(
                 opportunity_id=opp_id,
                 to_addr=to_addr,
                 subject=subject,
+                body_html=html_body,
             )
             log.info("Completed CRM activity: Send Email opp=%s", opp_id)
         except Exception as e:
