@@ -343,6 +343,62 @@ def get_activities(opportunity_id, customer_id, token, dealer_key):
         "completedActivities": completed,
     }
 
+def find_recent_opportunity_by_email(
+    *,
+    shopper_email: str,
+    subscription_id: str,
+    token: str,
+    since_minutes: int = 60 * 24 * 14,  # 14 days
+    page_size: int = 100,
+    max_pages: int = 20,
+):
+    """
+    General version of find_recent_kbb_opportunity_by_email:
+    Searches recent opportunities via searchDelta and returns the most likely ACTIVE opp for shopper_email.
+    Returns (opp_id, opp_obj) or (None, None).
+    """
+    target = (shopper_email or "").strip().lower()
+    if not target:
+        return None, None
+
+    page = 1
+    while page <= max_pages:
+        data = get_recent_opportunities(
+            token,
+            subscription_id,
+            since_minutes=since_minutes,
+            page=page,
+            page_size=page_size,
+        ) or {}
+
+        items = (data.get("items") or [])
+        if not items:
+            return None, None
+
+        for op in items:
+            # Prefer Active opps when that field exists
+            status = (op.get("status") or "").strip().lower()
+            if status and status != "active":
+                continue
+
+            cust = (op.get("customer") or {})
+            emails = cust.get("emails") or []
+            for e in emails:
+                addr = (e.get("address") or "").strip().lower()
+                if addr == target:
+                    opp_id = op.get("opportunityId") or op.get("id")
+                    return opp_id, op
+
+            # fallback: some payloads have customerEmail
+            addr2 = (op.get("customerEmail") or "").strip().lower()
+            if addr2 == target:
+                opp_id = op.get("opportunityId") or op.get("id")
+                return opp_id, op
+
+        page += 1
+
+    return None, None
+
 
 def set_customer_do_not_email(token, subscription_id, customer_id, email_address, do_not=True):
     """
