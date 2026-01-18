@@ -59,6 +59,23 @@ EXIT_KEYWORDS = [
     "leave me alone", "sold my car", "found another dealer"
 ]
 
+SALES_AI_EMAIL_DAYS = [2, 3, 5, 8, 11, 14, 17, 21, 28, 31, 32, 34, 37, 40, 44, 51]
+
+def _next_salesai_due_iso(*, created_iso: str, last_idx: int) -> str | None:
+    """
+    created_iso = lead create timestamp (UTC ISO)
+    last_idx = index of last sent cadence email in SALES_AI_EMAIL_DAYS (start at -1)
+    Returns next due date ISO in UTC, or None if cadence complete.
+    """
+    if last_idx + 1 >= len(SALES_AI_EMAIL_DAYS):
+        return None
+
+    created_dt = _dt.fromisoformat(str(created_iso).replace("Z", "+00:00"))
+    day_num = SALES_AI_EMAIL_DAYS[last_idx + 1]
+    due_dt = (created_dt + _td(days=int(day_num))).astimezone(_tz.utc)
+    return due_dt.isoformat()
+
+
 def is_exit_message(msg: str) -> bool:
     if not msg:
         return False
@@ -1801,6 +1818,31 @@ def processHit(hit):
             OFFLINE_MODE=OFFLINE_MODE,
         )
         
+        # ✅ ONLY AFTER a successful first-touch, seed cadence + next due date
+        if sent_ok or OFFLINE_MODE:
+            patti = opportunity.setdefault("patti", {})
+            if patti.get("salesai_email_idx") is None:
+                patti["salesai_email_idx"] = -1
+        
+            created_iso = (
+                opportunity.get("created_at")
+                or opportunity.get("dateIn")
+                or opportunity.get("createdDate")
+                or currDate_iso
+            )
+        
+            next_due = _next_salesai_due_iso(
+                created_iso=created_iso,
+                last_idx=int(patti["salesai_email_idx"])
+            )
+        
+            opportunity["followUP_date"] = next_due
+            opportunity["followUP_count"] = 0
+        
+            if not OFFLINE_MODE:
+                airtable_save(opportunity, extra_fields={"follow_up_at": next_due})
+
+        
     else:
         # handle follow-ups messages
         checkActivities(opportunity, currDate, rooftop_name)
@@ -2023,17 +2065,17 @@ def processHit(hit):
                     opportunityId,
                     e,
                 )
-
-            except Exception as e:
-                log.warning(
-                    "Failed to parse appt_due_utc %r for %s: %s",
-                    appt_due_utc,
-                    opportunityId,
-                    e,
-                )
     
         last_by = (opportunity.get('checkedDict') or {}).get('last_msg_by', '')
-        if followUP_date <= currDate and followUP_count > 3:
+
+        if last_by == "customer":
+            # customer replied; don't send an automated nudge
+            wJson(opportunity, f"jsons/process/{opportunityId}.json")
+            return
+
+        patti = opportunity.get("patti") or {}
+        idx = int(patti.get("salesai_email_idx") or -1)
+        if followUP_date <= currDate and idx >= (len(SALES_AI_EMAIL_DAYS) - 1):
             opportunity['isActive'] = False
             opportunity["followUP_date"] = None   
             if not OFFLINE_MODE:
@@ -2090,6 +2132,14 @@ def processHit(hit):
                 body_html
             )
 
+            # ✅ Normalize + CTA + footer (match first-touch formatting)
+            body_html = normalize_patti_body(body_html)
+            body_html = _patch_address_placeholders(body_html, rooftop_name)
+            body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+            body_html = _PREFS_RE.sub("", body_html).strip()
+            body_html = body_html + build_patti_footer(rooftop_name)
+
+
             # ✅ SEND the follow-up (currently missing)
             sent_ok = False
             customer_email = None
@@ -2097,26 +2147,13 @@ def processHit(hit):
             if not OFFLINE_MODE:
                 from patti_mailer import send_patti_email  # wrapper: Outlook send + CRM comment
             
-                cust = opportunity.get("customer") or {}
-                emails = cust.get("emails") or []
-            
-                # pick preferred + not doNotEmail, else first not doNotEmail
-                for e in emails:
-                    if e.get("doNotEmail"):
-                        continue
-                    if e.get("isPreferred") and e.get("address"):
-                        customer_email = e["address"]
-                        break
-            
-                if not customer_email:
-                    for e in emails:
-                        if e.get("doNotEmail"):
-                            continue
-                        if e.get("address"):
-                            customer_email = e["address"]
-                            break
-            
-                if customer_email:
+                actual_to = resolve_customer_email(
+                    opportunity,
+                    SAFE_MODE=SAFE_MODE,
+                    test_recipient=test_recipient
+                )
+                
+                if actual_to:
                     try:
                         send_patti_email(
                             token=token,
@@ -2124,7 +2161,7 @@ def processHit(hit):
                             opp_id=opportunityId,
                             rooftop_name=rooftop_name,
                             rooftop_sender=rooftop_sender,
-                            to_addr=customer_email,
+                            to_addr=actual_to,
                             subject=subject,
                             body_html=body_html,
                             cc_addrs=[],
@@ -2132,6 +2169,9 @@ def processHit(hit):
                         sent_ok = True
                     except Exception as e:
                         log.warning("Follow-up send failed for opp %s: %s", opportunityId, e)
+                else:
+                    log.warning("No customer email resolved for opp %s; skipping follow-up send", opportunityId)
+
             
             # Only record + advance cadence if we actually sent (or you're in OFFLINE_MODE)
             if sent_ok or OFFLINE_MODE:
@@ -2145,23 +2185,37 @@ def processHit(hit):
                         "notes": response.get("notes"),
                     }
                 )
-            
                 opportunity.setdefault("checkedDict", {})["last_msg_by"] = "patti"
             
-                nextDate = currDate + _td(days=1)
-                next_iso = nextDate.isoformat()
-                
-                opportunity["followUP_date"] = next_iso
-                opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
-                
-                airtable_save(
-                    opportunity,
-                    extra_fields={"follow_up_at": next_iso}
+                # ✅ SalesAI cadence advance (instead of +1 day)
+                patti = opportunity.setdefault("patti", {})
+                idx = int(patti.get("salesai_email_idx") or -1)
+                patti["salesai_email_idx"] = idx + 1
+            
+                created_iso = (
+                    opportunity.get("created_at")
+                    or opportunity.get("dateIn")
+                    or opportunity.get("createdDate")
+                    or opportunity.get("updated_at")  # last resort
+                    or currDate_iso
                 )
-
+            
+                next_due = _next_salesai_due_iso(created_iso=created_iso, last_idx=idx + 1)
+            
+                if next_due is None:
+                    opportunity["isActive"] = False
+                    opportunity["followUP_date"] = None
+                    if not OFFLINE_MODE:
+                        airtable_save(opportunity, extra_fields={"follow_up_at": None})
+                else:
+                    opportunity["followUP_date"] = next_due
+                    opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
+                    if not OFFLINE_MODE:
+                        airtable_save(opportunity, extra_fields={"follow_up_at": next_due})
             
                 if not OFFLINE_MODE:
                     airtable_save(opportunity)
+
     
     wJson(opportunity, f"jsons/process/{opportunityId}.json")
 
