@@ -2224,7 +2224,7 @@ _CARFAX_EMAIL_RE = re.compile(r"(?i)\bEmail:\s*([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A
 def _first_email_in_text(text: str) -> str | None:
     if not text:
         return None
-    m = _CARFAX_EMAIL_RE.search(text) or _EMAIL_RE.search(text)
+    m = _CARFAX_EMAIL_RE.search(text) or EMAIL_RE.search(text)
     return m.group(1).strip() if m else None
 
 def _build_email_context(*, opportunity: dict, fresh_opp: dict, subscription_id: str, token: str | None):
