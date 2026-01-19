@@ -10,7 +10,7 @@ from datetime import datetime as _dt, timedelta as _td, timezone as _tz
 from email_ingestion import clean_html  
 import json
 import requests
-
+from patti_common import EMAIL_RE
 
 # TEMP: while testing, only these rooftops
 ALLOWED_SUBSCRIPTIONS = {
@@ -130,10 +130,6 @@ def _extract_kbb_amount(text: str) -> str | None:
         return None
     raw = m.group(0)
     return raw.replace("¤", "$")
-
-
-
-EMAIL_RE = re.compile(r"([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})", re.I)
 
 def _extract_shopper_email(body_text: str) -> str | None:
     """
