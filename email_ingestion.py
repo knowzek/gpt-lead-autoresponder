@@ -192,7 +192,11 @@ def _find_best_active_opp_for_email(*, shopper_email: str, token: str, subscript
         log.warning("searchDelta fallback opp match failed: sub=%s email=%s err=%r", subscription_id, target, e)
         return None
 
-EMAIL_RE = re.compile(r"([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})", re.I)
+EMAIL_RE = re.compile(
+    r"([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})",
+    re.I
+)
+
 
 def _extract_shopper_email_from_provider(body_text: str) -> str | None:
     body_text = body_text or ""
@@ -620,8 +624,6 @@ def is_test_opp(opp: dict, opp_id: str | None) -> bool:
     if opp and opp.get("id") == TEST_OPP_ID:
         return True
     return False
-
-EMAIL_RE = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.I)
 
 def _extract_customer_email_from_lead_body(body_text: str) -> str | None:
     """
