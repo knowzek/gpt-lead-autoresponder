@@ -1,6 +1,15 @@
-import re as _re
-import re as _re2
 from rooftops import ROOFTOP_INFO
+import re
+
+EMAIL_RE = re.compile(
+    r"([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})",
+    re.I
+)
+
+PHONE_RE = re.compile(
+    r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b"
+)
+
 
 from datetime import datetime as _dt
 import zoneinfo as _zi
@@ -21,7 +30,7 @@ def is_exit_message(msg: str) -> bool:
 
 # === Decline detection ==========================================================
 
-_DECLINE_RE = _re.compile(
+_DECLINE_RE = re.compile(
     r'(?i)\b('
     r'not\s+interested|no\s+longer\s+interested|not\s+going\s+to\s+sell|'
     r'going\s+to\s+pass|pass(?:ing)?\s+on(?:\s+the)?\s+offer|'
@@ -33,7 +42,7 @@ def _is_decline(text: str) -> bool:
     return bool(_DECLINE_RE.search(text or ""))
 
 
-_OPT_OUT_RE = _re.compile(
+_OPT_OUT_RE = re.compile(
     r"(?i)\b("
     r"stop|stop\s+all|stop\s+now|end|cancel|quit|"
     r"unsubscribe|remove\s+me|do\s+not\s+contact|do\s+not\s+email|don't\s+email|"
@@ -75,7 +84,7 @@ def fmt_local_human(dt: _dt, tz_name: str = "America/Los_Angeles") -> str:
 
 # Detect any scheduling token/link/CTA so we can skip inserting,
 # or remove scheduling verbiage cleanly.
-_SCHED_ANY_RE = _re.compile(
+_SCHED_ANY_RE = re.compile(
     r"(?is)("
     r"LegacySalesApptSchLink|"
     r"scheduleservice|"
@@ -145,28 +154,28 @@ def normalize_patti_body(body_html: str) -> str:
     body_html = (body_html or "").strip()
 
     # 1) Strip common plain-text sign-offs at the very end (Best, Patti / Thanks, Patti, etc.)
-    body_html = _re.sub(
+    body_html = re.sub(
         r"(?is)\b(?:best|thanks|thank you|regards|sincerely|warmly|cheers)\b\s*,?\s*patti\s*$",
         "",
         body_html,
     ).strip()
 
     # 2) Strip HTML-ish sign-offs near the end (<br> Best,<br>Patti ...)
-    body_html = _re.sub(
+    body_html = re.sub(
         r"(?is)(?:<br\s*/?>\s*){0,3}\b(?:best|thanks|thank you|regards|sincerely|warmly|cheers)\b\s*,?\s*(?:<br\s*/?>\s*){0,3}patti\s*(?:<br\s*/?>\s*)*$",
         "",
         body_html,
     ).strip()
 
     # 3) Your existing “Patti + Virtual Assistant …” cleanup (keep, but broaden slightly)
-    body_html = _re.sub(
+    body_html = re.sub(
         r"(?is)(?:\n\s*)?patti\s*(?:<br/?>|\r?\n)+.*?$",
         "",
         body_html,
     ).strip()
 
     # Collapse multiple blank lines
-    body_html = _re.sub(r"\n{2,}", "\n", body_html)
+    body_html = re.sub(r"\n{2,}", "\n", body_html)
     return body_html
 
 
@@ -215,7 +224,7 @@ def append_soft_schedule_sentence(body_html: str, rooftop_name: str) -> str:
     )
 
     # If body already has <p> tags, just append; otherwise wrap it
-    if _re2.search(r'(?is)<p[^>]*>.*?</p>', body_html):
+    if re.search(r'(?is)<p[^>]*>.*?</p>', body_html):
         return body_html.rstrip() + soft_line
 
     return f"<p>{body_html.strip()}</p>{soft_line}" if body_html.strip() else soft_line
