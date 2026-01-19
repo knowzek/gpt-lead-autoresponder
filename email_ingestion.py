@@ -333,13 +333,35 @@ def process_lead_notification(inbound: dict) -> None:
     body_text = (raw_text or "").strip()
     first_name, last_name = _extract_first_last_from_provider(body_text)
 
+    log.info(
+        "lead_notification parsed body_text len=%d sender=%r subj=%r head=%r",
+        len(body_text or ""),
+        inbound.get("from"),
+        subject[:120],
+        (body_text or "")[:260],
+    )
+
+
     phone = ""  # single source of truth
     
     sender = (inbound.get("from") or "").lower()
     is_cars = ("cars.com" in sender) or ("salesleads@cars.com" in sender) or ("you have a new lead from cars.com" in body_text.lower())
+    log.info("lead_notification is_cars=%s sender=%r", is_cars, sender)
     
     if is_cars:
+        log.info(
+            "cars.com before extract len=%d head=%r",
+            len(body_text or ""),
+            (body_text or "")[:300],
+        )
+    
         cf, cl, ph = _extract_carscom_name_email_phone(body_text)
+    
+        log.info(
+            "cars.com extracted first=%r last=%r phone=%r (pre-merge first=%r last=%r)",
+            cf, cl, ph, first_name, last_name
+        )
+
         if cf: first_name = cf
         if cl: last_name = cl
         if ph: phone = ph
@@ -406,6 +428,12 @@ def process_lead_notification(inbound: dict) -> None:
         opp["_subscription_id"] = subscription_id
         now_iso = ts
         opp.setdefault("followUP_date", now_iso)
+
+        log.info(
+            "bootstrap upsert opp=%s email=%r first=%r last=%r phone=%r source=%r",
+            opp_id, shopper_email, first_name, last_name, phone, (opp.get("source") or "")
+        )
+
         upsert_lead(opp_id, {
             "subscription_id": subscription_id,
             "source": opp.get("source") or "",
@@ -558,9 +586,19 @@ def _safe_mode_from(inbound: dict) -> bool:
 
 
 def clean_html(html: str) -> str:
-    """Strip HTML tags and reduce to plain text."""
-    text = re.sub(r"(?is)<[^>]+>", " ", html or "")
-    return re.sub(r"\s+", " ", text).strip()
+    # Turn <br> and </p> into newlines first
+    h = html or ""
+    h = re.sub(r"(?i)<br\s*/?>", "\n", h)
+    h = re.sub(r"(?i)</p\s*>", "\n", h)
+
+    # Strip remaining tags
+    text = re.sub(r"(?is)<[^>]+>", " ", h)
+
+    # Normalize whitespace but KEEP newlines
+    text = re.sub(r"[ \t\r\f\v]+", " ", text)
+    text = re.sub(r"\n\s*\n+", "\n", text)
+    return text.strip()
+
 
 def _extract_email(addr: str) -> str:
     """
