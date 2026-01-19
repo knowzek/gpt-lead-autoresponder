@@ -494,7 +494,7 @@ def process_lead_notification(inbound: dict) -> None:
     # -----------------------------
     # TRIAGE: provider lead message
     # -----------------------------
-    
+    triage_intended_handoff = False
     try:
         # This flow is NOT KBB, so pass is_kbb=False
         if should_triage(is_kbb=False):
@@ -509,24 +509,25 @@ def process_lead_notification(inbound: dict) -> None:
                 "lead_notification triage label=%s reason=%r opp=%s shopper=%s",
                 label, reason[:220], opp_id, shopper_email
             )
-
+            
             if label == "HUMAN_REVIEW_REQUIRED":
-                # ✅ hard-lock in Airtable first (so we don't accidentally email the guest)
+                triage_intended_handoff = True
                 opportunity["needs_human_review"] = True
-                opportunity.setdefault("patti", {})["human_review_reason"] = reason or "Human review required"
-                save_opp(opportunity, extra_fields={})
-
-                # Then notify salesperson + GM
+                opportunity.setdefault("patti", {})["human_review_reason"] = (triage.get("reason") or "Human review required").strip()
+                save_opp(opportunity)
+            
                 handoff_to_human(
                     opportunity=opportunity,
-                    inbound_text=body_text or "",
-                    reason=reason or "Human review required",
+                    fresh_opp=fresh_opp,
                     token=tok,
                     subscription_id=subscription_id,
-                    opp_id=opp_id,
+                    rooftop_name=rooftop_name,
+                    inbound_subject=subject,
+                    inbound_text=body_text or "",
+                    inbound_ts=ts,
+                    triage=triage,
                 )
                 return
-
 
             if label == "AUTO_REPLY_OK" and reply:
                 # Optional: if you want triage to provide a better first reply than generic first-touch,
@@ -535,9 +536,29 @@ def process_lead_notification(inbound: dict) -> None:
                 opportunity.setdefault("patti", {})["triage_label"] = label
                 opportunity.setdefault("patti", {})["triage_reason"] = reason
                 save_opp(opportunity, extra_fields={})
+                
     except Exception as e:
         log.exception("lead_notification triage failed opp=%s err=%s", opp_id, e)
-        # fail open (continue to normal first-touch)
+
+        # ✅ FAIL CLOSED if this lead required human review
+        if triage_intended_handoff:
+            log.warning(
+                "Blocking first-touch because triage intended handoff but failed opp=%s shopper=%s",
+                opp_id, shopper_email
+            )
+            # make sure the lock is persisted (best-effort)
+            try:
+                opportunity["needs_human_review"] = True
+                opportunity.setdefault("patti", {})["human_review_reason"] = (
+                    opportunity.get("patti", {}).get("human_review_reason")
+                    or "Human review required (triage handoff failed)"
+                )
+                save_opp(opportunity)
+            except Exception:
+                pass
+            return
+        # otherwise: continue to normal first-touch
+
 
 
     # Salesperson (best-effort)
@@ -950,8 +971,8 @@ def process_inbound_email(inbound: dict) -> None:
     try:
         if should_triage(is_kbb):
             triage = classify_inbound_email(body_text)
-            cls = triage.get("classification")
-    
+            cls = (triage.get("label") or "").strip().upper()
+
             if cls == "HUMAN_REVIEW_REQUIRED":
                 fresh_opp_for_triage = None
                 try:
