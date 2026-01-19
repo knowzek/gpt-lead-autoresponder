@@ -35,8 +35,8 @@ from fortellis import (
     set_opportunity_substatus,
 )
 
-from patti_common import _SCHED_ANY_RE, enforce_standard_schedule_sentence
-from patti_common import fmt_local_human, normalize_patti_body, append_soft_schedule_sentence, rewrite_sched_cta_for_booked
+from patti_common import _SCHED_ANY_RE, enforce_standard_schedule_sentence, EMAIL_RE
+from patti_common import fmt_local_human, normalize_patti_body, append_soft_schedule_sentence, rewrite_sched_cta_for_booked 
 
 #from fortellis import get_vehicle_inventory_xml  
 from inventory_matcher import recommend_from_xml
@@ -2219,7 +2219,6 @@ def processHit(hit):
     
     wJson(opportunity, f"jsons/process/{opportunityId}.json")
 
-_EMAIL_RE = re.compile(r"(?i)\b([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})\b")
 _CARFAX_EMAIL_RE = re.compile(r"(?i)\bEmail:\s*([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})\b")
 
 def _first_email_in_text(text: str) -> str | None:
