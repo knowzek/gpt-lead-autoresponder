@@ -1104,9 +1104,6 @@ def complete_activity(
     # If we exhausted combos, raise the last InvalidActivityType error
     raise last_err
 
-
-
-
 from datetime import datetime, timezone
 
 def _iso_z(dt: datetime) -> str:
