@@ -287,12 +287,14 @@ def _extract_first_last_from_provider(body_text: str) -> tuple[str, str]:
       First Name: Michael
       First Name\tMichael
       First Name Michael
+      ...and inline formats like:
+      First Name Michael Last Name Smith Email ...
     """
     t = body_text or ""
     first = ""
     last = ""
 
-    # Accept colon OR tab OR spaces as separator
+    # 1) Line-based patterns (your current behavior)
     m1 = re.search(r"(?im)^\s*First\s*Name\s*(?:[:\t ]+)\s*(.+?)\s*$", t)
     m2 = re.search(r"(?im)^\s*Last\s*Name\s*(?:[:\t ]+)\s*(.+?)\s*$", t)
     if m1:
@@ -300,7 +302,27 @@ def _extract_first_last_from_provider(body_text: str) -> tuple[str, str]:
     if m2:
         last = m2.group(1).strip()
 
-    # CARFAX pattern fallback (keep this)
+    # 2) Inline fallback (Apollo / compact provider formats)
+    # Only run if missing either field.
+    if not first or not last:
+        # Capture First Name up to the next field label or end-of-line
+        mi_first = re.search(
+            r"(?is)\bFirst\s*Name\b\s*[:\t ]+\s*([A-Za-z][A-Za-z'’-]*(?:\s+[A-Za-z][A-Za-z'’-]*)?)"
+            r"(?=\s+\bLast\s*Name\b|\s+\bEmail\b|\s+\bTelephone\b|\s+\bPhone\b|\s+\bStreet\b|\s+\bCity\b|\s+\bZip\b|$)",
+            t,
+        )
+        mi_last = re.search(
+            r"(?is)\bLast\s*Name\b\s*[:\t ]+\s*([A-Za-z][A-Za-z'’-]*(?:\s+[A-Za-z][A-Za-z'’-]*)?)"
+            r"(?=\s+\bEmail\b|\s+\bTelephone\b|\s+\bPhone\b|\s+\bStreet\b|\s+\bCity\b|\s+\bZip\b|$)",
+            t,
+        )
+
+        if mi_first and not first:
+            first = mi_first.group(1).strip()
+        if mi_last and not last:
+            last = mi_last.group(1).strip()
+
+    # 3) CARFAX pattern fallback (keep this)
     if not first:
         m = re.search(
             r"(?i)\bNEW CUSTOMER LEAD FOR .*?\b([A-Z][a-zA-Z'’-]+)\s+([A-Z][a-zA-Z'’-]+)\b\s+is interested\b",
@@ -315,6 +337,7 @@ def _extract_first_last_from_provider(body_text: str) -> tuple[str, str]:
     if last.isupper():
         last = last.title()
     return first, last
+
 
 
 
