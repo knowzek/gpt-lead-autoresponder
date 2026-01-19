@@ -14,6 +14,8 @@ from outlook_email import send_email_via_outlook
 
 from fortellis import schedule_activity, add_opportunity_comment
 
+from patti_common import EMAIL_RE, PHONE_RE
+
 
 log = logging.getLogger("patti.triage")
 
@@ -68,7 +70,6 @@ SALESTEAM_ID_TO_EMAIL = {
 # -----------------------
 # Helpers
 # -----------------------
-EMAIL_RE = re.compile(r"([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})", re.I)
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
