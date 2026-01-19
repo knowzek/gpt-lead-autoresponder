@@ -208,6 +208,28 @@ _HUMAN_REVIEW_RE = re.compile(
 
 _NON_LEAD_RE = re.compile(r"(?i)\b(auto-?reply|out\s+of\s+office|delivery\s+has\s+failed|undeliverable)\b")
 
+# Inventory-specific config questions (model + qualifier) => human review
+_INVENTORY_QUAL_RE = re.compile(
+    r"(?i)\b("
+    r"panoramic|sunroof|moonroof|interior|leather|heated|ventilated|"
+    r"awd|fwd|4wd|4x4|"
+    r"package|tech|technology|premium|"
+    r"color|grey|gray|black|white|tan|beige|red|blue|"
+    r"captain|bench|tow|navigation|nav"
+    r")\b"
+)
+
+# "Model" hints (expand anytime)
+_MODEL_HINT_RE = re.compile(
+    r"(?i)\b("
+    # Kia
+    r"sportage|telluride|sorento|seltos|niro|carnival|ev6|ev9|k5|k4|forte|rio|"
+    # Mazda
+    r"mazda3|mazda\s*3|cx-?30|cx-?5|cx-?50|cx-?90|"
+    # Hyundai (add/trim as needed)
+    r"elantra|sonata|tucson|santa\s*fe|palisade|ioniq|kona|venue"
+    r")\b"
+)
 
 def classify_inbound_email(email_text: str) -> Dict[str, Any]:
     """
@@ -230,6 +252,16 @@ def classify_inbound_email(email_text: str) -> Dict[str, Any]:
 
     if _HUMAN_REVIEW_RE.search(t_short):
         return {"classification": "HUMAN_REVIEW_REQUIRED", "confidence": 0.90, "reason": "Pricing/financing/trade/legal/urgent/angry indicators."}
+
+    # Inventory-specific configuration (model + 1 qualifier) => handoff
+    m_model = _MODEL_HINT_RE.search(t_short)
+    m_qual  = _INVENTORY_QUAL_RE.search(t_short)
+    if m_model and m_qual:
+        return {
+            "classification": "HUMAN_REVIEW_REQUIRED",
+            "confidence": 0.92,
+            "reason": f"Inventory-specific config: model='{m_model.group(0)}' qualifier='{m_qual.group(0)}'."
+        }
 
     # GPT classifier (conservative gate)
     if not _oai:
