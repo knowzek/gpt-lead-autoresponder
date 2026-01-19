@@ -19,6 +19,7 @@ from fortellis import (
 from fortellis import complete_activity
 from fortellis import complete_read_email_activity
 from patti_triage import classify_inbound_email, handoff_to_human, should_triage
+from patti_common import EMAIL_RE, PHONE_RE
 
 from kbb_ico import _top_reply_only
 from airtable_store import (
@@ -191,12 +192,6 @@ def _find_best_active_opp_for_email(*, shopper_email: str, token: str, subscript
     except Exception as e:
         log.warning("searchDelta fallback opp match failed: sub=%s email=%s err=%r", subscription_id, target, e)
         return None
-
-EMAIL_RE = re.compile(
-    r"([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})",
-    re.I
-)
-
 
 def _extract_shopper_email_from_provider(body_text: str) -> str | None:
     body_text = body_text or ""
