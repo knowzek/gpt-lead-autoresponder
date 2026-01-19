@@ -16,6 +16,7 @@ from fortellis import (
     find_recent_opportunity_by_email,
     get_opps_by_customer_id,
 )
+from processNewData import send_first_touch_email
 from fortellis import complete_activity
 from fortellis import complete_read_email_activity
 from patti_triage import classify_inbound_email, handoff_to_human, should_triage
@@ -30,8 +31,6 @@ from airtable_store import (
     upsert_lead,
     _safe_json_dumps,
 )
-
-
 log = logging.getLogger("patti.email_ingestion")
 
 # For now we only want this running on your single test opp
@@ -474,9 +473,7 @@ def process_lead_notification(inbound: dict) -> None:
     
     save_opp(opportunity, extra_fields=extra)
 
-
-    # ✅ Call YOUR existing internet lead first-touch logic (the extracted helper)
-    from processNewData import send_first_touch_email
+    # ✅ Call existing internet lead first-touch logic (the extracted helper)
 
     fresh_opp = get_opportunity(opp_id, tok, subscription_id) or {}
 
@@ -493,6 +490,55 @@ def process_lead_notification(inbound: dict) -> None:
     
     # ✅ For provider lead notifications, always send to the provider-extracted shopper email
     customer_email = shopper_email
+
+    # -----------------------------
+    # TRIAGE: provider lead message
+    # -----------------------------
+    
+    try:
+        # This flow is NOT KBB, so pass is_kbb=False
+        if should_triage(is_kbb=False):
+            log.info("lead_notification triage running opp=%s shopper=%s", opp_id, shopper_email)
+            triage = classify_inbound_email(body_text or "")
+
+            label = (triage.get("label") or "").strip().upper()
+            reason = (triage.get("reason") or "").strip()
+            reply  = (triage.get("reply") or "").strip()
+
+            log.info(
+                "lead_notification triage label=%s reason=%r opp=%s shopper=%s",
+                label, reason[:220], opp_id, shopper_email
+            )
+
+            if label == "HUMAN_REVIEW_REQUIRED":
+                # ✅ hard-lock in Airtable first (so we don't accidentally email the guest)
+                opportunity["needs_human_review"] = True
+                opportunity.setdefault("patti", {})["human_review_reason"] = reason or "Human review required"
+                save_opp(opportunity, extra_fields={})
+
+                # Then notify salesperson + GM
+                handoff_to_human(
+                    opportunity=opportunity,
+                    inbound_text=body_text or "",
+                    reason=reason or "Human review required",
+                    token=tok,
+                    subscription_id=subscription_id,
+                    opp_id=opp_id,
+                )
+                return
+
+
+            if label == "AUTO_REPLY_OK" and reply:
+                # Optional: if you want triage to provide a better first reply than generic first-touch,
+                # you can store it for the email helper to use (depends on your send_first_touch_email implementation).
+                opportunity.setdefault("patti", {})["triage_reply"] = reply
+                opportunity.setdefault("patti", {})["triage_label"] = label
+                opportunity.setdefault("patti", {})["triage_reason"] = reason
+                save_opp(opportunity, extra_fields={})
+    except Exception as e:
+        log.exception("lead_notification triage failed opp=%s err=%s", opp_id, e)
+        # fail open (continue to normal first-touch)
+
 
     # Salesperson (best-effort)
     salesperson = ""
