@@ -37,6 +37,7 @@ from fortellis import (
 
 from patti_common import _SCHED_ANY_RE, enforce_standard_schedule_sentence, EMAIL_RE
 from patti_common import fmt_local_human, normalize_patti_body, append_soft_schedule_sentence, rewrite_sched_cta_for_booked 
+from patti_triage import classify_inbound_email, handoff_to_human, should_triage
 
 #from fortellis import get_vehicle_inventory_xml  
 from inventory_matcher import recommend_from_xml
@@ -2708,6 +2709,56 @@ def send_thread_reply_now(
         return ""
     
     customer_body = _latest_customer_body(messages)
+
+    # --- Step 1.5 — TRIAGE before any reply (pricing/OTD/finance/trade/etc.) ---
+    try:
+        # Detect KBB vs non-KBB (non-KBB always triages per should_triage())
+        src = (opportunity.get("source") or "").strip().lower()
+        is_kbb = ("kbb" in src) or ("instant cash offer" in src) or ("ico" in src)
+
+        if should_triage(is_kbb=is_kbb) and customer_body:
+            triage = classify_inbound_email(customer_body)
+
+            cls = (triage.get("classification") or "").strip().upper()
+            if cls == "HUMAN_REVIEW_REQUIRED":
+                # Flag in-memory so we block any further replies in this run
+                opportunity["needs_human_review"] = True
+
+                # Persist flag in Airtable "brain" (so it sticks)
+                try:
+                    airtable_save(
+                        opportunity,
+                        extra_fields={
+                            "Needs Human Review": True,
+                            "Human Review Reason": triage.get("reason") or "Triage: HUMAN_REVIEW_REQUIRED",
+                        },
+                    )
+                except Exception:
+                    pass
+
+                # Fire the escalation email (salesperson + HUMAN_REVIEW_CC), log activity, etc.
+                handoff_to_human(
+                    opportunity=opportunity,
+                    fresh_opp=fresh_opp,
+                    token=token,
+                    subscription_id=subscription_id,
+                    rooftop_name=rooftop_name,
+                    inbound_subject=inbound_subject or "",
+                    inbound_text=customer_body,
+                    inbound_ts=inbound_ts,
+                    triage=triage,
+                )
+
+                log.info(
+                    "✅ Triage triggered HUMAN REVIEW — blocking customer reply opp=%s reason=%s",
+                    opportunityId,
+                    triage.get("reason"),
+                )
+                return False, opportunity
+
+    except Exception as e:
+        log.warning("Triage gate failed (continuing without triage) opp=%s: %s", opportunityId, e)
+
     
     # --- Step 2: try to auto-schedule an appointment from this reply (WEBHOOK PATH) ---
     created_appt_ok = False
