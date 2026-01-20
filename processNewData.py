@@ -250,32 +250,20 @@ def maybe_send_tk_gm_day2_email(
         return False
 
     # Resolve customer email (preferred + not doNotEmail)
-    cust = opportunity.get("customer") or {}
-    emails = cust.get("emails") or []
-    to_addr = None
-
-    for e in emails:
-        if not isinstance(e, dict):
-            continue
-        if e.get("doNotEmail"):
-            continue
-        if e.get("isPreferred") and e.get("address"):
-            to_addr = e["address"]
-            break
-
-    if not to_addr:
-        for e in emails:
-            if not isinstance(e, dict):
-                continue
-            if e.get("doNotEmail"):
-                continue
-            if e.get("address"):
-                to_addr = e["address"]
-                break
-
+    # ✅ Resolve customer email from Airtable-hydrated field first
+    to_addr = resolve_customer_email(opportunity)
     if not to_addr:
         log.warning("TK GM Day2: no deliverable email for opp=%s", opportunityId)
         return False
+
+    # Optional: if Fortellis emails exist and mark this address doNotEmail, respect it
+    cust = opportunity.get("customer") or {}
+    emails = cust.get("emails") or []
+    for e in emails:
+        if isinstance(e, dict) and (e.get("address") or "").strip().lower() == to_addr.lower():
+            if e.get("doNotEmail"):
+                log.info("TK GM Day2: doNotEmail flagged for %s opp=%s", to_addr, opportunityId)
+                return False
 
     body_html = build_tk_gm_day2_html(customer_name)
 
