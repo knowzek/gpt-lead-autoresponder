@@ -524,19 +524,18 @@ def process_lead_notification(inbound: dict) -> None:
             log.info("lead_notification triage running opp=%s shopper=%s", opp_id, shopper_email)
             triage = classify_inbound_email(body_text or "")
 
-            label = (triage.get("label") or "").strip().upper()
+            classification = (triage.get("classification") or "").strip().upper()
             reason = (triage.get("reason") or "").strip()
-            reply  = (triage.get("reply") or "").strip()
-
+            
             log.info(
-                "lead_notification triage label=%s reason=%r opp=%s shopper=%s",
-                label, reason[:220], opp_id, shopper_email
+                "lead_notification triage classification=%s reason=%r opp=%s shopper=%s",
+                classification, reason[:220], opp_id, shopper_email
             )
             
-            if label == "HUMAN_REVIEW_REQUIRED":
+            if classification == "HUMAN_REVIEW_REQUIRED":
                 triage_intended_handoff = True
                 opportunity["needs_human_review"] = True
-                opportunity.setdefault("patti", {})["human_review_reason"] = (triage.get("reason") or "Human review required").strip()
+                opportunity.setdefault("patti", {})["human_review_reason"] = (reason or "Human review required").strip()
                 save_opp(opportunity)
             
                 handoff_to_human(
@@ -551,14 +550,16 @@ def process_lead_notification(inbound: dict) -> None:
                     triage=triage,
                 )
                 return
-
-            if label == "AUTO_REPLY_OK" and reply:
-                # Optional: if you want triage to provide a better first reply than generic first-touch,
-                # you can store it for the email helper to use (depends on your send_first_touch_email implementation).
-                opportunity.setdefault("patti", {})["triage_reply"] = reply
-                opportunity.setdefault("patti", {})["triage_label"] = label
-                opportunity.setdefault("patti", {})["triage_reason"] = reason
-                save_opp(opportunity, extra_fields={})
+            
+            if classification == "NON_LEAD":
+                log.info("lead_notification triage NON_LEAD opp=%s - ignoring", opp_id)
+                return
+            
+            if classification == "EXPLICIT_OPTOUT":
+                log.info("lead_notification triage EXPLICIT_OPTOUT opp=%s - stopping", opp_id)
+                return
+            
+            # classification == "AUTO_REPLY_SAFE" => fall through to normal first-touch
                 
     except Exception as e:
         log.exception("lead_notification triage failed opp=%s err=%s", opp_id, e)
@@ -994,7 +995,13 @@ def process_inbound_email(inbound: dict) -> None:
     try:
         if should_triage(is_kbb):
             triage = classify_inbound_email(body_text)
-            cls = (triage.get("label") or "").strip().upper()
+            cls = (triage.get("classification") or "").strip().upper()
+            log.info(
+                "triage classification=%s reason=%r opp=%s",
+                cls,
+                (triage.get("reason") or "")[:220],
+                opp_id,
+            )
 
             if cls == "HUMAN_REVIEW_REQUIRED":
                 fresh_opp_for_triage = None
