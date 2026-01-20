@@ -110,14 +110,31 @@ def get_or_assign_ab_variant(opportunity: dict) -> str:
 _VAGUE_TIME_WORDS_RE = re.compile(r"\b(later|tonight|this evening|this afternoon|after work)\b", re.I)
 _HAS_DIGIT_RE = re.compile(r"\d")
 
+# explicit time = contains an actual clock time or specific hour w/ am/pm
+_HAS_EXPLICIT_TIME_RE = re.compile(
+    r"""
+    (
+        \b\d{1,2}:\d{2}\s*(am|pm)?\b |      # 5:30, 17:00, 5:30pm
+        \b\d{1,2}\s*(am|pm)\b |             # 5pm, 11 am
+        \b(noon|midnight)\b                # noon, midnight
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
 def explicit_time_ok(text: str) -> bool:
     t = text or ""
-    if not has_explicit_time(t):
+
+    # must contain an explicit time (not "later today", "this evening", etc.)
+    if not _HAS_EXPLICIT_TIME_RE.search(t):
         return False
-    # if they used vague words but no digits, block (extra cautious)
+
+    # extra guard: vague words without digits should not pass
     if _VAGUE_TIME_WORDS_RE.search(t) and not _HAS_DIGIT_RE.search(t):
         return False
+
     return True
+
 
 
 def airtable_save(opportunity: dict, extra_fields: dict | None = None):
