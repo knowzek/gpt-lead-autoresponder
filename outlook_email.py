@@ -1,4 +1,4 @@
-
+import re
 import os
 import logging
 import requests
@@ -14,6 +14,10 @@ def send_email_via_outlook(to_addr, subject, html_body, cc_addrs=None, headers=N
     if not OUTLOOK_SEND_ENDPOINT:
         log.error("OUTLOOK_SEND_ENDPOINT missing; cannot send Outlook email")
         return
+
+     # ✅ strip "[EXTERNAL SENDER]" from the FRONT of the subject, always
+    if isinstance(subject, str) and subject.strip():
+        subject = _EXTERNAL_SENDER_PREFIX_RE.sub("", subject).strip()
 
     cc_addrs = cc_addrs or []
     # Outlook V2 is happiest with semicolon-delimited strings
