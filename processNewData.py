@@ -2148,7 +2148,6 @@ def processHit(hit):
 
             # ✅ SEND the follow-up (currently missing)
             sent_ok = False
-            customer_email = None
             
             if not OFFLINE_MODE:
                 from patti_mailer import send_patti_email  # wrapper: Outlook send + CRM comment
