@@ -1242,6 +1242,15 @@ def process_kbb_ico_lead(
     # ES-only state (no comments)
     state = dict(opportunity.get("_kbb_state") or {})
 
+    # 🔐 HARD STOP: if human review is set, do nothing at all
+    if opportunity.get("needs_human_review") is True:
+        log.info(
+            "KBB ICO: Needs Human Review set; suppressing all automation opp=%s",
+            opportunity.get("opportunityId") or opportunity.get("id"),
+        )
+        opportunity["_kbb_state"] = state
+        return state, False
+
     # -----------------------------
     # Inbound detection (STRICT)
     # -----------------------------
@@ -1591,7 +1600,6 @@ def process_kbb_ico_lead(
             state,
             acts=acts_live,
         )
-
 
     # === Compute last agent send time (prefer ES state; avoid extra CRM calls in webhook mode) ===
     last_agent_dt = None
