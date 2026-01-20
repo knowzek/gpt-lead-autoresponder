@@ -1847,6 +1847,12 @@ def process_kbb_ico_lead(
 
 
         # === COMPOSE + SEND ================================================
+
+        if opportunity.get("needs_human_review") is True:
+            log.info("KBB ICO: Needs Human Review set; suppressing all sends opp=%s", opp_id)
+            opportunity["_kbb_state"] = state
+            return state, action_taken
+
         cust_first = (opportunity.get('customer', {}) or {}).get('firstName') or "there"
 
         # ---------- DECLINED (opt-out) ----------
@@ -2279,6 +2285,12 @@ def process_kbb_ico_lead(
 
 
     # ===== NUDGE LOGIC (customer went dark AFTER a reply) =====
+
+    # 🚫 HARD GATE: stop all automated nudges if human review is set
+    if opportunity.get("needs_human_review") is True:
+        log.info("KBB ICO: Needs Human Review set; suppressing nudge opp=%s", opp_id)
+        opportunity["_kbb_state"] = state
+        return state, action_taken
     
     # If we were scheduled at the start of this run, reply immediately (no nudge/template).
     if scheduled_active_now and state.get("last_inbound_activity_id"):
