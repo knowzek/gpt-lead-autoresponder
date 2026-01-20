@@ -2654,7 +2654,18 @@ def send_first_touch_email(
         patti_meta = opportunity.setdefault("patti", {})
         patti_meta["ab_variant"] = variant
         patti_meta.setdefault("first_email_sent_at", currDate_iso)
-        
+
+        # ✅ Enroll into SalesAI cadence on first-touch (general leads)
+        patti_meta.setdefault("salesai_email_idx", -1)
+    
+        # Anchor cadence to the actual lead create time (preferred), fallback to first touch
+        created_iso = (
+            opportunity.get("dateIn")
+            or opportunity.get("created_at")
+            or currDate_iso
+        )
+        patti_meta.setdefault("salesai_created_iso", created_iso)
+
         airtable_save(
             opportunity,
             extra_fields={
