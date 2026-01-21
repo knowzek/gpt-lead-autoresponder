@@ -9,6 +9,11 @@ OUTLOOK_SEND_ENDPOINT = os.getenv("OUTLOOK_SEND_ENDPOINT")
 
 if not OUTLOOK_SEND_ENDPOINT:
     log.warning("OUTLOOK_SEND_ENDPOINT is not set – Outlook sending will fail")
+
+_EXTERNAL_SENDER_PREFIX_RE = re.compile(
+    r"^\s*(?:\[\s*EXTERNAL\s+SENDER\s*\]\s*)+",
+    re.IGNORECASE,
+)
     
 def send_email_via_outlook(to_addr, subject, html_body, cc_addrs=None, headers=None, timeout=10):
     if not OUTLOOK_SEND_ENDPOINT:
