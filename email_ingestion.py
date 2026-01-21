@@ -549,43 +549,47 @@ def process_lead_notification(inbound: dict) -> None:
     # -----------------------------
     triage_intended_handoff = False
     try:
-        # This flow is NOT KBB, so pass is_kbb=False
         if should_triage(is_kbb=False):
             log.info("lead_notification triage running opp=%s shopper=%s", opp_id, shopper_email)
-        
+    
             triage_text = body_text or ""
-        
-            # Provider template? Only triage the guest-written comment (prevents Price/VIN/Stock false flags)
+            triage = None  # ✅ ensure defined
+    
+            # Provider template? Only triage guest-written comment
             if _PROVIDER_TEMPLATE_HINT_RE.search(triage_text):
                 comment = _extract_customer_comment_from_provider(triage_text)
                 if comment:
                     triage_text = comment
                 else:
-                    # No guest comment in the template → never escalate
                     triage = {
                         "classification": "AUTO_REPLY_SAFE",
                         "reason": "Provider lead template with no customer-written comments"
                     }
-                    triage_text = None  # prevents GPT call
-        
-            if triage_text is not None:
-                triage = classify_inbound_email(triage_text)
-
-
+                    triage_text = ""  # ✅ no GPT call
+    
+            if triage is None:
+                if triage_text.strip():
+                    triage = classify_inbound_email(triage_text)
+                else:
+                    triage = {
+                        "classification": "AUTO_REPLY_SAFE",
+                        "reason": "Empty triage text"
+                    }
+    
             classification = (triage.get("classification") or "").strip().upper()
             reason = (triage.get("reason") or "").strip()
-            
+    
             log.info(
                 "lead_notification triage classification=%s reason=%r opp=%s shopper=%s",
                 classification, reason[:220], opp_id, shopper_email
             )
-            
+    
             if classification == "HUMAN_REVIEW_REQUIRED":
                 triage_intended_handoff = True
                 opportunity["needs_human_review"] = True
                 opportunity.setdefault("patti", {})["human_review_reason"] = (reason or "Human review required").strip()
                 save_opp(opportunity)
-            
+    
                 handoff_to_human(
                     opportunity=opportunity,
                     fresh_opp=fresh_opp,
@@ -598,17 +602,15 @@ def process_lead_notification(inbound: dict) -> None:
                     triage=triage,
                 )
                 return
-            
+    
             if classification == "NON_LEAD":
                 log.info("lead_notification triage NON_LEAD opp=%s - ignoring", opp_id)
                 return
-            
+    
             if classification == "EXPLICIT_OPTOUT":
                 log.info("lead_notification triage EXPLICIT_OPTOUT opp=%s - stopping", opp_id)
                 return
-            
-            # classification == "AUTO_REPLY_SAFE" => fall through to normal first-touch
-                
+    
     except Exception as e:
         log.exception("lead_notification triage failed opp=%s err=%s", opp_id, e)
 
