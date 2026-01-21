@@ -38,6 +38,36 @@ TEST_OPP_ID = "050a81e9-78d4-f011-814f-00505690ec8c"
 
 DEFAULT_SUBSCRIPTION_ID = os.getenv("DEFAULT_SUBSCRIPTION_ID")  # set this to Tustin Kia's subscription id
 
+# --- Provider template comment extraction (for CARFAX / Cars.com style lead emails) ---
+
+_PROVIDER_TEMPLATE_HINT_RE = re.compile(
+    r"(?is)\bNEW\s+CUSTOMER\s+LEAD\s+FOR\b|\bLead\s*ID\s*:\b|\bYear/Make/Model\s*:\b|\bVIN\s*:\b|\bStock\s*:\b|\bPrice\s*:\b"
+)
+
+_CUSTOMER_COMMENT_RE = re.compile(
+    r"(?is)\b(?:Additional\s+comments|Customer\s+comments?|Comments?|Message|Questions?)\s*:\s*(.+?)(?:\n{2,}|\Z)"
+)
+
+def _extract_customer_comment_from_provider(body_text: str) -> str:
+    t = (body_text or "").strip()
+    if not t:
+        return ""
+
+    m = _CUSTOMER_COMMENT_RE.search(t)
+    if not m:
+        return ""
+
+    comment = (m.group(1) or "").strip()
+
+    # Stop if the template starts repeating the contact block
+    comment = re.split(
+        r"(?im)^\s*(?:Here's how to contact this customer|First Name|Last Name|Email|Phone|Date Submitted)\s*:",
+        comment
+    )[0].strip()
+
+    return comment
+
+
 def _resolve_subscription_id(inbound: dict, headers: dict | None) -> str | None:
     # 1) Prefer body fields (Power Automate is sending these)
     for k in ("subscription_id", "subscriptionId", "subscription", "sub_id"):
@@ -522,7 +552,25 @@ def process_lead_notification(inbound: dict) -> None:
         # This flow is NOT KBB, so pass is_kbb=False
         if should_triage(is_kbb=False):
             log.info("lead_notification triage running opp=%s shopper=%s", opp_id, shopper_email)
-            triage = classify_inbound_email(body_text or "")
+        
+            triage_text = body_text or ""
+        
+            # Provider template? Only triage the guest-written comment (prevents Price/VIN/Stock false flags)
+            if _PROVIDER_TEMPLATE_HINT_RE.search(triage_text):
+                comment = _extract_customer_comment_from_provider(triage_text)
+                if comment:
+                    triage_text = comment
+                else:
+                    # No guest comment in the template → never escalate
+                    triage = {
+                        "classification": "AUTO_REPLY_SAFE",
+                        "reason": "Provider lead template with no customer-written comments"
+                    }
+                    triage_text = None  # prevents GPT call
+        
+            if triage_text is not None:
+                triage = classify_inbound_email(triage_text)
+
 
             classification = (triage.get("classification") or "").strip().upper()
             reason = (triage.get("reason") or "").strip()
