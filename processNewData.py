@@ -1010,6 +1010,7 @@ def processHit(hit):
     # (optional) ensure the blob has opportunityId too
     opportunity["opportunityId"] = opportunity.get("opportunityId") or opportunityId  
     opportunity["customer_email"] = (fields.get("customer_email") or "").strip()
+    opportunity["customer_first_name"] = (fields.get("Customer First Name") or "").strip()
 
     # Make Airtable fields available downstream (recipient, etc.)
     opportunity["_airtable_fields"] = fields
@@ -1055,6 +1056,10 @@ def processHit(hit):
 
     # --- Customer: tolerate missing + self-heal from Fortellis ---
     customer = opportunity.get("customer") or {}
+
+    # ✅ Prefer Airtable-hydrated name first
+    customer_name = (opportunity.get("customer_first_name") or "").strip() or customer.get("firstName") or "there"
+
     customerId = customer.get("id")
     
     if not customerId and not OFFLINE_MODE:
@@ -1102,7 +1107,8 @@ def processHit(hit):
         customer_email = email['address']
         break
 
-    customer_name = customer.get("firstName") or "there"
+    # Prefer Airtable field over opp_json
+    customer_name = (fields.get("Customer First Name") or "").strip() or customer.get("firstName") or "there"
 
     # --- Getting primary salesperson (robust) ---
     salesTeam = opportunity.get("salesTeam") or []
@@ -2261,7 +2267,9 @@ def _build_email_context(*, opportunity: dict, fresh_opp: dict, subscription_id:
     """
     # --- Customer ---
     customer = opportunity.get("customer") or {}
-    customer_name = customer.get("firstName") or "there"
+
+    # ✅ Prefer Airtable-hydrated name first
+    customer_name = (opportunity.get("customer_first_name") or "").strip() or customer.get("firstName") or "there"
 
     # 1) Preferred email from opportunity.customer.emails
     customer_email = None
