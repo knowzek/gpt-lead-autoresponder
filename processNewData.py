@@ -159,7 +159,7 @@ _KBB_SOURCES = {
 
 # --- Tustin Kia GM Day-2 email -------------------------------------------------
 
-TK_GM_DAY2_SUBJECT = "Thank you for your inquiry – Patterson Tustin Kia"
+TK_GM_DAY2_SUBJECT = "From the GM - How can I help?"
 
 def is_tustin_kia_rooftop(rooftop_name: str) -> bool:
     return (rooftop_name or "").strip().lower() == "patterson tustin kia" or (rooftop_name or "").strip().lower() == "tustin kia"
