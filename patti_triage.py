@@ -57,7 +57,7 @@ SALESTEAM_ID_TO_EMAIL = {
     "a7201e67-cdb5-f011-814f-00505690ec8c": "Joannet@pattersonautos.com",  # Joanne Tran
     "033b8d23-cbb5-f011-814f-00505690ec8c": "Damianp@pattersonautos.com",  # Damian Perez
     "2b0e5005-c7b5-f011-814f-00505690ec8c": "dannyam@pattersonautos.com",  # Danny Amezcua
-
+    "7cfd1fa3-cab5-f011-814f-00505690ec8c": "johnnym@pattersonautos.com", # Johnny Madrigal
     "268a74af-ccb5-f011-814f-00505690ec8c": "donalds@pattersonautos.com",  # Donald Smalley (Desk Manager)
     "0084c9ba-94a8-f011-814f-00505690ec8c": "ala@pattersonautos.com",  # Al Alcontin (BDC)
     "ea44fdc0-c1c7-f011-814f-00505690ec8c": "Juliem@pattersonautos.com",  # Julie Manallo (BDC)
@@ -65,6 +65,158 @@ SALESTEAM_ID_TO_EMAIL = {
 
     "8f693b1a-7966-ea11-a977-005056b72b57": "joshuaw@pattersonautos.com",  # Joshua Wheelan
 }
+
+def notify_staff_patti_scheduled_appt(
+    *,
+    opportunity: dict,
+    fresh_opp: dict | None,
+    subscription_id: str,
+    rooftop_name: str,
+    appt_human: str,
+    customer_reply: str,
+) -> None:
+    """
+    Email salesperson + CC managers when Patti schedules an appointment in the CRM.
+    Reuses the same recipient-resolution rules as human handoff.
+    No Airtable updates.
+    """
+    opp_id = opportunity.get("opportunityId") or opportunity.get("id") or ""
+
+    resolved_sales_email = resolve_primary_sales_email(fresh_opp or {}) or ""
+    to_addr = resolved_sales_email or os.getenv("HUMAN_REVIEW_FALLBACK_TO", "") or "knowzek@gmail.com"
+
+    # CC list: follow the same process as human handoff
+    raw_cc = (os.getenv("HUMAN_REVIEW_CC") or "").strip()
+    cc_addrs = []
+    if raw_cc:
+        parts = raw_cc.replace(",", ";").split(";")
+        cc_addrs = [p.strip() for p in parts if p.strip()]
+
+    # dedupe + don't duplicate To
+    to_lower = (to_addr or "").lower()
+    seen = set()
+    cc_clean = []
+    for e in cc_addrs:
+        el = e.lower()
+        if not el or el == to_lower or el in seen:
+            continue
+        seen.add(el)
+        cc_clean.append(e)
+    cc_addrs = cc_clean
+
+    # Customer info (prefer Airtable-saved fields)
+    first = (opportunity.get("customer_first_name") or "").strip()
+    last  = (opportunity.get("customer_last_name") or "").strip()
+    customer_name = (f"{first} {last}").strip() or "Customer"
+    customer_email = (opportunity.get("customer_email") or "").strip() or "unknown"
+    customer_phone = (opportunity.get("customer_phone") or "").strip() or "unknown"
+    vehicle = _vehicle_str(opportunity, fresh_opp or {}) or ""
+
+    subj = f"[Patti] Appointment scheduled — {rooftop_name} — {customer_name} — {appt_human}"
+    if vehicle:
+        subj += f" — {vehicle}"
+
+    html = f"""
+    <p><strong>Patti scheduled a sales appointment</strong></p>
+    <p><strong>Store:</strong> {rooftop_name}<br/>
+       <strong>When:</strong> {appt_human}<br/>
+       <strong>Customer:</strong> {customer_name}<br/>
+       <strong>Email:</strong> {customer_email}<br/>
+       <strong>Phone:</strong> {customer_phone}<br/>
+       <strong>Opportunity ID:</strong> {opp_id}<br/>
+       <strong>Vehicle:</strong> {vehicle or "—"}</p>
+
+    <p><strong>Customer reply:</strong><br/>
+    <em>{(customer_reply or "").strip()[:800]}</em></p>
+
+    <p>You can take it from here to confirm details and prep the vehicle.</p>
+    """
+
+    send_email_via_outlook(
+        to_addr=to_addr,
+        subject=_clip(subj, 180),
+        html_body=html,
+        cc_addrs=cc_addrs,
+        timeout=20,
+    )
+
+    log.info("APPT NOTIFY EMAIL: to=%s cc=%s opp=%s when=%s", to_addr, cc_addrs, opp_id, appt_human)
+
+def notify_staff_patti_scheduled_appt(
+    *,
+    opportunity: dict,
+    fresh_opp: dict | None,
+    subscription_id: str,
+    rooftop_name: str,
+    appt_human: str,
+    customer_reply: str,
+) -> None:
+    """
+    Email salesperson + CC managers when Patti schedules an appointment in the CRM.
+    Reuses the same recipient-resolution rules as human handoff.
+    No Airtable updates.
+    """
+    opp_id = opportunity.get("opportunityId") or opportunity.get("id") or ""
+
+    resolved_sales_email = resolve_primary_sales_email(fresh_opp or {}) or ""
+    to_addr = resolved_sales_email or os.getenv("HUMAN_REVIEW_FALLBACK_TO", "") or "knowzek@gmail.com"
+
+    # CC list: follow the same process as human handoff
+    raw_cc = (os.getenv("HUMAN_REVIEW_CC") or "").strip()
+    cc_addrs = []
+    if raw_cc:
+        parts = raw_cc.replace(",", ";").split(";")
+        cc_addrs = [p.strip() for p in parts if p.strip()]
+
+    # dedupe + don't duplicate To
+    to_lower = (to_addr or "").lower()
+    seen = set()
+    cc_clean = []
+    for e in cc_addrs:
+        el = e.lower()
+        if not el or el == to_lower or el in seen:
+            continue
+        seen.add(el)
+        cc_clean.append(e)
+    cc_addrs = cc_clean
+
+    # Customer info (prefer Airtable-saved fields)
+    first = (opportunity.get("customer_first_name") or "").strip()
+    last  = (opportunity.get("customer_last_name") or "").strip()
+    customer_name = (f"{first} {last}").strip() or "Customer"
+    customer_email = (opportunity.get("customer_email") or "").strip() or "unknown"
+    customer_phone = (opportunity.get("customer_phone") or "").strip() or "unknown"
+    vehicle = _vehicle_str(opportunity, fresh_opp or {}) or ""
+
+    subj = f"[Patti] Appointment scheduled — {rooftop_name} — {customer_name} — {appt_human}"
+    if vehicle:
+        subj += f" — {vehicle}"
+
+    html = f"""
+    <p><strong>Patti scheduled a sales appointment</strong></p>
+    <p><strong>Store:</strong> {rooftop_name}<br/>
+       <strong>When:</strong> {appt_human}<br/>
+       <strong>Customer:</strong> {customer_name}<br/>
+       <strong>Email:</strong> {customer_email}<br/>
+       <strong>Phone:</strong> {customer_phone}<br/>
+       <strong>Opportunity ID:</strong> {opp_id}<br/>
+       <strong>Vehicle:</strong> {vehicle or "—"}</p>
+
+    <p><strong>Customer reply:</strong><br/>
+    <em>{(customer_reply or "").strip()[:800]}</em></p>
+
+    <p>You can take it from here to confirm details and prep the vehicle.</p>
+    """
+
+    send_email_via_outlook(
+        to_addr=to_addr,
+        subject=_clip(subj, 180),
+        html_body=html,
+        cc_addrs=cc_addrs,
+        timeout=20,
+    )
+
+    log.info("APPT NOTIFY EMAIL: to=%s cc=%s opp=%s when=%s", to_addr, cc_addrs, opp_id, appt_human)
 
 
 # -----------------------
