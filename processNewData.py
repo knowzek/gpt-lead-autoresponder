@@ -1253,9 +1253,11 @@ def processHit(hit):
                 try:
                     airtable_save(opportunity)
                 except Exception as e:
-                    log.warning("Airtable save failed opp=%s (continuing): %s",
-                                opportunity.get("opportunityId") or opportunity.get("id"), e)None})
-
+                    log.warning(
+                        "Airtable save failed opp=%s (continuing): %s",
+                        opportunity.get("opportunityId") or opportunity.get("id"),
+                        e,
+                    )
         return
 
     
