@@ -100,7 +100,58 @@ def _iso(dt: datetime | str | None) -> str | None:
     return dt.astimezone(timezone.utc).isoformat()
 
 def _safe_json_dumps(obj) -> str:
-    return json.dumps(obj if obj is not None else {}, ensure_ascii=False)
+    """
+    Airtable Long text has practical limits; also opp blobs can grow huge.
+    Keep opp_json stable by removing very large fields and hard-capping size.
+    """
+    def _slim(o: dict) -> dict:
+        if not isinstance(o, dict):
+            return o or {}
+
+        o = dict(o)
+
+        # Drop the biggest / noisiest fields
+        for k in (
+            "completedActivities",
+            "scheduledActivities",
+            "activities",
+            "alreadyProcessedActivities",
+        ):
+            if k in o:
+                o.pop(k, None)
+
+        # Messages can explode; keep only last N and clip bodies
+        msgs = o.get("messages")
+        if isinstance(msgs, list) and msgs:
+            keep = []
+            for m in msgs[-25:]:
+                if not isinstance(m, dict):
+                    continue
+                mm = dict(m)
+
+                # clip heavy fields
+                for body_key in ("body", "body_html", "bodyHtml", "raw", "html"):
+                    if body_key in mm and isinstance(mm[body_key], str):
+                        mm[body_key] = mm[body_key][:2000]
+
+                keep.append(mm)
+            o["messages"] = keep
+
+        return o
+
+    try:
+        slim_obj = _slim(obj if obj is not None else {})
+        s = json.dumps(slim_obj, ensure_ascii=False)
+
+        # Hard cap (Airtable rejects oversize text)
+        MAX = 95000
+        if len(s) > MAX:
+            # Keep the front (schema/ids) and signal truncation
+            s = s[:MAX] + '"__TRUNCATED__":true}'
+        return s
+    except Exception:
+        return "{}"
+
 
 def _safe_json_loads(s: str | None):
     if not s:
