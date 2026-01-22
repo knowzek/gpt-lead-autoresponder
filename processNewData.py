@@ -3004,32 +3004,54 @@ def send_thread_reply_now(
     return sent_ok, opportunity
 
 
-# ---- Rolling ES lookback window (default 6 days) ----
+# ---- Airtable-driven cadence runner ----
 if __name__ == "__main__":
-    test_opp_id = os.getenv("TEST_OPPORTUNITY_ID", "").strip()
+    test_opp_id = (os.getenv("TEST_OPPORTUNITY_ID") or "").strip()
 
+    # -------------------------
+    # Test mode: single opp_id
+    # -------------------------
     if test_opp_id:
         log.info("TEST_OPPORTUNITY_ID=%s set; running single-opportunity test mode", test_opp_id)
+
         rec = find_by_opp_id(test_opp_id)
         if not rec:
             log.warning("TEST_OPPORTUNITY_ID %s not found in Airtable; exiting.", test_opp_id)
         else:
-            opp = opp_from_record(rec)
-            processHit(opp)
+            rec_id = rec.get("id")  # Airtable rec id (recXXXX...)
+            token = acquire_lock(rec_id, lock_minutes=10)
+            if not token:
+                log.warning("Could not acquire lock for test record %s; exiting.", rec_id)
+            else:
+                try:
+                    # IMPORTANT: processHit expects an Airtable record shaped like:
+                    # {"id": "...", "fields": {...}}
+                    processHit(rec)
+                finally:
+                    release_lock(rec_id, token)
 
+    # -------------------------
+    # Normal mode: hourly cron
+    # -------------------------
     else:
-        if not OFFLINE_MODE:
-            # pull from Airtable view instead of ES
-            records = query_view("Due Now", max_records=200)
+        if OFFLINE_MODE:
+            log.info("OFFLINE_MODE=true; skipping Airtable cadence run.")
+        else:
+            records = query_view("Due Now", max_records=200) or []
+            log.info("Pulled %d records from Airtable view 'Due Now'", len(records))
 
             for rec in records:
                 rec_id = rec.get("id")
+                if not rec_id:
+                    log.warning("Skipping Airtable item with no record id: %r", rec)
+                    continue
+
                 token = acquire_lock(rec_id, lock_minutes=10)
                 if not token:
                     continue
 
                 try:
-                    opp = opp_from_record(rec)
-                    processHit(opp)
+                    # IMPORTANT: pass Airtable record into processHit
+                    processHit(rec)
                 finally:
                     release_lock(rec_id, token)
