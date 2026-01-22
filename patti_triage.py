@@ -349,9 +349,18 @@ _OPT_OUT_RE = re.compile(
 # anything “sensitive / negotiation / needs human”
 _HUMAN_REVIEW_RE = re.compile(
     r"(?i)\b("
-    r"otd|out\s*the\s*door|best\s+price|lowest\s+price|discount|msrp|invoice|quote|offer|deal|"
+    r"otd|out\s*the\s*door|best\s+price|lowest\s+price|discount|msrp|invoice|quote|"
+    r"offer\s*(?:amount|price|value)|offeramount|"
+    r"deal\s*(?:sheet|breakdown|terms|numbers)|"
+
     r"payment|monthly|lease|apr|interest|finance|financing|credit|down\s+payment|"
-    r"trade|trade-?in|value\s+my\s+trade|appraisal|kbb\s+value|carmax|carvana|"
+    r"(?:trade-?in\s+(?:value|worth|offer|apprais|estimate)|"
+    r"value\s+my\s+trade|"
+    r"kbb\s+value|"
+    r"trade\s+(?:value|offer|worth)|"
+    r"appraisal|carmax|carvana|"
+    r"offer\s+amount|offeramount)"
+
     r"complaint|bbb|dmv|attorney|legal|lawsuit|"
     r"angry|upset|frustrated|scam|fraud|ripoff|"
     r"asap|urgent|today|immediately|call\s+me\s+now"
@@ -402,6 +411,21 @@ def classify_inbound_email(email_text: str) -> Dict[str, Any]:
     if _OPT_OUT_RE.search(t_short):
         return {"classification": "EXPLICIT_OPTOUT", "confidence": 0.98, "reason": "Contains opt-out language."}
 
+    t_lower = t_short.lower()
+
+    # Generic trade interest (no numbers/value/offer/payment/finance terms) should NOT force human review
+    if re.search(r"\btrade\b|\btrade[-\s]?in\b", t_lower):
+        has_trade_value_terms = re.search(
+            r"\$|\b\d{3,}\b|\boffer\b|\bvalue\b|\bworth\b|\bapprais|\bquote\b|\botd\b|\bout the door\b|"
+            r"\bpayoff\b|\bowe\b|\bnegative equity\b|\bpayment\b|\bfinance\b|\bapr\b|\brate\b",
+            t_lower
+        )
+        if not has_trade_value_terms:
+            # Let GPT decide (or mark safe directly)
+            # return {"classification": "AUTO_REPLY_SAFE", "confidence": 0.85, "reason": "Generic trade-in interest (no value/pricing terms)."}
+            pass  # <-- best: allow GPT to classify instead of auto-escalating
+
+
     if _HUMAN_REVIEW_RE.search(t_short):
         return {"classification": "HUMAN_REVIEW_REQUIRED", "confidence": 0.90, "reason": "Pricing/financing/trade/legal/urgent/angry indicators."}
 
@@ -433,7 +457,8 @@ NON_LEAD
 Rules:
 - pricing/discounts/OTD/quotes → HUMAN_REVIEW_REQUIRED
 - financing/credit/payments → HUMAN_REVIEW_REQUIRED
-- trade-in/value disputes → HUMAN_REVIEW_REQUIRED
+- trade-in value disputes or negotiation (numbers/offer/value/payoff) → HUMAN_REVIEW_REQUIRED
+- simple trade-in interest (no numbers/value) → AUTO_REPLY_SAFE
 - angry/urgent/emotional → HUMAN_REVIEW_REQUIRED
 - multiple questions or unclear intent → HUMAN_REVIEW_REQUIRED
 - stop contact → EXPLICIT_OPTOUT
