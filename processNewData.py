@@ -692,16 +692,12 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
                         pass
 
                 appt_iso = ""
-                conf = 0.0
-                if not already_scheduled:
-                    # ✅ HARD GATE: do not auto-schedule unless customer gave an explicit time
-                    if explicit_time_ok(customer_body):
+                    conf = 0.0
+                    if not already_scheduled:
                         proposed = extract_appt_time(customer_body or "", tz="America/Los_Angeles")
                         appt_iso = (proposed.get("iso") or "").strip()
                         conf = float(proposed.get("confidence") or 0.0)
-                    else:
-                        appt_iso = ""
-                        conf = 0.0
+
 
                 if appt_iso and conf >= 0.60:
                     try:
@@ -765,9 +761,22 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
             """
             else:
                 prompt = f"""
-            generate next patti reply, here is the current messages between patti and the customer (python list of dicts):
+            You are replying to an ACTIVE email thread (not a first welcome email).
+            
+            Hard rules:
+            - If the guest proposes a visit time (including casual phrasing like "tomorrow around 4"), confirm it confidently.
+            - Do NOT ask them what day/time works best if they already proposed one.
+            - Do NOT mention store hours unless the guest asks OR the proposed time is outside store hours.
+            - Always include the address in the confirmation.
+            
+            Address: 28 B Auto Center Dr, Tustin, CA 92782
+            
+            Return ONLY valid JSON with keys: subject, body.
+            
+            Messages (python list of dicts):
             {messages}
-            """
+            """.strip()
+
             response = run_gpt(
                 prompt,
                 customerInfo.get('firstName'),
@@ -812,8 +821,7 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
                 body_html = rewrite_sched_cta_for_booked(body_html)
                 body_html = _SCHED_ANY_RE.sub("", body_html).strip()
             else:
-                body_html = append_soft_schedule_sentence(body_html, rooftop_name)
-
+                body_html = body_html.strip()
             
             # Strip any extraneous prefs/unsubscribe footer GPT might add
             body_html = _PREFS_RE.sub("", body_html).strip()
@@ -2841,15 +2849,10 @@ def send_thread_reply_now(
             conf = 0.0
             
             if (not already_scheduled) and customer_body:
-                # ✅ HARD GATE: only auto-schedule if customer provided an explicit time
-                if explicit_time_ok(customer_body):
-                    proposed = extract_appt_time(customer_body, tz="America/Los_Angeles")
-                    appt_iso = (proposed.get("iso") or "").strip()
-                    conf = float(proposed.get("confidence") or 0.0)
-                else:
-                    log.info("Not auto-scheduling: no explicit time found in customer reply: %r", customer_body[:200])
+                proposed = extract_appt_time(customer_body, tz="America/Los_Angeles")
+                appt_iso = (proposed.get("iso") or "").strip()
+                conf = float(proposed.get("confidence") or 0.0)
 
-    
             if appt_iso and conf >= 0.60:
                 # appt_iso is expected to be parseable by fromisoformat when Z->+00:00
                 dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
@@ -2910,19 +2913,30 @@ def send_thread_reply_now(
     Context:
     - The guest originally inquired about: {vehicle_str}
     
-    Rules:
-    - If the customer gives vague availability (e.g. "later today", "this evening") WITHOUT a specific time,
-      you must NOT confirm or schedule an appointment yet.
-    - Instead: in ONE sentence, share today's store hours, then ask what exact time works best, offering 2–3 options.
-    - Keep it short and natural.
+    Hard rules:
+    - If the guest proposes a visit time (including casual phrasing like "tomorrow around 4"), CONFIRM it.
+    - Do NOT ask "what day/time works best?" after they already proposed a time.
+    - Do NOT mention store hours unless (a) the guest asks, or (b) the proposed time is outside store hours.
+    - Never invent store hours. Use only the store hours provided below.
+    - Always include the address in the confirmation sentence.
     
-    Store hours: If it’s after-hours, tell the guest you can set the appointment for the next available time.
+    Store hours (local time):
+    Mon: 9 AM–7 PM
+    Tue: 9 AM–7 PM
+    Wed: 9 AM–7 PM
+    Thu: 9 AM–7 PM
+    Fri: 9 AM–7 PM
+    Sat: 9 AM–8 PM
+    Sun: 10 AM–6 PM
+    
+    Address: 28 B Auto Center Dr, Tustin, CA 92782
     
     messages between Patti and the customer (python list of dicts):
     {messages}
     
     Return ONLY valid JSON with keys: subject, body.
     """.strip()
+
 
     
         response = run_gpt(prompt, customer_name, rooftop_name, prevMessages=True)
@@ -2947,7 +2961,7 @@ def send_thread_reply_now(
             body_html = rewrite_sched_cta_for_booked(body_html)
             body_html = _SCHED_ANY_RE.sub("", body_html).strip()
         else:
-            body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+            body_html = body_html.strip()
     
         body_html = _PREFS_RE.sub("", body_html).strip()
         body_html = body_html + build_patti_footer(rooftop_name)
