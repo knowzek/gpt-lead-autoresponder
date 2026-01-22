@@ -793,12 +793,15 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
             mode = (patti_meta.get("mode") or "").strip().lower()
             
             sub_status = (
-                (fresh_opp.get("subStatus") or fresh_opp.get("substatus") or "")
-                or (opportunity.get("subStatus") or opportunity.get("substatus") or "")
+                (opportunity.get("subStatus") or opportunity.get("substatus") or "")
             ).strip().lower()
             
-            has_booked_appt = (mode == "scheduled") or ("appointment" in sub_status) or bool(patti_meta.get("appt_due_utc"))
-            
+            has_booked_appt = (
+                mode == "scheduled"
+                or ("appointment" in sub_status)
+                or bool(patti_meta.get("appt_due_utc"))
+            )
+
             if has_booked_appt:
                 body_html = rewrite_sched_cta_for_booked(body_html)
                 body_html = _SCHED_ANY_RE.sub("", body_html).strip()
