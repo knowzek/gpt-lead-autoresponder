@@ -333,7 +333,6 @@ def maybe_send_tk_gm_day2_email(
         airtable_save(opportunity, extra_fields={
             "TK GM Day 2 Sent": True,
             "TK GM Day 2 Sent At": currDate_iso,
-            "TK GM Day 2 Subject": TK_GM_DAY2_SUBJECT,
         })
 
     return sent_ok
