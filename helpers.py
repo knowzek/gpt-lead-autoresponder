@@ -205,22 +205,51 @@ def build_ics_text(uid: str, summary: str, description: str, location: str, star
         "END:VCALENDAR\n"
     )
 
-
 def parse_date(date_str):
-    # Try with microseconds first, fallback if not present
-    for fmt in ("%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%SZ"):
-        try:
-            return datetime.strptime(date_str, fmt)
-        except ValueError:
-            pass
-    raise ValueError(f"Invalid date format: {date_str}")
+    """
+    Robust date parser for activity sorting.
+    If date_str is None/blank/unparseable, return a far-future datetime so it sorts last.
+    """
+    if not date_str:
+        return datetime.max.replace(tzinfo=timezone.utc)
 
-def sortActivities(activities, field = "completedDate"):
-    activities = sorted(
+    # If Fortellis ever returns a datetime object directly
+    if isinstance(date_str, datetime):
+        return date_str if date_str.tzinfo else date_str.replace(tzinfo=timezone.utc)
+
+    # Normalize to string
+    s = str(date_str).strip()
+    if not s:
+        return datetime.max.replace(tzinfo=timezone.utc)
+
+    # Common formats you may already have here — keep yours, just wrap safely
+    fmts = [
+        "%Y-%m-%dT%H:%M:%S.%fZ",
+        "%Y-%m-%dT%H:%M:%SZ",
+        "%Y-%m-%d %H:%M:%S",
+        "%m/%d/%Y %I:%M %p",
+        "%m/%d/%Y",
+    ]
+
+    for fmt in fmts:
+        try:
+            dt = datetime.strptime(s, fmt)
+            return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+        except Exception:
+            pass
+
+    # Last resort: sort it last
+    return datetime.max.replace(tzinfo=timezone.utc)
+
+
+def sortActivities(activities, field="completedDate"):
+    activities = activities or []
+    return sorted(
         activities,
-        key=lambda x: parse_date(x[field])
+        key=lambda x: parse_date((x or {}).get(field))
     )
-    return activities
+
+
 
 def findActivityByType(activities, typeNo):
     for act in activities:
