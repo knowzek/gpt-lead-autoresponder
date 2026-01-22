@@ -1097,18 +1097,22 @@ def processHit(hit):
         log.warning("Opp %s missing customer.id after hydrate; skipping.", opportunityId)
         return
 
+    # ✅ Customer email should come ONLY from Airtable
+    customer_email = (opportunity.get("customer_email") or "").strip() or None
+    
+    # ✅ Customer name should come from Airtable first-name first
+    customer_name = (opportunity.get("customer_first_name") or "").strip() or customer.get("firstName") or "there"
+    
+    # Optional safety: if Fortellis marks THIS SAME address as doNotEmail, respect it
+    if customer_email:
+        for e in (customer.get("emails") or []):
+            if not isinstance(e, dict):
+                continue
+            if (e.get("address") or "").strip().lower() == customer_email.lower() and e.get("doNotEmail"):
+                log.info("doNotEmail flagged for %s opp=%s", customer_email, opportunityId)
+                customer_email = None
+                break
 
-    # getting customer email & info
-    customer_emails = customer.get('emails', [])
-    customer_email = None
-    for email in customer_emails:
-        if email.get('doNotEmail') or not email.get('isPreferred'):
-            continue
-        customer_email = email['address']
-        break
-
-    # Prefer Airtable field over opp_json
-    customer_name = (fields.get("Customer First Name") or "").strip() or customer.get("firstName") or "there"
 
     # --- Getting primary salesperson (robust) ---
     salesTeam = opportunity.get("salesTeam") or []
