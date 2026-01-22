@@ -1588,7 +1588,7 @@ def processHit(hit):
             airtable_save(opportunity)
         except Exception as e:
             log.warning("Airtable save failed opp=%s (continuing): %s",
-                        opportunity.get("opportunityId") or opportunity.get("id"), e))
+                        opportunity.get("opportunityId") or opportunity.get("id"), e)
 
 
     # === Vehicle & SRP link =============================================
