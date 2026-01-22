@@ -32,6 +32,7 @@ from fortellis import (
     add_opportunity_comment,
     schedule_activity,
     send_opportunity_email_activity,
+    schedule_appointment_with_notify,
     set_opportunity_substatus,
 )
 
@@ -704,17 +705,25 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
                         dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
                         due_dt_iso_utc = dt_local.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
                         
-                        schedule_activity(
+                        appt_human = fmt_local_human(dt_local)
+                        
+                        schedule_appointment_with_notify(
                             token,
                             subscription_id,
                             opportunity['opportunityId'],
                             due_dt_iso_utc=due_dt_iso_utc,
                             activity_name="Sales Appointment",
                             activity_type="Appointment",
-                            comments=f"Auto-scheduled from Patti based on customer reply: {customer_body[:200]}"
+                            comments=f"Auto-scheduled from Patti based on customer reply: {customer_body[:200]}",
+                            opportunity=opportunity,
+                            fresh_opp=fresh_opp if "fresh_opp" in locals() else {},
+                            rooftop_name=rooftop_name,
+                            appt_human=appt_human,
+                            customer_reply=customer_body,
                         )
+                        
                         created_appt_ok = True
-                        appt_human = fmt_local_human(dt_local)
+
                         
                         patti_meta["mode"] = "scheduled"
                         patti_meta["appt_due_utc"] = due_dt_iso_utc
@@ -1799,7 +1808,9 @@ def processHit(hit):
                     dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
                     due_dt_iso_utc = dt_local.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-                    schedule_activity(
+                    appt_human = fmt_local_human(dt_local)
+
+                    schedule_appointment_with_notify(
                         token,
                         subscription_id,
                         opportunityId,
@@ -1807,10 +1818,14 @@ def processHit(hit):
                         activity_name="Sales Appointment",
                         activity_type="Appointment",
                         comments=f"Auto-scheduled from customer email: {inquiry_text[:180]}",
+                        opportunity=opportunity,
+                        fresh_opp=fresh_opp if "fresh_opp" in locals() else {},
+                        rooftop_name=rooftop_name,
+                        appt_human=appt_human,
+                        customer_reply=inquiry_text,
                     )
+                    
                     created_appt_ok = True
-                    appt_human = fmt_local_human(dt_local)
-
                     # 🔐 Store appointment state so future runs know this opp is scheduled
                     patti_meta = opportunity.get("patti") or {}
                     patti_meta["mode"] = "scheduled"
@@ -2859,7 +2874,9 @@ def send_thread_reply_now(
     
                 due_dt_iso_utc = dt_local.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     
-                schedule_activity(
+                appt_human = fmt_local_human(dt_local)
+
+                schedule_appointment_with_notify(
                     token,
                     subscription_id,
                     opportunityId,
@@ -2867,10 +2884,14 @@ def send_thread_reply_now(
                     activity_name="Sales Appointment",
                     activity_type="Appointment",
                     comments=f"Auto-scheduled from Patti based on customer reply: {customer_body[:200]}",
+                    opportunity=opportunity,
+                    fresh_opp=fresh_opp if "fresh_opp" in locals() else {},
+                    rooftop_name=rooftop_name,
+                    appt_human=appt_human,
+                    customer_reply=customer_body,
                 )
-    
+                
                 created_appt_ok = True
-                appt_human = fmt_local_human(dt_local)
     
                 # Persist appointment state in Airtable “brain”
                 patti_meta["mode"] = "scheduled"
