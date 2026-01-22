@@ -1104,7 +1104,12 @@ def processHit(hit):
                     opportunity["isActive"] = fresh_opp.get("isActive")
     
                 # persist once so future runs are clean
-                airtable_save(opportunity)
+                try:
+                    airtable_save(opportunity)
+                except Exception as e:
+                    log.warning("Airtable save failed opp=%s (continuing): %s",
+                                opportunity.get("opportunityId") or opportunity.get("id"), e)
+
     
         except Exception as e:
             log.warning("Customer hydrate failed opp=%s err=%s", opportunityId, e)
@@ -1187,7 +1192,11 @@ def processHit(hit):
         # Clear any prior transient_error now that the fetch succeeded
         if not OFFLINE_MODE:
             opportunity.setdefault("patti", {})["transient_error"] = None
-            airtable_save(opportunity)
+            try:
+                airtable_save(opportunity)
+            except Exception as e:
+                log.warning("Airtable save failed opp=%s (continuing): %s",
+                            opportunity.get("opportunityId") or opportunity.get("id"), e)
 
 
 
@@ -1211,7 +1220,11 @@ def processHit(hit):
             
             # Persist blob to Airtable (instead of ES partial update)
             if not OFFLINE_MODE:
-                airtable_save(opportunity)   # or save_opp(opportunity)
+                try:
+                    airtable_save(opportunity)
+                except Exception as e:
+                    log.warning("Airtable save failed opp=%s (continuing): %s",
+                                opportunity.get("opportunityId") or opportunity.get("id"), e)
 
         # We can’t proceed without fresh_opp; exit gracefully and let the next run retry.
         return
@@ -1237,7 +1250,11 @@ def processHit(hit):
             if not OFFLINE_MODE:
                 # also clear follow-up so it won't keep showing as due
                 opportunity["followUP_date"] = None
-                airtable_save(opportunity, extra_fields={"follow_up_at": None})
+                try:
+                    airtable_save(opportunity)
+                except Exception as e:
+                    log.warning("Airtable save failed opp=%s (continuing): %s",
+                                opportunity.get("opportunityId") or opportunity.get("id"), e)None})
 
         return
 
@@ -1465,7 +1482,11 @@ def processHit(hit):
         
             # Persist updates (writes follow_up_at from followUP_date)
             if not OFFLINE_MODE:
-                airtable_save(opportunity)
+                try:
+                    airtable_save(opportunity)
+                except Exception as e:
+                    log.warning("Airtable save failed opp=%s (continuing): %s",
+                                opportunity.get("opportunityId") or opportunity.get("id"), e)
         
         except Exception as e:
             log.exception("KBB ICO handler failed for opp %s: %s", opportunityId, e)
@@ -1549,7 +1570,11 @@ def processHit(hit):
 
         if not OFFLINE_MODE:
             opportunity.pop("completedActivitiesTesting", None)
-            airtable_save(opportunity)
+            try:
+                airtable_save(opportunity)
+            except Exception as e:
+                log.warning("Airtable save failed opp=%s (continuing): %s",
+                            opportunity.get("opportunityId") or opportunity.get("id"), e)
 
         wJson(opportunity, f"jsons/process/{opportunityId}.json")
         return
@@ -1557,7 +1582,11 @@ def processHit(hit):
     # normal ES cleanup when there is *no* appointment yet
     if not OFFLINE_MODE:
         opportunity.pop("completedActivitiesTesting", None)
-        airtable_save(opportunity)
+        try:
+            airtable_save(opportunity)
+        except Exception as e:
+            log.warning("Airtable save failed opp=%s (continuing): %s",
+                        opportunity.get("opportunityId") or opportunity.get("id"), e))
 
 
     # === Vehicle & SRP link =============================================
@@ -1896,9 +1925,14 @@ def processHit(hit):
             opportunity["followUP_date"] = next_due
             opportunity["followUP_count"] = 0
         
-            if not OFFLINE_MODE:
+            try:
                 airtable_save(opportunity, extra_fields={"follow_up_at": next_due})
-
+            except Exception as e:
+                log.warning(
+                    "Airtable save failed after first-touch (continuing). opp=%s err=%s",
+                    opportunity.get("opportunityId") or opportunity.get("id"),
+                    e,
+                )
         
     else:
         # handle follow-ups messages
@@ -2030,7 +2064,12 @@ def processHit(hit):
                             e,
                         )
 
-                airtable_save(opportunity)
+                try:
+                    airtable_save(opportunity)
+                except Exception as e:
+                    log.warning("Airtable save failed opp=%s (continuing): %s",
+                                opportunity.get("opportunityId") or opportunity.get("id"), e)
+
 
             # Debug JSON + stop this run
             wJson(opportunity, f"jsons/process/{opportunity['opportunityId']}.json")
@@ -2050,7 +2089,12 @@ def processHit(hit):
             opportunity['followUP_date'] = dt.isoformat()
             opportunity.setdefault('followUP_count', 0)
             if not OFFLINE_MODE:
-                airtable_save(opportunity)
+                try:
+                    airtable_save(opportunity)
+                except Exception as e:
+                    log.warning("Airtable save failed opp=%s (continuing): %s",
+                                opportunity.get("opportunityId") or opportunity.get("id"), e)
+
             wJson(opportunity, f"jsons/process/{opportunityId}.json")
             return  # ⬅️ important: skip the cadence logic below for this run
         
@@ -2095,7 +2139,11 @@ def processHit(hit):
                 opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
         
                 if not OFFLINE_MODE:
-                    airtable_save(opportunity, extra_fields={"follow_up_at": next_iso})
+                    try:
+                        airtable_save(opportunity, extra_fields={"follow_up_at": next_iso})
+                    except Exception as e:
+                        log.warning("Airtable save failed opp=%s (continuing): %s",
+                                    opportunity.get("opportunityId") or opportunity.get("id"), e)
         
                 wJson(opportunity, f"jsons/process/{opportunityId}.json")
                 return
@@ -2136,7 +2184,11 @@ def processHit(hit):
             opportunity['isActive'] = False
             opportunity["followUP_date"] = None   
             if not OFFLINE_MODE:
-                airtable_save(opportunity, extra_fields={"follow_up_at": None})
+                try:
+                    airtable_save(opportunity, extra_fields={"follow_up_at": None})
+                except Exception as e:
+                    log.warning("Airtable save failed opp=%s (continuing): %s",
+                                opportunity.get("opportunityId") or opportunity.get("id"), e)
             wJson(opportunity, f"jsons/process/{opportunityId}.json")
             return
 
@@ -2262,15 +2314,27 @@ def processHit(hit):
                     opportunity["isActive"] = False
                     opportunity["followUP_date"] = None
                     if not OFFLINE_MODE:
-                        airtable_save(opportunity, extra_fields={"follow_up_at": None})
+                        try:
+                            airtable_save(opportunity, extra_fields={"follow_up_at": None})
+                        except Exception as e:
+                            log.warning("Airtable save failed opp=%s (continuing): %s",
+                                        opportunity.get("opportunityId") or opportunity.get("id"), e)
                 else:
                     opportunity["followUP_date"] = next_due
                     opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
                     if not OFFLINE_MODE:
-                        airtable_save(opportunity, extra_fields={"follow_up_at": next_due})
+                        try:
+                            airtable_save(opportunity, extra_fields={"follow_up_at": next_due})
+                        except Exception as e:
+                            log.warning("Airtable save failed opp=%s (continuing): %s",
+                                        opportunity.get("opportunityId") or opportunity.get("id"), e)
             
                 if not OFFLINE_MODE:
-                    airtable_save(opportunity)
+                    try:
+                        airtable_save(opportunity)
+                    except Exception as e:
+                        log.warning("Airtable save failed opp=%s (continuing): %s",
+                                    opportunity.get("opportunityId") or opportunity.get("id"), e)
 
     
     wJson(opportunity, f"jsons/process/{opportunityId}.json")
