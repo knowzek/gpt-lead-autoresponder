@@ -48,6 +48,11 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
+def _norm_email(s: str | None) -> str | None:
+    s = (s or "").strip().lower()
+    return s if ("@" in s and "." in s) else None
+
+
 RUN_KBB = os.getenv("RUN_KBB", "0").lower() in ("1", "true", "yes")
 
 log = logging.getLogger(__name__)
@@ -576,6 +581,7 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
     activities = sortActivities(activities)
 
     alreadyProcessedActivities = opportunity.get('alreadyProcessedActivities', {})
+    currDate_iso = (currDate.astimezone(_tz.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     # Ensure checkedDict is always a dict on the opportunity
     checkedDict = opportunity.get('checkedDict') or {}
@@ -850,19 +856,16 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
                 rt = get_rooftop_info(subscription_id)
                 rooftop_sender = rt.get("sender") or TEST_FROM
             
-                # pick customer email (prefer preferred & not doNotEmail)
-                cust   = opportunity.get("customer") or {}
-                emails = cust.get("emails") or []
-                customer_email = None
-                for e in emails:
-                    if e.get("doNotEmail"):
-                        continue
-                    if e.get("isPreferred"):
-                        customer_email = e.get("address")
-                        break
-                if not customer_email and emails:
-                    customer_email = emails[0].get("address")
-            
+                # ✅ Use Airtable-provided customer_email (no opp_json fallback)
+                customer_email = (opportunity.get("customer_email") or "").strip() or None
+
+                if not customer_email:
+                    log.warning(
+                        "No customer_email on opp %s (subscription_id=%s) — cannot send",
+                        opportunity.get("opportunityId"),
+                        subscription_id,
+                    )
+
                 if customer_email:
                     try:
                         from patti_mailer import send_patti_email
@@ -1003,9 +1006,13 @@ def processHit(hit):
         except Exception:
             log.warning("Skipping opp_id=%s (bad opp_json)", opportunityId)
             return
-    
+
     # (optional) ensure the blob has opportunityId too
     opportunity["opportunityId"] = opportunity.get("opportunityId") or opportunityId  
+    opportunity["customer_email"] = (fields.get("customer_email") or "").strip()
+
+    # Make Airtable fields available downstream (recipient, etc.)
+    opportunity["_airtable_fields"] = fields
 
     if not opportunity.get('isActive', True):
         print("pass...")
