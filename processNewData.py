@@ -692,11 +692,11 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
                         pass
 
                 appt_iso = ""
-                    conf = 0.0
-                    if not already_scheduled:
-                        proposed = extract_appt_time(customer_body or "", tz="America/Los_Angeles")
-                        appt_iso = (proposed.get("iso") or "").strip()
-                        conf = float(proposed.get("confidence") or 0.0)
+                conf = 0.0
+                if not already_scheduled:
+                    proposed = extract_appt_time(customer_body or "", tz="America/Los_Angeles")
+                    appt_iso = (proposed.get("iso") or "").strip()
+                    conf = float(proposed.get("confidence") or 0.0)
 
 
                 if appt_iso and conf >= 0.60:
