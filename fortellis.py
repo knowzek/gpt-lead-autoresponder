@@ -1008,6 +1008,68 @@ def schedule_activity(
         json=payload,
     )
 
+def schedule_appointment_with_notify(
+    token,
+    dealer_key,
+    opportunity_id,
+    *,
+    due_dt_iso_utc,
+    activity_name,
+    activity_type,
+    comments="",
+    # notify inputs:
+    opportunity=None,
+    fresh_opp=None,
+    rooftop_name="",
+    appt_human="",
+    customer_reply="",
+):
+    """
+    Schedule an appointment activity and notify staff (salesperson + GM CCs).
+    Mirrors schedule_activity() for Fortellis, plus a best-effort email.
+
+    IMPORTANT:
+    - Uses the same Fortellis schedule endpoint.
+    - Only sends the staff email if scheduling succeeds.
+    - Does NOT update Airtable.
+    """
+    # 1) Schedule in Fortellis (authoritative)
+    resp = schedule_activity(
+        token,
+        dealer_key,
+        opportunity_id,
+        due_dt_iso_utc=due_dt_iso_utc,
+        activity_name=activity_name,
+        activity_type=activity_type,
+        comments=comments or "",
+    )
+
+    # 2) Best-effort notify (never break scheduling if email fails)
+    try:
+        # guard: only notify when this is actually an Appointment
+        type_id = int(_coerce_activity_type(activity_type))
+        if type_id == 7:  # Appointment
+            from patti_triage import notify_staff_patti_scheduled_appt
+
+            notify_staff_patti_scheduled_appt(
+                opportunity=opportunity or {},
+                fresh_opp=fresh_opp or {},
+                subscription_id=dealer_key,
+                rooftop_name=rooftop_name or "",
+                appt_human=appt_human or due_dt_iso_utc,
+                customer_reply=customer_reply or "",
+            )
+    except Exception as e:
+        log.warning(
+            "schedule_appointment_with_notify: notify email failed opp=%s dealer_key=%s: %s",
+            opportunity_id,
+            dealer_key,
+            e,
+        )
+
+    return resp
+
+
 from requests.exceptions import HTTPError
 
 def complete_activity(
