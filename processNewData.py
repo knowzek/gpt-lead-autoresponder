@@ -981,9 +981,16 @@ def processHit(hit):
     # Airtable mode: hit is an Airtable record
     fields = (hit.get("fields") or {})
     opportunityId = fields.get("opp_id")  # canonical
+    # in processHit(), replace the warning block with:
     if not opportunityId:
-        log.warning("Skipping Airtable record missing opp_id")
+        log.warning(
+            "Skipping Airtable record missing opp_id rec_id=%s fields_keys=%s fields=%r",
+            hit.get("id"),
+            sorted(list(fields.keys())),
+            fields,
+        )
         return
+
     
     opportunity = fields.get("opp_json") or {}
     if isinstance(opportunity, str):
