@@ -349,23 +349,31 @@ _OPT_OUT_RE = re.compile(
 # anything “sensitive / negotiation / needs human”
 _HUMAN_REVIEW_RE = re.compile(
     r"(?i)\b("
+    # Price / negotiation keywords that are *actually* negotiation
     r"otd|out\s*the\s*door|best\s+price|lowest\s+price|discount|msrp|invoice|quote|"
-    r"offer\s*(?:amount|price|value)|offeramount|"
     r"deal\s*(?:sheet|breakdown|terms|numbers)|"
 
+    # Finance terms
     r"payment|monthly|lease|apr|interest|finance|financing|credit|down\s+payment|"
-    r"(?:trade-?in\s+(?:value|worth|offer|apprais|estimate)|"
+
+    # Trade-in: only when it’s clearly about value/offer/estimate/appraisal (not just “trade”)
+    r"trade-?in\s+(?:value|worth|offer|apprais|estimate)|"
     r"value\s+my\s+trade|"
     r"kbb\s+value|"
     r"trade\s+(?:value|offer|worth)|"
     r"appraisal|carmax|carvana|"
-    r"offer\s+amount|offeramount)"
 
-    r"complaint|bbb|dmv|attorney|legal|lawsuit|"
+    # Offer/Value: ONLY if it looks like a real number/value, not a template label like OfferAmount
+    r"|offer\s*(?:amount|price|value)\s*[:=]?\s*(?:\$\s*)?\d{2,}"
+    r"|\$\s*\d{2,}"
+
+    # Complaints / legal / anger / urgency
+    r"|complaint|bbb|dmv|attorney|legal|lawsuit|"
     r"angry|upset|frustrated|scam|fraud|ripoff|"
     r"asap|urgent|today|immediately|call\s+me\s+now"
     r")\b"
 )
+
 
 _NON_LEAD_RE = re.compile(r"(?i)\b(auto-?reply|out\s+of\s+office|delivery\s+has\s+failed|undeliverable)\b")
 
