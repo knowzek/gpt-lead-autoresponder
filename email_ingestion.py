@@ -354,13 +354,11 @@ def _extract_first_last_from_provider(body_text: str) -> tuple[str, str]:
     if not first or not last:
         # Capture First Name up to the next field label or end-of-line
         mi_first = re.search(
-            r"(?is)\bFirst\s*Name\b\s*[:\t ]+\s*([A-Za-z][A-Za-z'’-]*(?:\s+[A-Za-z][A-Za-z'’-]*)?)"
-            r"(?=\s+\bLast\s*Name\b|\s+\bEmail\b|\s+\bTelephone\b|\s+\bPhone\b|\s+\bStreet\b|\s+\bCity\b|\s+\bZip\b|$)",
+            r"(?im)\bFirst\s*Name\b\s*[:\t ]+\s*([A-Za-z][A-Za-z'’-]*)\b",
             t,
         )
         mi_last = re.search(
-            r"(?is)\bLast\s*Name\b\s*[:\t ]+\s*([A-Za-z][A-Za-z'’-]*(?:\s+[A-Za-z][A-Za-z'’-]*)?)"
-            r"(?=\s+\bEmail\b|\s+\bTelephone\b|\s+\bPhone\b|\s+\bStreet\b|\s+\bCity\b|\s+\bZip\b|$)",
+            r"(?im)\bLast\s*Name\b\s*[:\t ]+\s*([A-Za-z][A-Za-z'’-]*)\b",
             t,
         )
 
