@@ -17,6 +17,7 @@ import re
 import logging
 import hashlib, json, time
 from uuid import uuid4
+from pathlib import Path
 from zoneinfo import ZoneInfo
 import uuid
 from airtable_store import (
@@ -188,56 +189,27 @@ _KBB_SOURCES = {
 
 # --- Tustin Kia GM Day-2 email -------------------------------------------------
 
-TK_GM_DAY2_SUBJECT = "From the GM - How can I help?"
-
 def is_tustin_kia_rooftop(rooftop_name: str) -> bool:
     return (rooftop_name or "").strip().lower() == "patterson tustin kia" or (rooftop_name or "").strip().lower() == "tustin kia"
 
+TK_GM_DAY2_SUBJECT = "From the GM - How can I help?"
+
 def build_tk_gm_day2_html(customer_name: str) -> str:
     cn = (customer_name or "there").strip()
-    # HTML-safe, no emojis, email-client friendly
-    return f"""
-<p>Hi {cn},</p>
 
-<p>Thank you for your recent inquiry with Patterson Tustin Kia. I wanted to personally reach out and make sure you’re being taken care of.</p>
+    # project root = folder containing this file (processNewData.py)
+    base_dir = Path(__file__).resolve().parent
 
-<p>We recently opened our doors and have already earned over 160 five-star Google reviews in just our first 45 days, thanks to our transparent, no-pressure approach. You can see what our customers are saying here:</p>
+    # template location in your repo
+    tpl_path = base_dir / "templates" / "cadence" / "tustin_kia" / "day2_gm_email.html"
 
-<p>
-  <a href="https://www.google.com/search?q=tustin+kia#mpd=~14551332690025579345/customers/reviews" target="_blank" rel="noopener noreferrer">
-    Read our Google reviews
-  </a>
-</p>
+    html = tpl_path.read_text(encoding="utf-8")
 
-<p>When you work with us, you can expect:</p>
+    # Support either placeholder style (so you don’t have to remember which one you used)
+    html = html.replace("{{customer_name}}", cn)
+    html = html.replace("{customer_name}", cn)
 
-<ul>
-  <li>No dealer add-ons or surprises</li>
-  <li>Clear, upfront pricing</li>
-  <li>Located in the heart of the Tustin Auto Mall</li>
-  <li>Access to over 10,000 new and used vehicles across the auto mall when you visit</li>
-</ul>
-
-<p>If you have any questions, need availability, or would like a quick price check, simply reply to this email or reach me directly at <a href="mailto:alexc@pattersonautos.com">alexc@pattersonautos.com</a>.</p>
-
-<p>We’d love the opportunity to earn your business.</p>
-
-<p style="margin:18px 0 0;">
-  Best regards,<br>
-  <strong>Alex Chung</strong><br>
-  General Manager<br>
-  Patterson Tustin Kia<br>
-  <a href="mailto:alexc@pattersonautos.com">alexc@pattersonautos.com</a><br>
-  <a href="https://www.tustinkia.com" target="_blank" rel="noopener noreferrer">www.tustinkia.com</a>
-</p>
-
-<p style="margin:12px 0 0;">
-  <img src="https://d36urhup7zbd7q.cloudfront.net/u/wDG9w8Vme8n/3a102c62-58ff-4e9f-b200-b81fa572837f__400x256__.png"
-       alt="Patterson Tustin Kia"
-       width="200"
-       style="display:block;border:0;outline:none;text-decoration:none;height:auto;">
-</p>
-""".strip()
+    return html.strip()
 
 def resolve_customer_email(
     opportunity: dict,
