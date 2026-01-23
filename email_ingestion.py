@@ -508,9 +508,17 @@ def process_lead_notification(inbound: dict) -> None:
         now_iso = ts
         opp.setdefault("followUP_date", now_iso)
 
+        # ✅ Salesperson (best-effort) for bootstrap write
+        salesperson = ""
+        sp = opp.get("salesperson") or opp.get("owner") or {}
+        if isinstance(sp, dict):
+            salesperson = (sp.get("name") or sp.get("fullName") or "").strip()
+        elif isinstance(sp, str):
+            salesperson = sp.strip()
+
         log.info(
-            "bootstrap upsert opp=%s email=%r first=%r last=%r phone=%r source=%r",
-            opp_id, shopper_email, first_name, last_name, phone, (opp.get("source") or "")
+            "bootstrap upsert opp=%s email=%r first=%r last=%r phone=%r source=%r salesperson=%r",
+            opp_id, shopper_email, first_name, last_name, phone, (opp.get("source") or ""), salesperson
         )
 
         upsert_lead(opp_id, {
@@ -524,7 +532,9 @@ def process_lead_notification(inbound: dict) -> None:
             "Customer First Name": first_name,
             "Customer Last Name": last_name,
             "Phone": phone,
+            "Assigned Sales Rep": salesperson,
         })
+
         rec2 = find_by_opp_id(opp_id)
         if not rec2:
             log.warning("Bootstrap upsert did not produce record opp=%s", opp_id)
@@ -659,18 +669,6 @@ def process_lead_notification(inbound: dict) -> None:
                 pass
             return
         # otherwise: continue to normal first-touch
-
-
-
-    # Salesperson (best-effort)
-    salesperson = ""
-    sp = fresh_opp.get("salesperson") or fresh_opp.get("owner") or {}
-    if isinstance(sp, dict):
-        salesperson = (sp.get("name") or sp.get("fullName") or "").strip()
-    elif isinstance(sp, str):
-        salesperson = sp.strip()
-    if not salesperson:
-        salesperson = "our team"
 
     # Vehicle string (best-effort)
     vehicle_str = "one of our vehicles"
