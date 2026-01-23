@@ -2,6 +2,8 @@
 import os, json, uuid
 from datetime import datetime, timedelta, timezone
 import requests
+import hashlib
+from datetime import datetime as _dt, timezone as _tz
 
 AIRTABLE_API_TOKEN = os.getenv("AIRTABLE_API_TOKEN")
 AIRTABLE_BASE_ID   = os.getenv("AIRTABLE_BASE_ID")
@@ -36,6 +38,76 @@ def mark_customer_reply(opp: dict, *, when_iso: str | None = None):
         "First Customer Reply At": m["first_customer_reply_at"],
         "Last Customer Reply At": m["last_customer_reply_at"],
     })
+
+def _sha1(s: str) -> str:
+    return hashlib.sha1(s.encode("utf-8")).hexdigest()
+
+def _iso_now() -> str:
+    return _dt.now(_tz.utc).isoformat().replace("+00:00", "Z")
+
+def _extract_compliance(opp: dict) -> dict:
+    """
+    Canonical: opp["compliance"] (or opp["patti"]["compliance"] fallback).
+    Always returns a dict with at least {"suppressed": bool}.
+    """
+    comp = None
+    if isinstance(opp.get("compliance"), dict):
+        comp = opp.get("compliance")
+    elif isinstance(opp.get("patti"), dict) and isinstance(opp["patti"].get("compliance"), dict):
+        comp = opp["patti"].get("compliance")
+
+    if not isinstance(comp, dict):
+        return {"suppressed": False}
+
+    suppressed = bool(comp.get("suppressed"))
+    if not suppressed:
+        return {"suppressed": False}
+
+    return {
+        "suppressed": True,
+        "reason": (comp.get("reason") or "").strip() or "unsubscribe",
+        "channel": (comp.get("channel") or "email").strip() or "email",
+        "at": (comp.get("at") or _iso_now()),
+    }
+
+def _build_patti_snapshot(opp: dict) -> dict:
+    patti = opp.get("patti") if isinstance(opp.get("patti"), dict) else {}
+    metrics = opp.get("patti_metrics") if isinstance(opp.get("patti_metrics"), dict) else {}
+
+    cust = opp.get("customer") if isinstance(opp.get("customer"), dict) else {}
+    veh  = opp.get("vehicle") if isinstance(opp.get("vehicle"), dict) else {}
+
+    return {
+        "opportunityId": opp.get("opportunityId") or opp.get("id"),
+        "subscription_id": opp.get("_subscription_id") or opp.get("subscription_id"),
+        "source": opp.get("source") or "",
+        "customer": {
+            "firstName": cust.get("firstName") or opp.get("customer_first_name") or "",
+            "lastName":  cust.get("lastName")  or opp.get("customer_last_name")  or "",
+            "email":     opp.get("customer_email") or cust.get("email") or "",
+            "phone":     opp.get("customer_phone") or "",
+        },
+        "vehicle": {
+            "year":  veh.get("year") or opp.get("year") or "",
+            "make":  veh.get("make") or opp.get("make") or "",
+            "model": veh.get("model") or opp.get("model") or "",
+            "vin":   veh.get("vin") or opp.get("vin") or "",
+        },
+        "patti": {
+            "mode": patti.get("mode") or "",
+            "salesai_email_idx": patti.get("salesai_email_idx"),
+            "last_template_day_sent": patti.get("last_template_day_sent"),
+            "last_customer_msg_at": patti.get("last_customer_msg_at"),
+            "handoff": patti.get("handoff") if isinstance(patti.get("handoff"), dict) else None,
+        },
+        "patti_metrics": {
+            "customer_replied": metrics.get("customer_replied"),
+            "first_customer_reply_at": metrics.get("first_customer_reply_at"),
+            "last_customer_reply_at": metrics.get("last_customer_reply_at"),
+        },
+        "compliance": _extract_compliance(opp),
+    }
+
 
 def mark_unsubscribed(opp: dict, *, when_iso: str | None = None, reason: str = ""):
     when_iso = when_iso or _now_iso_utc()
@@ -230,13 +302,15 @@ def release_lock(rec_id: str, token: str):
 
 def opp_from_record(rec: dict) -> dict:
     """
-    Return the opportunity dict from Airtable record (opp_json).
+    Return the opportunity dict from Airtable record (patti_json snapshot).
     Also attaches the record id for persistence.
     Hydrates key identity fields from Airtable columns so downstream code
-    can rely on them even if opp_json is partial.
+    can rely on them even if patti_json is partial.
     """
     fields = rec.get("fields", {}) or {}
-    opp = _safe_json_loads(fields.get("opp_json")) or {}
+
+    # ✅ NEW: load snapshot JSON instead of full opp_json blob
+    opp = _safe_json_loads(fields.get("patti_json")) or {}
 
     # Always attach Airtable record id
     opp["_airtable_rec_id"] = rec.get("id")
@@ -258,13 +332,12 @@ def opp_from_record(rec: dict) -> dict:
 
     if fields.get("customer_email"):
         opp["customer_email"] = fields.get("customer_email")
-        
+
     aph = (fields.get("Phone") or "").strip()
     if aph:
         opp["customer_phone"] = aph
 
-
-    # ✅ NEW: hydrate customer first/last name from Airtable columns
+    # ✅ Hydrate customer first/last name from Airtable columns
     afn = (fields.get("Customer First Name") or "").strip()
     aln = (fields.get("Customer Last Name") or "").strip()
     if afn or aln:
@@ -282,24 +355,33 @@ def opp_from_record(rec: dict) -> dict:
         opp.setdefault("customer_first_name", afn)
         opp.setdefault("customer_last_name", aln)
 
-
     # --- Hydrate human review flags from Airtable columns ---
-    # Airtable checkbox returns True/False when present.
     if "Needs Human Review" in fields:
         opp["needs_human_review"] = bool(fields.get("Needs Human Review"))
     else:
-        # default if column missing in this base/table
         opp.setdefault("needs_human_review", False)
 
-    # hydrate reason + timestamp for logging/debugging
     if fields.get("Human Review Reason") and not opp.get("human_review_reason"):
         opp["human_review_reason"] = fields.get("Human Review Reason")
 
     if fields.get("Human Review At") and not opp.get("human_review_at"):
         opp["human_review_at"] = fields.get("Human Review At")
 
+    # ✅ NEW: Hydrate suppression/compliance from Airtable columns (authoritative for gating)
+    if fields.get("Suppressed") is True:
+        opp["compliance"] = {
+            "suppressed": True,
+            "reason": fields.get("Suppression Reason") or "unsubscribe",
+            "channel": "email",
+            "at": fields.get("Suppressed At") or "",
+        }
+    else:
+        # If snapshot already has compliance, keep it; otherwise default false.
+        if not isinstance(opp.get("compliance"), dict):
+            opp["compliance"] = {"suppressed": False}
 
     return opp
+
 
 def get_by_id(rec_id: str) -> dict:
     return _request("GET", f"{BASE_URL}/{rec_id}")
@@ -311,7 +393,8 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
     if not rec_id:
         raise RuntimeError("Missing opp['_airtable_rec_id']; cannot save to Airtable")
 
-    # (optional) re-hydrate identity — keep if you want it
+    fields = {}
+    # (optional) re-hydrate identity — keep (and we also use fields for hash compare)
     try:
         rec = get_by_id(rec_id)
         fields = (rec or {}).get("fields", {}) or {}
@@ -325,7 +408,7 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
         if airtable_sub_id:
             opp.setdefault("_subscription_id", airtable_sub_id)
     except Exception:
-        pass
+        fields = {}
 
     is_active = bool(opp.get("isActive", True))
     follow_up_at = opp.get("followUP_date") or opp.get("follow_up_at")
@@ -336,12 +419,28 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
     if not mode and isinstance(opp.get("patti"), dict):
         mode = opp["patti"].get("mode")
 
+    # ✅ Snapshot JSON + hash to avoid rewriting every time
+    snapshot = _build_patti_snapshot(opp)
+    snapshot_str = json.dumps(snapshot, ensure_ascii=False)
+    snapshot_hash = _sha1(snapshot_str)
+    prev_hash = (fields.get("patti_hash") or "").strip()
+
     patch = {
         "is_active": is_active,
         "follow_up_at": _iso(follow_up_at),
         "mode": (mode or ""),
-        "opp_json": _safe_json_dumps(opp),
     }
+
+    if snapshot_hash != prev_hash:
+        patch["patti_json"] = snapshot_str
+        patch["patti_hash"] = snapshot_hash
+
+    # ✅ Mirror compliance into columns for filtering/reporting
+    comp = snapshot.get("compliance") or {"suppressed": False}
+    patch["Suppressed"] = bool(comp.get("suppressed"))
+    if comp.get("suppressed"):
+        patch["Suppression Reason"] = comp.get("reason") or ""
+        patch["Suppressed At"] = comp.get("at") or ""
 
     if extra_fields:
         patch.update(extra_fields)
