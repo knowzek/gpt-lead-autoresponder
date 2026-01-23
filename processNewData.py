@@ -175,11 +175,15 @@ def _already_sent_first_touch_recently(*, customer_email: str, subscription_id: 
 
 def airtable_save(opportunity: dict, extra_fields: dict | None = None):
     """
-    Persist the full opp back to Airtable (opp_json + follow_up_at + is_active).
+    Persist the opportunity back to Airtable using:
+      - patti_json + patti_hash (snapshot)
+      - key columns (follow_up_at, is_active, mode, Suppressed, etc.)
+    Does NOT write opp_json.
     """
     if OFFLINE_MODE:
         return
     return save_opp(opportunity, extra_fields=extra_fields or {})
+
 
 _KBB_SOURCES = {
     "kbb instant cash offer",
@@ -1015,21 +1019,38 @@ def processHit(hit):
         return
 
     
-    opportunity = fields.get("opp_json") or {}
-    if isinstance(opportunity, str):
-        try:
-            opportunity = json.loads(opportunity)
-        except Exception:
-            log.warning("Skipping opp_id=%s (bad opp_json)", opportunityId)
-            return
+    # ✅ Canonical: build the working opportunity from Airtable snapshot + columns
+    opportunity = opp_from_record(hit)
 
-    # (optional) ensure the blob has opportunityId too
-    opportunity["opportunityId"] = opportunity.get("opportunityId") or opportunityId  
-    opportunity["customer_email"] = (fields.get("customer_email") or "").strip()
-    opportunity["customer_first_name"] = (fields.get("Customer First Name") or "").strip()
+    # Sanity: ensure opportunityId is present
+    opportunity["opportunityId"] = opportunity.get("opportunityId") or opportunityId
+    opportunity["id"] = opportunity.get("id") or opportunity["opportunityId"]
 
-    # Make Airtable fields available downstream (recipient, etc.)
+    # Keep Airtable fields handy for downstream display/debug (optional)
     opportunity["_airtable_fields"] = fields
+
+    # ✅ IMPORTANT: processNewData expects followUP_date and isActive on the opp object
+    # (save_opp() will mirror back to Airtable columns)
+    if fields.get("follow_up_at") and not opportunity.get("followUP_date"):
+        opportunity["followUP_date"] = fields.get("follow_up_at")
+
+    if "is_active" in fields and "isActive" not in opportunity:
+        opportunity["isActive"] = bool(fields.get("is_active"))
+
+    # Optional convenience hydration (safe)
+    if fields.get("customer_email") and not opportunity.get("customer_email"):
+        opportunity["customer_email"] = (fields.get("customer_email") or "").strip()
+
+    if fields.get("Customer First Name") and not opportunity.get("customer_first_name"):
+        opportunity["customer_first_name"] = (fields.get("Customer First Name") or "").strip()
+
+    if fields.get("Customer Last Name") and not opportunity.get("customer_last_name"):
+        opportunity["customer_last_name"] = (fields.get("Customer Last Name") or "").strip()
+
+    # If your code expects a customer dict sometimes:
+    if opportunity.get("customer_email") and not isinstance(opportunity.get("customer"), dict):
+        opportunity["customer"] = {"emails": [{"address": opportunity["customer_email"]}]}
+
 
     if not opportunity.get('isActive', True):
         print("pass...")
