@@ -1028,7 +1028,6 @@ def process_inbound_email(inbound: dict) -> None:
         
     source = ((opportunity.get("source") or "") or "")).lower()
     is_kbb = _is_kbb_opp(opportunity)
-    )
 
     # 2) Append inbound message into the thread (in-memory)
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
