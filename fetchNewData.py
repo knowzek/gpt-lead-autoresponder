@@ -14,9 +14,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from constants import *
-from airtable_store import upsert_lead, find_by_opp_id, _safe_json_dumps, opp_from_record
+from airtable_store import upsert_lead, find_by_opp_id, opp_from_record, save_opp
 
-
+FORTELLIS_BASE_URL = "https://api.fortellis.io"
 DRY_RUN = int(os.getenv("DRY_RUN", "1"))  # 1 = DO NOT write to CRM, 0 = allow writes
 
 from fortellis import (
@@ -54,6 +54,27 @@ def _is_assigned_to_kristin_doc(doc: dict) -> bool:
         if (fn == "kristin" and ln == "nowzek") or em in {"knowzek@pattersonautos.com","knowzek@gmail.com"}:
             return True
     return False
+
+def _needs_airtable_columns_patch(created_now: bool, existing_fields: dict | None, doc: dict) -> bool:
+    if created_now or not existing_fields:
+        return True
+
+    want_is_active = bool(doc.get("isActive", True))
+    want_follow = doc.get("followUP_date")
+    want_mode = (doc.get("_kbb_state") or {}).get("mode", "") or ""
+
+    # Airtable field names as stored in your base
+    have_is_active = bool(existing_fields.get("is_active", existing_fields.get("isActive", True)))
+    have_follow = existing_fields.get("follow_up_at") or existing_fields.get("followUP_date") or existing_fields.get("follow_up_at")
+    have_mode = (existing_fields.get("mode") or existing_fields.get("Mode") or "") or ""
+
+
+    # Compare as strings to avoid tz formatting mismatches
+    want_follow_s = str(want_follow or "")
+    have_follow_s = str(have_follow or "")
+
+    return (want_is_active != have_is_active) or (want_follow_s != have_follow_s) or (want_mode != have_mode)
+
 
 def _merge_preserve(existing: dict, incoming: dict) -> dict:
     """
@@ -204,9 +225,6 @@ def extract_adf_comment(adf_xml: str) -> str:
         log.warning("Failed to parse ADF XML: %s", e)
     return ""
 
-
-
-
 # === Pull opportunity leads ======================================================
 
 all_items = []
@@ -285,6 +303,7 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
         
         # ---- Airtable upsert ----
         existing_rec = find_by_opp_id(opp_id)
+        existing_fields = (existing_rec or {}).get("fields") or {}
         created_now = existing_rec is None
         
         log.info("Airtable match opp=%s exists=%s rec_id=%s", opp_id, bool(existing_rec), (existing_rec or {}).get("id"))
@@ -315,15 +334,25 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
             }
 
         
-        upsert_lead(opp_id, {
-            "subscription_id": subscription_id,
-            "source": docToIndex.get("source") or "",
-            "is_active": bool(docToIndex.get("isActive", True)),
-            "follow_up_at": docToIndex.get("followUP_date"),
-            "mode": (docToIndex.get("_kbb_state") or {}).get("mode", ""),
-            "opp_json": _safe_json_dumps(docToIndex),
-        })
+        if _needs_airtable_columns_patch(created_now, existing_fields, docToIndex):
+            rec = upsert_lead(opp_id, {
+                "subscription_id": subscription_id,
+                "source": docToIndex.get("source") or "",
+                "is_active": bool(docToIndex.get("isActive", True)),
+                "follow_up_at": docToIndex.get("followUP_date"),
+                "mode": (docToIndex.get("_kbb_state") or {}).get("mode", ""),
+            })
+            rec_id = rec.get("id") if isinstance(rec, dict) else None
+        else:
+            # ✅ no PATCH needed; reuse existing record id
+            rec_id = (existing_rec or {}).get("id")
         
+        docToIndex["_airtable_rec_id"] = rec_id
+
+        # ✅ NEW record: persist initial snapshot once (cheap + guarantees patti_json exists)
+        if created_now and docToIndex.get("_airtable_rec_id"):
+            save_opp(docToIndex)
+
         # If created now, optionally hydrate customer+activities then upsert again
         if created_now:
             if customerID:
@@ -339,7 +368,7 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
             
                     # Fallback to the known-good Sales v1 URL format
                     if not self_href:
-                        self_href = f"{BASE_URL}/sales/v1/elead/customers/{customerID}"
+                        self_href = f"{FORTELLIS_BASE_URL}/sales/v1/elead/customers/{customerID}"
             
                     richer = get_customer_by_url(self_href, token, subscription_id) or {}
             
@@ -376,14 +405,10 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
                 "last_msg_by": None,
             })
         
-            upsert_lead(opp_id, {
-                "subscription_id": subscription_id,
-                "source": docToIndex.get("source") or "",
-                "is_active": bool(docToIndex.get("isActive", True)),
-                "follow_up_at": docToIndex.get("followUP_date"),
-                "mode": (docToIndex.get("_kbb_state") or {}).get("mode", ""),
-                "opp_json": _safe_json_dumps(docToIndex),
-            })
+            # After hydration, persist updated snapshot + follow-up fields
+            if created_now and docToIndex.get("_airtable_rec_id"):
+                save_opp(docToIndex)
+
 
         # keep what we’re sending for logging/return
         items.append(docToIndex)
