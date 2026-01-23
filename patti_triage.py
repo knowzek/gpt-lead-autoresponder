@@ -136,6 +136,7 @@ def notify_staff_patti_scheduled_appt(
         to_addr=to_addr,
         subject=_clip(subj, 180),
         html_body=html,
+        opp_id=opp_id,
         cc_addrs=cc_addrs,
         timeout=20,
     )
@@ -212,6 +213,7 @@ def notify_staff_patti_scheduled_appt(
         to_addr=to_addr,
         subject=_clip(subj, 180),
         html_body=html,
+        opp_id=opp_id,
         cc_addrs=cc_addrs,
         timeout=20,
     )
@@ -711,6 +713,7 @@ def handoff_to_human(
         to_addr=to_addr,
         subject=_clip(subj, 180),
         html_body=html,
+        opp_id=opp_id,
         cc_addrs=cc_addrs,
         timeout=20,
     )
