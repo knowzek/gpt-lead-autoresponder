@@ -346,41 +346,26 @@ def process_kbb_adf_notification(inbound: dict) -> None:
     opportunity["followUP_date"] = follow_up_at
 
     # -----------------------------
-    # 4.5) Compute is_active once (used by Airtable + logs)
-    # -----------------------------
-    status = (opportunity.get("status") or "Active").strip().lower()
-    substatus = (opportunity.get("subStatus") or opportunity.get("substatus") or "New").strip().lower()
-
-    # Treat Lost/Inactive as not active; otherwise active
-    is_active = (status == "active") and (substatus not in {"lost", "inactive", "closed"})
-
-
-    # -----------------------------
     # 5) Upsert Airtable record (create OR update)
     # -----------------------------
     from airtable_store import upsert_lead, _safe_json_dumps
     
-    rec = upsert_lead(opp_id, {
+    fields = {
         "subscription_id": subscription_id,
         "source": opportunity.get("source") or "",
         "is_active": True,
         "follow_up_at": follow_up_at,
         "mode": (opportunity.get("_kbb_state") or {}).get("mode", ""),
-    })
+    }
+    
+    # ✅ Persist KBB offer context in its own Airtable column
+    if opportunity.get("_kbb_offer_ctx"):
+        fields["kbb_offer_ctx"] = json.dumps(opportunity["_kbb_offer_ctx"], ensure_ascii=False)
+    
+    rec = upsert_lead(opp_id, fields)
     
     # Attach Airtable record id so future save_opp() calls work
     opportunity["_airtable_rec_id"] = rec.get("id")
-
-    # Persist KBB offer context to Airtable (own column)
-    try:
-        rec_id = opportunity.get("_airtable_rec_id")
-        if rec_id and opportunity.get("_kbb_offer_ctx"):
-            patch_by_id(rec_id, {
-                "kbb_offer_ctx": json.dumps(opportunity["_kbb_offer_ctx"], ensure_ascii=False)
-            })
-    except Exception as e:
-        log.warning("KBB ADF: failed to persist kbb_offer_ctx opp=%s err=%s", opp_id, e)
-
     
     log.info(
         "KBB ADF: upserted Airtable opp=%s rec_id=%s follow_up_at=%s is_active=%s",
