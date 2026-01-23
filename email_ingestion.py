@@ -29,7 +29,6 @@ from airtable_store import (
     opp_from_record,
     save_opp,
     upsert_lead,
-    _safe_json_dumps,
 )
 log = logging.getLogger("patti.email_ingestion")
 
@@ -545,7 +544,6 @@ def process_lead_notification(inbound: dict) -> None:
             "is_active": bool(opp.get("isActive", True)),
             "follow_up_at": opp.get("followUP_date"),
             "mode": "",
-            "opp_json": _safe_json_dumps(opp),
             "customer_email": shopper_email,
             "Customer First Name": first_name,
             "Customer Last Name": last_name,
@@ -819,7 +817,7 @@ def _compute_lead_age_days(opportunity: dict) -> int:
 def _find_opportunity_by_sender(sender_email: str):
     """
     Find opportunity in Airtable by matching the sender email against
-    opp_json.customer.emails[].address (or a stored customer_email column if you have one).
+    matching the sender email against the customer_email column (preferred) (or a stored customer_email column if you have one).
     """
     if not sender_email:
         return None, None
@@ -1017,7 +1015,6 @@ def process_inbound_email(inbound: dict) -> None:
             "is_active": bool(opp.get("isActive", True)),
             "follow_up_at": opp.get("followUP_date"),
             "mode": "",
-            "opp_json": _safe_json_dumps(opp),
         })
     
         rec2 = find_by_opp_id(opp_id)
@@ -1029,17 +1026,10 @@ def process_inbound_email(inbound: dict) -> None:
         
     block_auto_reply = bool(opportunity.get("needs_human_review") is True)
         
-    source = (opportunity.get("source") or "").lower()
-    # if opp_json is a dict in your normalized object, include it too:
-    try:
-        source2 = (opportunity.get("opp_json", {}) or {}).get("source", "")
-    except Exception:
-        source2 = ""
-    source = (source + " " + str(source2)).lower()
-    
-    is_kbb = ("kbb" in source) or ("kelley blue book" in source) or ("instant cash offer" in source)
+    source = ((opportunity.get("source") or "") or "")).lower()
+    is_kbb = _is_kbb_opp(opportunity)
+    )
 
-    
     # 2) Append inbound message into the thread (in-memory)
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     msg_dict = {
@@ -1081,7 +1071,7 @@ def process_inbound_email(inbound: dict) -> None:
         st["mode"] = "convo"
 
 
-    # 4) Persist to Airtable (save_opp already updates follow_up_at + opp_json)
+    # 4) Persist to Airtable (save_opp updates follow_up_at + patti_json/patti_hash)
     save_opp(opportunity)
 
     # 4.5) TRIAGE (classify BEFORE any immediate reply)
