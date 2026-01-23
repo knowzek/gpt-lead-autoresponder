@@ -70,6 +70,25 @@ def _extract_compliance(opp: dict) -> dict:
         "at": (comp.get("at") or _iso_now()),
     }
 
+def is_opp_suppressed(opp_id: str) -> tuple[bool, str]:
+    """
+    Returns (suppressed, reason). Uses Airtable checkbox + reason field.
+    """
+    oid = (opp_id or "").strip()
+    if not oid:
+        return False, ""
+
+    # Find the record for this opp_id
+    rec = find_by_opp_id(oid)  # you already have this in airtable_store
+    if not rec:
+        return False, ""
+
+    fields = (rec.get("fields") or {})
+    if fields.get("Suppressed") is True:
+        return True, (fields.get("Suppression Reason") or "suppressed")
+    return False, ""
+
+
 def _build_patti_snapshot(opp: dict) -> dict:
     patti = opp.get("patti") if isinstance(opp.get("patti"), dict) else {}
     metrics = opp.get("patti_metrics") if isinstance(opp.get("patti_metrics"), dict) else {}
