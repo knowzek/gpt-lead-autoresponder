@@ -1026,7 +1026,7 @@ def process_inbound_email(inbound: dict) -> None:
         
     block_auto_reply = bool(opportunity.get("needs_human_review") is True)
         
-    source = ((opportunity.get("source") or "") or "")).lower()
+    source = (opportunity.get("source") or "").lower()
     is_kbb = _is_kbb_opp(opportunity)
 
     # 2) Append inbound message into the thread (in-memory)
