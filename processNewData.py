@@ -43,7 +43,6 @@ from patti_triage import classify_inbound_email, handoff_to_human, should_triage
 #from fortellis import get_vehicle_inventory_xml  
 from inventory_matcher import recommend_from_xml
 
-# from datetime import datetime, timedelta, timezone
 from datetime import datetime as _dt, timedelta as _td, timezone as _tz
 import os
 from dotenv import load_dotenv
@@ -142,6 +141,35 @@ def explicit_time_ok(text: str) -> bool:
 
     return True
 
+
+def _already_sent_first_touch_recently(*, customer_email: str, subscription_id: str, current_opp_id: str, lookback_hours: int = 72) -> bool:
+    email = (customer_email or "").strip().lower()
+    sub = (subscription_id or "").strip()
+    if not email or not sub:
+        return False
+
+    recs = find_by_customer_email(email)  # your existing airtable_store helper
+    if not recs:
+        return False
+    if isinstance(recs, dict):
+        recs = [recs]
+
+    cutoff = _dt.now(_tz.utc) - _td(hours=lookback_hours)
+
+    for r in recs:
+        opp_id = r.get("opportunityId") or r.get("opp_id") or ""
+        if str(opp_id) == str(current_opp_id):
+            continue
+
+        r_sub = r.get("_subscription_id") or r.get("subscription_id") or ""
+        if str(r_sub) != str(sub):
+            continue
+
+        sent_at = _parse_iso_utc(r.get("first_email_sent_at"))  # <-- Airtable field
+        if sent_at and sent_at >= cutoff:
+            return True
+
+    return False
 
 
 def airtable_save(opportunity: dict, extra_fields: dict | None = None):
@@ -2529,6 +2557,26 @@ def send_first_touch_email(
         )
         return False
 
+    # --- DEDUPE: don't send first-touch again if we've already welcomed this email recently (same rooftop)
+    if customer_email and _already_sent_first_touch_recently(
+        customer_email=customer_email,
+        subscription_id=subscription_id,
+        current_opp_id=opportunity.get("opportunityId") or opportunityId,
+        lookback_hours=72,
+    ):
+        log.info(
+            "Skipping duplicate first-touch for %s (already welcomed recently) opp=%s",
+            customer_email, opportunity.get("opportunityId") or opportunityId
+        )
+        # Optional: still mark record so it doesn't look "untouched"
+        opportunity.setdefault("patti", {})
+        opportunity["patti"]["skip_first_touch"] = True
+        opportunity["patti"]["skip_first_touch_reason"] = "duplicate_lead_same_email_recent_first_touch"
+        if not OFFLINE_MODE:
+            airtable_save(opportunity)
+        return False
+
+
     variant = get_or_assign_ab_variant(opportunity)
 
     VARIANT_LONG = "A_long"
@@ -2771,7 +2819,10 @@ def send_first_touch_email(
     
         patti_meta = opportunity.setdefault("patti", {})
         patti_meta["ab_variant"] = variant
-        patti_meta.setdefault("first_email_sent_at", currDate_iso)
+        # Canonical first-touch timestamp
+        opportunity["first_email_sent_at"] = currDate_iso
+        patti_meta.setdefault("first_email_sent_at", currDate_iso)  # (optional) keep for backward compat
+
 
         # ✅ Enroll into SalesAI cadence on first-touch (general leads)
         patti_meta.setdefault("salesai_email_idx", -1)
@@ -2789,7 +2840,7 @@ def send_first_touch_email(
             extra_fields={
                 "follow_up_at": next_iso,
                 "ab_variant": variant,
-                "first_email_sent_at": patti_meta["first_email_sent_at"],
+                "first_email_sent_at": opportunity["first_email_sent_at"],
             }
         )
 
@@ -2801,9 +2852,9 @@ def send_first_touch_email(
         )
 
     
-    # Persist Patti state + messages into ES
-    airtable_save(opportunity)
-
+    # Persist opportunity state (only if we didn't already save in the sent_ok path)
+    if not sent_ok and not OFFLINE_MODE:
+        airtable_save(opportunity)
 
     return sent_ok
 
