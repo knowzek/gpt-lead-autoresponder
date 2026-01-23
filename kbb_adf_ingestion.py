@@ -4,7 +4,7 @@ import logging
 
 from fortellis import get_token, get_recent_opportunities, get_opportunity, get_customer_by_url, find_recent_kbb_opportunity_by_email, find_best_kbb_opp_for_email
 from constants import CUSTOMER_URL 
-from airtable_store import upsert_lead, find_by_opp_id, _safe_json_dumps, find_by_customer_email, opp_from_record, save_opp
+from airtable_store import upsert_lead, find_by_opp_id, patch_by_id, save_opp
 
 from datetime import datetime as _dt, timedelta as _td, timezone as _tz
 from email_ingestion import clean_html  
@@ -286,36 +286,33 @@ def process_kbb_adf_notification(inbound: dict) -> None:
         except Exception as e:
             log.warning("KBB ADF: customer hydrate failed opp=%s cust_id=%s err=%s", opp_id, customer_id, e)
 
-    # Build opp_json
+    # Build *skinny* opportunity payload (no opp_json bloat)
     now_iso = _dt.now(_tz.utc).isoformat()
-
-    opportunity = dict(fresh_opp)
-    opportunity["opportunityId"] = opportunity.get("opportunityId") or opportunity.get("id") or opp_id
-    opportunity["id"] = opportunity.get("id") or opportunity["opportunityId"]
-    opportunity["_subscription_id"] = subscription_id
-
-    # ensure customer is stored (with emails)
-    if customer:
+    
+    opportunity = {
+        "opportunityId": (fresh_opp.get("opportunityId") or fresh_opp.get("id") or opp_id),
+        "id": (fresh_opp.get("id") or fresh_opp.get("opportunityId") or opp_id),
+        "_subscription_id": subscription_id,
+    
+        # minimal fields some downstream logic may reference
+        "source": fresh_opp.get("source") or "KBB",
+        "isActive": bool(fresh_opp.get("isActive", True)),
+    
+        # mark that ADF arrived (cron guard)
+        "_kbb_adf_seen_at": now_iso,
+    
+        # Treat this as customer-initiated inbound so cadence can start cleanly
+        "checkedDict": {
+            "patti_already_contacted": False,
+            "last_msg_by": "customer",
+            "is_sales_contacted": False,
+        },
+    }
+    
+    # keep customer attached (emails live here)
+    if isinstance(customer, dict) and customer:
         opportunity["customer"] = customer
-
-    # safety defaults processNewData expects
-    opportunity.setdefault("messages", [])
-    opportunity.setdefault("checkedDict", {
-        "patti_already_contacted": False,
-        "last_msg_by": None,
-        "is_sales_contacted": False,
-    })
-    opportunity.setdefault("isActive", True)
-    opportunity.setdefault("status", opportunity.get("status") or "Active")
-    opportunity.setdefault("subStatus", opportunity.get("subStatus") or opportunity.get("substatus") or "New")
-    opportunity.setdefault("upType", opportunity.get("upType") or opportunity.get("uptype") or "Campaign")
-
-    # mark that ADF arrived (lets cron guard against accidental blasts)
-    opportunity["_kbb_adf_seen_at"] = now_iso
-
-    # Treat this as customer-initiated inbound so cadence can start cleanly
-    checked = opportunity.setdefault("checkedDict", {})
-    checked.setdefault("last_msg_by", "customer")
+    
 
     
     # -----------------------------
@@ -369,11 +366,21 @@ def process_kbb_adf_notification(inbound: dict) -> None:
         "is_active": True,
         "follow_up_at": follow_up_at,
         "mode": (opportunity.get("_kbb_state") or {}).get("mode", ""),
-        "opp_json": _safe_json_dumps(opportunity),
     })
     
     # Attach Airtable record id so future save_opp() calls work
     opportunity["_airtable_rec_id"] = rec.get("id")
+
+    # Persist KBB offer context to Airtable (own column)
+    try:
+        rec_id = opportunity.get("_airtable_rec_id")
+        if rec_id and opportunity.get("_kbb_offer_ctx"):
+            patch_by_id(rec_id, {
+                "kbb_offer_ctx": json.dumps(opportunity["_kbb_offer_ctx"], ensure_ascii=False)
+            })
+    except Exception as e:
+        log.warning("KBB ADF: failed to persist kbb_offer_ctx opp=%s err=%s", opp_id, e)
+
     
     log.info(
         "KBB ADF: upserted Airtable opp=%s rec_id=%s follow_up_at=%s is_active=%s",
