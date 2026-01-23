@@ -41,7 +41,17 @@ DEFAULT_SUBSCRIPTION_ID = os.getenv("DEFAULT_SUBSCRIPTION_ID")  # set this to Tu
 # --- Provider template comment extraction (for CARFAX / Cars.com style lead emails) ---
 
 _PROVIDER_TEMPLATE_HINT_RE = re.compile(
-    r"(?is)\bNEW\s+CUSTOMER\s+LEAD\s+FOR\b|\bLead\s*ID\s*:\b|\bYear/Make/Model\s*:\b|\bVIN\s*:\b|\bStock\s*:\b|\bPrice\s*:\b"
+    r"(?is)"
+    r"\bNEW\s+CUSTOMER\s+LEAD\s+FOR\b|"
+    r"\bLead\s*ID\s*:\b|"
+    r"\bYear/Make/Model\s*:\b|"
+    r"\bVIN\s*:\b|"
+    r"\bStock\s*:\b|"
+    r"\bPrice\s*:\b|"
+    r"\bApollo\s+Website\s+Lead\b|"
+    r"\bType\s+Of\s+Lead\s*:\b|"
+    r"\bContact\s+Information\s*:\b|"
+    r"\bInterested\s+In\s*:\b"
 )
 
 _CUSTOMER_COMMENT_RE = re.compile(
