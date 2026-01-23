@@ -4,8 +4,7 @@ from datetime import datetime, timezone
 
 from outlook_email import send_email_via_outlook
 from fortellis import send_opportunity_email_activity, complete_send_email_activity
-
-from airtable_store import find_by_opp_id, opp_from_record, save_opp  # ✅ add
+from airtable_store import find_by_opp_id, opp_from_record, save_opp, is_opp_suppressed
 
 log = logging.getLogger("patti.mailer")
 
@@ -58,9 +57,21 @@ def send_patti_email(
     cc_addrs=None,
     reply_to_activity_id=None,
 ):
-    cc_addrs = cc_addrs or []
-    log.info("📬 send_patti_email EMAIL_MODE=%s opp=%s to=%s subject=%s", EMAIL_MODE, opp_id, to_addr, subject)
+    log.info("📬 send_patti_email EMAIL_MODE=%s opp=%s to=%s subject=%s",
+             EMAIL_MODE, opp_id, to_addr, subject)
 
+    # ⛔ Compliance kill switch (centralized)
+    try:
+        suppressed, reason = is_opp_suppressed(opp_id)
+        if suppressed:
+            log.info("⛔ Suppressed opp=%s — skipping outbound send (%s)", opp_id, reason)
+            return False
+    except Exception as e:
+        # Recommended: fail-open so a transient Airtable issue doesn't stop all sending.
+        # If you prefer strict compliance over continuity, switch back to fail-closed.
+        log.warning("Compliance check failed opp=%s — proceeding (fail-open). err=%s", opp_id, e)
+
+    cc_addrs = cc_addrs or []
     sent_ok = False
 
     # --- CRM path ---
@@ -117,9 +128,7 @@ def send_patti_email(
         except Exception as e:
             log.warning("Failed to complete 'Send Email' activity opp=%s: %s", opp_id, e)
 
-    # ✅ Metrics hook (only once, only on success)
     if sent_ok:
         _bump_ai_send_metrics_in_airtable(opp_id)
 
     return sent_ok
-
