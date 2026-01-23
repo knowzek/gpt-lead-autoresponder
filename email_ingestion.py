@@ -379,6 +379,18 @@ def _extract_first_last_from_provider(body_text: str) -> tuple[str, str]:
             first = first or m.group(1).strip()
             last = last or m.group(2).strip()
 
+    # 4) Cars.com fallback:
+    # Standalone "First Last" line immediately before an email address
+    if not first:
+        m = re.search(
+            r"(?is)\b([A-Z][a-zA-Z'’-]+)\s+([A-Z][a-zA-Z'’-]+)\s*(?:\r?\n|\s)+\s*[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b",
+            t,
+        )
+        if m:
+            first = m.group(1).strip()
+            last = m.group(2).strip()
+
+
     first = _clean_first_name(first)
     last = (last or "").strip()
     if last.isupper():
