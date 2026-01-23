@@ -3,7 +3,6 @@ import os, json, uuid
 from datetime import datetime, timedelta, timezone
 import requests
 import hashlib
-from datetime import datetime as _dt, timezone as _tz
 
 AIRTABLE_API_TOKEN = os.getenv("AIRTABLE_API_TOKEN")
 AIRTABLE_BASE_ID   = os.getenv("AIRTABLE_BASE_ID")
@@ -43,7 +42,7 @@ def _sha1(s: str) -> str:
     return hashlib.sha1(s.encode("utf-8")).hexdigest()
 
 def _iso_now() -> str:
-    return _dt.now(_tz.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 def _extract_compliance(opp: dict) -> dict:
     """
@@ -130,50 +129,41 @@ def _build_patti_snapshot(opp: dict) -> dict:
 
 def mark_unsubscribed(opp: dict, *, when_iso: str | None = None, reason: str = ""):
     when_iso = when_iso or _now_iso_utc()
+
     m = opp.setdefault("patti_metrics", {})
     m["unsubscribed"] = True
     m["unsubscribed_at"] = when_iso
     if reason:
         m["unsubscribed_reason"] = reason[:500]
 
-    opp["isActive"] = False  # stop future sends
+    # stop future sends + stop showing as due
+    opp["isActive"] = False
+    opp["followUP_date"] = None
+    opp["follow_up_at"] = None
+
+    # keep snapshot + columns aligned
+    opp["compliance"] = {
+        "suppressed": True,
+        "reason": reason or "unsubscribe",
+        "channel": "email",
+        "at": when_iso,
+    }
 
     return save_opp(opp, extra_fields={
         "Unsubscribed": True,
         "is_active": False,
+        "follow_up_at": None,          # ✅ important
+        "Suppressed": True,
+        "Suppression Reason": reason or "unsubscribe",
+        "Suppressed At": when_iso,
     })
-
-def mark_customer_reply(opp: dict, *, when_iso: str | None = None):
-    when_iso = when_iso or _now_iso_utc()
-
-    m = opp.setdefault("patti_metrics", {})
-
-    # First reply only gets set once
-    if not m.get("first_customer_reply_at"):
-        m["first_customer_reply_at"] = when_iso
-
-    # Last reply always updates
-    m["last_customer_reply_at"] = when_iso
-    m["customer_replied"] = True
-
-    save_opp(opp, extra_fields={
-        "Customer Replied": True,
-        "First Customer Reply At": m["first_customer_reply_at"],
-        "Last Customer Reply At": m["last_customer_reply_at"],
-    })
-
 
 def find_by_customer_email(email: str):
     email = (email or "").strip().lower()
     if not email:
         return None
 
-    # If you have a dedicated column like customer_email, use it (fastest):
-    # formula = f"LOWER({{customer_email}})='{email}'"
-
-    # Otherwise search inside opp_json (works fine for Phase 2):
-    safe = email.replace("'", "\\'")
-    formula = f"FIND('{safe}', LOWER({{opp_json}}))"
+    formula = f"LOWER({{customer_email}})='{email}'"
 
     params = {"filterByFormula": formula, "maxRecords": 1}
     data = _request("GET", BASE_URL, params=params)
@@ -330,7 +320,8 @@ def opp_from_record(rec: dict) -> dict:
 
     # ✅ NEW: load snapshot JSON instead of full opp_json blob
     opp = _safe_json_loads(fields.get("patti_json")) or {}
-
+    if not opp:
+        opp = _safe_json_loads(fields.get("opp_json")) or {}
     # Always attach Airtable record id
     opp["_airtable_rec_id"] = rec.get("id")
 
@@ -390,14 +381,14 @@ def opp_from_record(rec: dict) -> dict:
     if fields.get("Suppressed") is True:
         opp["compliance"] = {
             "suppressed": True,
-            "reason": fields.get("Suppression Reason") or "unsubscribe",
+            "reason": (fields.get("Suppression Reason") or "unsubscribe"),
             "channel": "email",
-            "at": fields.get("Suppressed At") or "",
+            "at": (fields.get("Suppressed At") or ""),
         }
     else:
-        # If snapshot already has compliance, keep it; otherwise default false.
         if not isinstance(opp.get("compliance"), dict):
             opp["compliance"] = {"suppressed": False}
+
 
     return opp
 
