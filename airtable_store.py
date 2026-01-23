@@ -325,6 +325,20 @@ def opp_from_record(rec: dict) -> dict:
     # Always attach Airtable record id
     opp["_airtable_rec_id"] = rec.get("id")
 
+    # ✅ Hydrate KBB offer memo from Airtable field (authoritative)
+    kbb_ctx_raw = fields.get("kbb_offer_ctx")
+    if kbb_ctx_raw:
+        try:
+            if isinstance(kbb_ctx_raw, str):
+                parsed = json.loads(kbb_ctx_raw)
+            else:
+                parsed = kbb_ctx_raw
+            if isinstance(parsed, dict):
+                opp["_kbb_offer_ctx"] = parsed
+        except Exception:
+            pass
+
+
     # --- Hydrate canonical opp id ---
     airtable_opp_id = (fields.get("opp_id") or fields.get("opportunityId") or fields.get("id") or "").strip()
     if airtable_opp_id:
