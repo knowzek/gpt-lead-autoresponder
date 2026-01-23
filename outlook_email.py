@@ -2,7 +2,7 @@ import re
 import os
 import logging
 import requests
-
+from airtable_store import is_opp_suppressed
 log = logging.getLogger("patti.outlook")
 
 OUTLOOK_SEND_ENDPOINT = os.getenv("OUTLOOK_SEND_ENDPOINT")
@@ -15,22 +15,53 @@ _EXTERNAL_SENDER_PREFIX_RE = re.compile(
     re.IGNORECASE,
 )
     
-def send_email_via_outlook(to_addr, subject, html_body, cc_addrs=None, headers=None, timeout=10):
+def send_email_via_outlook(
+    to_addr,
+    subject,
+    html_body,
+    *,
+    opp_id=None,
+    cc_addrs=None,
+    headers=None,
+    timeout=10,
+):
     if not OUTLOOK_SEND_ENDPOINT:
         log.error("OUTLOOK_SEND_ENDPOINT missing; cannot send Outlook email")
         return
 
-     # ✅ strip "[EXTERNAL SENDER]" from the FRONT of the subject, always
+    # ⛔ Compliance kill switch (covers bypasses)
+    try:
+        _opp_id = (opp_id or "").strip()
+        if not _opp_id:
+            hdrs = headers or {}
+            _opp_id = (hdrs.get("X-Opportunity-ID") or hdrs.get("x-opportunity-id") or "").strip()
+
+        if _opp_id:
+            suppressed, reason = is_opp_suppressed(_opp_id)
+            if suppressed:
+                log.info("⛔ Suppressed opp=%s — blocking Outlook send (%s)", _opp_id, reason)
+                return
+    except Exception as e:
+        log.warning(
+            "Compliance check failed in send_email_via_outlook — proceeding (fail-open). err=%s",
+            e,
+        )
+
+    headers = headers or {}
+    if opp_id and "X-Opportunity-ID" not in headers:
+    headers["X-Opportunity-ID"] = opp_id
+
+
+    # ✅ strip "[EXTERNAL SENDER]" from the FRONT of the subject, always
     if isinstance(subject, str) and subject.strip():
         subject = _EXTERNAL_SENDER_PREFIX_RE.sub("", subject).strip()
 
     cc_addrs = cc_addrs or []
-    # Outlook V2 is happiest with semicolon-delimited strings
     cc_str = "; ".join([c.strip() for c in cc_addrs if c and c.strip()])
 
     payload = {
         "to": to_addr,
-        "cc": cc_str,              # ✅ first-class
+        "cc": cc_str,
         "subject": subject,
         "html_body": html_body,
         "headers": headers or {},
@@ -43,4 +74,5 @@ def send_email_via_outlook(to_addr, subject, html_body, cc_addrs=None, headers=N
     except Exception as e:
         log.exception("Failed to send Outlook email to %s: %s", to_addr, e)
         raise
+
 
