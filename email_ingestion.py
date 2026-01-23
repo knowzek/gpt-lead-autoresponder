@@ -503,18 +503,36 @@ def process_lead_notification(inbound: dict) -> None:
     if rec:
         opportunity = opp_from_record(rec)
     else:
-        opp = get_opportunity(opp_id, tok, subscription_id)
         opp["_subscription_id"] = subscription_id
         now_iso = ts
         opp.setdefault("followUP_date", now_iso)
 
-        # ✅ Salesperson (best-effort) for bootstrap write
+        # ✅ Salesperson from Fortellis salesTeam (primary)
         salesperson = ""
-        sp = opp.get("salesperson") or opp.get("owner") or {}
-        if isinstance(sp, dict):
-            salesperson = (sp.get("name") or sp.get("fullName") or "").strip()
-        elif isinstance(sp, str):
-            salesperson = sp.strip()
+        try:
+            team = opp.get("salesTeam") or []
+            if isinstance(team, dict):
+                team = [team]
+        
+            primary = None
+            for m in team:
+                if not isinstance(m, dict):
+                    continue
+                if m.get("isPrimary") is True or m.get("isPositionPrimary") is True:
+                    primary = m
+                    break
+        
+            # fallback: first team member
+            if primary is None and team:
+                primary = team[0] if isinstance(team[0], dict) else None
+        
+            if primary:
+                fn = (primary.get("firstName") or "").strip()
+                ln = (primary.get("lastName") or "").strip()
+                salesperson = (f"{fn} {ln}").strip()
+        except Exception:
+            salesperson = ""
+
 
         log.info(
             "bootstrap upsert opp=%s email=%r first=%r last=%r phone=%r source=%r salesperson=%r",
