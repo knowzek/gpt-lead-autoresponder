@@ -77,27 +77,23 @@ def get_kbb_offer_context_simple(opportunity: dict) -> dict:
 
     opportunity["_kbb_offer_ctx"] = found
 
-    # ✅ Persist Patti-only memo back into Airtable so it's available next run
+    # ✅ Persist KBB memo into its own Airtable column (no opp_json / no patti_json changes)
     try:
-        from airtable_store import save_opp
-        import json
-    
-        opp_id = opportunity.get("opportunityId") or opportunity.get("id")
-        if opp_id and found:
-            save_opp(
-                opportunity,
-                extra_fields={
-                    "opp_id": opp_id,
-                    "subscription_id": opportunity.get("_subscription_id") or "",
-                    "opp_json": json.dumps(opportunity, ensure_ascii=False),
-                },
-            )
+        from airtable_store import patch_by_id
+
+        rec_id = opportunity.get("_airtable_rec_id")
+        if rec_id and found:
+            patch_by_id(rec_id, {
+                "kbb_offer_ctx": json.dumps(found, ensure_ascii=False),
+            })
     except Exception as e:
-        # don't break the run if Airtable has an issue
         import logging
-        logging.getLogger("patti.kbb").warning("Failed to persist _kbb_offer_ctx for opp=%s err=%s",
-                                              opportunity.get("opportunityId") or opportunity.get("id"),
-                                              e)
+        logging.getLogger("patti.kbb").warning(
+            "Failed to persist kbb_offer_ctx opp=%s err=%s",
+            opportunity.get("opportunityId") or opportunity.get("id"),
+            e,
+        )
+
     
     return found
 
