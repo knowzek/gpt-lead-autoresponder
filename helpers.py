@@ -2,8 +2,6 @@ import json, os
 import re, html as _html
 import sys
 import xml.etree.ElementTree as ET
-from datetime import datetime
-
 import urllib.parse, base64
 from datetime import datetime, timedelta, timezone
 
@@ -81,11 +79,16 @@ def get_kbb_offer_context_simple(opportunity: dict) -> dict:
     try:
         from airtable_store import patch_by_id
 
+        # Avoid repeat PATCHes in the same run
+        if opportunity.get("_kbb_offer_ctx_saved") == found:
+            return found
+
         rec_id = opportunity.get("_airtable_rec_id")
         if rec_id and found:
             patch_by_id(rec_id, {
                 "kbb_offer_ctx": json.dumps(found, ensure_ascii=False),
             })
+            opportunity["_kbb_offer_ctx_saved"] = dict(found)
     except Exception as e:
         import logging
         logging.getLogger("patti.kbb").warning(
@@ -93,8 +96,6 @@ def get_kbb_offer_context_simple(opportunity: dict) -> dict:
             opportunity.get("opportunityId") or opportunity.get("id"),
             e,
         )
-
-    
     return found
 
 
