@@ -606,11 +606,19 @@ def process_lead_notification(inbound: dict) -> None:
             log.info("lead_notification triage running opp=%s shopper=%s", opp_id, shopper_email)
     
             triage_text = body_text or ""
+            log.info(
+                "TRIAGE DEBUG provider_hint=%s",
+                bool(_PROVIDER_TEMPLATE_HINT_RE.search(triage_text))
+            )
             triage = None  # ✅ ensure defined
     
             # Provider template? Only triage guest-written comment
             if _PROVIDER_TEMPLATE_HINT_RE.search(triage_text):
                 comment = _extract_customer_comment_from_provider(triage_text)
+                log.info(
+                    "TRIAGE DEBUG extracted_comment_len=%s",
+                    len(comment or "")
+                )
                 if comment:
                     triage_text = comment
                 else:
@@ -622,6 +630,15 @@ def process_lead_notification(inbound: dict) -> None:
     
             if triage is None:
                 if triage_text.strip():
+
+                    from patti_triage import _HUMAN_REVIEW_RE
+
+                    triage_input = triage_text or ""
+                    
+                    log.info("TRIAGE DEBUG using triage_text len=%s", len(triage_input))
+                    log.info("TRIAGE DEBUG input preview (first 400 chars): %r", triage_input[:400])
+                    log.info("TRIAGE DEBUG human_review_regex_match=%s", bool(_HUMAN_REVIEW_RE.search(triage_input)))
+
                     triage = classify_inbound_email(triage_text)
                 else:
                     triage = {
