@@ -22,7 +22,7 @@ from zoneinfo import ZoneInfo
 import uuid
 from airtable_store import (
     find_by_opp_id, query_view, acquire_lock, release_lock,
-    opp_from_record, save_opp
+    opp_from_record, save_opp, find_by_customer_email
 )
 
 from fortellis import (
