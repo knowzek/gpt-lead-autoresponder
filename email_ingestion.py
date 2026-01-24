@@ -1164,7 +1164,6 @@ def process_inbound_email(inbound: dict) -> None:
                     return
             
                 log.info("Triage EXPLICIT_OPTOUT KBB opp=%s - letting KBB brain handle", opp_id)
-            )
     
     except Exception as e:
         log.exception(
