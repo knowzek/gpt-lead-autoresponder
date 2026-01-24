@@ -547,7 +547,7 @@ def process_lead_notification(inbound: dict) -> None:
             "customer_email": shopper_email,
             "Customer First Name": first_name,
             "Customer Last Name": last_name,
-            "Phone": phone,
+            "customer_phone": phone,
             "Assigned Sales Rep": salesperson,
         })
 
@@ -574,7 +574,7 @@ def process_lead_notification(inbound: dict) -> None:
         "customer_email": shopper_email,
         "Customer First Name": first_name,
         "Customer Last Name": last_name,
-        "Phone": phone,
+        "customer_phone": phone,
     }
     
     save_opp(opportunity, extra_fields=extra)
