@@ -661,9 +661,31 @@ def process_lead_notification(inbound: dict) -> None:
                 return
     
             if classification == "EXPLICIT_OPTOUT":
-                log.info("lead_notification triage EXPLICIT_OPTOUT opp=%s - stopping", opp_id)
-                return
-    
+            log.info("lead_notification triage EXPLICIT_OPTOUT opp=%s - suppressing + stopping", opp_id)
+        
+            try:
+                mark_unsubscribed(opportunity, reason=reason or "Explicit opt-out")
+            except Exception as e:
+                log.warning("mark_unsubscribed failed opp=%s: %s", opp_id, e)
+        
+            # Optional: CRM comment (no escalation email)
+            try:
+                add_opportunity_comment(
+                    tok, subscription_id, opp_id,
+                    f"Customer opted out via email reply. Suppressed. Msg: {_clip(triage_text, 300)}"
+                )
+            except Exception:
+                pass
+        
+            # Important: clear any “due now” followup so it won’t keep surfacing
+            opportunity["followUP_date"] = None
+            try:
+                save_opp(opportunity)
+            except Exception:
+                pass
+        
+            return
+
     except Exception as e:
         log.exception("lead_notification triage failed opp=%s err=%s", opp_id, e)
 
@@ -1126,15 +1148,23 @@ def process_inbound_email(inbound: dict) -> None:
     
             if cls == "EXPLICIT_OPTOUT":
                 if not is_kbb:
-                    log.info(
-                        "Triage EXPLICIT_OPTOUT non-KBB opp=%s - stopping auto reply",
-                        opp_id,
-                    )
+                    log.info("Triage EXPLICIT_OPTOUT non-KBB opp=%s - suppressing + stopping", opp_id)
+            
+                    try:
+                        mark_unsubscribed(opportunity, reason=(triage.get("reason") or "Explicit opt-out"))
+                    except Exception as e:
+                        log.warning("mark_unsubscribed failed opp=%s: %s", opp_id, e)
+            
+                    opportunity["followUP_date"] = None
+                    try:
+                        save_opp(opportunity)
+                    except Exception:
+                        pass
+            
                     return
-                log.info(
-                    "Triage EXPLICIT_OPTOUT KBB opp=%s - letting KBB brain handle",
-                    opp_id,
-                )
+            
+                log.info("Triage EXPLICIT_OPTOUT KBB opp=%s - letting KBB brain handle", opp_id)
+            )
     
     except Exception as e:
         log.exception(
