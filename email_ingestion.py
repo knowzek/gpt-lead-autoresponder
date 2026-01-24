@@ -676,6 +676,17 @@ def process_lead_notification(inbound: dict) -> None:
                 "lead_notification triage classification=%s reason=%r opp=%s shopper=%s",
                 classification, reason[:220], opp_id, shopper_email
             )
+
+            if os.getenv("TRIAGE_ONLY", "0") == "1":
+                log.warning(
+                    "TRIAGE_ONLY enabled: would classify=%s reason=%r opp=%s shopper=%s — stopping before any Airtable/CRM/email actions",
+                    classification,
+                    reason[:220],
+                    opp_id,
+                    shopper_email,
+                )
+                return
+
     
             if classification == "HUMAN_REVIEW_REQUIRED":
                 triage_intended_handoff = True
@@ -741,8 +752,6 @@ def process_lead_notification(inbound: dict) -> None:
                     pass
 
                 return
-
-
 
     except Exception as e:
         log.exception("lead_notification triage failed opp=%s err=%s", opp_id, e)
