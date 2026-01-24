@@ -40,6 +40,7 @@ from fortellis import (
 from patti_common import _SCHED_ANY_RE, enforce_standard_schedule_sentence, EMAIL_RE
 from patti_common import fmt_local_human, normalize_patti_body, append_soft_schedule_sentence, rewrite_sched_cta_for_booked 
 from patti_triage import classify_inbound_email, handoff_to_human, should_triage
+from airtable_store import find_by_customer_email
 
 #from fortellis import get_vehicle_inventory_xml  
 from inventory_matcher import recommend_from_xml
@@ -2912,6 +2913,9 @@ def send_thread_reply_now(
 
             if cls == "EXPLICIT_OPTOUT":
                 log.info("✅ Triage EXPLICIT_OPTOUT — suppressing and blocking reply opp=%s", opportunityId)
+
+                opportunity.setdefault("patti", {})["skip"] = True
+                opportunity.setdefault("patti", {})["skip_reason"] = "explicit_opt_out"
             
                 try:
                     mark_unsubscribed(opportunity, reason=triage.get("reason") or "Explicit opt-out")
