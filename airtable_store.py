@@ -357,7 +357,7 @@ def opp_from_record(rec: dict) -> dict:
     if fields.get("customer_email"):
         opp["customer_email"] = fields.get("customer_email")
 
-    aph = (fields.get("Phone") or "").strip()
+    aph = (fields.get("customer_phone") or "").strip()
     if aph:
         opp["customer_phone"] = aph
 
