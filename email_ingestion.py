@@ -661,6 +661,9 @@ def process_lead_notification(inbound: dict) -> None:
                     log.info("TRIAGE DEBUG using triage_text len=%s", len(triage_input))
                     log.info("TRIAGE DEBUG input preview (first 400 chars): %r", triage_input[:400])
                     log.info("TRIAGE DEBUG human_review_regex_match=%s", bool(_HUMAN_REVIEW_RE.search(triage_input)))
+                    m = _HUMAN_REVIEW_RE.search(triage_input)
+                    log.info("TRIAGE DEBUG human_review_regex_match=%s match=%r", bool(m), (m.group(0) if m else None))
+
 
                     triage = classify_inbound_email(triage_text)
                 else:
