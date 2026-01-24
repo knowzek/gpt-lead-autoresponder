@@ -54,8 +54,32 @@ _PROVIDER_TEMPLATE_HINT_RE = re.compile(
 )
 
 _CUSTOMER_COMMENT_RE = re.compile(
-    r"(?is)\b(?:Additional\s+comments|Customer\s+comments?|Comments?|Message|Questions?)\s*:\s*(.+?)(?:\n{2,}|\Z)"
+    r"(?is)\b(?:Additional\s+comments|Customer\s+comments?|Comments?|Message|Questions?)\b"
+    r"(?:\s*[:\-]\s*|\s+)"          # colon/dash optional OR just whitespace
+    r"(.+?)"
+    r"(?=("
+        r"\bFirst\s+Name\b|"
+        r"\bLast\s+Name\b|"
+        r"\bEmail\b|"
+        r"\bPhone\b|"
+        r"\bTelephone\b|"
+        r"\bOfferAmount\b|"
+        r"\bStreet\b|"
+        r"\bCity\b|"
+        r"\bZip\b|"
+        r"\bType\s+Of\s+Lead\b|"
+        r"\bContact\s+Information\b|"
+        r"\bInterested\s+In\b|"
+        r"\bYear\b|"
+        r"\bMake\b|"
+        r"\bModel\b|"
+        r"\bVIN\b|"
+        r"\bStock\b|"
+        r"\bPrice\b|"
+        r"\Z"
+    r"))"
 )
+
 
 def _extract_customer_comment_from_provider(body_text: str) -> str:
     t = (body_text or "").strip()
