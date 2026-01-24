@@ -2909,6 +2909,35 @@ def send_thread_reply_now(
             triage = classify_inbound_email(customer_body)
 
             cls = (triage.get("classification") or "").strip().upper()
+
+            if cls == "EXPLICIT_OPTOUT":
+                log.info("✅ Triage EXPLICIT_OPTOUT — suppressing and blocking reply opp=%s", opportunityId)
+            
+                try:
+                    mark_unsubscribed(opportunity, reason=triage.get("reason") or "Explicit opt-out")
+                except Exception as e:
+                    log.warning("mark_unsubscribed failed opp=%s: %s", opportunityId, e)
+            
+                # Clear follow-up so it doesn't keep showing as due
+                opportunity["followUP_date"] = None
+                opportunity["isActive"] = False
+                p = opportunity.setdefault("patti", {})
+                if isinstance(p, dict):
+                    p["skip"] = True
+                    p["skip_reason"] = "explicit_opt_out"
+                    p["opted_out_at"] = inbound_ts or currDate_iso
+                
+                try:
+                    save_opp(opportunity)
+                except Exception:
+                    pass
+                    
+                return False, opportunity  # 🚫 stop: no reply, no appt logic, no handoff
+            
+            if cls == "NON_LEAD":
+                log.info("Triage NON_LEAD — ignoring opp=%s", opportunityId)
+                return False, opportunity
+
             if cls == "HUMAN_REVIEW_REQUIRED":
                 # Flag in-memory so we block any further replies in this run
                 opportunity["needs_human_review"] = True
