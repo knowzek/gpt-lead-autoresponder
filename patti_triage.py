@@ -287,11 +287,11 @@ _HUMAN_REVIEW_RE = re.compile(
     r"value\s+my\s+trade|"
     r"kbb\s+value|"
     r"trade\s+(?:value|offer|worth)|"
-    r"appraisal|carmax|carvana|"
+    r"appraisal|carmax|carvana"
 
     # Offer/Value: ONLY if it looks like a real number/value, not a template label like OfferAmount
-    r"|offer\s*(?:amount|price|value)\s*[:=]?\s*(?:\$\s*)?\d{2,}"
-    r"|\$\s*\d{2,}"
+    r"offer\s*(?:amount|price|value)\s*[:=]?\s*(?:\$\s*)?\d{2,}|"
+
 
     # Complaints / legal / anger / urgency
     r"|complaint|bbb|dmv|attorney|legal|lawsuit|"
