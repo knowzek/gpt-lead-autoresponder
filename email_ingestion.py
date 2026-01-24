@@ -418,8 +418,6 @@ def process_lead_notification(inbound: dict) -> None:
         subject[:120],
         (body_text or "")[:260],
     )
-
-
     phone = ""  # single source of truth
     
     sender = (inbound.get("from") or "").lower()
@@ -497,10 +495,12 @@ def process_lead_notification(inbound: dict) -> None:
         )
         return
 
+    salesperson = "our team"
     # Airtable bootstrap
     rec = find_by_opp_id(opp_id)
     if rec:
         opportunity = opp_from_record(rec)
+        salesperson = (opportunity.get("Assigned Sales Rep") or "").strip() or salesperson
     else:
         opp["_subscription_id"] = subscription_id
         now_iso = ts
@@ -531,7 +531,7 @@ def process_lead_notification(inbound: dict) -> None:
                 salesperson = (f"{fn} {ln}").strip()
         except Exception:
             salesperson = ""
-
+        salesperson = salesperson or "our team"
 
         log.info(
             "bootstrap upsert opp=%s email=%r first=%r last=%r phone=%r source=%r salesperson=%r",
@@ -1030,11 +1030,14 @@ def process_inbound_email(inbound: dict) -> None:
         if not opp_id:
             log.warning("No active opp found in Fortellis for sender=%s (sub=%s)", sender_raw, subscription_id)
             return
+            
+    salesperson = "our team"
     
     # Now try Airtable
     rec = find_by_opp_id(opp_id)
     if rec:
         opportunity = opp_from_record(rec)
+        salesperson = (opportunity.get("Assigned Sales Rep") or "").strip() or salesperson
     else:
         # Bootstrap from Fortellis by opp_id, then create Airtable lead
         opp = get_opportunity(opp_id, tok, subscription_id)
