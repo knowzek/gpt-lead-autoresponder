@@ -94,16 +94,15 @@ def _extract_customer_comment_from_provider(body_text: str) -> str:
 
     # Stop if the template starts repeating the contact block
     comment = re.split(
-        r"(?im)^\s*(?:"
+        r"(?im)\b(?:"
         r"Here's how to contact this customer|"
         r"First Name|Last Name|Email|Phone|Telephone|"
         r"Date Submitted|"
         r"INTERESTED IN|"
         r"Year\b|Make\b|Model\b|OfferAmount\b|Street\b|City\b|Zip\b"
-        r")\s*:",
+        r")\b",
         comment
     )[0].strip()
-
 
     return comment
 
