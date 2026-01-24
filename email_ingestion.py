@@ -638,10 +638,10 @@ def process_lead_notification(inbound: dict) -> None:
             # Provider template? Only triage guest-written comment
             if _PROVIDER_TEMPLATE_HINT_RE.search(triage_text):
                 comment = _extract_customer_comment_from_provider(triage_text)
-                log.info(
-                    "TRIAGE DEBUG extracted_comment_len=%s",
-                    len(comment or "")
-                )
+                
+                log.info("TRIAGE DEBUG extracted_comment_len=%s", len(comment or ""))
+                log.info("TRIAGE DEBUG extracted_comment_preview=%r", (comment or "")[:220])
+                
                 if comment:
                     triage_text = comment
                 else:
