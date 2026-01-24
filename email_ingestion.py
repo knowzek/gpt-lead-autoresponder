@@ -663,33 +663,37 @@ def process_lead_notification(inbound: dict) -> None:
             if classification == "EXPLICIT_OPTOUT":
                 log.info(
                     "lead_notification triage EXPLICIT_OPTOUT opp=%s - suppressing + stopping",
-                    opp_id,
+                    opp_id
                 )
 
+                # Mark suppressed/unsubscribed in Airtable + opp_json
                 try:
                     mark_unsubscribed(opportunity, reason=reason or "Explicit opt-out")
                 except Exception as e:
                     log.warning("mark_unsubscribed failed opp=%s: %s", opp_id, e)
 
-                # Optional: CRM comment (no escalation email)
+                # Optional: CRM note (NO escalation)
                 try:
                     add_opportunity_comment(
                         tok,
                         subscription_id,
                         opp_id,
-                        f"Customer opted out via email reply. Suppressed. Msg: {_clip(triage_text, 300)}",
+                        _clip(
+                            f"Customer opted out via email reply. Suppressed.\n"
+                            f"Msg: {_clip(triage_text, 300)}",
+                            1800,
+                        )
                     )
                 except Exception:
                     pass
 
-                # Important: clear any “due now” followup so it won’t keep surfacing
+                # Clear “due now” so it stops surfacing in cron/views
                 opportunity["followUP_date"] = None
-                opportunity["isActive"] = False
-                p = opportunity.setdefault("patti", {})
-                if isinstance(p, dict):
-                    p["skip"] = True
-                    p["skip_reason"] = "explicit_opt_out"
-                    p["opted_out_at"] = ts or _now_iso()
+
+                # Make extra sure nothing else continues
+                opportunity["needs_human_review"] = False
+                opportunity.setdefault("patti", {})["skip"] = True
+                opportunity.setdefault("patti", {})["skip_reason"] = "explicit_opt_out"
 
                 try:
                     save_opp(opportunity)
@@ -697,6 +701,7 @@ def process_lead_notification(inbound: dict) -> None:
                     pass
 
                 return
+
 
 
     except Exception as e:
