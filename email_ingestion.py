@@ -127,7 +127,7 @@ _PROVIDER_BOILERPLATE_LINES_RE = re.compile(
 def _extract_customer_comment_from_provider(body_text: str) -> str:
     if not body_text:
         return ""
-
+        
     kept = []
     for line in body_text.splitlines():
         line = line.strip()
