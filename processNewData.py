@@ -1016,14 +1016,15 @@ def processHit(hit):
         )
         return
 
-    # ✅ Build the working opportunity FIRST
+    # ✅ Build the working opportunity first (so we can safely reference it)
     opportunity = opp_from_record(hit)
 
-    # Sanity: ensure opportunityId is present
+    # Sanity: ensure ids
     opportunity["opportunityId"] = opportunity.get("opportunityId") or opportunityId
     opportunity["id"] = opportunity.get("id") or opportunity["opportunityId"]
 
     # --- HARD STOP: Needs Human Review ---
+    # (covers cases where the Airtable checkbox exists AND cases where opp_from_record hydrated needs_human_review)
     needs_hr = bool(fields.get("Needs Human Review")) or bool(opportunity.get("needs_human_review"))
     if needs_hr:
         log.warning("Skipping opp %s: Needs Human Review is checked", opportunityId)
@@ -1035,7 +1036,7 @@ def processHit(hit):
         wJson(opportunity, f"jsons/process/{opportunityId}.json")
         return
 
-    # Keep Airtable fields handy for downstream display/debug (optional)
+    # (optional debug)
     opportunity["_airtable_fields"] = fields
 
     # ✅ IMPORTANT: processNewData expects followUP_date and isActive on the opp object
