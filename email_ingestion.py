@@ -53,6 +53,7 @@ _PROVIDER_TEMPLATE_HINT_RE = re.compile(
     r"\bInterested\s+In\s*:\b"
 )
 
+"""
 _CUSTOMER_COMMENT_RE = re.compile(
     r"(?is)\b(?:Additional\s+comments|Customer\s+comments?|Comments?|Message|Questions?)\b"
     r"(?:\s*[:\-]\s*|\s+)"          # colon/dash optional OR just whitespace
@@ -80,7 +81,6 @@ _CUSTOMER_COMMENT_RE = re.compile(
     r"))"
 )
 
-
 def _extract_customer_comment_from_provider(body_text: str) -> str:
     t = (body_text or "").strip()
     if not t:
@@ -105,6 +105,39 @@ def _extract_customer_comment_from_provider(body_text: str) -> str:
     )[0].strip()
 
     return comment
+"""
+
+_PROVIDER_BOILERPLATE_LINES_RE = re.compile(
+    r"(?im)^\s*(?:"
+    r"new customer lead for|"
+    r"here's how to contact this customer|"
+    r"first name|last name|email|e-?mail|phone|telephone|"
+    r"date submitted|lead id|listing|price|condition|stock|vin|"
+    r"year/make/model|year\b|make\b|model\b|"
+    r"interested in\b|"
+    r"type of lead\b|"
+    r"contact information\b|"
+    r"offeramount\b|street\b|city\b|zip\b|"
+    r"lead provided by|"
+    r"for more information about your carfax account"
+    r").*$"
+)
+
+def _extract_customer_comment_from_provider(body_text: str) -> str:
+    if not body_text:
+        return ""
+
+    kept = []
+    for line in body_text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if _PROVIDER_BOILERPLATE_LINES_RE.search(line):
+            continue
+        kept.append(line)
+
+    return " ".join(kept).strip()
+
 
 
 def _resolve_subscription_id(inbound: dict, headers: dict | None) -> str | None:
