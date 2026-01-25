@@ -278,6 +278,7 @@ def query_view(view: str, max_records: int = 200) -> list[dict]:
         offset = data.get("offset")
         if not offset:
             return out
+"""
 
 def acquire_lock(rec_id: str, lock_minutes: int = 10) -> str | None:
     """
@@ -308,6 +309,64 @@ def release_lock(rec_id: str, token: str):
     if rec.get("fields", {}).get("lock_token") != token:
         return
     patch_by_id(rec_id, {"lock_until": None, "lock_token": ""})
+
+"""
+
+def acquire_lock(rec_or_id, lock_minutes: int = 10) -> str | None:
+    """
+    Best-effort lease lock.
+    Accepts either:
+      - Airtable record dict (preferred: saves 1 GET)
+      - Airtable record id string (falls back to 1 GET)
+    """
+    # Case 1: caller passed the whole record (preferred)
+    if isinstance(rec_or_id, dict):
+        rec = rec_or_id
+        rec_id = rec.get("id")
+        f = rec.get("fields", {}) or {}
+        if not rec_id:
+            return None
+    else:
+        # Case 2: caller passed rec_id string (fallback: requires 1 GET)
+        rec_id = str(rec_or_id or "").strip()
+        if not rec_id:
+            return None
+        rec = _request("GET", f"{BASE_URL}/{rec_id}")
+        f = rec.get("fields", {}) or {}
+
+    now = _now_utc()
+
+    lock_until = f.get("lock_until")
+    if lock_until:
+        try:
+            lu = datetime.fromisoformat(str(lock_until).replace("Z", "+00:00"))
+            if lu > now:
+                return None
+        except Exception:
+            pass
+
+    token = uuid.uuid4().hex
+    patch_by_id(rec_id, {
+        "lock_until": _iso(now + timedelta(minutes=lock_minutes)),
+        "lock_token": token,
+    })
+    return token
+
+
+def release_lock(rec_id: str, token: str):
+    """
+    Release without a GET (saves 1 GET per record).
+    This is *best effort* — if another worker stole the lock, it may clear theirs.
+    If you truly need strict safety, keep the GET+token-check version.
+    """
+    rec_id = (rec_id or "").strip()
+    token = (token or "").strip()
+    if not rec_id or not token:
+        return
+
+    patch_by_id(rec_id, {"lock_until": None, "lock_token": ""})
+
+
 
 def opp_from_record(rec: dict) -> dict:
     """
