@@ -384,6 +384,15 @@ def opp_from_record(rec: dict) -> dict:
     # Always attach Airtable record id
     opp["_airtable_rec_id"] = rec.get("id")
 
+    # --- Hydrate Assigned Sales Rep from Airtable column ---
+    asr = fields.get("Assigned Sales Rep")
+    if asr:
+        if isinstance(asr, list):
+            asr = asr[0] if asr else ""
+        if isinstance(asr, dict):
+            asr = asr.get("name") or asr.get("value") or ""
+        opp["Assigned Sales Rep"] = str(asr).strip()
+
     # ✅ Hydrate KBB offer memo from Airtable field (authoritative)
     kbb_ctx_raw = fields.get("kbb_offer_ctx")
     if kbb_ctx_raw:
