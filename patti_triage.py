@@ -16,7 +16,6 @@ from fortellis import schedule_activity, add_opportunity_comment
 
 from patti_common import EMAIL_RE, PHONE_RE
 
-
 log = logging.getLogger("patti.triage")
 
 # -----------------------
