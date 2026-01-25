@@ -856,6 +856,12 @@ def process_lead_notification(inbound: dict) -> None:
         log.warning("Blocking first-touch: human review lock opp=%s", opp_id)
         return
 
+    log.info(
+        "lead_notification resolved salesperson=%r (airtable=%r) opp=%s",
+        salesperson,
+        (opportunity.get("Assigned Sales Rep") if isinstance(opportunity, dict) else None),
+        opp_id,
+    )
     sent_ok = send_first_touch_email(
         opportunity=opportunity,
         fresh_opp=fresh_opp,
