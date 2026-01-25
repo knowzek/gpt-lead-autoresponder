@@ -281,9 +281,6 @@ def query_view(view: str, max_records: int = 200) -> list[dict]:
 """
 
 def acquire_lock(rec_id: str, lock_minutes: int = 10) -> str | None:
-    """
-    Best-effort lease lock (prevents overlapping cron runs from double-sending).
-    """
     rec = _request("GET", f"{BASE_URL}/{rec_id}")
     f = rec.get("fields", {})
     now = _now_utc()
