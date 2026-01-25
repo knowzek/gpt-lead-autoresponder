@@ -110,6 +110,7 @@ def _extract_customer_comment_from_provider(body_text: str) -> str:
 _PROVIDER_BOILERPLATE_LINES_RE = re.compile(
     r"(?im)^\s*(?:"
     r"new customer lead for|"
+    r".+?\s+is\s+interested\s+in\s+one\s+of\s+your\s+carfax\s+car\s+listings|"
     r"here's how to contact this customer|"
     r"first name|last name|email|e-?mail|phone|telephone|"
     r"date submitted|lead id|listing|price|condition|stock|vin|"
