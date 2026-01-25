@@ -2556,6 +2556,12 @@ def send_first_touch_email(
             opportunity.get("opportunityId") or opportunity.get("id")
         )
         return False
+        
+    log.info("send_first_touch_email inputs: opp=%s salesperson=%r customer=%r",
+         opportunity.get("opportunityId") or opportunityId,
+         salesperson,
+         customer_email)
+
 
     # --- DEDUPE: don't send first-touch again if we've already welcomed this email recently (same rooftop)
     if customer_email and _already_sent_first_touch_recently(
