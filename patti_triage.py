@@ -388,7 +388,7 @@ Rules:
 - trade-in value disputes or negotiation (numbers/offer/value/payoff) → HUMAN_REVIEW_REQUIRED
 - simple trade-in interest (no numbers/value) → AUTO_REPLY_SAFE
 - angry/urgent/emotional → HUMAN_REVIEW_REQUIRED
-- multiple questions or unclear intent → HUMAN_REVIEW_REQUIRED
+- unclear intent → AUTO_REPLY_SAFE
 - stop contact → EXPLICIT_OPTOUT
 - auto-reply/system noise → NON_LEAD
 - simple availability/basic info/confirmation → AUTO_REPLY_SAFE
@@ -425,6 +425,13 @@ Email:
             cls = "HUMAN_REVIEW_REQUIRED"
             reason = reason or "Invalid classifier output; defaulted to human review."
 
+        # Prevent NON_LEAD on short content; treat as safe lead engagement
+        if cls == "NON_LEAD" and len(t_short) < 120:
+            log.info("TRIAGE DEBUG coerced NON_LEAD->AUTO_REPLY_SAFE due to short length (%s chars)", len(t_short))
+            cls = "AUTO_REPLY_SAFE"
+            reason = (reason or "short") + " → coerced to AUTO_REPLY_SAFE (short text is not a non-lead)."
+            conf = max(conf, 0.70)
+
         # confidence safety valve
         if cls == "AUTO_REPLY_SAFE" and conf < TRIAGE_MIN_CONF:
             return {
@@ -434,6 +441,7 @@ Email:
             }
 
         return {"classification": cls, "confidence": conf, "reason": reason or "Classified by model."}
+
 
     except Exception as e:
         log.exception("Classifier failed: %s", e)
