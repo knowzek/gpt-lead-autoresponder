@@ -1254,23 +1254,20 @@ def process_inbound_email(inbound: dict) -> None:
                 return
     
             if cls == "EXPLICIT_OPTOUT":
-                if not is_kbb:
-                    log.info("Triage EXPLICIT_OPTOUT non-KBB opp=%s - suppressing + stopping", opp_id)
-            
-                    try:
-                        mark_unsubscribed(opportunity, reason=(triage.get("reason") or "Explicit opt-out"))
-                    except Exception as e:
-                        log.warning("mark_unsubscribed failed opp=%s: %s", opp_id, e)
-            
-                    opportunity["followUP_date"] = None
-                    try:
-                        save_opp(opportunity)
-                    except Exception:
-                        pass
-            
-                    return
-            
-                log.info("Triage EXPLICIT_OPTOUT KBB opp=%s - letting KBB brain handle", opp_id)
+                log.info("Triage EXPLICIT_OPTOUT non-KBB opp=%s - suppressing + stopping", opp_id)
+        
+                try:
+                    mark_unsubscribed(opportunity, reason=(triage.get("reason") or "Explicit opt-out"))
+                except Exception as e:
+                    log.warning("mark_unsubscribed failed opp=%s: %s", opp_id, e)
+        
+                opportunity["followUP_date"] = None
+                try:
+                    save_opp(opportunity)
+                except Exception:
+                    pass
+        
+                return
     
     except Exception as e:
         log.exception(
