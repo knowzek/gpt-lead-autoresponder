@@ -70,6 +70,14 @@ def send_email_via_outlook(
     }
 
     log.info("OUTLOOK endpoint=%s", (OUTLOOK_SEND_ENDPOINT or "")[-20:])
+    log.info(
+        "MAILER webhook endpoint_suffix=%s to=%s cc=%r subject=%r",
+        (OUTLOOK_SEND_ENDPOINT or "")[-24:],
+        to_addr,
+        cc_str,
+        subject,
+    )
+
     resp = requests.post(OUTLOOK_SEND_ENDPOINT, json=payload, timeout=timeout)
     resp.raise_for_status()
     log.info("Sent Outlook email to %s (cc=%s) via Power Automate", to_addr, cc_str)
