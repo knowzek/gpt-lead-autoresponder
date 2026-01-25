@@ -1001,15 +1001,12 @@ def processHit(hit):
     currDate = _dt.now(_tz.utc)
     currDate_iso = currDate.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # remove later
-    global already_processed
-
     inquiry_text = None  # ensure defined
 
     # Airtable mode: hit is an Airtable record
     fields = (hit.get("fields") or {})
     opportunityId = fields.get("opp_id")  # canonical
-    # in processHit(), replace the warning block with:
+
     if not opportunityId:
         log.warning(
             "Skipping Airtable record missing opp_id rec_id=%s fields_keys=%s fields=%r",
@@ -1019,19 +1016,29 @@ def processHit(hit):
         )
         return
 
-    
-    # ✅ Canonical: build the working opportunity from Airtable snapshot + columns
+    # ✅ Build the working opportunity FIRST
     opportunity = opp_from_record(hit)
 
     # Sanity: ensure opportunityId is present
     opportunity["opportunityId"] = opportunity.get("opportunityId") or opportunityId
     opportunity["id"] = opportunity.get("id") or opportunity["opportunityId"]
 
+    # --- HARD STOP: Needs Human Review ---
+    needs_hr = bool(fields.get("Needs Human Review")) or bool(opportunity.get("needs_human_review"))
+    if needs_hr:
+        log.warning("Skipping opp %s: Needs Human Review is checked", opportunityId)
+
+        # Optional: stop it from re-appearing in Due Now if your view uses follow_up_at
+        if not OFFLINE_MODE:
+            airtable_save(opportunity, extra_fields={"follow_up_at": None})
+
+        wJson(opportunity, f"jsons/process/{opportunityId}.json")
+        return
+
     # Keep Airtable fields handy for downstream display/debug (optional)
     opportunity["_airtable_fields"] = fields
 
     # ✅ IMPORTANT: processNewData expects followUP_date and isActive on the opp object
-    # (save_opp() will mirror back to Airtable columns)
     if fields.get("follow_up_at") and not opportunity.get("followUP_date"):
         opportunity["followUP_date"] = fields.get("follow_up_at")
 
@@ -1048,12 +1055,10 @@ def processHit(hit):
     if fields.get("Customer Last Name") and not opportunity.get("customer_last_name"):
         opportunity["customer_last_name"] = (fields.get("Customer Last Name") or "").strip()
 
-    # If your code expects a customer dict sometimes:
     if opportunity.get("customer_email") and not isinstance(opportunity.get("customer"), dict):
         opportunity["customer"] = {"emails": [{"address": opportunity["customer_email"]}]}
 
-
-    if not opportunity.get('isActive', True):
+    if not opportunity.get("isActive", True):
         print("pass...")
         return
 
