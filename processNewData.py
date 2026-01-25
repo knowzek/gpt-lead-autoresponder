@@ -3225,7 +3225,7 @@ if __name__ == "__main__":
             log.warning("TEST_OPPORTUNITY_ID %s not found in Airtable; exiting.", test_opp_id)
         else:
             rec_id = rec.get("id")  # Airtable rec id (recXXXX...)
-            token = acquire_lock(rec_id, lock_minutes=10)
+            token = acquire_lock(rec, lock_minutes=10)
             if not token:
                 log.warning("Could not acquire lock for test record %s; exiting.", rec_id)
             else:
@@ -3252,7 +3252,7 @@ if __name__ == "__main__":
                     log.warning("Skipping Airtable item with no record id: %r", rec)
                     continue
 
-                token = acquire_lock(rec_id, lock_minutes=10)
+                token = acquire_lock(rec, lock_minutes=10)
                 if not token:
                     continue
 
