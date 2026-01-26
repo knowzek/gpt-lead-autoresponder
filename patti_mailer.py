@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from outlook_email import send_email_via_outlook
 from fortellis import send_opportunity_email_activity, complete_send_email_activity
-from airtable_store import find_by_opp_id, opp_from_record, save_opp, is_opp_suppressed
+from airtable_store import find_by_opp_id, opp_from_record, save_opp, is_opp_suppressed, patch_by_id
 
 log = logging.getLogger("patti.mailer")
 
@@ -14,34 +14,25 @@ EMAIL_MODE = os.getenv("EMAIL_MODE", "outlook")  # "crm" or "outlook"
 def _now_iso_utc() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-
 def _bump_ai_send_metrics_in_airtable(opp_id: str) -> None:
-    """
-    After a successful outbound send, increment AI messages + timestamps in Airtable.
-    Non-blocking.
-    """
     try:
         rec = find_by_opp_id(opp_id)
         if not rec:
             return
 
-        opp = opp_from_record(rec)
-        m = opp.setdefault("patti_metrics", {})
+        f = rec.get("fields", {}) or {}
+        current = int(f.get("AI Messages Sent") or 0)
 
         when_iso = _now_iso_utc()
-        m["ai_messages_sent"] = int(m.get("ai_messages_sent") or 0) + 1
-        m.setdefault("ai_first_message_sent_at", when_iso)
-        m["last_ai_message_at"] = when_iso
 
-        # ⚠️ Must match your Airtable column names exactly:
-        save_opp(opp, extra_fields={
-            "AI Messages Sent": m["ai_messages_sent"],
-            "AI First Message Sent At": m["ai_first_message_sent_at"],
-            "Last AI Message At": m["last_ai_message_at"],
+        patch_by_id(rec["id"], {
+            "AI Messages Sent": current + 1,
+            "AI First Message Sent At": f.get("AI First Message Sent At") or when_iso,
+            "Last AI Message At": when_iso,
         })
 
     except Exception as e:
-        log.warning("AI metrics update failed (non-blocking) opp=%s err=%s", opp_id, str(e)[:200])
+        log.warning("AI metrics update failed (non-blocking) opp=%s err=%s", opp_id, str(e)[:500])
 
 
 def send_patti_email(
