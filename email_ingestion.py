@@ -489,6 +489,19 @@ def process_lead_notification(inbound: dict) -> None:
     sender = (inbound.get("from") or "").lower()
     is_cars = ("cars.com" in sender) or ("salesleads@cars.com" in sender) or ("you have a new lead from cars.com" in body_text.lower())
     log.info("lead_notification is_cars=%s sender=%r", is_cars, sender)
+
+    # ✅ scalable provider-template flag (metadata first, regex fallback)
+    source = (inbound.get("source") or "").lower().strip()
+    provider_template = (
+        is_cars
+        or source in {"cars.com", "carfax", "autotrader", "apollo"}
+        or sender.endswith("@cars.com")
+        or sender.endswith("@carfax.com")
+        or bool(_PROVIDER_TEMPLATE_HINT_RE.search(body_text or ""))
+    )
+    
+    log.info("TRIAGE DEBUG provider_template=%s source=%r sender=%r", provider_template, source, sender)
+
     
     if is_cars:
         log.info(
@@ -679,12 +692,12 @@ def process_lead_notification(inbound: dict) -> None:
             triage = None  # ✅ ensure defined
     
             # Provider template? Only triage guest-written comment
-            if _PROVIDER_TEMPLATE_HINT_RE.search(triage_text):
+            if provider_template:
                 comment = _extract_customer_comment_from_provider(triage_text)
-                
+            
                 log.info("TRIAGE DEBUG extracted_comment_len=%s", len(comment or ""))
                 log.info("TRIAGE DEBUG extracted_comment_preview=%r", (comment or "")[:220])
-                
+            
                 if comment:
                     triage_text = comment
                 else:
@@ -693,7 +706,7 @@ def process_lead_notification(inbound: dict) -> None:
                         "reason": "Provider lead template with no customer-written comments"
                     }
                     triage_text = ""  # ✅ no GPT call
-    
+                
             if triage is None:
                 if triage_text.strip():
 
@@ -708,7 +721,8 @@ def process_lead_notification(inbound: dict) -> None:
                     log.info("TRIAGE DEBUG human_review_regex_match=%s match=%r", bool(m), (m.group(0) if m else None))
 
 
-                    triage = classify_inbound_email(triage_text)
+                    triage = classify_inbound_email(triage_text, provider_template=provider_template)
+
                 else:
                     triage = {
                         "classification": "AUTO_REPLY_SAFE",
