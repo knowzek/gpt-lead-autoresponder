@@ -61,61 +61,6 @@ _PROVIDER_TEMPLATE_HINT_RE = re.compile(
     r"\bPrice\s+not\s+available\b"
 )
 
-
-"""
-_CUSTOMER_COMMENT_RE = re.compile(
-    r"(?is)\b(?:Additional\s+comments|Customer\s+comments?|Comments?|Message|Questions?)\b"
-    r"(?:\s*[:\-]\s*|\s+)"          # colon/dash optional OR just whitespace
-    r"(.+?)"
-    r"(?=("
-        r"\bFirst\s+Name\b|"
-        r"\bLast\s+Name\b|"
-        r"\bEmail\b|"
-        r"\bPhone\b|"
-        r"\bTelephone\b|"
-        r"\bOfferAmount\b|"
-        r"\bStreet\b|"
-        r"\bCity\b|"
-        r"\bZip\b|"
-        r"\bType\s+Of\s+Lead\b|"
-        r"\bContact\s+Information\b|"
-        r"\bInterested\s+In\b|"
-        r"\bYear\b|"
-        r"\bMake\b|"
-        r"\bModel\b|"
-        r"\bVIN\b|"
-        r"\bStock\b|"
-        r"\bPrice\b|"
-        r"\Z"
-    r"))"
-)
-
-def _extract_customer_comment_from_provider(body_text: str) -> str:
-    t = (body_text or "").strip()
-    if not t:
-        return ""
-
-    m = _CUSTOMER_COMMENT_RE.search(t)
-    if not m:
-        return ""
-
-    comment = (m.group(1) or "").strip()
-
-    # Stop if the template starts repeating the contact block
-    comment = re.split(
-        r"(?im)\b(?:"
-        r"Here's how to contact this customer|"
-        r"First Name|Last Name|Email|Phone|Telephone|"
-        r"Date Submitted|"
-        r"INTERESTED IN|"
-        r"Year\b|Make\b|Model\b|OfferAmount\b|Street\b|City\b|Zip\b"
-        r")\b",
-        comment
-    )[0].strip()
-
-    return comment
-"""
-
 _PROVIDER_BOILERPLATE_LINES_RE = re.compile(
     r"(?im)^\s*(?:"
     r"new customer lead for|"
