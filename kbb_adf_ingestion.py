@@ -313,7 +313,10 @@ def process_kbb_adf_notification(inbound: dict) -> None:
     if isinstance(customer, dict) and customer:
         opportunity["customer"] = customer
     
-
+    # -----------------------------
+    # Derive is_active ONCE (prevent NameError)
+    # -----------------------------
+    is_active = bool(opportunity.get("isActive", True))
     
     # -----------------------------
     # 3) Store offer amount (optional) — make ADF authoritative
