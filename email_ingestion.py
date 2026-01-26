@@ -32,6 +32,49 @@ from airtable_store import (
 )
 log = logging.getLogger("patti.email_ingestion")
 
+PHONE_RE = re.compile(r"(\+?1?\s*\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4})")
+
+def _norm_phone_e164_us(raw: str) -> str:
+    raw = (raw or "").strip()
+    if not raw:
+        return ""
+    digits = re.sub(r"\D+", "", raw)
+    if len(digits) == 10:
+        return "+1" + digits
+    if len(digits) == 11 and digits.startswith("1"):
+        return "+" + digits
+    if raw.startswith("+") and len(digits) >= 10:
+        return "+" + digits
+    return ""
+
+def _extract_phone_from_opp(fresh_opp: dict, body_text: str = "") -> str:
+    # 1) Try Fortellis customer phone fields
+    cust = (fresh_opp or {}).get("customer") or {}
+    phones = cust.get("phones") or cust.get("phoneNumbers") or []
+    if isinstance(phones, list):
+        for p in phones:
+            if isinstance(p, dict):
+                n = p.get("number") or p.get("phoneNumber") or ""
+            else:
+                n = str(p or "")
+            e164 = _norm_phone_e164_us(n)
+            if e164:
+                return e164
+
+    # 2) Fallback: regex in provider email body (if present)
+    m = PHONE_RE.search(body_text or "")
+    if m:
+        return _norm_phone_e164_us(m.group(1))
+
+    return ""
+
+def _sms_test_enabled() -> bool:
+    return (os.getenv("SMS_TEST", "0").strip() == "1")
+
+def _sms_test_to() -> str:
+    return _norm_phone_e164_us(os.getenv("SMS_TEST_TO", "").strip())
+
+
 # For now we only want this running on your single test opp
 TEST_OPP_ID = "050a81e9-78d4-f011-814f-00505690ec8c"
 
@@ -522,6 +565,7 @@ def process_lead_notification(inbound: dict) -> None:
     salesperson = "our team"
     # Airtable bootstrap
     rec = find_by_opp_id(opp_id)
+    is_new_record = not bool(rec)
     if rec:
         opportunity = opp_from_record(rec)
         salesperson = (opportunity.get("Assigned Sales Rep") or "").strip() or salesperson
@@ -567,7 +611,7 @@ def process_lead_notification(inbound: dict) -> None:
             "source": opp.get("source") or "",
             "is_active": bool(opp.get("isActive", True)),
             "follow_up_at": opp.get("followUP_date"),
-            "mode": "",
+            "mode": "cadence",
             "customer_email": shopper_email,
             "Customer First Name": first_name,
             "Customer Last Name": last_name,
@@ -606,6 +650,56 @@ def process_lead_notification(inbound: dict) -> None:
     # ✅ Call existing internet lead first-touch logic (the extracted helper)
 
     fresh_opp = get_opportunity(opp_id, tok, subscription_id) or {}
+
+    # --- STEP 1: First SMS on new lead (General Leads only) ---
+    try:
+        # Only send SMS on first-time bootstrap (new record)
+        if is_new_record:
+            from goto_sms import send_sms
+
+            from_number = _norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", "+17145977229"))
+            if not from_number:
+                log.warning("SMS: missing PATTI_SMS_NUMBER; skipping opp=%s", opp_id)
+            else:
+                guest_phone = _extract_phone_from_opp(fresh_opp, body_text=body_text)
+                if not guest_phone:
+                    log.warning("SMS: no guest phone found; skipping opp=%s", opp_id)
+                else:
+                    # SMS_TEST reroute
+                    to_number = guest_phone
+                    if _sms_test_enabled():
+                        test_to = _sms_test_to()
+                        if not test_to:
+                            log.warning("SMS_TEST=1 but SMS_TEST_TO invalid; skipping opp=%s", opp_id)
+                            to_number = ""
+                        else:
+                            to_number = test_to
+
+                    if to_number:
+                        # Impel-style first text: simple + 1 question + opt-out footer (pre-reply)
+                        base = f"Hi {first_name or ''} — this is Patti with {rooftop_name}. I got your request"
+                        if vehicle_str and vehicle_str != "one of our vehicles":
+                            base += f" on the {vehicle_str}."
+                        else:
+                            base += "."
+                        msg = base + " When’s a good time to connect? Reply STOP to opt out."
+
+                        resp = send_sms(from_number=from_number, to_number=to_number, body=msg)
+
+                        # Persist SMS metadata (best-effort — field names based on what you added)
+                        extra_sms = {
+                            "last_sms_sent_at": _dt.now(_tz.utc).isoformat(),
+                            "sms_conversation_id": resp.get("conversationId") or resp.get("conversation_id") or resp.get("id") or "",
+                            "sms_nudge_count": 0,
+                            # Set due for SMS cadence (simple: 24h; you can later align to your exact day schedule)
+                            "sms_followup_due_at": (_dt.now(_tz.utc).replace(microsecond=0)).isoformat(),
+                        }
+                        save_opp(opportunity, extra_fields=extra_sms)
+
+                        log.info("SMS first-touch sent opp=%s to=%s (test=%s)", opp_id, to_number, _sms_test_enabled())
+    except Exception as e:
+        log.exception("SMS first-touch failed opp=%s err=%s", opp_id, e)
+
 
     # Rooftop / sender
     rt = get_rooftop_info(subscription_id) or {}
