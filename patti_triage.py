@@ -320,7 +320,8 @@ _MODEL_HINT_RE = re.compile(
     r")\b"
 )
 
-def classify_inbound_email(email_text: str) -> Dict[str, Any]:
+def classify_inbound_email(email_text: str, *, provider_template: bool = False) -> Dict[str, Any]:
+
     """
     Returns:
       {
@@ -358,14 +359,17 @@ def classify_inbound_email(email_text: str) -> Dict[str, Any]:
         return {"classification": "HUMAN_REVIEW_REQUIRED", "confidence": 0.90, "reason": "Pricing/financing/trade/legal/urgent/angry indicators."}
 
     # Inventory-specific configuration (model + 1 qualifier) => handoff
-    m_model = _MODEL_HINT_RE.search(t_short)
-    m_qual  = _INVENTORY_QUAL_RE.search(t_short)
-    if m_model and m_qual:
-        return {
-            "classification": "HUMAN_REVIEW_REQUIRED",
-            "confidence": 0.92,
-            "reason": f"Inventory-specific config: model='{m_model.group(0)}' qualifier='{m_qual.group(0)}'."
-        }
+    # ✅ BUT: do NOT escalate for provider templates (Cars.com/Carfax first-touch)
+    if not provider_template:
+        m_model = _MODEL_HINT_RE.search(t_short)
+        m_qual  = _INVENTORY_QUAL_RE.search(t_short)
+        if m_model and m_qual:
+            return {
+                "classification": "HUMAN_REVIEW_REQUIRED",
+                "confidence": 0.92,
+                "reason": f"Inventory-specific config: model='{m_model.group(0)}' qualifier='{m_qual.group(0)}'."
+            }
+
 
     # GPT classifier (conservative gate)
     if not _oai:
