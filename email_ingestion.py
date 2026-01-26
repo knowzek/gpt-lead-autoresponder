@@ -3,6 +3,7 @@ import os
 import re
 import logging
 from datetime import datetime as _dt, timezone as _tz
+from datetime import timedelta
 import json
 from airtable_store import mark_customer_reply, mark_unsubscribed
 from kbb_ico import _is_optout_text as _kbb_is_optout_text, _is_decline as _kbb_is_decline
@@ -661,9 +662,11 @@ def process_lead_notification(inbound: dict) -> None:
             if not from_number:
                 log.warning("SMS: missing PATTI_SMS_NUMBER; skipping opp=%s", opp_id)
             else:
-                guest_phone = _extract_phone_from_opp(fresh_opp, body_text=body_text)
+                guest_phone_raw = (opportunity.get("customer_phone") or "").strip()
+                guest_phone = _norm_phone_e164_us(guest_phone_raw)
+
                 if not guest_phone:
-                    log.warning("SMS: no guest phone found; skipping opp=%s", opp_id)
+                    log.warning("SMS: no Airtable customer_phone (raw=%r); skipping opp=%s", guest_phone_raw, opp_id)
                 else:
                     # SMS_TEST reroute
                     to_number = guest_phone
@@ -677,7 +680,7 @@ def process_lead_notification(inbound: dict) -> None:
 
                     if to_number:
                         # Impel-style first text: simple + 1 question + opt-out footer (pre-reply)
-                        base = f"Hi {first_name or ''} — this is Patti with {rooftop_name}. I got your request"
+                        base = f"Hi {first_name or ''} - this is Patti with {rooftop_name}. I got your request"
                         if vehicle_str and vehicle_str != "one of our vehicles":
                             base += f" on the {vehicle_str}."
                         else:
@@ -692,7 +695,7 @@ def process_lead_notification(inbound: dict) -> None:
                             "sms_conversation_id": resp.get("conversationId") or resp.get("conversation_id") or resp.get("id") or "",
                             "sms_nudge_count": 0,
                             # Set due for SMS cadence (simple: 24h; you can later align to your exact day schedule)
-                            "sms_followup_due_at": (_dt.now(_tz.utc).replace(microsecond=0)).isoformat(),
+                            "sms_followup_due_at": (_dt.now(_tz.utc) + timedelta(hours=24)).replace(microsecond=0).isoformat(),
                         }
                         save_opp(opportunity, extra_fields=extra_sms)
 
