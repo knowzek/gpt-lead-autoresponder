@@ -680,7 +680,7 @@ def process_lead_notification(inbound: dict) -> None:
 
                     if to_number:
                         # Impel-style first text: simple + 1 question + opt-out footer (pre-reply)
-                        base = f"Hi {first_name or ''} - this is Patti with {rooftop_name}. I got your request"
+                        base = f"Hi {first_name or ''} - this is Patti with Tustin Kia. I got your request"
                         if vehicle_str and vehicle_str != "one of our vehicles":
                             base += f" on the {vehicle_str}."
                         else:
