@@ -50,8 +50,17 @@ _PROVIDER_TEMPLATE_HINT_RE = re.compile(
     r"\bApollo\s+Website\s+Lead\b|"
     r"\bType\s+Of\s+Lead\s*:\b|"
     r"\bContact\s+Information\s*:\b|"
-    r"\bInterested\s+In\s*:\b"
+    r"\bInterested\s+In\s*:\b|"
+
+    # ✅ Cars.com lead notification variants
+    r"\bYou\s+have\s+a\s+new\s+lead\s+from\s+Cars\.com\b|"
+    r"\bView\s+Shopper\s+Details\b|"
+    r"\bLead\s*#\s*[0-9a-f\-]{12,}\b|"
+    r"\bCars\.com\s+New\s+(?:Car|Used\s+Car)\s+Lead\b|"
+    r"\bStock\s+number\s*:\b|"
+    r"\bPrice\s+not\s+available\b"
 )
+
 
 """
 _CUSTOMER_COMMENT_RE = re.compile(
