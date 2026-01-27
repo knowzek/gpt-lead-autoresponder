@@ -33,6 +33,7 @@ from airtable_store import (
 )
 log = logging.getLogger("patti.email_ingestion")
 
+
 PHONE_RE = re.compile(r"(\+?1?\s*\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4})")
 
 def _norm_phone_e164_us(raw: str) -> str:
@@ -293,8 +294,68 @@ def _find_best_active_opp_for_email(*, shopper_email: str, token: str, subscript
         log.warning("searchDelta fallback opp match failed: sub=%s email=%s err=%r", subscription_id, target, e)
         return None
 
+import xml.etree.ElementTree as ET
+import html as _html
+
+def _looks_like_adf_xml(s: str) -> bool:
+    s0 = (s or "").lstrip()
+    return s0.startswith("<") and "<adf" in s0.lower() and "<prospect" in s0.lower()
+
+def _extract_adf_fields(adf_xml: str) -> dict:
+    """
+    Returns dict with: email, first, last, phone, comments
+    Works for CarGurus ADF and most ADF providers.
+    """
+    out = {"email": "", "first": "", "last": "", "phone": "", "comments": ""}
+    try:
+        root = ET.fromstring(adf_xml)
+
+        # Email / phone
+        email_el = root.find(".//customer/contact/email")
+        phone_el = root.find(".//customer/contact/phone")
+        if email_el is not None and (email_el.text or "").strip():
+            out["email"] = (email_el.text or "").strip().lower()
+        if phone_el is not None and (phone_el.text or "").strip():
+            out["phone"] = (phone_el.text or "").strip()
+
+        # Names
+        first_el = root.find(".//customer/contact/name[@part='first']")
+        last_el  = root.find(".//customer/contact/name[@part='last']")
+        if first_el is not None and (first_el.text or "").strip():
+            out["first"] = (first_el.text or "").strip()
+        if last_el is not None and (last_el.text or "").strip():
+            out["last"] = (last_el.text or "").strip()
+
+        # Comments (CDATA or normal text; decode entities)
+        c_el = root.find(".//customer/comments")
+        if c_el is not None and (c_el.text or "").strip():
+            out["comments"] = _html.unescape((c_el.text or "").strip())
+
+    except Exception:
+        # keep defaults
+        pass
+
+    return out
+
+def _extract_adf_email(adf_xml: str) -> str:
+    try:
+        root = ET.fromstring(adf_xml)
+        email_el = root.find(".//customer/contact/email")
+        if email_el is not None and (email_el.text or "").strip():
+            return (email_el.text or "").strip().lower()
+    except Exception:
+        pass
+    return ""
+
+
 def _extract_shopper_email_from_provider(body_text: str) -> str | None:
     body_text = body_text or ""
+
+    # ✅ ADF XML (CarGurus, many other providers) — deterministic
+    if _looks_like_adf_xml(body_text):
+        adf_email = _extract_adf_email(body_text)
+        if adf_email:
+            return adf_email
 
     # Apollo (tab), or colon, or spaces
     m = re.search(r"(?im)^\s*email\s*(?:[:\t ]+)\s*([^\s<]+@[^\s<]+)\s*$", body_text)
@@ -303,14 +364,22 @@ def _extract_shopper_email_from_provider(body_text: str) -> str | None:
 
     # fallback: pick first email that isn't the sender/provider
     candidates = [e.lower() for e in EMAIL_RE.findall(body_text)]
-    block = {"noreplylead@carfax.com", "salesleads@cars.com", "reply@messages.kbb.com", "patti@pattersonautos.com"}
+    block = {
+        "noreplylead@carfax.com",
+        "salesleads@cars.com",
+        "reply@messages.kbb.com",
+        "patti@pattersonautos.com",
+        "dealers@cargurus.com",  # ✅ add this
+    }
     for e in candidates:
         if e in block:
             continue
-        if "carfax" in e or "cars.com" in e:
+        if "carfax" in e or "cars.com" in e or "cargurus" in e:  # ✅ extra guard
             continue
         return e
+
     return None
+
 
 PHONE_RE = re.compile(r"(?i)\b(\+?1[\s\-\.]?)?\(?\d{3}\)?[\s\-\.]?\d{3}[\s\-\.]?\d{4}\b")
 
@@ -464,7 +533,16 @@ def process_lead_notification(inbound: dict) -> None:
     body_html = inbound.get("body_html") or ""
     raw_text = inbound.get("body_text") or clean_html(body_html)
     body_text = (raw_text or "").strip()
-    first_name, last_name = _extract_first_last_from_provider(body_text)
+
+    # ✅ ADF (CarGurus) structured parse first
+    adf = _extract_adf_fields(body_text) if _looks_like_adf_xml(body_text) else {}
+
+    # Start with ADF values (if present), fallback to existing provider regex
+    first_name = _clean_first_name(adf.get("first", "")) if adf else ""
+    last_name  = (adf.get("last", "") or "").strip() if adf else ""
+
+    if not first_name and not last_name:
+        first_name, last_name = _extract_first_last_from_provider(body_text)
 
     log.info(
         "lead_notification parsed body_text len=%d sender=%r subj=%r head=%r",
@@ -473,7 +551,17 @@ def process_lead_notification(inbound: dict) -> None:
         subject[:120],
         (body_text or "")[:260],
     )
+    
     phone = ""  # single source of truth
+    customer_comment = ""
+    
+    # ✅ If ADF gave us structured phone/comments, use them
+    if adf:
+        phone = _norm_phone_e164_us(adf.get("phone", ""))
+        customer_comment = (adf.get("comments", "") or "").strip()
+        if not customer_comment and provider_template:
+            customer_comment = _extract_customer_comment_from_provider(body_text)
+
     
     sender = (inbound.get("from") or "").lower()
     is_cars = ("cars.com" in sender) or ("salesleads@cars.com" in sender) or ("you have a new lead from cars.com" in body_text.lower())
@@ -481,9 +569,12 @@ def process_lead_notification(inbound: dict) -> None:
 
     # ✅ scalable provider-template flag (metadata first, regex fallback)
     source = (inbound.get("source") or "").lower().strip()
+    if not source and ("cargurus" in sender or "dealers@cargurus.com" in sender):
+        source = "cargurus"
+
     provider_template = (
         is_cars
-        or source in {"cars.com", "carfax", "autotrader", "apollo"}
+        or source in {"cars.com", "carfax", "autotrader", "apollo", "cargurus"}
         or sender.endswith("@cars.com")
         or sender.endswith("@carfax.com")
         or bool(_PROVIDER_TEMPLATE_HINT_RE.search(body_text or ""))
@@ -506,13 +597,25 @@ def process_lead_notification(inbound: dict) -> None:
             cf, cl, ph, first_name, last_name
         )
 
-        if cf: first_name = cf
-        if cl: last_name = cl
-        if ph: phone = ph
+        if cf:
+            first_name = cf
+        if cl:
+            last_name = cl
+        if ph:
+            phone = ph
+
+        # normalize once after possible assignment
+        phone = _norm_phone_e164_us(phone)
     
     # If Cars.com didn't yield a phone, try Apollo-style Telephone line
     if not phone:
-        phone = extract_phone_from_text(body_text) or ""
+        phone = _norm_phone_e164_us(extract_phone_from_text(body_text) or "")
+    
+    # Final fallback: regex anywhere in body
+    if not phone:
+        m = PHONE_RE.search(body_text or "")
+        if m:
+            phone = _norm_phone_e164_us(m.group(0))
 
 
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
@@ -616,6 +719,7 @@ def process_lead_notification(inbound: dict) -> None:
             "customer_email": shopper_email,
             "Customer First Name": first_name,
             "Customer Last Name": last_name,
+            "Customer Comments": customer_comment,
             "customer_phone": phone,
             "Assigned Sales Rep": salesperson,
         })
@@ -626,14 +730,17 @@ def process_lead_notification(inbound: dict) -> None:
             return
         opportunity = opp_from_record(rec2)
 
-    # Seed message into thread for GPT context (optional, but useful)
+    # Seed message into thread for GPT context
+    msg_body = customer_comment or body_text[:1500]
+    
     opportunity.setdefault("messages", []).append({
         "msgFrom": "customer",
         "subject": subject,
-        "body": body_text[:1500],
+        "body": msg_body,
         "date": ts,
         "source": "lead_notification",
     })
+
     opportunity.setdefault("checkedDict", {})["last_msg_by"] = "customer"
 
     # Persist guest email once, forever
@@ -644,6 +751,7 @@ def process_lead_notification(inbound: dict) -> None:
         "Customer First Name": first_name,
         "Customer Last Name": last_name,
         "customer_phone": phone,
+        "Customer Comments": customer_comment,
     }
     
     save_opp(opportunity, extra_fields=extra)
