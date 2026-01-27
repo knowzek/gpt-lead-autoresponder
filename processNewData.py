@@ -68,7 +68,7 @@ EXIT_KEYWORDS = [
 ]
 test_recipient = (os.getenv("TEST_RECIPIENT") or "").strip() or None
 
-SALES_AI_EMAIL_DAYS = [2, 3, 5, 8, 11, 14, 17, 21, 28, 31, 32, 34, 37, 40, 44, 51]
+SALES_AI_EMAIL_DAYS = [1, 2, 3, 5, 8, 11, 14, 17, 21, 28, 31, 32, 34, 37, 40, 44, 51]
 
 def _next_salesai_due_iso(*, created_iso: str, last_idx: int) -> str | None:
     """
