@@ -114,7 +114,11 @@ def health():
 
 @app.route("/lead-notification-inbound", methods=["POST"])
 def lead_notification_inbound():
-    inbound = request.get_json(force=True) or {}
+    inbound = request.get_json(force=True, silent=True) or {}
+    bt = inbound.get("body_text") or ""
+    bh = inbound.get("body_html") or ""
+    log.info("PA PAYLOAD DEBUG body_text_head=%r", bt[:300])
+    log.info("PA PAYLOAD DEBUG body_html_head=%r", bh[:300])
     from email_ingestion import process_lead_notification
     process_lead_notification(inbound)
     return jsonify({"ok": True}), 200
