@@ -120,20 +120,73 @@ _PROVIDER_BOILERPLATE_LINES_RE = re.compile(
     r").*$"
 )
 
+# Labels that often precede the guest-written free text
+_COMMENT_LABEL_RE = re.compile(
+    r"(?is)^\s*(?:additional\s+comments?|customer\s+comments?|comments?|message|questions?)\s*:\s*(.*)$"
+)
+
+# Very strict "field line" patterns to drop (only when they look like provider key/value fields)
+_PROVIDER_FIELD_LINE_RE = re.compile(
+    r"(?i)^\s*(?:"
+    r"msrp|internet\s*price|listing\s*price|price|"
+    r"vin|stock|lead\s*id|offeramount|"
+    r"year|make|model|trim|condition"
+    r")\s*:\s*(?:\$?\s*[\d,]+(?:\.\d{2})?|[A-Z0-9\-]{6,}|.+?)\s*$"
+)
+
 def _extract_customer_comment_from_provider(body_text: str) -> str:
     if not body_text:
         return ""
-        
+
+    lines = []
+    for raw in body_text.splitlines():
+        s = (raw or "").strip()
+        if not s:
+            continue
+        if _PROVIDER_BOILERPLATE_LINES_RE.search(s):
+            continue
+        lines.append(s)
+
+    if not lines:
+        return ""
+
+    # --- Pass 1: If we see a comment label, extract ONLY that comment section ---
+    captured = []
+    in_comment_block = False
+
+    for s in lines:
+        m = _COMMENT_LABEL_RE.match(s)
+
+        if m:
+            # Found a labeled comment line.
+            in_comment_block = True
+            remainder = (m.group(1) or "").strip()
+            if remainder:
+                captured.append(remainder)
+            continue
+
+        if in_comment_block:
+            # Stop if we hit what looks like another provider field line.
+            if _PROVIDER_FIELD_LINE_RE.match(s):
+                break
+            # Stop if we hit a boilerplate line (already filtered, but just in case)
+            if _PROVIDER_BOILERPLATE_LINES_RE.search(s):
+                break
+            captured.append(s)
+
+    if captured:
+        return " ".join(captured).strip()
+
+    # --- Pass 2: No comment label detected: keep your original behavior,
+    #             but drop strict provider field lines like "MSRP: $56,640" ---
     kept = []
-    for line in body_text.splitlines():
-        line = line.strip()
-        if not line:
+    for s in lines:
+        if _PROVIDER_FIELD_LINE_RE.match(s):
             continue
-        if _PROVIDER_BOILERPLATE_LINES_RE.search(line):
-            continue
-        kept.append(line)
+        kept.append(s)
 
     return " ".join(kept).strip()
+
 
 
 
