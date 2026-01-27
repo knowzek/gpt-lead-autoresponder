@@ -170,6 +170,18 @@ def find_by_customer_email(email: str):
     recs = data.get("records") or []
     return recs[0] if recs else None
 
+def find_by_customer_phone(phone_e164: str):
+    phone_e164 = (phone_e164 or "").strip()
+    if not phone_e164:
+        return None
+
+    # Exact match (works if you store +1E164 consistently)
+    formula = f"{{customer_phone}}='{phone_e164}'"
+    params = {"filterByFormula": formula, "maxRecords": 1}
+    data = _request("GET", BASE_URL, params=params)
+    recs = data.get("records") or []
+    return recs[0] if recs else None
+
 
 def _iso(dt: datetime | str | None) -> str | None:
     if dt is None:
