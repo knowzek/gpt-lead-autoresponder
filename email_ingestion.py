@@ -581,6 +581,8 @@ def process_lead_notification(inbound: dict) -> None:
     body_html = inbound.get("body_html") or ""
     raw_text = inbound.get("body_text") or clean_html(body_html)
     body_text = (raw_text or "").strip()
+    provider_template = False
+
 
     # ✅ ADF (CarGurus) structured parse first
     adf = _extract_adf_fields(body_text) if _looks_like_adf_xml(body_text) else {}
