@@ -582,18 +582,25 @@ def process_lead_notification(inbound: dict) -> None:
     body_html = inbound.get("body_html") or ""
     body_text_in = inbound.get("body_text") or ""
     
-    # If body_html contains ADF/XML, do NOT run clean_html on it
-    if body_text_in.strip():
-        body_text = body_text_in.strip()
-    elif body_html.lstrip().startswith("<?xml") or "<adf" in body_html.lower():
-        body_text = body_html.strip()
+    raw_html = (body_html or "").strip()
+    raw_text = (body_text_in or "").strip()
+    
+    # Always keep a cleaned version for provider regex extraction (Carfax often needs this)
+    cleaned_text = (clean_html(raw_html) or "").strip() if raw_html else ""
+    
+    # Choose the best body_text for general parsing / logging
+    if raw_text:
+        body_text = raw_text
+    elif raw_html.lstrip().startswith("<?xml") or "<adf" in raw_html.lower():
+        body_text = raw_html
     else:
-        body_text = (clean_html(body_html) or "").strip()
+        body_text = cleaned_text
 
 
 
     # ✅ ADF (CarGurus) structured parse first
-    adf = _extract_adf_fields(body_text) if _looks_like_adf_xml(body_text) else {}
+    adf_src = raw_html if (raw_html.lstrip().startswith("<?xml") or "<adf" in raw_html.lower()) else body_text
+    adf = _extract_adf_fields(adf_src) if _looks_like_adf_xml(adf_src) else {}
 
     # Start with ADF values (if present), fallback to existing provider regex
     first_name = _clean_first_name(adf.get("first", "")) if adf else ""
@@ -706,8 +713,17 @@ def process_lead_notification(inbound: dict) -> None:
     shopper_email = (adf.get("email", "") or "").strip() if adf else ""
     if not shopper_email:
         shopper_email = _extract_shopper_email_from_provider(body_text)
+    
+    if not shopper_email and cleaned_text:
+        shopper_email = _extract_shopper_email_from_provider(cleaned_text)
+    
+    if not shopper_email and raw_html:
+        shopper_email = _extract_shopper_email_from_provider(raw_html)
+    
+    if not shopper_email:
         log.warning("No shopper email found in provider lead email. subj=%r", subject[:120])
         return
+
 
     opp_id = _find_best_active_opp_for_email(
         shopper_email=shopper_email,
