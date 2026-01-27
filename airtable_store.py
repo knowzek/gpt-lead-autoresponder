@@ -480,6 +480,21 @@ def opp_from_record(rec: dict) -> dict:
         if not isinstance(opp.get("compliance"), dict):
             opp["compliance"] = {"suppressed": False}
 
+    # ✅ Hydrate first-touch + routing flag (authoritative for cron routing)
+    fes = (
+        fields.get("first_email_sent_at")
+        or fields.get("First Email Sent At")
+        or fields.get("AI First Message Sent At")
+    )
+
+    if fes:
+        # persist into opp so downstream checks based on timestamp also work
+        opp.setdefault("first_email_sent_at", fes)
+
+        # critical: this is what most routers use to skip first-touch
+        checked = opp.setdefault("checkedDict", {})
+        if isinstance(checked, dict):
+            checked["patti_already_contacted"] = True
 
     return opp
 
