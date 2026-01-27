@@ -1939,13 +1939,15 @@ def processHit(hit):
             if patti.get("salesai_email_idx") is None:
                 patti["salesai_email_idx"] = -1
         
+            patti = opportunity.get("patti") or {}
             created_iso = (
-                opportunity.get("created_at")
+                patti.get("salesai_created_iso")     # ✅ authoritative anchor (from Airtable hydration)
+                or opportunity.get("created_at")
                 or opportunity.get("dateIn")
                 or opportunity.get("createdDate")
                 or currDate_iso
             )
-        
+
             next_due = _next_salesai_due_iso(
                 created_iso=created_iso,
                 last_idx=int(patti["salesai_email_idx"])
@@ -2329,14 +2331,16 @@ def processHit(hit):
                 idx = int(patti.get("salesai_email_idx") or -1)
                 patti["salesai_email_idx"] = idx + 1
             
+                patti = opportunity.get("patti") or {}
                 created_iso = (
-                    opportunity.get("created_at")
+                    patti.get("salesai_created_iso")     # ✅ authoritative anchor
+                    or opportunity.get("created_at")
                     or opportunity.get("dateIn")
                     or opportunity.get("createdDate")
-                    or opportunity.get("updated_at")  # last resort
+                    or opportunity.get("updated_at")     # last resort
                     or currDate_iso
                 )
-            
+
                 next_due = _next_salesai_due_iso(created_iso=created_iso, last_idx=idx + 1)
             
                 if next_due is None:
@@ -2817,39 +2821,35 @@ def send_first_touch_email(
         checkedDict["last_msg_by"] = "patti"
         opportunity["checkedDict"] = checkedDict
     
-        nextDate = currDate + _td(hours=24)
-        next_iso = nextDate.isoformat()
-    
-        opportunity["followUP_date"] = next_iso
-        opportunity["followUP_count"] = 0
-    
-        patti_meta = opportunity.setdefault("patti", {})
-        patti_meta["ab_variant"] = variant
-        # Canonical first-touch timestamp
-        opportunity["first_email_sent_at"] = currDate_iso
-        patti_meta.setdefault("first_email_sent_at", currDate_iso)  # (optional) keep for backward compat
-
-
         # ✅ Enroll into SalesAI cadence on first-touch (general leads)
+        patti_meta = opportunity.setdefault("patti", {})
         patti_meta.setdefault("salesai_email_idx", -1)
-    
-        # Anchor cadence to the actual lead create time (preferred), fallback to first touch
+        
+        # Anchor cadence to Lead Created At (preferred), fallback to first touch
         created_iso = (
-            opportunity.get("dateIn")
+            patti_meta.get("salesai_created_iso")
+            or opportunity.get("Lead Created At")  # if you already hydrated it into opp fields
+            or opportunity.get("dateIn")
             or opportunity.get("created_at")
             or currDate_iso
         )
-        patti_meta.setdefault("salesai_created_iso", created_iso)
-
+        patti_meta["salesai_created_iso"] = created_iso
+        
+        next_iso = _next_salesai_due_iso(created_iso=created_iso, last_idx=int(patti_meta["salesai_email_idx"]))
+        
+        opportunity["followUP_date"] = next_iso
+        opportunity["followUP_count"] = 0
+        
         airtable_save(
             opportunity,
             extra_fields={
                 "follow_up_at": next_iso,
                 "ab_variant": variant,
                 "first_email_sent_at": opportunity["first_email_sent_at"],
+                # optional but recommended so Airtable is the truth:
+                "salesai_created_iso": created_iso,   # if you add this column
             }
         )
-
 
     else:
         log.warning(
