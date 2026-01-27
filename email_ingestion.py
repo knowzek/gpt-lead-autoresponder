@@ -1397,15 +1397,56 @@ def process_inbound_email(inbound: dict) -> None:
     
     # ✅ PATCH 2A: Mark engagement (customer replied)
     mark_customer_reply(opportunity, when_iso=ts)
+
+    # 2B: log inbound email to CRM as a COMPLETED "Read Email" activity (type 20)
+    subscription_id = opportunity.get("_subscription_id") or inbound.get("subscription_id")
+    if subscription_id:
+        try:
+            from datetime import datetime, timezone
+    
+            token = tok
+            preview = (body_text or "")[:500]
+    
+            # Convert inbound ts (your ts is usually like 2026-01-15T18:59:19+00:00)
+            # into Zulu "YYYY-MM-DDTHH:MM:SSZ" for Fortellis.
+            def _to_z(iso_str: str | None) -> str:
+                if iso_str:
+                    try:
+                        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+                        return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                    except Exception:
+                        pass
+                return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+            completed_z = _to_z(ts)
+    
+            complete_read_email_activity(
+                token=token,
+                subscription_id=subscription_id,
+                opportunity_id=opp_id,
+                completed_dt_iso_utc=completed_z,
+                comments=f"From: {sender_raw}\nSubject: {subject}\n\n{preview}",
+            )
+    
+        except Exception as e:
+            log.warning("Failed to log inbound email activity opp=%s err=%s", opp_id, e)
+
+
     
     # ✅ PATCH 2B: If opt-out detected, mark unsubscribed and stop
     if _kbb_is_optout_text(body_text) or _kbb_is_decline(body_text):
         mark_unsubscribed(opportunity, when_iso=ts, reason=body_text[:300])
         opportunity.setdefault("checkedDict", {})["last_msg_by"] = "customer"
-        opportunity["followUP_date"] = ts
-        save_opp(opportunity)  # ✅ ensures latest thread + flags are persisted
-        log.info("Inbound opt-out detected; unsubscribed opp=%s", opp_id)
+    
+        # ✅ STOP cadence / cron loop
+        opportunity["isActive"] = False
+        opportunity["followUP_date"] = None
+        opportunity["followUP_count"] = 0
+    
+        save_opp(opportunity, extra_fields={"follow_up_at": None, "is_active": False})
+        log.info("Inbound opt-out/decline detected; unsubscribed opp=%s", opp_id)
         return
+
 
     if block_auto_reply:
         log.info("Blocking inbound auto-reply (but reply logged): Needs Human Review opp=%s", opp_id)
@@ -1565,40 +1606,6 @@ def process_inbound_email(inbound: dict) -> None:
 
     except Exception as e:
         log.exception("Immediate inbound reply failed opp=%s err=%s", opp_id, e)
-
-    # 6) Optional: log inbound email to CRM as a COMPLETED "Read Email" activity (type 20)
-    subscription_id = opportunity.get("_subscription_id")
-    if subscription_id:
-        try:
-            from datetime import datetime, timezone
-    
-            token = get_token(subscription_id)
-            preview = (body_text or "")[:500]
-    
-            # Convert inbound ts (your ts is usually like 2026-01-15T18:59:19+00:00)
-            # into Zulu "YYYY-MM-DDTHH:MM:SSZ" for Fortellis.
-            def _to_z(iso_str: str | None) -> str:
-                if iso_str:
-                    try:
-                        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
-                        return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-                    except Exception:
-                        pass
-                return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    
-            completed_z = _to_z(ts)
-    
-            complete_read_email_activity(
-                token=token,
-                subscription_id=subscription_id,
-                opportunity_id=opp_id,
-                completed_dt_iso_utc=completed_z,
-                comments=f"From: {sender_raw}\nSubject: {subject}\n\n{preview}",
-            )
-    
-        except Exception as e:
-            log.warning("Failed to log inbound email activity opp=%s err=%s", opp_id, e)
-
 
     log.info("Inbound email queued + processed immediately for opp=%s", opp_id)
     return
