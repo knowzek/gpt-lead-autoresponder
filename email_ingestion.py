@@ -33,9 +33,6 @@ from airtable_store import (
 )
 log = logging.getLogger("patti.email_ingestion")
 
-
-PHONE_RE = re.compile(r"(\+?1?\s*\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4})")
-
 def _norm_phone_e164_us(raw: str) -> str:
     raw = (raw or "").strip()
     if not raw:
@@ -381,8 +378,6 @@ def _extract_shopper_email_from_provider(body_text: str) -> str | None:
     return None
 
 
-PHONE_RE = re.compile(r"(?i)\b(\+?1[\s\-\.]?)?\(?\d{3}\)?[\s\-\.]?\d{3}[\s\-\.]?\d{4}\b")
-
 def _extract_carscom_name_email_phone(body_text: str) -> tuple[str, str, str]:
     """
     Cars.com format (as plain text) tends to look like:
@@ -559,9 +554,6 @@ def process_lead_notification(inbound: dict) -> None:
     if adf:
         phone = _norm_phone_e164_us(adf.get("phone", ""))
         customer_comment = (adf.get("comments", "") or "").strip()
-        if not customer_comment and provider_template:
-            customer_comment = _extract_customer_comment_from_provider(body_text)
-
     
     sender = (inbound.get("from") or "").lower()
     is_cars = ("cars.com" in sender) or ("salesleads@cars.com" in sender) or ("you have a new lead from cars.com" in body_text.lower())
@@ -579,6 +571,9 @@ def process_lead_notification(inbound: dict) -> None:
         or sender.endswith("@carfax.com")
         or bool(_PROVIDER_TEMPLATE_HINT_RE.search(body_text or ""))
     )
+
+    if not customer_comment and provider_template:
+        customer_comment = _extract_customer_comment_from_provider(body_text)
     
     log.info("TRIAGE DEBUG provider_template=%s source=%r sender=%r", provider_template, source, sender)
 
