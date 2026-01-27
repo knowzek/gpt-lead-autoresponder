@@ -1041,13 +1041,27 @@ def processHit(hit):
     needs_hr = bool(fields.get("Needs Human Review")) or bool(opportunity.get("needs_human_review"))
     if needs_hr:
         log.warning("Skipping opp %s: Needs Human Review is checked", opportunityId)
-
-        # Optional: stop it from re-appearing in Due Now if your view uses follow_up_at
+    
+        # Keep snapshot consistent too
+        p = opportunity.setdefault("patti", {})
+        if isinstance(p, dict):
+            p["mode"] = "handoff"
+            if fields.get("Human Review Reason"):
+                p["handoff"] = {"reason": fields.get("Human Review Reason"), "at": currDate_iso}
+    
         if not OFFLINE_MODE:
-            airtable_save(opportunity, extra_fields={"follow_up_at": None})
-
+            try:
+                airtable_save(opportunity, extra_fields={
+                    "follow_up_at": None,
+                    # optional if you have this Airtable column:
+                    # "mode": "handoff",
+                })
+            except Exception as e:
+                log.warning("Failed to clear follow_up_at for HR opp=%s: %s", opportunityId, e)
+    
         wJson(opportunity, f"jsons/process/{opportunityId}.json")
         return
+
 
     # (optional debug)
     opportunity["_airtable_fields"] = fields
