@@ -479,7 +479,18 @@ def handoff_to_human(
     # idempotency: if already notified, skip
     patti = opportunity.get("patti") or {}
     if isinstance(patti, dict) and patti.get("human_review_notified_at"):
+        # ✅ Even if already notified, ensure cron won't retry
+        try:
+            opportunity["needs_human_review"] = True
+            opportunity["followUP_date"] = None
+            patti["mode"] = "handoff"
+            if not OFFLINE_MODE and rec_id:
+                patch_by_id(rec_id, {"follow_up_at": None})
+            save_opp(opportunity)
+        except Exception:
+            pass
         return {"ok": True, "skipped": True, "opp_id": opp_id, "reason": "Already notified."}
+
 
     # resolve people + context
     rt = get_rooftop_info(subscription_id) or {}
@@ -519,20 +530,36 @@ def handoff_to_human(
                 AT_AT: now_iso,
                 AT_NOTIFIED: True,
                 AT_NOTIFIED_AT: now_iso,
+                "follow_up_at": None,
             })
         except Exception as e:
             log.exception("Airtable patch failed rec=%s: %s", rec_id, e)
 
-    # persist in opp blob (idempotency)
+    # persist in opp blob (idempotency + durable stop)
     try:
         p = opportunity.setdefault("patti", {})
         if not isinstance(p, dict):
             opportunity["patti"] = {}
             p = opportunity["patti"]
+
+        # ✅ STOP customer automation immediately (durable fields)
+        opportunity["needs_human_review"] = True
+        opportunity["human_review_reason"] = reason
+        opportunity["human_review_at"] = now_iso
+        opportunity["followUP_date"] = None
+        opportunity["followUP_count"] = 0
+
+        # ✅ Durable state into snapshot (these SHOULD be in _build_patti_snapshot)
+        p["mode"] = "handoff"
+        p["handoff"] = {"reason": reason, "at": now_iso}
+
+        # Idempotency markers
         p["human_review_requested_at"] = now_iso
         p["human_review_notified_at"] = now_iso
         p["human_review_reason"] = reason
+
         save_opp(opportunity)
+
     except Exception as e:
         log.warning("save_opp failed (ignored): %s", e)
 
