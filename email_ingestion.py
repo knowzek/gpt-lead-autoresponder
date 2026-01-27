@@ -602,12 +602,15 @@ def process_lead_notification(inbound: dict) -> None:
     adf_src = raw_html if (raw_html.lstrip().startswith("<?xml") or "<adf" in raw_html.lower()) else body_text
     adf = _extract_adf_fields(adf_src) if _looks_like_adf_xml(adf_src) else {}
 
-    # Start with ADF values (if present), fallback to existing provider regex
-    first_name = _clean_first_name(adf.get("first", "")) if adf else ""
-    last_name  = (adf.get("last", "") or "").strip() if adf else ""
-
+    first_name = ""
+    last_name = ""
+    
+    if adf:
+        first_name = _clean_first_name(adf.get("first", "") or "")
+        last_name  = (adf.get("last", "") or "").strip()
+    
     if not first_name and not last_name:
-        first_name, last_name = _extract_first_last_from_provider(body_text)
+        first_name, last_name = _extract_first_last_from_provider(cleaned_text)
 
     log.info(
         "lead_notification parsed body_text len=%d sender=%r subj=%r head=%r",
@@ -624,10 +627,9 @@ def process_lead_notification(inbound: dict) -> None:
     # ✅ If ADF gave us structured phone/comments, use them
     if adf:
         customer_comment = (adf.get("comments", "") or "").strip()
-        triage_text = customer_comment or body_text
-    
-    if provider_template and not adf:
-        triage_text = customer_comment or body_text
+        triage_text = customer_comment  # ✅ ADF: never triage the XML
+        if not triage_text.strip():
+            triage_text = ""  # keep it empty on purpose
     
     sender = (inbound.get("from") or "").lower()
     is_cars = ("cars.com" in sender) or ("salesleads@cars.com" in sender) or ("you have a new lead from cars.com" in body_text.lower())
@@ -913,57 +915,48 @@ def process_lead_notification(inbound: dict) -> None:
         if should_triage(is_kbb=False):
             log.info("lead_notification triage running opp=%s shopper=%s", opp_id, shopper_email)
     
-            if is_adf:
-                triage_text = (customer_comment or "").strip()
-            else:
-                triage_text = (customer_comment or "").strip() or (body_text or "")
             triage = None
-            # ADF: if no customer comments, do NOT triage the XML blob
-            if is_adf and not triage_text.strip():
-                triage = {
-                    "classification": "AUTO_REPLY_SAFE",
-                    "reason": "ADF lead with no customer comments"
-                }
-
-
-            log.info("TRIAGE DEBUG provider_hint_body=%s provider_hint_triage=%s",
-                 bool(_PROVIDER_TEMPLATE_HINT_RE.search(body_text or "")),
-                 bool(_PROVIDER_TEMPLATE_HINT_RE.search(triage_text or "")))
-
     
-            # Provider template? Only triage guest-written comment
-            if provider_template and not is_adf:
-                comment = _extract_customer_comment_from_provider(triage_text)
-            
-                log.info("TRIAGE DEBUG extracted_comment_len=%s", len(comment or ""))
-                log.info("TRIAGE DEBUG extracted_comment_preview=%r", (comment or "")[:220])
-            
-                if comment:
-                    triage_text = comment
-                else:
-                    triage_text = ""  # ✅ no GPT call
-                
-            if triage is None:
-                if triage_text.strip():
-
-                    from patti_triage import _HUMAN_REVIEW_RE
-
-                    triage_input = triage_text or ""
-                    
-                    log.info("TRIAGE DEBUG using triage_text len=%s", len(triage_input))
-                    log.info("TRIAGE DEBUG input preview (first 400 chars): %r", triage_input[:400])
-                    log.info("TRIAGE DEBUG human_review_regex_match=%s", bool(_HUMAN_REVIEW_RE.search(triage_input)))
-                    m = _HUMAN_REVIEW_RE.search(triage_input)
-                    log.info("TRIAGE DEBUG human_review_regex_match=%s match=%r", bool(m), (m.group(0) if m else None))
-
-
-                    triage = classify_inbound_email(triage_text, provider_template=provider_template)
-
-                else:
+            if is_adf:
+                # ✅ ADF: NEVER triage XML. Only triage customer comments.
+                triage_text = (customer_comment or "").strip()
+    
+                if not triage_text:
                     triage = {
                         "classification": "AUTO_REPLY_SAFE",
-                        "reason": "Empty triage text"
+                        "reason": "ADF lead with no customer comments"
                     }
+                # else: we will run GPT on triage_text below
+    
+            else:
+                # Non-ADF providers
+                triage_text = (customer_comment or "").strip() or (body_text or "")
+    
+            log.info("TRIAGE DEBUG provider_hint_body=%s provider_hint_triage=%s",
+                     bool(_PROVIDER_TEMPLATE_HINT_RE.search(body_text or "")),
+                     bool(_PROVIDER_TEMPLATE_HINT_RE.search(triage_text or "")))
+    
+            # Provider template? Only triage guest-written comment (non-ADF only)
+            if provider_template and not is_adf:
+                comment = _extract_customer_comment_from_provider(triage_text)
+    
+                log.info("TRIAGE DEBUG extracted_comment_len=%s", len(comment or ""))
+                log.info("TRIAGE DEBUG extracted_comment_preview=%r", (comment or "")[:220])
+    
+                triage_text = comment.strip() if comment else ""
+    
+                if not triage_text:
+                    triage = {
+                        "classification": "AUTO_REPLY_SAFE",
+                        "reason": "Provider lead template with no customer-written comments"
+                    }
+    
+            # ✅ Only call GPT if triage still unset AND there's real text
+            if triage is None:
+                if triage_text.strip():
+                    triage = classify_inbound_email(triage_text, provider_template=provider_template)
+                else:
+                    triage = {"classification": "AUTO_REPLY_SAFE", "reason": "Empty triage text"}
     
             classification = (triage.get("classification") or "").strip().upper()
             reason = (triage.get("reason") or "").strip()
