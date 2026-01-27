@@ -322,23 +322,36 @@ def maybe_send_tk_gm_day2_email(
         # Persist state so we never resend
         patti_meta["tk_gm_day2_sent"] = True
         patti_meta["tk_gm_day2_sent_at"] = currDate_iso
+    
+        # ✅ Included in patti_json snapshot → prevents re-sends even if extra_fields aren't read
+        try:
+            patti_meta["last_template_day_sent"] = max(int(patti_meta.get("last_template_day_sent") or 0), 2)
+        except Exception:
+            patti_meta["last_template_day_sent"] = 2
+    
+        # Normalize idx so it doesn't stay null forever
+        if patti_meta.get("salesai_email_idx") is None:
+            patti_meta["salesai_email_idx"] = -1
+    
         opportunity["patti"] = patti_meta
-
+    
         # Optional: record in thread history (helps auditing)
         opportunity.setdefault("messages", []).append({
-            "msgFrom": "patti",  # still sent by Patti system, but content is Alex
+            "msgFrom": "patti",
             "subject": TK_GM_DAY2_SUBJECT,
             "body": body_html,
             "date": currDate_iso,
             "trigger": "tk_gm_day2",
         })
         opportunity.setdefault("checkedDict", {})["last_msg_by"] = "patti"
-
-        # Write explicit Airtable fields for dashboarding
+    
         airtable_save(opportunity, extra_fields={
             "TK GM Day 2 Sent": True,
             "TK GM Day 2 Sent At": currDate_iso,
+            # optional if you have this column:
+            # "Last Template Day Sent": patti_meta["last_template_day_sent"],
         })
+
 
     return sent_ok
     
