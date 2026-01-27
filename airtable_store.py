@@ -491,6 +491,14 @@ def opp_from_record(rec: dict) -> dict:
         if isinstance(p, dict):
             # do NOT overwrite if snapshot already has one
             p.setdefault("salesai_created_iso", anchor)
+            
+    # ✅ Normalize cadence state if snapshot has nulls
+    p = opp.setdefault("patti", {})
+    if isinstance(p, dict):
+        if p.get("salesai_email_idx") is None:
+            p["salesai_email_idx"] = -1
+        if p.get("last_template_day_sent") is None:
+            p["last_template_day_sent"] = 0
 
 
     # ✅ Hydrate first-touch + routing flag (authoritative for cron routing)
@@ -508,6 +516,28 @@ def opp_from_record(rec: dict) -> dict:
         checked = opp.setdefault("checkedDict", {})
         if isinstance(checked, dict):
             checked["patti_already_contacted"] = True
+
+    # ✅ Normalize cadence state if snapshot has nulls
+    p = opp.setdefault("patti", {})
+    if isinstance(p, dict):
+        if p.get("salesai_email_idx") is None:
+            p["salesai_email_idx"] = -1
+        if p.get("last_template_day_sent") is None:
+            p["last_template_day_sent"] = 0
+
+    # ✅ If Airtable says GM Day 2 was sent, force last_template_day_sent >= 2
+    gm_day2_sent = (
+        fields.get("GM Day 2 Sent")
+        or fields.get("GM Day 2 Email Sent")
+        or fields.get("Day 2 GM Email Sent")
+        or False
+    )
+
+    if gm_day2_sent:
+        try:
+            p["last_template_day_sent"] = max(int(p.get("last_template_day_sent") or 0), 2)
+        except Exception:
+            p["last_template_day_sent"] = 2
 
 
     return opp
