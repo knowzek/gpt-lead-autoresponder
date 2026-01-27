@@ -480,6 +480,19 @@ def opp_from_record(rec: dict) -> dict:
         if not isinstance(opp.get("compliance"), dict):
             opp["compliance"] = {"suppressed": False}
 
+    # ✅ Cadence anchor (authoritative from Airtable)
+    anchor = (
+        fields.get("salesai_created_iso")
+        or fields.get("Lead Created At")
+        or fields.get("Created At")
+    )
+    if anchor:
+        p = opp.setdefault("patti", {})
+        if isinstance(p, dict):
+            # do NOT overwrite if snapshot already has one
+            p.setdefault("salesai_created_iso", anchor)
+
+
     # ✅ Hydrate first-touch + routing flag (authoritative for cron routing)
     fes = (
         fields.get("first_email_sent_at")
@@ -495,6 +508,7 @@ def opp_from_record(rec: dict) -> dict:
         checked = opp.setdefault("checkedDict", {})
         if isinstance(checked, dict):
             checked["patti_already_contacted"] = True
+
 
     return opp
 
