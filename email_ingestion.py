@@ -917,7 +917,7 @@ def process_lead_notification(inbound: dict) -> None:
                 triage_text = (customer_comment or "").strip()
             else:
                 triage_text = (customer_comment or "").strip() or (body_text or "")
-
+            triage = None
             # ADF: if no customer comments, do NOT triage the XML blob
             if is_adf and not triage_text.strip():
                 triage = {
@@ -1121,6 +1121,8 @@ def process_lead_notification(inbound: dict) -> None:
         (opportunity.get("Assigned Sales Rep") if isinstance(opportunity, dict) else None),
         opp_id,
     )
+
+    
     sent_ok = send_first_touch_email(
         opportunity=opportunity,
         fresh_opp=fresh_opp,
