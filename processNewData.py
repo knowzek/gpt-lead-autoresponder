@@ -2872,7 +2872,7 @@ def send_first_touch_email(
             extra_fields={
                 "follow_up_at": next_iso,
                 "ab_variant": variant,
-                "first_email_sent_at": opportunity["first_email_sent_at"],
+                "first_email_sent_at": opportunity.get("first_email_sent_at"),
                 # optional but recommended so Airtable is the truth:
                 "salesai_created_iso": created_iso,   # if you add this column
             }
