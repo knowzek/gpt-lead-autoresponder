@@ -578,10 +578,18 @@ def _is_kbb_opp(opp: dict) -> bool:
 
 def process_lead_notification(inbound: dict) -> None:
     subject = inbound.get("subject") or ""
-    body_html = inbound.get("body_html") or ""
-    raw_text = inbound.get("body_text") or clean_html(body_html)
-    body_text = (raw_text or "").strip()
     provider_template = False
+    body_html = inbound.get("body_html") or ""
+    body_text_in = inbound.get("body_text") or ""
+    
+    # If body_html contains ADF/XML, do NOT run clean_html on it
+    if body_text_in.strip():
+        body_text = body_text_in.strip()
+    elif body_html.lstrip().startswith("<?xml") or "<adf" in body_html.lower():
+        body_text = body_html.strip()
+    else:
+        body_text = (clean_html(body_html) or "").strip()
+
 
 
     # ✅ ADF (CarGurus) structured parse first
@@ -610,9 +618,6 @@ def process_lead_notification(inbound: dict) -> None:
     if adf:
         customer_comment = (adf.get("comments", "") or "").strip()
         triage_text = customer_comment or body_text
-    
-    if provider_template and not customer_comment:
-        customer_comment = _extract_customer_comment_from_provider(body_text)
     
     if provider_template and not adf:
         triage_text = customer_comment or body_text
@@ -909,7 +914,6 @@ def process_lead_notification(inbound: dict) -> None:
                  bool(_PROVIDER_TEMPLATE_HINT_RE.search(body_text or "")),
                  bool(_PROVIDER_TEMPLATE_HINT_RE.search(triage_text or "")))
 
-            triage = None  # ✅ ensure defined
     
             # Provider template? Only triage guest-written comment
             if provider_template and not is_adf:
