@@ -6,6 +6,7 @@ from flask import Flask, request, jsonify
 
 from email_ingestion import process_inbound_email
 from kbb_adf_ingestion import process_kbb_adf_notification
+from sms_ingestion import process_inbound_sms
 
 log = logging.getLogger("patti.web")
 app = Flask(__name__)
@@ -175,6 +176,29 @@ def email_inbound():
     except Exception as e:
         log.exception("Email ingestion failed: %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/sms-inbound", methods=["POST"])
+def sms_inbound():
+    """
+    Webhook endpoint called by GoTo for inbound SMS.
+    For now: log raw payload, apply simple rules, reply immediately.
+    """
+    try:
+        payload_json = request.get_json(silent=True) or {}
+        raw_text = ""
+        try:
+            raw_text = (request.data or b"").decode("utf-8", errors="ignore")
+        except Exception:
+            raw_text = ""
+
+        log.info("📥 Incoming SMS webhook")
+        out = process_inbound_sms(payload_json, raw_text=raw_text)
+        return jsonify(out), 200
+
+    except Exception as e:
+        log.exception("SMS ingestion failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
 
 # -----------------------------
