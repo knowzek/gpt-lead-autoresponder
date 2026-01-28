@@ -874,6 +874,7 @@ def process_lead_notification(inbound: dict) -> None:
 
     fresh_opp = get_opportunity(opp_id, tok, subscription_id) or {}
 
+    vehicle_str = "one of our vehicles"
     # --- STEP 1: First SMS on new lead (General Leads only) ---
     try:
         # Only send SMS on first-time bootstrap (new record)
