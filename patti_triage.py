@@ -320,6 +320,88 @@ _MODEL_HINT_RE = re.compile(
     r")\b"
 )
 
+def gpt_reply_gate(email_text: str) -> Dict[str, Any]:
+    """
+    Decide if Patti can safely auto-reply WITHOUT guessing or needing verification.
+    Returns:
+      {
+        "can_auto_reply": bool,
+        "confidence": float,
+        "reason": str
+      }
+    """
+    t = (email_text or "").strip()
+    t_short = _clip(t, 2500)
+
+    if not _oai:
+        # If OpenAI not configured, default safe (human)
+        return {"can_auto_reply": False, "confidence": 0.60, "reason": "OpenAI not configured; default to human review."}
+
+    prompt = f"""
+You are the escalation gate for a dealership assistant named Patti.
+
+Your only job: decide if Patti can reply directly **truthfully and completely** using ONLY what she has,
+or if this should be handed off to a human.
+
+Patti capabilities / constraints:
+- Inventory access: NO (cannot confirm availability, exact options, trims, or holds)
+- Vehicle history access: NO (cannot confirm accident history, title status, service history, number of owners, etc.)
+- Pricing authority: LIMITED (cannot negotiate, quote OTD, confirm discounts, or fees)
+- Scheduling: YES (can propose times and set appointments)
+- Location/hours: YES
+- Can ask a clarifying question: YES
+
+Rules:
+- HANDOFF if the customer asks for anything that requires verification or dealership-only data
+  (e.g. accident history, condition assessment, title, service records, exact availability, "is it still available", "clean title",
+   "how many owners", "any damage", "what's the best price", OTD, discounts, finance approvals, payoff, etc.)
+- HANDOFF if the message is multi-part, ambiguous, upset/angry, or requires a nuanced human response.
+- AUTO_REPLY is allowed only if Patti can answer with high confidence from general info (hours/location/next steps)
+  or by asking 1 clarifying question safely.
+
+Return JSON ONLY:
+{{
+  "can_auto_reply": true/false,
+  "confidence": 0.0,
+  "reason": "short"
+}}
+
+Email:
+\"\"\"{t_short}\"\"\"
+""".strip()
+
+    try:
+        resp = _oai.chat.completions.create(
+            model=OPENAI_MODEL,
+            temperature=0,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": "Return JSON only. No extra text."},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        raw = resp.choices[0].message.content or "{}"
+        data = json.loads(raw)
+
+        can_auto = bool(data.get("can_auto_reply"))
+        conf = float(data.get("confidence") or 0.0)
+        reason = (data.get("reason") or "").strip()
+
+        # safety valve: if it says "auto" but low confidence, force handoff
+        if can_auto and conf < TRIAGE_MIN_CONF:
+            return {
+                "can_auto_reply": False,
+                "confidence": conf,
+                "reason": f"Confidence below threshold ({TRIAGE_MIN_CONF}). {reason}".strip()
+            }
+
+        return {"can_auto_reply": can_auto, "confidence": conf, "reason": reason or "Gated by model."}
+
+    except Exception as e:
+        log.exception("Reply gate failed: %s", e)
+        return {"can_auto_reply": False, "confidence": 0.55, "reason": "Reply gate error; default to human review."}
+
+
 def classify_inbound_email(email_text: str, *, provider_template: bool = False) -> Dict[str, Any]:
 
     """
@@ -355,101 +437,21 @@ def classify_inbound_email(email_text: str, *, provider_template: bool = False) 
             pass  # <-- best: allow GPT to classify instead of auto-escalating
 
 
-    if _HUMAN_REVIEW_RE.search(t_short):
-        return {"classification": "HUMAN_REVIEW_REQUIRED", "confidence": 0.90, "reason": "Pricing/financing/trade/legal/urgent/angry indicators."}
+    # 3) NEW: GPT Reply Gate (THIS REPLACES regex escalation + old GPT classifier)
+    gate = gpt_reply_gate(t_short)
 
-    # Inventory-specific configuration (model + 1 qualifier) => handoff
-    # ✅ BUT: do NOT escalate for provider templates (Cars.com/Carfax first-touch)
-    if not provider_template:
-        m_model = _MODEL_HINT_RE.search(t_short)
-        m_qual  = _INVENTORY_QUAL_RE.search(t_short)
-        if m_model and m_qual:
-            return {
-                "classification": "HUMAN_REVIEW_REQUIRED",
-                "confidence": 0.92,
-                "reason": f"Inventory-specific config: model='{m_model.group(0)}' qualifier='{m_qual.group(0)}'."
-            }
+    if not gate.get("can_auto_reply", False):
+        return {
+            "classification": "HUMAN_REVIEW_REQUIRED",
+            "confidence": float(gate.get("confidence") or 0.0),
+            "reason": gate.get("reason") or "Reply gate: requires human review."
+        }
 
-
-    # GPT classifier (conservative gate)
-    if not _oai:
-        return {"classification": "HUMAN_REVIEW_REQUIRED", "confidence": 0.60, "reason": "OpenAI not configured; default to human."}
-
-    prompt = f"""
-You are classifying an inbound dealership internet lead email.
-
-Do NOT write a reply. Only classify.
-
-Choose ONE:
-AUTO_REPLY_SAFE
-HUMAN_REVIEW_REQUIRED
-EXPLICIT_OPTOUT
-NON_LEAD
-
-Rules:
-- pricing/discounts/OTD/quotes → HUMAN_REVIEW_REQUIRED
-- financing/credit/payments → HUMAN_REVIEW_REQUIRED
-- trade-in value disputes or negotiation (numbers/offer/value/payoff) → HUMAN_REVIEW_REQUIRED
-- simple trade-in interest (no numbers/value) → AUTO_REPLY_SAFE
-- angry/urgent/emotional → HUMAN_REVIEW_REQUIRED
-- unclear intent → AUTO_REPLY_SAFE
-- stop contact → EXPLICIT_OPTOUT
-- auto-reply/system noise → NON_LEAD
-- simple availability/basic info/confirmation → AUTO_REPLY_SAFE
-
-Return JSON ONLY:
-{{
-  "classification": "AUTO_REPLY_SAFE|HUMAN_REVIEW_REQUIRED|EXPLICIT_OPTOUT|NON_LEAD",
-  "confidence": 0.0,
-  "reason": "short"
-}}
-
-Email:
-\"\"\"{t_short}\"\"\"
-""".strip()
-
-    try:
-        resp = _oai.chat.completions.create(
-            model=OPENAI_MODEL,
-            temperature=0,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": "Return JSON only. No extra text."},
-                {"role": "user", "content": prompt},
-            ],
-        )
-        raw = resp.choices[0].message.content or "{}"
-        data = json.loads(raw)
-
-        cls = (data.get("classification") or "").strip().upper()
-        conf = float(data.get("confidence") or 0.0)
-        reason = (data.get("reason") or "").strip()
-
-        if cls not in {"AUTO_REPLY_SAFE", "HUMAN_REVIEW_REQUIRED", "EXPLICIT_OPTOUT", "NON_LEAD"}:
-            cls = "HUMAN_REVIEW_REQUIRED"
-            reason = reason or "Invalid classifier output; defaulted to human review."
-
-        # Prevent NON_LEAD on short content; treat as safe lead engagement
-        if cls == "NON_LEAD" and len(t_short) < 120:
-            log.info("TRIAGE DEBUG coerced NON_LEAD->AUTO_REPLY_SAFE due to short length (%s chars)", len(t_short))
-            cls = "AUTO_REPLY_SAFE"
-            reason = (reason or "short") + " → coerced to AUTO_REPLY_SAFE (short text is not a non-lead)."
-            conf = max(conf, 0.70)
-
-        # confidence safety valve
-        if cls == "AUTO_REPLY_SAFE" and conf < TRIAGE_MIN_CONF:
-            return {
-                "classification": "HUMAN_REVIEW_REQUIRED",
-                "confidence": conf,
-                "reason": f"Confidence below threshold ({TRIAGE_MIN_CONF}). {reason}".strip()
-            }
-
-        return {"classification": cls, "confidence": conf, "reason": reason or "Classified by model."}
-
-
-    except Exception as e:
-        log.exception("Classifier failed: %s", e)
-        return {"classification": "HUMAN_REVIEW_REQUIRED", "confidence": 0.55, "reason": "Classifier error; default to human review."}
+    return {
+        "classification": "AUTO_REPLY_SAFE",
+        "confidence": float(gate.get("confidence") or 0.0),
+        "reason": gate.get("reason") or "Reply gate: safe to auto-reply."
+    }
 
 
 def handoff_to_human(
