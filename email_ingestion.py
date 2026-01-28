@@ -79,6 +79,22 @@ TEST_OPP_ID = "050a81e9-78d4-f011-814f-00505690ec8c"
 
 DEFAULT_SUBSCRIPTION_ID = os.getenv("DEFAULT_SUBSCRIPTION_ID")  # set this to Tustin Kia's subscription id
 
+_HTML_NBSP_RE = re.compile(r"(?i)&nbsp;|&#160;")
+_LEADING_HTML_SPACE_RE = re.compile(r"(?i)^(?:&nbsp;|\u00a0|\s)+")
+
+def _norm_provider_line(raw: str) -> str:
+    """
+    Normalizes provider lines so '&nbsp;' doesn't break ^\\s* regexes.
+    """
+    s = (raw or "")
+    # Convert common HTML non-breaking spaces into real spaces
+    s = _HTML_NBSP_RE.sub(" ", s)
+    s = s.replace("\u00a0", " ")  # actual NBSP char
+    # Collapse weird leading HTML spaces into whitespace
+    s = _LEADING_HTML_SPACE_RE.sub("", s)
+    return s.strip()
+
+
 # --- Provider template comment extraction (for CARFAX / Cars.com style lead emails) ---
 
 _PROVIDER_TEMPLATE_HINT_RE = re.compile(
@@ -122,8 +138,9 @@ _PROVIDER_BOILERPLATE_LINES_RE = re.compile(
 
 # Labels that often precede the guest-written free text
 _COMMENT_LABEL_RE = re.compile(
-    r"(?is)^\s*(?:additional\s+comments?|customer\s+comments?|comments?|message|questions?)\s*:\s*(.*)$"
+    r"(?is)^\s*(additional\s+comments?|customer\s+comments?|comments?|message|questions?)\s*(?::\s*)?(.*)$"
 )
+
 
 # Very strict "field line" patterns to drop (only when they look like provider key/value fields)
 _PROVIDER_FIELD_LINE_RE = re.compile(
@@ -140,7 +157,7 @@ def _extract_customer_comment_from_provider(body_text: str) -> str:
 
     lines = []
     for raw in body_text.splitlines():
-        s = (raw or "").strip()
+        s = _norm_provider_line(raw)
         if not s:
             continue
         if _PROVIDER_BOILERPLATE_LINES_RE.search(s):
@@ -150,38 +167,54 @@ def _extract_customer_comment_from_provider(body_text: str) -> str:
     if not lines:
         return ""
 
-    # --- Pass 1: If we see a comment label, extract ONLY that comment section ---
+    # --- Pass 1: detect comment label, with or without colon ---
     captured = []
     in_comment_block = False
+    saw_comment_label = False
 
     for s in lines:
         m = _COMMENT_LABEL_RE.match(s)
-
         if m:
-            # Found a labeled comment line.
-            in_comment_block = True
-            remainder = (m.group(1) or "").strip()
-            if remainder:
-                captured.append(remainder)
-            continue
+            label = (m.group(1) or "").strip().lower()
+            remainder = (m.group(2) or "").strip()
+
+            # If this is a comment label, start capturing.
+            if label in {"additional comments", "additional comment", "customer comments", "customer comment",
+                         "comments", "comment", "message", "questions", "question"}:
+                saw_comment_label = True
+                in_comment_block = True
+                if remainder:
+                    captured.append(remainder)
+                continue
 
         if in_comment_block:
-            # Stop if we hit what looks like another provider field line.
+            # Stop if we hit another provider field or obvious template section
             if _PROVIDER_FIELD_LINE_RE.match(s):
                 break
-            # Stop if we hit a boilerplate line (already filtered, but just in case)
             if _PROVIDER_BOILERPLATE_LINES_RE.search(s):
+                break
+            if _PROVIDER_TEMPLATE_HINT_RE.search(s):  # <-- important for Apollo headers
                 break
             captured.append(s)
 
     if captured:
-        return " ".join(captured).strip()
+        out = " ".join(captured).strip()
+        # Guard: if we somehow captured template header junk, discard
+        if _PROVIDER_TEMPLATE_HINT_RE.search(out) and len(out) < 200:
+            return ""
+        return out
 
-    # --- Pass 2: No comment label detected: keep your original behavior,
-    #             but drop strict provider field lines like "MSRP: $56,640" ---
+    # --- Pass 1b: If we saw "Comments" label but nothing captured, don't fall back to template text ---
+    if saw_comment_label:
+        return ""
+
+    # --- Pass 2: fallback ---
     kept = []
     for s in lines:
         if _PROVIDER_FIELD_LINE_RE.match(s):
+            continue
+        # If the line still looks like provider header/template, drop it
+        if _PROVIDER_TEMPLATE_HINT_RE.search(s):
             continue
         kept.append(s)
 
