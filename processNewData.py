@@ -275,10 +275,10 @@ def maybe_send_tk_gm_day2_email(
     if not is_tustin_kia_rooftop(rooftop_name):
         return False
 
-    patti_meta = opportunity.setdefault("patti", {})
-    if patti_meta.get("tk_gm_day2_sent") is True:
+    # ✅ ROOT GATE: Airtable checkbox only (no patti_json)
+    if bool(opportunity.get("tk_gm_day2_sent")):
         return False
-
+        
     # Resolve customer email (preferred + not doNotEmail)
     # ✅ Resolve customer email from Airtable-hydrated field first
     to_addr = resolve_customer_email(opportunity)
@@ -348,8 +348,6 @@ def maybe_send_tk_gm_day2_email(
         airtable_save(opportunity, extra_fields={
             "TK GM Day 2 Sent": True,
             "TK GM Day 2 Sent At": currDate_iso,
-            # optional if you have this column:
-            # "Last Template Day Sent": patti_meta["last_template_day_sent"],
         })
 
 
