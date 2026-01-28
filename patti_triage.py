@@ -472,6 +472,9 @@ def classify_inbound_email(email_text: str, *, provider_template: bool = False) 
     # 3) NEW: GPT Reply Gate (THIS REPLACES regex escalation + old GPT classifier)
     gate = gpt_reply_gate(t_short)
 
+    log.info("TRIAGE_GATE can_auto=%s conf=%.2f reason=%s",
+         gate.get("can_auto_reply"), float(gate.get("confidence") or 0), gate.get("reason"))
+
     if not gate.get("can_auto_reply", False):
         return {
             "classification": "HUMAN_REVIEW_REQUIRED",
