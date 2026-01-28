@@ -524,23 +524,24 @@ def opp_from_record(rec: dict) -> dict:
             p["salesai_email_idx"] = -1
         if p.get("last_template_day_sent") is None:
             p["last_template_day_sent"] = 0
-
-    # ✅ If Airtable says GM Day 2 was sent, force last_template_day_sent >= 2
-    gm_day2_sent = (
-        fields.get("GM Day 2 Sent")
-        or fields.get("GM Day 2 Email Sent")
-        or fields.get("Day 2 GM Email Sent")
-        or False
-    )
-
-    if gm_day2_sent:
+    
+    # ✅ TK GM Day 2 Sent (authoritative Airtable checkbox)
+    tk_gm_day2_sent = bool(fields.get("TK GM Day 2 Sent"))
+    opp["tk_gm_day2_sent"] = tk_gm_day2_sent
+    
+    tk_gm_day2_sent_at = fields.get("TK GM Day 2 Sent At")
+    if tk_gm_day2_sent_at:
+        opp["tk_gm_day2_sent_at"] = tk_gm_day2_sent_at
+    
+    # Optional derived state (only if other cadence code still relies on it)
+    if tk_gm_day2_sent and isinstance(p, dict):
         try:
             p["last_template_day_sent"] = max(int(p.get("last_template_day_sent") or 0), 2)
         except Exception:
             p["last_template_day_sent"] = 2
-
-
+    
     return opp
+
 
 
 def get_by_id(rec_id: str) -> dict:
