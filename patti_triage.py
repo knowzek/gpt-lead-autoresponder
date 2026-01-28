@@ -424,6 +424,39 @@ def classify_inbound_email(email_text: str, *, provider_template: bool = False) 
 
     t_lower = t_short.lower()
 
+    if provider_template:
+        # Extract only the customer-written part from the provider template
+        comment = _extract_customer_comment_from_provider(t_short)  # you already have this helper
+        comment = (comment or "").strip()
+    
+        # If we truly have no customer comment, it's just a normal first-touch lead
+        if not comment:
+            return {
+                "classification": "AUTO_REPLY_SAFE",
+                "confidence": 0.85,
+                "reason": "Provider template with no customer comment; safe for normal first-touch."
+            }
+    
+        # If customer comment contains opt-out, honor it
+        if _OPT_OUT_RE.search(comment):
+            return {"classification": "EXPLICIT_OPTOUT", "confidence": 0.98, "reason": "Opt-out in customer comment."}
+    
+        # Run the GPT reply gate ONLY on the extracted customer comment
+        gate = gpt_reply_gate(comment)
+    
+        if not gate.get("can_auto_reply", False):
+            return {
+                "classification": "HUMAN_REVIEW_REQUIRED",
+                "confidence": float(gate.get("confidence") or 0.0),
+                "reason": gate.get("reason") or "Reply gate: requires human review (provider comment)."
+            }
+    
+        return {
+            "classification": "AUTO_REPLY_SAFE",
+            "confidence": float(gate.get("confidence") or 0.0),
+            "reason": gate.get("reason") or "Reply gate: safe to auto-reply (provider comment)."
+        }
+
     # Generic trade interest (no numbers/value/offer/payment/finance terms) should NOT force human review
     if re.search(r"\btrade\b|\btrade[-\s]?in\b", t_lower):
         has_trade_value_terms = re.search(
@@ -435,7 +468,6 @@ def classify_inbound_email(email_text: str, *, provider_template: bool = False) 
             # Let GPT decide (or mark safe directly)
             # return {"classification": "AUTO_REPLY_SAFE", "confidence": 0.85, "reason": "Generic trade-in interest (no value/pricing terms)."}
             pass  # <-- best: allow GPT to classify instead of auto-escalating
-
 
     # 3) NEW: GPT Reply Gate (THIS REPLACES regex escalation + old GPT classifier)
     gate = gpt_reply_gate(t_short)
