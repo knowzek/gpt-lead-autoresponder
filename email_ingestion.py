@@ -119,23 +119,6 @@ _PROVIDER_TEMPLATE_HINT_RE = re.compile(
     r"\bPrice\s+not\s+available\b"
 )
 
-_PROVIDER_BOILERPLATE_LINES_RE = re.compile(
-    r"(?im)^\s*(?:"
-    r"new customer lead for|"
-    r".+?\s+is\s+interested\s+in\s+one\s+of\s+your\s+carfax\s+car\s+listings|"
-    r"here's how to contact this customer|"
-    r"first name|last name|email|e-?mail|phone|telephone|"
-    r"date submitted|lead id|listing|price|condition|stock|vin|"
-    r"year/make/model|year\b|make\b|model\b|"
-    r"interested in\b|"
-    r"type of lead\b|"
-    r"contact information\b|"
-    r"offeramount\b|street\b|city\b|zip\b|"
-    r"lead provided by|"
-    r"for more information about your carfax account"
-    r").*$"
-)
-
 # Labels that often precede the guest-written free text
 _COMMENT_LABEL_RE = re.compile(
     r"(?is)^\s*(additional\s+comments?|customer\s+comments?|comments?|message|questions?)\s*(?::\s*)?(.*)$"
@@ -150,78 +133,6 @@ _PROVIDER_FIELD_LINE_RE = re.compile(
     r"year|make|model|trim|condition"
     r")\s*:\s*(?:\$?\s*[\d,]+(?:\.\d{2})?|[A-Z0-9\-]{6,}|.+?)\s*$"
 )
-
-def _extract_customer_comment_from_provider(body_text: str) -> str:
-    if not body_text:
-        return ""
-
-    lines = []
-    for raw in body_text.splitlines():
-        s = _norm_provider_line(raw)
-        if not s:
-            continue
-        if _PROVIDER_BOILERPLATE_LINES_RE.search(s):
-            continue
-        lines.append(s)
-
-    if not lines:
-        return ""
-
-    # --- Pass 1: detect comment label, with or without colon ---
-    captured = []
-    in_comment_block = False
-    saw_comment_label = False
-
-    for s in lines:
-        m = _COMMENT_LABEL_RE.match(s)
-        if m:
-            label = (m.group(1) or "").strip().lower()
-            remainder = (m.group(2) or "").strip()
-
-            # If this is a comment label, start capturing.
-            if label in {"additional comments", "additional comment", "customer comments", "customer comment",
-                         "comments", "comment", "message", "questions", "question"}:
-                saw_comment_label = True
-                in_comment_block = True
-                if remainder:
-                    captured.append(remainder)
-                continue
-
-        if in_comment_block:
-            # Stop if we hit another provider field or obvious template section
-            if _PROVIDER_FIELD_LINE_RE.match(s):
-                break
-            if _PROVIDER_BOILERPLATE_LINES_RE.search(s):
-                break
-            if _PROVIDER_TEMPLATE_HINT_RE.search(s):  # <-- important for Apollo headers
-                break
-            captured.append(s)
-
-    if captured:
-        out = " ".join(captured).strip()
-        # Guard: if we somehow captured template header junk, discard
-        if _PROVIDER_TEMPLATE_HINT_RE.search(out) and len(out) < 200:
-            return ""
-        return out
-
-    # --- Pass 1b: If we saw "Comments" label but nothing captured, don't fall back to template text ---
-    if saw_comment_label:
-        return ""
-
-    # --- Pass 2: fallback ---
-    kept = []
-    for s in lines:
-        if _PROVIDER_FIELD_LINE_RE.match(s):
-            continue
-        # If the line still looks like provider header/template, drop it
-        if _PROVIDER_TEMPLATE_HINT_RE.search(s):
-            continue
-        kept.append(s)
-
-    return " ".join(kept).strip()
-
-
-
 
 def _resolve_subscription_id(inbound: dict, headers: dict | None) -> str | None:
     # 1) Prefer body fields (Power Automate is sending these)
