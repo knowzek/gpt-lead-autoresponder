@@ -226,7 +226,16 @@ def _find_kbb_opp_by_email_via_fortellis(shopper_email: str) -> tuple[str, str] 
 def process_kbb_adf_notification(inbound: dict) -> None:
     subject = inbound.get("subject") or ""
     body_html = inbound.get("body_html") or ""
-    body_text = inbound.get("body_text") or clean_html(body_html)
+    raw_text  = inbound.get("body_text") or ""
+    
+    # Prefer body_text only if it looks complete enough to contain an email.
+    # If it's clipped (like "Email: summer"), fall back to HTML-derived text.
+    if ("@" not in raw_text) or (len(raw_text) < 300):
+        body_text = clean_html(body_html)
+    else:
+        body_text = raw_text
+    
+    log.info("KBB ADF: lens body_text=%s body_html=%s", len(raw_text), len(body_html))
 
     log.info("KBB ADF: raw body_text sample: %r", (body_text or "")[:500])
 
