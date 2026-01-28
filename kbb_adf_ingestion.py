@@ -230,6 +230,9 @@ def process_kbb_adf_notification(inbound: dict) -> None:
 
     log.info("KBB ADF: raw body_text sample: %r", (body_text or "")[:500])
 
+    i = (body_text or "").lower().find("email:")
+    log.info("KBB ADF DEBUG email-window=%r", (body_text or "")[max(0,i-80):i+200])
+
     shopper_email = _extract_shopper_email(body_text)
     if not shopper_email:
         log.warning("KBB ADF inbound had no shopper email; subject=%s", subject)
