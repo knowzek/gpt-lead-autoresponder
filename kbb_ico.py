@@ -35,6 +35,7 @@ import textwrap as _tw
 import zoneinfo as _zi
 
 from html import unescape as _unesc
+import re as _re
 
 #from rooftops import ROOFTOP_INFO as ROOFTOP_INFO
 
@@ -653,20 +654,73 @@ def _latest_read_email_id(acts: list[dict]) -> str | None:
             newest = str(a.get("activityId") or a.get("id") or "")
     return newest
 
+# Add these (or expand your existing ones)
+_REPLY_SEP_TEXT_RE = _re.compile(
+    r"(?im)^\s*(?:"
+    r"from:\s|sent:\s|to:\s|cc:\s|subject:\s|"
+    r"[-_ ]*original message[-_ ]*|"
+    r"[-_ ]*forwarded message[-_ ]*|"
+    r"on .+ wrote:\s*$"
+    r")"
+)
+
+# Optional: remove common Outlook “quoted history” containers before text conversion
+_OUTLOOK_QUOTED_HTML_RE = _re.compile(
+    r"(?is)"
+    r"<div[^>]+id=['\"]divRplyFwdMsg['\"][^>]*>.*$|"   # Outlook reply/forward header block
+    r"<div[^>]+class=['\"][^'\"]*OutlookMessageHeader[^'\"]*['\"][^>]*>.*$|"
+    r"<div[^>]+class=['\"][^'\"]*gmail_quote[^'\"]*['\"][^>]*>.*$"
+)
+
+_TAGS_RE = _re.compile(r"(?is)<[^>]+>")  # you already have this
+
+_BR_RE = _re.compile(r"(?is)<br\s*/?>")
+_BLOCK_END_RE = _re.compile(r"(?is)</(?:p|div|li|tr|table|h[1-6])\s*>")
+_SCRIPT_STYLE_RE = _re.compile(r"(?is)<(script|style)[^>]*>.*?</\1>")
+
 def _top_reply_only(html: str) -> str:
-    """Strip quoted thread and return the customer's fresh reply (first paragraph)."""
+    """Return the customer's fresh reply (strip quoted thread, keep meaningful body)."""
     if not html:
         return ""
+
     s = html
-    s = _GMAIL_QUOTE_RE.sub("", s)   # remove Gmail quoted thread
-    s = _BLOCKQUOTE_RE.sub("", s)    # remove generic blockquotes
-    # keep just the first <div>/<p>…</div></p> or line before a double break
-    s = s.split("<br><br>", 1)[0]
-    # fallback: remove tags and trim
+
+    # 1) Remove script/style noise early
+    s = _SCRIPT_STYLE_RE.sub(" ", s)
+
+    # 2) Remove known quoted containers (Outlook/Gmail) BEFORE nuking tags
+    s = _OUTLOOK_QUOTED_HTML_RE.sub("", s)
+
+    # 3) Your existing quote removals (keep them)
+    s = _GMAIL_QUOTE_RE.sub("", s)
+    s = _BLOCKQUOTE_RE.sub("", s)
+
+    # 4) Convert HTML to text with newlines so we can detect separators
+    s = _BR_RE.sub("\n", s)
+    s = _BLOCK_END_RE.sub("\n", s)
+
+    # 5) Strip tags + unescape
     s = _TAGS_RE.sub(" ", s)
-    s = _re.sub(r'\s+', ' ', _unesc(s)).strip()
-    # be conservative: cap length
-    return s[:500]
+    s = _unesc(s)
+
+    # 6) Normalize whitespace/newlines
+    s = _re.sub(r"\r\n?", "\n", s)
+    s = _re.sub(r"[ \t]+", " ", s)
+    s = _re.sub(r"\n{3,}", "\n\n", s).strip()
+
+    # 7) Cut at reply separators in *text* (From:/Sent:/Original Message/etc.)
+    m = _REPLY_SEP_TEXT_RE.search(s)
+    if m:
+        s = s[:m.start()].strip()
+
+    # 8) If we accidentally ended up with only a greeting, keep more (2 paragraphs)
+    #    (This handles “Hi,” + blank line + actual request)
+    parts = [p.strip() for p in s.split("\n\n") if p.strip()]
+    if len(parts) >= 2 and len(parts[0]) <= 10:
+        s = (parts[0] + "\n\n" + parts[1]).strip()
+
+    return s[:800]
+
 
 def _has_upcoming_appt(acts_live, state: dict) -> bool:
     """
