@@ -22,6 +22,7 @@ from fortellis import complete_activity
 from fortellis import complete_read_email_activity
 from patti_triage import classify_inbound_email, handoff_to_human, should_triage
 from patti_common import EMAIL_RE, PHONE_RE
+from patti_common import extract_customer_comment_from_provider, PROVIDER_BOILERPLATE_LINES_RE
 
 from kbb_ico import _top_reply_only
 from airtable_store import (
