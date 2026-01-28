@@ -2198,11 +2198,24 @@ def processHit(hit):
         
                 if not OFFLINE_MODE:
                     try:
-                        airtable_save(opportunity, extra_fields={"follow_up_at": next_iso})
+                        first_sent = opportunity.get("first_email_sent_at")
+                
+                        extra = {
+                            "follow_up_at": next_iso
+                        }
+                
+                        if first_sent:
+                            extra["first_email_sent_at"] = first_sent
+                
+                        airtable_save(opportunity, extra_fields=extra)
+                
                     except Exception as e:
-                        log.warning("Airtable save failed opp=%s (continuing): %s",
-                                    opportunity.get("opportunityId") or opportunity.get("id"), e)
-        
+                        log.warning(
+                            "Airtable save failed opp=%s (continuing): %s",
+                            opportunity.get("opportunityId") or opportunity.get("id"),
+                            e
+                        )
+
                 wJson(opportunity, f"jsons/process/{opportunityId}.json")
                 return
         
@@ -2593,6 +2606,15 @@ def send_first_touch_email(
          salesperson,
          customer_email)
 
+    # --- HARD FIRST-TOUCH IDEMPOTENCY GATE ---
+    if opportunity.get("first_email_sent_at"):
+        log.info(
+            "Skipping first-touch email: already sent at %s opp=%s",
+            opportunity.get("first_email_sent_at"),
+            opportunity.get("opportunityId") or opportunity.get("id"),
+        )
+        return False
+
 
     # --- DEDUPE: don't send first-touch again if we've already welcomed this email recently (same rooftop)
     if customer_email and _already_sent_first_touch_recently(
@@ -2811,7 +2833,16 @@ def send_first_touch_email(
             customer_email,
             actual_to,
         )
+
+    # Latch FIRST (always) so retries cannot resend
+    now_iso = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
+    opportunity["first_email_sent_at"] = opportunity.get("first_email_sent_at") or now_iso
     
+    save_opp(
+        opportunity,
+        extra_fields={"first_email_sent_at": opportunity["first_email_sent_at"]},
+    )
+
     # ✅ Send in both modes (SAFE_MODE just changes actual_to)
     if actual_to:
         try:
@@ -2836,8 +2867,6 @@ def send_first_touch_email(
             "No recipient resolved for opp %s (customer_email=%r SAFE_MODE=%r test_recipient=%r)",
             opportunityId, customer_email, SAFE_MODE, test_recipient
         )
-
-
     
     # ---------------------------
     #   Only update Patti's state IF sent_ok is True
@@ -2884,7 +2913,6 @@ def send_first_touch_email(
             opportunityId,
         )
 
-    
     # Persist opportunity state (only if we didn't already save in the sent_ok path)
     if not sent_ok and not OFFLINE_MODE:
         airtable_save(opportunity)
