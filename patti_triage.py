@@ -15,6 +15,7 @@ from outlook_email import send_email_via_outlook
 from fortellis import schedule_activity, add_opportunity_comment
 
 from patti_common import EMAIL_RE, PHONE_RE
+from patti_common import extract_customer_comment_from_provider
 
 log = logging.getLogger("patti.triage")
 
@@ -426,7 +427,7 @@ def classify_inbound_email(email_text: str, *, provider_template: bool = False) 
 
     if provider_template:
         # Extract only the customer-written part from the provider template
-        comment = _extract_customer_comment_from_provider(t_short)  # you already have this helper
+        comment = extract_customer_comment_from_provider(t_short)  # you already have this helper
         comment = (comment or "").strip()
     
         # If we truly have no customer comment, it's just a normal first-touch lead
