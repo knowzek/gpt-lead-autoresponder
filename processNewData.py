@@ -2287,6 +2287,11 @@ def processHit(hit):
                             subject=subject,
                             body_html=body_html,
                             cc_addrs=[],
+                        
+                            force_mode="cadence",                 # ✅ tells Airtable this is cadence
+                            next_follow_up_at=next_due,           # ✅ advances follow_up_at
+                            template_day=int(patti.get("salesai_email_idx") or -1) + 2,
+                            ab_variant=opportunity.get("ab_variant"),
                         )
                         sent_ok = True
                     except Exception as e:
@@ -2793,13 +2798,18 @@ def send_first_touch_email(
                 opp_id=opportunityId,
                 rooftop_name=rooftop_name,
                 rooftop_sender=rooftop_sender,
-                to_addr=actual_to,            # ✅ use actual_to
+                to_addr=actual_to,
                 subject=subject,
                 body_html=body_html,
                 cc_addrs=[],
                 force_mode="cadence",
                 next_follow_up_at=next_due,
+            
+                # ✅ new
+                template_day=1,          # first-touch
+                ab_variant=variant,
             )
+
         except Exception as e:
             log.warning("Failed to send Patti general lead email for opp %s: %s", opportunityId, e)
             sent_ok = False
