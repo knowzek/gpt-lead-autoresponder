@@ -371,6 +371,7 @@ def process_kbb_adf_notification(inbound: dict) -> None:
         "is_active": True,
         "follow_up_at": follow_up_at,
         "mode": (opportunity.get("_kbb_state") or {}).get("mode", ""),
+        "Email": shopper_email or "",
     }
     
     # ✅ Persist KBB offer context in its own Airtable column
@@ -444,6 +445,35 @@ def process_kbb_adf_notification(inbound: dict) -> None:
             opportunity["followUP_date"] = next_follow
     
             save_opp(opportunity)
+            
+            # ✅ ALSO PATCH KBB-specific columns directly (no opp_json dependency)
+            try:
+                # state should now contain the last template info
+                last_day = state.get("last_template_day_sent")
+                last_at  = state.get("last_template_sent_at")
+
+                # Set first_email_sent_at only if it isn't already set
+                existing_first = ((rec or {}).get("fields") or {}).get("first_email_sent_at")
+
+                patch = {
+                    "Email": shopper_email or "",
+                }
+
+                if last_day:
+                    patch["Last template sent"] = f"Day {int(last_day)}"
+
+                if last_at:
+                    patch["Last template sent at (date/time)"] = last_at
+
+                    if not existing_first:
+                        patch["first_email_sent_at"] = last_at
+
+                if len(patch) > 1:  # means we have at least one of the template fields too
+                    upsert_lead(opp_id, patch)
+
+            except Exception as e:
+                log.warning("KBB ADF: failed to patch template fields in Airtable opp=%s err=%s", opp_id, e)
+
     
             log.info("KBB ADF: Day 1 sent; scheduled next follow_up_at=%s opp=%s", next_follow, opp_id)
     
