@@ -193,6 +193,8 @@ def mark_ai_email_sent(
     when_iso: str | None = None,
     next_follow_up_at: str | None = None,
     force_mode: str | None = None,
+    template_day: int | None = None,
+    ab_variant: str | None = None,
 ):
     """
     Call this immediately after a successful outbound email send.
@@ -241,6 +243,16 @@ def mark_ai_email_sent(
         "AI Messages Sent": int(opp.get("AI Messages Sent") or 0),
         "mode": (force_mode or (mode or "")),
     }
+
+    # ✅ persist A/B if provided
+    if ab_variant:
+        patch["ab_variant"] = ab_variant
+        opp["ab_variant"] = ab_variant
+
+    # ✅ persist last_template_day_sent if provided
+    if template_day is not None:
+        patch["last_template_day_sent"] = int(template_day)
+        opp["last_template_day_sent"] = int(template_day)
 
     # If you have AI Emails Sent column, keep it updated too
     if "AI Emails Sent" in opp:
