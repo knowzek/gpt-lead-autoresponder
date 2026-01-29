@@ -24,7 +24,7 @@ from airtable_store import (
     find_by_opp_id, query_view, acquire_lock, release_lock,
     opp_from_record, save_opp, find_by_customer_email
 )
-from airtable_store import _bump_ai_send_metrics_in_airtable
+from patti_mailer import _bump_ai_send_metrics_in_airtable
 
 from fortellis import (
     get_activities,
