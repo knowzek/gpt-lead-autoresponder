@@ -95,7 +95,7 @@ def extract_customer_comment_from_provider(body_text: str) -> str:
         s = _norm_provider_line(raw)
         if not s:
             continue
-        if _PROVIDER_BOILERPLATE_LINES_RE.search(s):
+        if PROVIDER_BOILERPLATE_LINES_RE.search(s):
             continue
         lines.append(s)
 
@@ -126,7 +126,7 @@ def extract_customer_comment_from_provider(body_text: str) -> str:
             # Stop if we hit another provider field or obvious template section
             if _PROVIDER_FIELD_LINE_RE.match(s):
                 break
-            if _PROVIDER_BOILERPLATE_LINES_RE.search(s):
+            if PROVIDER_BOILERPLATE_LINES_RE.search(s):
                 break
             if _PROVIDER_TEMPLATE_HINT_RE.search(s):  # <-- important for Apollo headers
                 break
