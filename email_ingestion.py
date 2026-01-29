@@ -768,7 +768,7 @@ def process_lead_notification(inbound: dict) -> None:
         "source": "lead_notification",
     })
 
-    opportunity.setdefault("checkedDict", {})["last_msg_by"] = "customer"
+    opportunity.setdefault("checkedDict", {})["last_msg_by"] = "seed"
 
     # Persist guest email once, forever
     opportunity["customer_email"] = shopper_email
@@ -1378,6 +1378,18 @@ def process_inbound_email(inbound: dict) -> None:
     # ✅ PATCH 2A: Mark engagement (customer replied)
     mark_customer_reply(opportunity, when_iso=ts)
 
+    # ✅ Ensure cadence is paused immediately for ANY customer reply
+    try:
+        save_opp(opportunity, extra_fields={
+            "mode": "convo",
+            "follow_up_at": None,
+            "Customer Replied": True,
+            "Last Customer Reply At": ts,
+        })
+    except Exception:
+        pass
+
+
     # 2B: log inbound email to CRM as a COMPLETED "Read Email" activity (type 20)
     subscription_id = opportunity.get("_subscription_id") or inbound.get("subscription_id")
     if subscription_id:
@@ -1432,10 +1444,9 @@ def process_inbound_email(inbound: dict) -> None:
         log.info("Blocking inbound auto-reply (but reply logged): Needs Human Review opp=%s", opp_id)
         return
 
-    # 3) Mark inbound + set KBB convo signals
-    now_iso = ts  # use the inbound timestamp we already computed
+    # 3) Mark inbound + set convo signals (Airtable brain)
+    now_iso = ts
     opportunity.setdefault("checkedDict", {})["last_msg_by"] = "customer"
-    opportunity["followUP_date"] = now_iso  # due now
     
     if is_kbb:
         st = opportunity.setdefault("_kbb_state", {})
@@ -1443,12 +1454,18 @@ def process_inbound_email(inbound: dict) -> None:
         st["last_customer_msg_at"] = now_iso
     else:
         st = opportunity.setdefault("_internet_state", {})
-        st["last_customer_msg_at"] = now_iso
         st["mode"] = "convo"
-
-
-    # 4) Persist to Airtable (save_opp updates follow_up_at + patti_json/patti_hash)
-    save_opp(opportunity)
+        st["last_customer_msg_at"] = now_iso
+    
+    # 🚫 DO NOT set opportunity["followUP_date"] here
+    
+    # 4) Persist to Airtable — explicitly pause cadence
+    save_opp(opportunity, extra_fields={
+        "mode": "convo",
+        "follow_up_at": None,
+        "Customer Replied": True,
+        "Last Customer Reply At": now_iso,
+    })
 
     # 4.5) TRIAGE (classify BEFORE any immediate reply)
     try:
