@@ -43,30 +43,43 @@ def _post_send_airtable_update(
     template_day: int | None = None,
 ) -> None:
     """
-    Airtable is the brain. Update counters/timestamps/mode/follow_up_at.
+    Airtable is the brain. After a successful send, update counters / timestamps / follow_up_at.
     Fail-open (non-blocking).
     """
     try:
+        rec = find_by_opp_id(opp_id)
+        if not rec:
+            # fallback: keep legacy bump so you don't lose metrics if record missing
+            _bump_ai_send_metrics_in_airtable(opp_id)
+            return
+
+        opp = opp_from_record(rec)
+
         when_iso = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
-        # ✅ preferred: single brain-writer
+        # ✅ This matches your mark_ai_email_sent signature (opp-dict based)
         mark_ai_email_sent(
-            opp_id,
+            opp,
             when_iso=when_iso,
             next_follow_up_at=next_follow_up_at,
-            mode=(force_mode or "cadence"),
-            template_day=template_day,
+            force_mode=force_mode,
         )
-        return
+
+        # Optional: if you want template_day persisted too, do it here
+        if template_day is not None:
+            try:
+                save_opp(opp, extra_fields={"last_template_day_sent": int(template_day)})
+            except Exception:
+                pass
 
     except Exception as e:
+        # fail-open: don't break sending due to Airtable flake
         log.warning("Airtable post-send update failed opp=%s err=%s", opp_id, e)
+        try:
+            _bump_ai_send_metrics_in_airtable(opp_id)  # best-effort legacy
+        except Exception:
+            pass
 
-    # Optional legacy fallback (ok to keep for now)
-    try:
-        _bump_ai_send_metrics_in_airtable(opp_id)
-    except Exception:
-        pass
 
 
 def send_patti_email(
