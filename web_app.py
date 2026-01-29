@@ -203,6 +203,17 @@ def sms_inbound():
         log.exception("SMS ingestion failed: %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500
 
+from sms_poller import poll_once
+
+@app.route("/sms-poll", methods=["POST"])
+def sms_poll():
+    # simple guard so nobody hits it publicly
+    key = request.headers.get("X-Admin-Key", "")
+    if key != os.getenv("ADMIN_KEY", ""):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    poll_once()
+    return jsonify({"ok": True}), 200
 
 
 # -----------------------------
