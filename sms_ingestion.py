@@ -7,6 +7,8 @@ from datetime import datetime as _dt, timezone as _tz
 
 from airtable_store import find_by_customer_phone, opp_from_record, save_opp
 from goto_sms import send_sms
+from sms_brain import generate_sms_reply
+
 
 log = logging.getLogger("patti.sms")
 
@@ -235,7 +237,7 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
 
         save_opp(opp, extra_fields=base_patch)
 
-        reply_text = "Totally — the team is checking on that now and will text you shortly."
+        reply_text = "Totally - the team is checking on that now and will text you shortly."
 
         to_number = from_phone
         if _sms_test_enabled():
@@ -253,8 +255,21 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
 
     # --- Default: immediate simple convo reply (NO footer once guest has replied) ---
     save_opp(opp, extra_fields=base_patch)
-
-    reply_text = "Thanks — what day/time works best for you to connect?"
+    
+    # Impel-style GPT reply (single question, no opt-out footer once guest replies)
+    vehicle = (opp.get("vehicle") or opp.get("Vehicle") or "").strip() or "the vehicle you asked about"
+    decision = generate_sms_reply(
+        rooftop_name=(opp.get("rooftop_name") or ""),
+        customer_first_name=(opp.get("customer_first_name") or ""),
+        customer_phone=from_phone,
+        salesperson=(opp.get("Assigned Sales Rep") or "our team"),
+        vehicle=vehicle,
+        last_inbound=body,
+        thread_snippet=None,
+        include_optout_footer=False,
+    )
+    reply_text = (decision.get("reply") or "Thanks — what day/time works best for you to connect?").strip()
+    
 
     to_number = from_phone
     if _sms_test_enabled():
