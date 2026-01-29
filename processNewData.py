@@ -2141,24 +2141,17 @@ def processHit(hit):
         
             if sent_gm:
                 # Advance cadence like a normal follow-up, so we don't also send GPT follow-up today
-                nextDate = currDate + _td(days=1)
-                next_iso = nextDate.isoformat()
-                opportunity["followUP_date"] = next_iso
+                next_due = (now_utc + _td(days=1)).replace(microsecond=0).isoformat()
+                opportunity["follow_up_at"] = next_due
                 opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
         
                 if not OFFLINE_MODE:
                     try:
+                        extra = {"follow_up_at": next_due}
                         first_sent = opportunity.get("first_email_sent_at")
-                
-                        extra = {
-                            "follow_up_at": next_iso
-                        }
-                
                         if first_sent:
                             extra["first_email_sent_at"] = first_sent
-                
                         airtable_save(opportunity, extra_fields=extra)
-                
                     except Exception as e:
                         log.warning(
                             "Airtable save failed opp=%s (continuing): %s",
