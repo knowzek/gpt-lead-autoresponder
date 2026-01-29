@@ -38,8 +38,7 @@ def list_messages(owner_phone_e164: str, contact_phone_e164: str, limit: int = 2
     return r.json()
 
 def _auth_headers():
-    # however you're already doing it for send_sms; keep consistent
-    token = os.environ["GOTO_ACCESS_TOKEN"]  # or your get_token() logic
+    token = _get_access_token()
     return {
         "Authorization": f"Bearer {token}",
         "Accept": "application/json",
