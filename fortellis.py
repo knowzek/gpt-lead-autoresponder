@@ -696,10 +696,6 @@ def get_recent_opportunities(token, dealer_key, since_minutes=360, page=1, page_
 
     return {"items": items, "totalItems": total, "searchDate": search_date}
 
-
-
-from typing import Optional
-
 from typing import Optional
 
 def send_opportunity_email_activity(token, subscription_id, opportunity_id,
