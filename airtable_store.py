@@ -761,12 +761,23 @@ def get_by_id(rec_id: str) -> dict:
 
 
 def save_opp(opp: dict, *, extra_fields: dict | None = None):
+    """
+    Drop-in replacement: safe, deterministic, never references undefined vars.
+    - Airtable is the brain (mode + follow_up_at rules)
+    - Keeps patti_json + patti_hash change-detection (but fail-open if snapshot can't serialize)
+    - Never PATCH computed/formula/rollup fields
+    """
+    import json
+    import hashlib
+
     rec_id = opp.get("_airtable_rec_id")
     if not rec_id:
         raise RuntimeError("Missing opp['_airtable_rec_id']; cannot save to Airtable")
 
+    extra_fields = extra_fields or {}
+
+    # Re-hydrate identity + grab existing fields (for prev_hash + ids)
     fields = {}
-    # (optional) re-hydrate identity — keep (and we also use fields for hash compare)
     try:
         rec = get_by_id(rec_id)
         fields = (rec or {}).get("fields", {}) or {}
@@ -782,13 +793,14 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
     except Exception:
         fields = {}
 
+    # is_active (truthy default True)
     is_active = bool(opp.get("isActive", True))
 
-    # --- Determine truth-mode (NEVER reference bare `mode`) ---
-    extra_fields = extra_fields or {}
-    
+    # ---------------------------
+    # mode resolution (NEVER reference bare `mode`)
+    # caller extra_fields wins
+    # ---------------------------
     patti = opp.get("patti") if isinstance(opp.get("patti"), dict) else {}
-    
     mode_value = (
         extra_fields.get("mode")
         or patti.get("mode")
@@ -796,47 +808,78 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
         or ""
     )
     mode_norm = str(mode_value).strip().lower()
-    
+
+    # ---------------------------
+    # customer replied (Airtable brain signals)
+    # ---------------------------
     customer_replied = (
         (opp.get("Customer Replied") is True)
         or (isinstance(opp.get("patti_metrics"), dict) and bool(opp["patti_metrics"].get("customer_replied")))
     )
-    
-    # --- follow_up_at brain rules ---
-    # Allow follow_up_at ONLY in cadence mode AND only if no customer reply.
-    # Let explicit extra_fields["follow_up_at"] win if caller passed it.
-    follow_up_at_value = extra_fields.get("follow_up_at")
-    
-    if follow_up_at_value is None:
+
+    # ---------------------------
+    # follow_up_at brain rules
+    # - if caller explicitly passed follow_up_at (even None) => use it
+    # - else: only allow follow_up_at in cadence mode and only if no customer reply
+    # ---------------------------
+    if "follow_up_at" in extra_fields:
+        follow_up_at_value = extra_fields.get("follow_up_at")  # may be None on purpose
+    else:
         if (mode_norm in ("", "cadence")) and not customer_replied:
             follow_up_at_value = opp.get("follow_up_at") or opp.get("followUP_date")
         else:
             follow_up_at_value = None
-    
+
+    # Base patch (caller can still override after this)
     patch = {
         "is_active": is_active,
         "follow_up_at": _iso(follow_up_at_value),
-        "mode": mode_norm,  # store normalized
+        "mode": mode_norm,  # normalized storage ("cadence", "convo", "scheduled", etc.)
     }
 
+    # ---------------------------
+    # Snapshot hashing for patti_json (safe)
+    # ---------------------------
+    prev_hash = (fields.get("patti_hash") or "").strip()
 
-    if snapshot_hash != prev_hash:
-        patch["patti_json"] = snapshot_str
-        patch["patti_hash"] = snapshot_hash
+    snapshot_str = None
+    snapshot_hash = None
+    try:
+        # Use a stable JSON string; default=str prevents crashes on datetimes/etc.
+        snapshot_str = json.dumps(opp, sort_keys=True, ensure_ascii=False, default=str)
+        snapshot_hash = hashlib.sha256(snapshot_str.encode("utf-8")).hexdigest()
 
-    # ✅ Mirror compliance into columns for filtering/reporting
-    comp = snapshot.get("compliance") or {"suppressed": False}
+        if snapshot_hash and snapshot_hash != prev_hash:
+            patch["patti_json"] = snapshot_str
+            patch["patti_hash"] = snapshot_hash
+    except Exception:
+        # Fail-open: don't block saving brain fields if snapshot serialization fails
+        pass
+
+    # ---------------------------
+    # Mirror compliance into columns (safe)
+    # ---------------------------
+    comp = opp.get("compliance")
+    if not isinstance(comp, dict):
+        comp = {"suppressed": False}
+
     patch["Suppressed"] = bool(comp.get("suppressed"))
     if comp.get("suppressed"):
         patch["Suppression Reason"] = comp.get("reason") or ""
         patch["Suppressed At"] = comp.get("at") or ""
 
+    # ---------------------------
+    # Apply caller overrides last (caller wins)
+    # ---------------------------
     if extra_fields:
         patch.update(extra_fields)
 
-    # ✅ Never PATCH computed/formula/rollup fields in Airtable
+    # ---------------------------
+    # Never PATCH computed/formula/rollup fields
+    # ---------------------------
     COMPUTED_FIELDS = {
         "customer_email_lower",
+        # add others here if Airtable complains (formula/rollup/lookup fields)
     }
     for k in list(patch.keys()):
         if k in COMPUTED_FIELDS:
