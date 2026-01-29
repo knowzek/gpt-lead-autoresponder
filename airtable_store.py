@@ -17,6 +17,40 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
+import re
+
+def _digits(phone: str) -> str:
+    return re.sub(r"\D+", "", phone or "")
+
+def find_by_customer_phone_loose(phone_any: str):
+    """
+    Matches Airtable customer_phone stored as 714-xxx-xxxx against
+    incoming E164 (+1714...) by comparing last 10 digits.
+    """
+    d = _digits(phone_any)
+    if len(d) < 10:
+        return None
+    last10 = d[-10:]
+
+    # Airtable formula: compare last 10 digits by stripping non-digits isn't possible natively,
+    # so we do a broader contains search on common patterns.
+    # Best approach: fetch small batch and compare in Python.
+    # But to keep it simple: query records where customer_phone contains last4 and then filter.
+    last4 = last10[-4:]
+
+    # you likely already have a "search" helper; if not, use filterByFormula on FIND()
+    formula = f"FIND('{last4}', {{customer_phone}}) > 0"
+    params = {"filterByFormula": formula, "maxRecords": 25}
+    data = _request("GET", BASE_URL, params=params)
+    recs = data.get("records") or []
+
+    for rec in recs:
+        f = rec.get("fields") or {}
+        if _digits(f.get("customer_phone"))[-10:] == last10:
+            return rec
+    return None
+
+
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
