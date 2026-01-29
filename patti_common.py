@@ -1,5 +1,7 @@
 from rooftops import ROOFTOP_INFO
 import re
+import html
+
 
 EMAIL_RE = re.compile(
     r"([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})",
@@ -61,6 +63,28 @@ PROVIDER_BOILERPLATE_LINES_RE = re.compile(
     r"\bunsubscribe\b|"
     r").*$"
 )
+
+_WS_RE = re.compile(r"\s+")
+
+def _norm_provider_line(s: str) -> str:
+    """
+    Normalize a single provider line for matching/filtering.
+    Keep it conservative: strip, unescape HTML entities, remove weird whitespace.
+    """
+    if not s:
+        return ""
+    # convert HTML entities (&nbsp;, &amp;, etc.)
+    s = html.unescape(s)
+
+    # normalize common weird spaces
+    s = s.replace("\u00a0", " ")   # nbsp
+    s = s.replace("\u200b", "")   # zero-width space
+    s = s.replace("\ufeff", "")   # BOM
+
+    # collapse whitespace
+    s = _WS_RE.sub(" ", s).strip()
+    return s
+
 
 def extract_customer_comment_from_provider(body_text: str) -> str:
     if not body_text:
