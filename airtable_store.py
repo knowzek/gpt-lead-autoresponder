@@ -32,11 +32,198 @@ def mark_customer_reply(opp: dict, *, when_iso: str | None = None):
     m["last_customer_reply_at"] = when_iso
     m["customer_replied"] = True
 
+    # ✅ enforce convo mode + clear follow_up_at immediately
+    p = opp.setdefault("patti", {})
+    if isinstance(p, dict):
+        p["mode"] = "convo"
+        p["last_customer_msg_at"] = when_iso
+
     return save_opp(opp, extra_fields={
         "Customer Replied": True,
         "First Customer Reply At": m["first_customer_reply_at"],
         "Last Customer Reply At": m["last_customer_reply_at"],
+        "mode": "convo",
+        "follow_up_at": None,   # ✅ critical
     })
+
+
+def _truthy(x) -> bool:
+    return bool(x) and str(x).strip() not in ("", "0", "False", "false", "None", "null")
+
+def already_contacted_airtable(opp: dict) -> bool:
+    """
+    Airtable is the brain:
+    Treat as contacted if ANY of these Airtable-backed fields indicate prior AI send.
+    """
+    # These are first-class Airtable columns you already have
+    if _truthy(opp.get("first_email_sent_at")):
+        return True
+    if _truthy(opp.get("AI First Message Sent At")):
+        return True
+    if _truthy(opp.get("Last AI Message At")):
+        return True
+
+    # Numeric columns
+    try:
+        if int(opp.get("AI Messages Sent") or 0) > 0:
+            return True
+    except Exception:
+        pass
+
+    return False
+
+def is_customer_replied_airtable(opp: dict) -> bool:
+    # Checkbox + derived metrics
+    if opp.get("Customer Replied") is True:
+        return True
+    m = opp.get("patti_metrics") if isinstance(opp.get("patti_metrics"), dict) else {}
+    return bool(m.get("customer_replied"))
+
+def get_mode_airtable(opp: dict) -> str:
+    mode = ""
+    if isinstance(opp.get("patti"), dict):
+        mode = (opp["patti"].get("mode") or "")
+    # also allow top-level column hydration (opp_from_record adds it)
+    if not mode:
+        mode = (opp.get("mode") or "")
+    return (mode or "").strip().lower()
+
+def should_suppress_all_sends_airtable(opp: dict, *, now_utc: datetime | None = None) -> tuple[bool, str]:
+    """
+    Hard stop gates, Airtable truth only.
+    Returns (stop, reason).
+    """
+    now_utc = now_utc or _now_utc()
+
+    # Compliance
+    comp = opp.get("compliance") if isinstance(opp.get("compliance"), dict) else {}
+    if comp.get("suppressed"):
+        return True, "suppressed"
+
+    if opp.get("Suppressed") is True:
+        return True, "suppressed"
+
+    if opp.get("opted_out") is True or opp.get("Unsubscribed") is True:
+        return True, "opted_out/unsubscribed"
+
+    if opp.get("is_active") is False or opp.get("isActive") is False:
+        return True, "inactive"
+
+    # Lease lock
+    lu = opp.get("lock_until")
+    if lu:
+        try:
+            lock_until = datetime.fromisoformat(str(lu).replace("Z", "+00:00"))
+            if lock_until.tzinfo is None:
+                lock_until = lock_until.replace(tzinfo=timezone.utc)
+            if lock_until > now_utc:
+                return True, "locked"
+        except Exception:
+            pass
+
+    return False, ""
+
+def pause_cadence_on_customer_reply(opp: dict, *, when_iso: str | None = None):
+    """
+    Single place to enforce:
+    - mode=convo
+    - Customer Replied timestamps
+    - clear follow_up_at so cron can't cadence-spam
+    """
+    when_iso = when_iso or _now_iso_utc()
+
+    # in-memory canonical fields
+    p = opp.setdefault("patti", {})
+    if isinstance(p, dict):
+        p["mode"] = "convo"
+        p["last_customer_msg_at"] = when_iso
+
+    opp["Customer Replied"] = True  # convenience copy
+
+    # persist Airtable truth columns
+    extra = {
+        "Customer Replied": True,
+        "mode": "convo",
+        "follow_up_at": None,              # ✅ crucial
+        "Last Customer Reply At": when_iso,
+    }
+    # Don't overwrite first reply if it exists
+    if not _truthy(opp.get("First Customer Reply At")):
+        extra["First Customer Reply At"] = when_iso
+
+    return save_opp(opp, extra_fields=extra)
+
+def mark_ai_email_sent(
+    opp: dict,
+    *,
+    when_iso: str | None = None,
+    next_follow_up_at: str | None = None,
+    force_mode: str | None = None,
+):
+    """
+    Call this immediately after a successful outbound email send.
+
+    Updates Airtable "brain" fields:
+    - AI Messages Sent (+1)
+    - AI Emails Sent (+1) if present
+    - Last AI Message At = when
+    - first_email_sent_at / AI First Message Sent At if empty
+    - follow_up_at: set to next_follow_up_at ONLY if cadence mode and no customer reply
+                 else clear it (None)
+    """
+    when_iso = when_iso or _now_iso_utc()
+
+    # Local copies (so downstream code sees it in-memory too)
+    opp["Last AI Message At"] = when_iso
+    if not _truthy(opp.get("first_email_sent_at")):
+        opp["first_email_sent_at"] = when_iso
+    if not _truthy(opp.get("AI First Message Sent At")):
+        opp["AI First Message Sent At"] = when_iso
+
+    # Increment counts in-memory (best effort)
+    try:
+        opp["AI Messages Sent"] = int(opp.get("AI Messages Sent") or 0) + 1
+    except Exception:
+        opp["AI Messages Sent"] = 1
+
+    try:
+        # Only if you actually have this column; harmless if you don't pass it to patch
+        opp["AI Emails Sent"] = int(opp.get("AI Emails Sent") or 0) + 1
+    except Exception:
+        pass
+
+    # Decide mode
+    mode = force_mode or get_mode_airtable(opp) or ""
+    if isinstance(opp.get("patti"), dict) and force_mode:
+        opp["patti"]["mode"] = force_mode
+
+    customer_replied = is_customer_replied_airtable(opp)
+    cadence_allowed = (mode in ("", "cadence")) and not customer_replied
+
+    patch = {
+        "Last AI Message At": when_iso,
+        "first_email_sent_at": opp.get("first_email_sent_at") or when_iso,
+        "AI First Message Sent At": opp.get("AI First Message Sent At") or when_iso,
+        "AI Messages Sent": int(opp.get("AI Messages Sent") or 0),
+        "mode": (force_mode or (mode or "")),
+    }
+
+    # If you have AI Emails Sent column, keep it updated too
+    if "AI Emails Sent" in opp:
+        patch["AI Emails Sent"] = int(opp.get("AI Emails Sent") or 0)
+
+    # follow_up_at is ONLY cadence and ONLY if no customer reply
+    if cadence_allowed and next_follow_up_at:
+        patch["follow_up_at"] = _iso(next_follow_up_at)
+        opp["follow_up_at"] = next_follow_up_at
+        opp["followUP_date"] = next_follow_up_at
+    else:
+        patch["follow_up_at"] = None
+        opp["follow_up_at"] = None
+        opp["followUP_date"] = None
+
+    return save_opp(opp, extra_fields=patch)
+
 
 def _sha1(s: str) -> str:
     return hashlib.sha1(s.encode("utf-8")).hexdigest()
@@ -517,6 +704,30 @@ def opp_from_record(rec: dict) -> dict:
         if isinstance(checked, dict):
             checked["patti_already_contacted"] = True
 
+    # ✅ Airtable-brain fields (authoritative gates)
+    if "Customer Replied" in fields:
+        opp["Customer Replied"] = bool(fields.get("Customer Replied"))
+
+    # Timestamps used for gating decisions
+    for k in ("first_email_sent_at", "follow_up_at", "First Customer Reply At", "Last Customer Reply At",
+              "AI First Message Sent At", "Last AI Message At"):
+        if fields.get(k) and not opp.get(k):
+            opp[k] = fields.get(k)
+
+    # Counters
+    if "AI Messages Sent" in fields:
+        opp["AI Messages Sent"] = int(fields.get("AI Messages Sent") or 0)
+    if "AI Emails Sent" in fields:
+        opp["AI Emails Sent"] = int(fields.get("AI Emails Sent") or 0)
+
+    # If Airtable says convo, reflect it in patti mode
+    mode_col = (fields.get("mode") or "").strip().lower()
+    if mode_col:
+        p = opp.setdefault("patti", {})
+        if isinstance(p, dict):
+            p["mode"] = mode_col
+
+
     # ✅ Normalize cadence state if snapshot has nulls
     p = opp.setdefault("patti", {})
     if isinstance(p, dict):
@@ -572,25 +783,25 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
         fields = {}
 
     is_active = bool(opp.get("isActive", True))
-    follow_up_at = opp.get("followUP_date") or opp.get("follow_up_at")
 
-    mode = None
-    if isinstance(opp.get("_kbb_state"), dict):
-        mode = opp["_kbb_state"].get("mode")
-    if not mode and isinstance(opp.get("patti"), dict):
-        mode = opp["patti"].get("mode")
-
-    # ✅ Snapshot JSON + hash to avoid rewriting every time
-    snapshot = _build_patti_snapshot(opp)
-    snapshot_str = json.dumps(snapshot, ensure_ascii=False)
-    snapshot_hash = _sha1(snapshot_str)
-    prev_hash = (fields.get("patti_hash") or "").strip()
-
+    # Determine truth-mode
+    mode_norm = (mode or "").strip().lower()
+    customer_replied = (
+        (opp.get("Customer Replied") is True)
+        or (isinstance(opp.get("patti_metrics"), dict) and opp["patti_metrics"].get("customer_replied"))
+    )
+    
+    # Only allow follow_up_at in cadence mode and only if no customer reply
+    follow_up_at = None
+    if (mode_norm in ("", "cadence")) and not customer_replied:
+        follow_up_at = opp.get("followUP_date") or opp.get("follow_up_at")
+    
     patch = {
         "is_active": is_active,
         "follow_up_at": _iso(follow_up_at),
         "mode": (mode or ""),
     }
+
 
     if snapshot_hash != prev_hash:
         patch["patti_json"] = snapshot_str
