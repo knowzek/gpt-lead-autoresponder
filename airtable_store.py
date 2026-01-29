@@ -784,22 +784,39 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
 
     is_active = bool(opp.get("isActive", True))
 
-    # Determine truth-mode
-    mode_norm = (mode or "").strip().lower()
+    # --- Determine truth-mode (NEVER reference bare `mode`) ---
+    extra_fields = extra_fields or {}
+    
+    patti = opp.get("patti") if isinstance(opp.get("patti"), dict) else {}
+    
+    mode_value = (
+        extra_fields.get("mode")
+        or patti.get("mode")
+        or opp.get("mode")
+        or ""
+    )
+    mode_norm = str(mode_value).strip().lower()
+    
     customer_replied = (
         (opp.get("Customer Replied") is True)
-        or (isinstance(opp.get("patti_metrics"), dict) and opp["patti_metrics"].get("customer_replied"))
+        or (isinstance(opp.get("patti_metrics"), dict) and bool(opp["patti_metrics"].get("customer_replied")))
     )
     
-    # Only allow follow_up_at in cadence mode and only if no customer reply
-    follow_up_at = None
-    if (mode_norm in ("", "cadence")) and not customer_replied:
-        follow_up_at = opp.get("followUP_date") or opp.get("follow_up_at")
+    # --- follow_up_at brain rules ---
+    # Allow follow_up_at ONLY in cadence mode AND only if no customer reply.
+    # Let explicit extra_fields["follow_up_at"] win if caller passed it.
+    follow_up_at_value = extra_fields.get("follow_up_at")
+    
+    if follow_up_at_value is None:
+        if (mode_norm in ("", "cadence")) and not customer_replied:
+            follow_up_at_value = opp.get("follow_up_at") or opp.get("followUP_date")
+        else:
+            follow_up_at_value = None
     
     patch = {
         "is_active": is_active,
-        "follow_up_at": _iso(follow_up_at),
-        "mode": (mode or ""),
+        "follow_up_at": _iso(follow_up_at_value),
+        "mode": mode_norm,  # store normalized
     }
 
 
