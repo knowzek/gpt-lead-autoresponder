@@ -1949,38 +1949,6 @@ def processHit(hit):
             OFFLINE_MODE=OFFLINE_MODE,
         )
         
-        # ✅ ONLY AFTER a successful first-touch, seed cadence + next due date
-        if sent_ok or OFFLINE_MODE:
-            patti = opportunity.setdefault("patti", {})
-            if patti.get("salesai_email_idx") is None:
-                patti["salesai_email_idx"] = -1
-        
-            patti = opportunity.get("patti") or {}
-            created_iso = (
-                patti.get("salesai_created_iso")     # ✅ authoritative anchor (from Airtable hydration)
-                or opportunity.get("created_at")
-                or opportunity.get("dateIn")
-                or opportunity.get("createdDate")
-                or currDate_iso
-            )
-
-            next_due = _next_salesai_due_iso(
-                created_iso=created_iso,
-                last_idx=int(patti["salesai_email_idx"])
-            )
-        
-            opportunity["followUP_date"] = next_due
-            opportunity["followUP_count"] = 0
-        
-            try:
-                airtable_save(opportunity, extra_fields={"follow_up_at": next_due})
-            except Exception as e:
-                log.warning(
-                    "Airtable save failed after first-touch (continuing). opp=%s err=%s",
-                    opportunity.get("opportunityId") or opportunity.get("id"),
-                    e,
-                )
-        
     else:
         # handle follow-ups messages
         checkActivities(opportunity, currDate, rooftop_name)
@@ -2803,55 +2771,56 @@ def send_first_touch_email(
     #   FIX: Only mark as sent if actual success
     # ---------------------------
     sent_ok = False
-    
     if OFFLINE_MODE:
         sent_ok = True
-
+    
     # Decide recipient (Safe Mode reroutes to test inbox)
     actual_to = customer_email
-
     if SAFE_MODE:
-        actual_to = (
-            test_recipient
-            or os.getenv("INTERNET_TEST_EMAIL") 
-            or os.getenv("TEST_TO")
-        )
+        actual_to = test_recipient or os.getenv("INTERNET_TEST_EMAIL") or os.getenv("TEST_TO")
         log.warning(
             "SAFE_MODE enabled: rerouting email for opp %s from %r -> %r",
-            opportunityId,
-            customer_email,
-            actual_to,
+            opportunityId, customer_email, actual_to,
         )
-
-    # Latch FIRST (always) so retries cannot resend
-    now_iso = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
-    opportunity["first_email_sent_at"] = opportunity.get("first_email_sent_at") or now_iso
     
-    save_opp(
-        opportunity,
-        extra_fields={"first_email_sent_at": opportunity["first_email_sent_at"]},
-    )
-
-    # ✅ Send in both modes (SAFE_MODE just changes actual_to)
-    if actual_to:
+    if actual_to and not OFFLINE_MODE:
         try:
             from patti_mailer import send_patti_email
     
-            send_patti_email(
+            # ✅ Decide cadence anchor BEFORE sending (authoritative)
+            patti = opportunity.setdefault("patti", {})
+            created_iso = (
+                patti.get("salesai_created_iso")
+                or opportunity.get("Lead Created At")   # Airtable brain (preferred)
+                or opportunity.get("created_at")
+                or opportunity.get("dateIn")
+                or opportunity.get("createdDate")
+                or currDate_iso
+            )
+            patti["salesai_created_iso"] = created_iso
+
+    
+            idx = int(patti.get("salesai_email_idx") if patti.get("salesai_email_idx") is not None else -1)
+            next_due = _next_salesai_due_iso(created_iso=created_iso, last_idx=idx)
+    
+            sent_ok = send_patti_email(
                 token=token,
                 subscription_id=subscription_id,
-                opp_id=opportunity.get("opportunityId") or opportunityId,
+                opp_id=opportunityId,
                 rooftop_name=rooftop_name,
                 rooftop_sender=rooftop_sender,
-                to_addr=actual_to,
+                to_addr=actual_to,            # ✅ use actual_to
                 subject=subject,
                 body_html=body_html,
                 cc_addrs=[],
+                force_mode="cadence",
+                next_follow_up_at=next_due,
             )
-            sent_ok = True
         except Exception as e:
             log.warning("Failed to send Patti general lead email for opp %s: %s", opportunityId, e)
-    else:
+            sent_ok = False
+    
+    elif not actual_to:
         log.warning(
             "No recipient resolved for opp %s (customer_email=%r SAFE_MODE=%r test_recipient=%r)",
             opportunityId, customer_email, SAFE_MODE, test_recipient
@@ -2860,51 +2829,54 @@ def send_first_touch_email(
     # ---------------------------
     #   Only update Patti's state IF sent_ok is True
     # ---------------------------
-    if sent_ok:
+    if sent_ok or OFFLINE_MODE:
         checkedDict = opportunity.get("checkedDict") or {}
         checkedDict["patti_already_contacted"] = True
         checkedDict["last_msg_by"] = "patti"
         opportunity["checkedDict"] = checkedDict
     
-        # ✅ Enroll into SalesAI cadence on first-touch (general leads)
+        # ✅ set first_email_sent_at ONLY AFTER success
+        now_iso = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
+        opportunity["first_email_sent_at"] = opportunity.get("first_email_sent_at") or now_iso
+    
+        # cadence enrollment
         patti_meta = opportunity.setdefault("patti", {})
         patti_meta.setdefault("salesai_email_idx", -1)
-        
-        # Anchor cadence to Lead Created At (preferred), fallback to first touch
+    
         created_iso = (
             patti_meta.get("salesai_created_iso")
-            or opportunity.get("Lead Created At")  # if you already hydrated it into opp fields
-            or opportunity.get("dateIn")
+            or opportunity.get("Lead Created At")
             or opportunity.get("created_at")
+            or opportunity.get("dateIn")
+            or opportunity.get("createdDate")
             or currDate_iso
         )
         patti_meta["salesai_created_iso"] = created_iso
-        
-        next_iso = _next_salesai_due_iso(created_iso=created_iso, last_idx=int(patti_meta["salesai_email_idx"]))
-        
-        opportunity["followUP_date"] = next_iso
+    
         opportunity["followUP_count"] = 0
-        
-        airtable_save(
-            opportunity,
-            extra_fields={
-                "follow_up_at": next_iso,
-                "ab_variant": variant,
-                "first_email_sent_at": opportunity.get("first_email_sent_at"),
-            }
-        )
-
+    
+        # ✅ Only persist fields NOT already handled by mark_ai_email_sent() inside send_patti_email
+        if not OFFLINE_MODE:
+            airtable_save(
+                opportunity,
+                extra_fields={
+                    "ab_variant": variant,
+                    "salesai_created_iso": created_iso,
+                    "first_email_sent_at": opportunity["first_email_sent_at"],
+                    "mode": "cadence",
+                }
+            )
+    
     else:
         log.warning(
             "Did NOT mark Patti as contacted for opp %s because sendEmail failed.",
             opportunityId,
         )
+        if not OFFLINE_MODE:
+            airtable_save(opportunity)
+    
+    return bool(sent_ok or OFFLINE_MODE)
 
-    # Persist opportunity state (only if we didn't already save in the sent_ok path)
-    if not sent_ok and not OFFLINE_MODE:
-        airtable_save(opportunity)
-
-    return sent_ok
 
 
 def send_thread_reply_now(
