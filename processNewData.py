@@ -1664,7 +1664,7 @@ def processHit(hit):
     completedActivities = activities.get("completedActivities", [])  # keep; you still need this for firstActivity parsing
     
     # ⛔ Global suppression (Airtable brain)
-    stop, why = should_suppress_all_sends_airtable(opportunity, now_utc=currDate)
+    stop, why = should_suppress_all_sends_airtable(opportunity)  # let helper decide now_utc
     if stop:
         log.info("⛔ Suppressed/blocked opp=%s — skipping sends (%s)", opportunityId, why)
         wJson(opportunity, f"jsons/process/{opportunityId}.json")
@@ -2042,40 +2042,34 @@ def processHit(hit):
                 rt = get_rooftop_info(subscription_id)
                 rooftop_sender = rt.get("sender") or TEST_FROM
 
-                cust   = opportunity.get("customer") or {}
-                emails = cust.get("emails") or []
-                customer_email = None
-                for e in emails:
-                    if e.get("doNotEmail"):
-                        continue
-                    if e.get("isPreferred"):
-                        customer_email = e.get("address")
-                        break
-                if not customer_email and emails:
-                    customer_email = emails[0].get("address")
-
-                if customer_email:
+                actual_to = resolve_customer_email(
+                    opportunity,
+                    SAFE_MODE=SAFE_MODE,
+                    test_recipient=test_recipient
+                )
+                
+                if actual_to:
                     try:
                         from patti_mailer import send_patti_email
-                        
+                
                         send_patti_email(
                             token=token,
                             subscription_id=subscription_id,
                             opp_id=opportunity["opportunityId"],
                             rooftop_name=rooftop_name,
                             rooftop_sender=rooftop_sender,
-                            to_addr=customer_email,
+                            to_addr=actual_to,
                             subject=subject,
                             body_html=body_html,
                             cc_addrs=[],
+                            force_mode="convo",          # ✅ this is a thread reply / confirmation
+                            next_follow_up_at=None,      # ✅ no cadence scheduling here
                         )
-
+                        sent_ok = True
                     except Exception as e:
-                        log.warning(
-                            "Failed to send Patti booking-link appt confirmation for opp %s: %s",
-                            opportunity["opportunityId"],
-                            e,
-                        )
+                        log.warning("Failed to send appt confirmation opp=%s: %s", opportunityId, e)
+                else:
+                    log.warning("No recipient resolved for appt confirmation opp=%s", opportunityId)
 
                 try:
                     airtable_save(opportunity)
@@ -2091,60 +2085,48 @@ def processHit(hit):
         # ✅ NUMBER 3: Convo/reply gates (Airtable brain)
         mode = get_mode_airtable(opportunity)
         replied = is_customer_replied_airtable(opportunity)
-    
+        
         if mode == "convo" or replied:
-            log.info(
-                "⏸ Skipping CADENCE follow-ups (mode=%r replied=%s) opp=%s",
-                mode, replied, opportunityId
-            )
+            log.info("⏸ Skipping CADENCE follow-ups (mode=%r replied=%s) opp=%s", mode, replied, opportunityId)
             wJson(opportunity, f"jsons/process/{opportunityId}.json")
             return
-    
-        # ⬇️ cadence follow-up logic continues here (followUP_date / follow_up_at due, etc.)
         
-        fud = opportunity.get("followUP_date")
-
-        if isinstance(fud, str):
-            dt = _dt.fromisoformat(fud)
-        elif isinstance(fud, _dt):
-            dt = fud
-        else:
-            # No previous follow-up recorded.
-            # Seed a follow-up date 24h from now and DO NOT send a nudge on this run.
-            dt = currDate + _td(hours=24)
-            opportunity['followUP_date'] = dt.isoformat()
-            opportunity.setdefault('followUP_count', 0)
+        # ✅ Airtable cadence timing (follow_up_at is the brain)
+        due_iso = (opportunity.get("follow_up_at") or "").strip()
+        
+        if not due_iso:
+            seed_iso = (_dt.now(_tz.utc) + _td(hours=24)).replace(microsecond=0).isoformat()
+            opportunity["follow_up_at"] = seed_iso
             if not OFFLINE_MODE:
-                try:
-                    airtable_save(opportunity)
-                except Exception as e:
-                    log.warning("Airtable save failed opp=%s (continuing): %s",
-                                opportunity.get("opportunityId") or opportunity.get("id"), e)
-
+                airtable_save(opportunity, extra_fields={"follow_up_at": seed_iso})
             wJson(opportunity, f"jsons/process/{opportunityId}.json")
-            return  # ⬅️ important: skip the cadence logic below for this run
+            return
         
-        # Make it timezone-aware (UTC)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=_tz.utc)
+        try:
+            due_dt = _dt.fromisoformat(due_iso.replace("Z", "+00:00"))
+            if due_dt.tzinfo is None:
+                due_dt = due_dt.replace(tzinfo=_tz.utc)
+        except Exception:
+            seed_iso = (_dt.now(_tz.utc) + _td(hours=24)).replace(microsecond=0).isoformat()
+            opportunity["follow_up_at"] = seed_iso
+            if not OFFLINE_MODE:
+                airtable_save(opportunity, extra_fields={"follow_up_at": seed_iso})
+            wJson(opportunity, f"jsons/process/{opportunityId}.json")
+            return
         
-        followUP_date = dt
-        followUP_count = int(opportunity.get("followUP_count") or 0)
-
+        now_utc = _dt.now(_tz.utc)
+        if due_dt > now_utc:
+            wJson(opportunity, f"jsons/process/{opportunityId}.json")
+            return
         
-        # Make it timezone-aware (UTC)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=_tz.utc)
-        
-        followUP_date = dt
-        
-        # -- followUP_count normalization --
+        # ✅ If we reach here: cadence is due now
         followUP_count = int(opportunity.get("followUP_count") or 0)
 
     
         # --- Step 4A: Tustin Kia GM Day-2 email (send even if appointment exists) ---
-        # Day-2 in your system = first follow-up run (followUP_count == 0) when followUP_date is due.
-        if followUP_date <= currDate and followUP_count == 0:
+        # Day-2 in your system = first follow-up run when due_dt is due
+        if due_dt <= now_utc and followUP_count == 0:
+
             sent_gm = maybe_send_tk_gm_day2_email(
                 opportunity=opportunity,
                 opportunityId=opportunityId,
@@ -2219,7 +2201,7 @@ def processHit(hit):
 
         patti = opportunity.get("patti") or {}
         idx = int(patti.get("salesai_email_idx") or -1)
-        if followUP_date <= currDate and idx >= (len(SALES_AI_EMAIL_DAYS) - 1):
+        if due_dt <= now_utc and idx >= (len(SALES_AI_EMAIL_DAYS) - 1):
             opportunity['isActive'] = False
             opportunity["followUP_date"] = None   
             if not OFFLINE_MODE:
@@ -2231,7 +2213,7 @@ def processHit(hit):
             wJson(opportunity, f"jsons/process/{opportunityId}.json")
             return
 
-        elif followUP_date <= currDate:
+        elif due_dt <= now_utc:
             # Use full thread history but be explicit that this is NOT a first email.
             messages = opportunity.get("messages") or []
         
@@ -2808,8 +2790,6 @@ def send_first_touch_email(
                 or opportunity.get("createdDate")
                 or currDate_iso
             )
-            patti["salesai_created_iso"] = created_iso
-
     
             idx = int(patti.get("salesai_email_idx") if patti.get("salesai_email_idx") is not None else -1)
             next_due = _next_salesai_due_iso(created_iso=created_iso, last_idx=idx)
