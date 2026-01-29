@@ -15,6 +15,7 @@ from fortellis import (
     get_opportunity,
     search_customers_by_email,
     find_recent_opportunity_by_email,
+    get_recent_opportunities,
     get_opps_by_customer_id,
 )
 from processNewData import send_first_touch_email
