@@ -13,6 +13,39 @@ GOTO_SMS_URL   = "https://api.goto.com/messaging/v1/messages"
 _ACCESS_TOKEN = None
 _ACCESS_TOKEN_EXP = 0
 
+GOTO_API = "https://api.goto.com"
+
+def list_conversations(owner_phone_e164: str, sort: str = "DESCENDINGLAST_MESSAGE_TIMESTAMP", limit: int = 20):
+    url = f"{GOTO_API}/messaging/v1/conversations"
+    params = {
+        "ownerPhoneNumber": owner_phone_e164,
+        "sort": sort,
+        "limit": limit,
+    }
+    r = requests.get(url, headers=_auth_headers(), params=params, timeout=30)
+    r.raise_for_status()
+    return r.json()
+
+def list_messages(owner_phone_e164: str, contact_phone_e164: str, limit: int = 20):
+    url = f"{GOTO_API}/messaging/v1/messages"
+    params = {
+        "ownerPhoneNumber": owner_phone_e164,
+        "contactPhoneNumber": contact_phone_e164,
+        "limit": limit,
+    }
+    r = requests.get(url, headers=_auth_headers(), params=params, timeout=30)
+    r.raise_for_status()
+    return r.json()
+
+def _auth_headers():
+    # however you're already doing it for send_sms; keep consistent
+    token = os.environ["GOTO_ACCESS_TOKEN"]  # or your get_token() logic
+    return {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
 
 def _env(name: str, default: str = "") -> str:
     return (os.getenv(name) or default).strip()
