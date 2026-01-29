@@ -788,6 +788,12 @@ def process_lead_notification(inbound: dict) -> None:
     fresh_opp = get_opportunity(opp_id, tok, subscription_id) or {}
 
     vehicle_str = "one of our vehicles"
+    
+    # Rooftop / sender
+    rt = get_rooftop_info(subscription_id) or {}
+    rooftop_name   = rt.get("name") or rt.get("rooftop_name") or "Rooftop"
+    rooftop_sender = rt.get("sender") or rt.get("patti_email") or os.getenv("TEST_FROM") or ""
+    
     # --- STEP 1: First SMS on new lead (General Leads only) ---
     try:
         # Only send SMS on first-time bootstrap (new record)
@@ -815,13 +821,20 @@ def process_lead_notification(inbound: dict) -> None:
                             to_number = test_to
 
                     if to_number:
-                        # Impel-style first text: simple + 1 question + opt-out footer (pre-reply)
-                        base = f"Hi {first_name or ''} - this is Patti with Tustin Kia. I got your request"
-                        if vehicle_str and vehicle_str != "one of our vehicles":
-                            base += f" on the {vehicle_str}."
-                        else:
-                            base += "."
-                        msg = base + " When’s a good time to connect? Reply STOP to opt out."
+                        # Impel-style first text (shorter than email, still crisp)
+                        rooftop_display = rooftop_name or "Patterson Autos"
+                        
+                        vehicle_phrase = vehicle_str if (vehicle_str and vehicle_str != "one of our vehicles") else "your vehicle inquiry"
+                        call_line = f"If you’d rather talk first, we can call {phone}." if phone else ""
+                        
+                        msg = (
+                            f"Hi {first_name or 'there'}, this is Patti with {rooftop_display}. "
+                            f"Thanks for reaching out about {vehicle_phrase}. "
+                            f"What day/time works best to come by? "
+                            f"{call_line} "
+                            f"Opt-out reply STOP"
+                        ).strip()
+
 
                         resp = send_sms(from_number=from_number, to_number=to_number, body=msg)
 
@@ -839,11 +852,6 @@ def process_lead_notification(inbound: dict) -> None:
     except Exception as e:
         log.exception("SMS first-touch failed opp=%s err=%s", opp_id, e)
 
-
-    # Rooftop / sender
-    rt = get_rooftop_info(subscription_id) or {}
-    rooftop_name   = rt.get("name") or rt.get("rooftop_name") or "Rooftop"
-    rooftop_sender = rt.get("sender") or rt.get("patti_email") or os.getenv("TEST_FROM") or ""
 
     # Customer name (prefer Airtable-hydrated first/last, then Fortellis, else "there")
     cust = fresh_opp.get("customer") or opportunity.get("customer") or {}
