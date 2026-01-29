@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from outlook_email import send_email_via_outlook
 from fortellis import send_opportunity_email_activity, complete_send_email_activity
-from airtable_store import find_by_opp_id, opp_from_record, save_opp, is_opp_suppressed, patch_by_id
+from airtable_store import find_by_opp_id, opp_from_record, save_opp, is_opp_suppressed, patch_by_id, mark_ai_email_sent
 
 log = logging.getLogger("patti.mailer")
 
@@ -34,6 +34,36 @@ def _bump_ai_send_metrics_in_airtable(opp_id: str) -> None:
     except Exception as e:
         log.warning("AI metrics update failed (non-blocking) opp=%s err=%s", opp_id, str(e)[:500])
 
+def _post_send_airtable_update():
+    # ✅ Airtable is the brain: update Last AI Message At, counts, first_email_sent_at, follow_up_at rules
+    try:
+        rec = find_by_opp_id(opp_id)
+        if not rec:
+            # fallback: keep legacy bump so you don't lose metrics if record missing
+            _bump_ai_send_metrics_in_airtable(opp_id)
+            return
+
+        opp = opp_from_record(rec)
+
+        # Use an actual timestamp of send (UTC ISO)
+        when_iso = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+        # IMPORTANT:
+        # - For cadence sends: pass next_follow_up_at (so follow_up_at advances)
+        # - For convo replies: pass force_mode="convo" and next_follow_up_at=None (so follow_up_at clears)
+        mark_ai_email_sent(
+            opp,
+            when_iso=when_iso,
+            next_follow_up_at=next_follow_up_at,
+            force_mode=force_mode,
+        )
+    except Exception as e:
+        # fail-open: don't break sending due to Airtable flake
+        log.warning("Airtable post-send update failed opp=%s err=%s", opp_id, e)
+        try:
+            _bump_ai_send_metrics_in_airtable(opp_id)  # best-effort legacy
+        except Exception:
+            pass
 
 def send_patti_email(
     *,
@@ -47,7 +77,12 @@ def send_patti_email(
     body_html,
     cc_addrs=None,
     reply_to_activity_id=None,
+
+    # ✅ NEW (optional): let caller tell us how to update Airtable brain
+    next_follow_up_at: str | None = None,
+    force_mode: str | None = None,     # "cadence" or "convo" (or None)
 ):
+
     log.info("📬 send_patti_email EMAIL_MODE=%s opp=%s to=%s subject=%s",
              EMAIL_MODE, opp_id, to_addr, subject)
 
@@ -86,8 +121,7 @@ def send_patti_email(
             sent_ok = False
 
         if sent_ok:
-            _bump_ai_send_metrics_in_airtable(opp_id)
-
+            _post_send_airtable_update()
         return sent_ok
 
     # --- Outlook path ---
@@ -120,6 +154,5 @@ def send_patti_email(
             log.warning("Failed to complete 'Send Email' activity opp=%s: %s", opp_id, e)
 
     if sent_ok:
-        _bump_ai_send_metrics_in_airtable(opp_id)
-
+        _post_send_airtable_update()
     return sent_ok
