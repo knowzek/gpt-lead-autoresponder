@@ -594,7 +594,7 @@ def process_lead_notification(inbound: dict) -> None:
     )
 
     if not customer_comment and provider_template:
-        customer_comment = _extract_customer_comment_from_provider(body_text)
+        customer_comment = extract_customer_comment_from_provider(body_text)
     
     log.info("TRIAGE DEBUG provider_template=%s source=%r sender=%r", provider_template, source, sender)
 
@@ -884,7 +884,7 @@ def process_lead_notification(inbound: dict) -> None:
     
             # Provider template? Only triage guest-written comment (non-ADF only)
             if provider_template and not is_adf:
-                comment = _extract_customer_comment_from_provider(triage_text)
+                comment = extract_customer_comment_from_provider(triage_text)
     
                 log.info("TRIAGE DEBUG extracted_comment_len=%s", len(comment or ""))
                 log.info("TRIAGE DEBUG extracted_comment_preview=%r", (comment or "")[:220])
