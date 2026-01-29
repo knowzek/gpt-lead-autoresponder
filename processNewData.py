@@ -1659,21 +1659,19 @@ def processHit(hit):
     if base_url and (make and model):
         vehicle_str = f'<a href="{base_url}?make={make}&model={model}">{vehicle_str}</a>'
 
-    completedActivities = activities.get('completedActivities', [])
+    from airtable_store import already_contacted_airtable, should_suppress_all_sends_airtable, get_mode_airtable, is_customer_replied_airtable
 
-    patti_already_contacted = checkedDict.get('patti_already_contacted', False)
-
-    # 🔒 Extra safety: if we see any Fortellis send-email activities, 
-    # assume Patti has already contacted this lead at least once.
-    if not patti_already_contacted:
-        for act in completedActivities:
-            name = (act.get("activityName") or "").strip()
-            comments = (act.get("comments") or "").lower()
-            if name == "Fortellis - Send Email" and "sent via fortellis email service" in comments:
-                patti_already_contacted = True
-                checkedDict["patti_already_contacted"] = True
-                opportunity["checkedDict"] = checkedDict
-                break
+    completedActivities = activities.get("completedActivities", [])  # keep; you still need this for firstActivity parsing
+    
+    # ⛔ Global suppression (Airtable brain)
+    stop, why = should_suppress_all_sends_airtable(opportunity, now_utc=currDate)
+    if stop:
+        log.info("⛔ Suppressed/blocked opp=%s — skipping sends (%s)", opportunityId, why)
+        wJson(opportunity, f"jsons/process/{opportunityId}.json")
+        return
+    
+    # ✅ Airtable-only "already contacted"
+    patti_already_contacted = already_contacted_airtable(opportunity)
 
 
     if not patti_already_contacted:
@@ -1952,7 +1950,7 @@ def processHit(hit):
     else:
         # handle follow-ups messages
         checkActivities(opportunity, currDate, rooftop_name)
-
+    
         # --- One-time confirmation for appointments booked via the online link ---
         patti_meta = opportunity.get("patti") or {}
         appt_due_utc = patti_meta.get("appt_due_utc")
@@ -2090,6 +2088,19 @@ def processHit(hit):
             wJson(opportunity, f"jsons/process/{opportunity['opportunityId']}.json")
             return
 
+        # ✅ NUMBER 3: Convo/reply gates (Airtable brain)
+        mode = get_mode_airtable(opportunity)
+        replied = is_customer_replied_airtable(opportunity)
+    
+        if mode == "convo" or replied:
+            log.info(
+                "⏸ Skipping CADENCE follow-ups (mode=%r replied=%s) opp=%s",
+                mode, replied, opportunityId
+            )
+            wJson(opportunity, f"jsons/process/{opportunityId}.json")
+            return
+    
+        # ⬇️ cadence follow-up logic continues here (followUP_date / follow_up_at due, etc.)
         
         fud = opportunity.get("followUP_date")
 
