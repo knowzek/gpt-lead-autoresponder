@@ -24,6 +24,7 @@ from airtable_store import (
     find_by_opp_id, query_view, acquire_lock, release_lock,
     opp_from_record, save_opp, find_by_customer_email
 )
+from airtable_store import _bump_ai_send_metrics_in_airtable
 
 from fortellis import (
     get_activities,
@@ -275,8 +276,8 @@ def maybe_send_tk_gm_day2_email(
     if not is_tustin_kia_rooftop(rooftop_name):
         return False
 
-    # ✅ ROOT GATE: Airtable checkbox only (no patti_json)
-    if bool(opportunity.get("tk_gm_day2_sent")):
+    # ✅ ROOT GATE: Airtable checkbox only
+    if bool(opportunity.get("TK GM Day 2 Sent")):
         return False
         
     # Resolve customer email (preferred + not doNotEmail)
@@ -319,21 +320,6 @@ def maybe_send_tk_gm_day2_email(
             sent_ok = False
 
     if sent_ok:
-        # Persist state so we never resend
-        patti_meta["tk_gm_day2_sent"] = True
-        patti_meta["tk_gm_day2_sent_at"] = currDate_iso
-    
-        # ✅ Included in patti_json snapshot → prevents re-sends even if extra_fields aren't read
-        try:
-            patti_meta["last_template_day_sent"] = max(int(patti_meta.get("last_template_day_sent") or 0), 2)
-        except Exception:
-            patti_meta["last_template_day_sent"] = 2
-    
-        # Normalize idx so it doesn't stay null forever
-        if patti_meta.get("salesai_email_idx") is None:
-            patti_meta["salesai_email_idx"] = -1
-    
-        opportunity["patti"] = patti_meta
     
         # Optional: record in thread history (helps auditing)
         opportunity.setdefault("messages", []).append({
@@ -348,8 +334,13 @@ def maybe_send_tk_gm_day2_email(
         airtable_save(opportunity, extra_fields={
             "TK GM Day 2 Sent": True,
             "TK GM Day 2 Sent At": currDate_iso,
+            "last_template_day_sent": 2,
         })
 
+        try:
+            _bump_ai_send_metrics_in_airtable(opportunityId)
+        except Exception as e:
+            log.warning("AI metrics update failed (non-blocking) opp=%s: %s", opportunityId, e)
 
     return sent_ok
     
