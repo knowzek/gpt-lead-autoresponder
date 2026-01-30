@@ -3,6 +3,7 @@ import logging
 import json
 from datetime import datetime as _dt
 from flask import Flask, request, jsonify
+import os
 
 from email_ingestion import process_inbound_email
 from kbb_adf_ingestion import process_kbb_adf_notification
