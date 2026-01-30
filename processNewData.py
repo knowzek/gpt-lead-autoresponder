@@ -2854,7 +2854,6 @@ def send_first_touch_email(
                 opportunity,
                 extra_fields={
                     "ab_variant": variant,
-                    "salesai_created_iso": created_iso,
                     "first_email_sent_at": opportunity["first_email_sent_at"],
                     "mode": "cadence",
                 }
