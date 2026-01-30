@@ -50,18 +50,25 @@ def _as_str(v) -> str:
 
 def canonicalize_opp(opp: dict, fields: dict) -> dict:
     """
-    Standardize opp at the root so downstream code can trust:
-      - opp["opportunityId"]
-      - opp["_subscription_id"]
-      - opp["rooftop_name"]
-      - opp["customer_first_name"], ["customer_last_name"], ["customer_email"], ["customer_phone"]
-      - opp["salesperson_name"]
-      - opp["vehicle"]
-      - opp["patti"] (dict)
-      - opp["source"] (optional)
+    Canonicalize opp so downstream code can safely rely on these keys:
+      opportunityId, _subscription_id, rooftop_name,
+      customer_first_name/last_name/email/phone,
+      salesperson_name, vehicle, patti, source
     """
     opp = opp or {}
     fields = fields or {}
+
+    # Ensure canonical keys always exist (prevents KeyError)
+    for k in (
+        "rooftop_name",
+        "customer_first_name",
+        "customer_last_name",
+        "customer_email",
+        "customer_phone",
+        "salesperson_name",
+        "vehicle",
+    ):
+        opp.setdefault(k, "")
 
     # ---- IDs ----
     opp_id = _as_str(
@@ -83,37 +90,65 @@ def canonicalize_opp(opp: dict, fields: dict) -> dict:
         opp["_subscription_id"] = sub
 
     # ---- Rooftop ----
-    rt = _as_str(
-        opp.get("rooftop_name")
-        or fields.get("rooftop_name")
+    # Airtable (preferred) + common Fortellis variants
+    opp["rooftop_name"] = _as_str(
+        fields.get("rooftop_name")
         or fields.get("Rooftop Name")
+        or opp.get("rooftop_name")
+        or opp.get("rooftopName")
+        or (opp.get("dealer") or {}).get("name")
+        or (opp.get("dealer") or {}).get("rooftopName")
+        or (opp.get("dealerInfo") or {}).get("name")
     )
-    if rt:
-        opp["rooftop_name"] = rt
 
-    # ---- Customer (prefer Airtable columns) ----
-    opp["customer_first_name"] = _as_str(fields.get("Customer First Name") or opp.get("customer_first_name"))
-    opp["customer_last_name"]  = _as_str(fields.get("Customer Last Name")  or opp.get("customer_last_name"))
-    opp["customer_email"]      = _as_str(fields.get("customer_email")      or opp.get("customer_email"))
-    opp["customer_phone"]      = _as_str(fields.get("customer_phone")      or opp.get("customer_phone"))
+    # ---- Customer (prefer Airtable, but fallback to Fortellis/common shapes) ----
+    cust = opp.get("customer") or {}
+    opp["customer_first_name"] = _as_str(
+        fields.get("Customer First Name")
+        or opp.get("customer_first_name")
+        or cust.get("firstName")
+        or opp.get("firstName")
+    )
+    opp["customer_last_name"] = _as_str(
+        fields.get("Customer Last Name")
+        or opp.get("customer_last_name")
+        or cust.get("lastName")
+        or opp.get("lastName")
+    )
+    opp["customer_email"] = _as_str(
+        fields.get("customer_email")
+        or opp.get("customer_email")
+        or cust.get("email")
+        or opp.get("email")
+    )
+    opp["customer_phone"] = _as_str(
+        fields.get("customer_phone")
+        or opp.get("customer_phone")
+        or cust.get("mobilePhone")
+        or cust.get("phone")
+        or opp.get("phone")
+    )
 
     # ---- Salesperson ----
-    # Airtable might return a string, a list, or a dict depending on field type.
     sp = (
         fields.get("Assigned Sales Rep")
         or opp.get("salesperson_name")
+        or (opp.get("salesperson") or {}).get("name")
         or opp.get("salesperson")
         or opp.get("Assigned Sales Rep")
     )
     opp["salesperson_name"] = _as_str(sp)
 
     # ---- Vehicle ----
-    # Fortellis sometimes provides a dict for vehicleOfInterest; Airtable may have Vehicle/vehicle.
+    voi = opp.get("vehicleOfInterest")
     opp["vehicle"] = _as_str(
         fields.get("vehicle")
         or fields.get("Vehicle")
         or opp.get("vehicle")
-        or opp.get("vehicleOfInterest")
+        or (voi or {}).get("display")            # if dict
+        or (voi or {}).get("name")
+        or (voi or {}).get("value")
+        or voi
     )
 
     # ---- Patti dict always exists ----
@@ -122,7 +157,7 @@ def canonicalize_opp(opp: dict, fields: dict) -> dict:
 
     # ---- Source ----
     if not opp.get("source"):
-        src = _as_str(fields.get("source"))
+        src = _as_str(fields.get("source") or opp.get("source"))
         if src:
             opp["source"] = src
 
