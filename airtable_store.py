@@ -887,20 +887,31 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
     # Snapshot hashing for patti_json (safe)
     # ---------------------------
     prev_hash = (fields.get("patti_hash") or "").strip()
-
-    snapshot_str = None
-    snapshot_hash = None
+    
     try:
-        # Use a stable JSON string; default=str prevents crashes on datetimes/etc.
-        snapshot_str = json.dumps(opp, sort_keys=True, ensure_ascii=False, default=str)
-        snapshot_hash = hashlib.sha256(snapshot_str.encode("utf-8")).hexdigest()
-
-        if snapshot_hash and snapshot_hash != prev_hash:
-            patch["patti_json"] = snapshot_str
-            patch["patti_hash"] = snapshot_hash
+        snapshot_obj = _build_patti_snapshot(opp)  # ✅ tiny snapshot only
+        snapshot_str = json.dumps(snapshot_obj, sort_keys=True, ensure_ascii=False, default=str)
+    
+        MAX = 95_000
+        if len(snapshot_str) > MAX:
+            # Fail-open: don't write it at all
+            # (optional) log.warning("patti_json snapshot too large; skipping write len=%s opp=%s", len(snapshot_str), opp.get("opportunityId"))
+            pass
+        else:
+            snapshot_hash = hashlib.sha256(snapshot_str.encode("utf-8")).hexdigest()
+            if snapshot_hash and snapshot_hash != prev_hash:
+                patch["patti_json"] = snapshot_str
+                patch["patti_hash"] = snapshot_hash
+    
+        # Absolute safety: never allow oversize patti_json into the patch
+        if "patti_json" in patch and len(patch["patti_json"]) > MAX:
+            patch.pop("patti_json", None)
+            patch.pop("patti_hash", None)
+    
     except Exception:
         # Fail-open: don't block saving brain fields if snapshot serialization fails
         pass
+
 
     # ---------------------------
     # Mirror compliance into columns (safe)
