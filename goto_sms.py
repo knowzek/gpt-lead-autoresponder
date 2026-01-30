@@ -15,16 +15,15 @@ _ACCESS_TOKEN_EXP = 0
 
 GOTO_API = "https://api.goto.com"
 
-def list_conversations(owner_phone_e164: str, sort: str = "DESCENDINGLAST_MESSAGE_TIMESTAMP", limit: int = 20):
+def list_conversations(owner_phone_e164: str):
     url = f"{GOTO_API}/messaging/v1/conversations"
     params = {
         "ownerPhoneNumber": owner_phone_e164,
-        "sort": sort,
-        "limit": limit,
     }
     r = requests.get(url, headers=_auth_headers(), params=params, timeout=30)
     r.raise_for_status()
     return r.json()
+
 
 def list_messages(owner_phone_e164: str, contact_phone_e164: str, limit: int = 20):
     url = f"{GOTO_API}/messaging/v1/messages"
