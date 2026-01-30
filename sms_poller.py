@@ -32,7 +32,7 @@ def poll_once():
     """
     owner = _patti_number()
 
-    data = list_conversations(owner_phone_e164=owner, limit=20)
+    data = list_conversations(owner_phone_e164=owner)
     items = data.get("items") or []
     log.info("SMS poll: got %d conversations", len(items))
 
