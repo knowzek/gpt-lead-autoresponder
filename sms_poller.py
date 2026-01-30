@@ -38,6 +38,7 @@ def poll_once():
     items = data.get("items") or []
     log.info("SMS poll: got %d conversations", len(items))
 
+    msgs = list_messages(owner_phone_e164=owner, contact_phone_e164=author, limit=12)
     for conv in items:
         last = conv.get("lastMessage") or {}
         if not last:
