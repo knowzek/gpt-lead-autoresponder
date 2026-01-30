@@ -9,6 +9,8 @@ from airtable_store import (
     opp_from_record,
     save_opp,
 )
+from sms_brain import generate_sms_reply
+
 
 log = logging.getLogger("patti.sms.poller")
 
@@ -74,8 +76,15 @@ def poll_once():
         log.info("SMS poll: new inbound msg opp=%s author=%s body=%r",
                  opp.get("opportunityId"), author, body[:120])
 
-        # VERY SIMPLE auto-reply for now (no GPT yet)
-        reply_text = "Thanks! What day/time works best for you to come in?"
+        # Build GPT reply
+        decision = generate_sms_reply(
+            opp=opp,
+            inbound_text=body,
+            include_optout_footer=False,  # guest already replied; no footer
+        )
+        
+        reply_text = (decision.get("reply")).strip()
+
 
         to_number = author
         if _sms_test_enabled() and _sms_test_to():
