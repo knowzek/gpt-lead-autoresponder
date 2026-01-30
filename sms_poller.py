@@ -77,10 +77,19 @@ def poll_once():
                  opp.get("opportunityId"), author, body[:120])
 
         # Build GPT reply
+        # inbound SMS text
+        last_inbound = body or ""
+        
+        # opp is already canonicalized by opp_from_record()
         decision = generate_sms_reply(
-            opp=opp,
-            inbound_text=body,
-            include_optout_footer=False,  # guest already replied; no footer
+            rooftop_name=opp["rooftop_name"],
+            customer_first_name=opp["customer_first_name"],
+            customer_phone=opp["customer_phone"],
+            salesperson=opp["salesperson_name"],
+            vehicle=opp["vehicle"],
+            last_inbound=last_inbound,
+            thread_snippet=None,           # optional, keep simple for now
+            include_optout_footer=False,
         )
         
         reply_text = (decision.get("reply")).strip()
