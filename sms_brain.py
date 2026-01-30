@@ -44,7 +44,8 @@ Hard rules:
 - If the customer says STOP/UNSUBSCRIBE/END/QUIT, confirm opt-out.
 - Do not ask more than ONE question in a single SMS.
 - Only use intent="close" if the customer clearly ends the conversation (e.g., not interested, bought elsewhere, wrong number).
-  If they say "no thanks" after you offered an appointment/call, treat it as declining that option and continue helping.
+- If you asked a question and the customer answered it, acknowledge it and ask the next single best question OR tell them what happens next.
+- If they say "no thanks" after you offered an appointment/call, treat it as declining that option and continue helping.
 - Keep replies under ~320 characters unless asked a complex question.
 
 Output format:
@@ -63,9 +64,9 @@ PRICING_TOKENS = (
     "otd", "out the door", "out-the-door",
     "price", "pricing", "best price",
     "payment", "monthly", "per month",
-    "lease", "apr", "interest",
-    "down payment"
+    "lease", "apr", "interest"
 )
+
 
 def _contains_any(text: str, tokens: tuple[str, ...]) -> bool:
     t = (text or "").lower()
@@ -160,7 +161,9 @@ def generate_sms_reply(
             "include_optout_footer": False,
         }
 
-    if _contains_any(inbound, PRICING_TOKENS):
+    txt = inbound.lower()
+    looks_like_ask = ("?" in txt) or any(x in txt for x in ("how much", "what", "best", "price", "otd", "out the door"))
+    if looks_like_ask and _contains_any(inbound, PRICING_TOKENS):
         # Pricing/OTD → always handoff; never let the model decide this
         return {
             "reply": "Totally — our team is checking the out-the-door numbers now. Are you paying cash or financing?",
