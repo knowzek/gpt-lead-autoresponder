@@ -26,7 +26,6 @@ SMS_MODEL = (os.getenv("SMS_OPENAI_MODEL") or os.getenv("OPENAI_MODEL") or "gpt-
 
 _oai = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-
 SYSTEM_PROMPT = """You are Patti, an AI online relations assistant for a car dealership.
 
 Voice / vibe (match Impel "Sierra" examples):
@@ -36,14 +35,16 @@ Voice / vibe (match Impel "Sierra" examples):
 - Sound human and helpful, not robotic.
 
 Primary goal:
-- Move the customer to the next step: schedule an appointment OR offer a quick call first.
+- Answer the customer’s question clearly and briefly.
+- Then (if appropriate) suggest a next step: schedule an appointment OR offer a quick call.
 
 Hard rules:
-- Never quote pricing, OTD, payments, APR, lease terms, discounts, trade values, incentives. If the customer asks, respond with a brief "team is checking" message and mark handoff.
-- If the customer indicates they already bought, not interested, or wants to stop, be polite and stop.
+- Never quote pricing, OTD, payments, APR, lease terms, discounts, trade values, incentives.
+- If the customer indicates they already bought, not interested, wrong number, or wants to stop, be polite and stop.
 - If the customer says STOP/UNSUBSCRIBE/END/QUIT, confirm opt-out.
 - Do not ask more than ONE question in a single SMS.
-- Only use intent="close" if the customer clearly ends the conversation (e.g., not interested, bought elsewhere, wrong number). If they say "no thanks" after you offered an appointment/call, treat it as declining that option and continue helping.
+- Only use intent="close" if the customer clearly ends the conversation (e.g., not interested, bought elsewhere, wrong number).
+  If they say "no thanks" after you offered an appointment/call, treat it as declining that option and continue helping.
 - Keep replies under ~320 characters unless asked a complex question.
 
 Output format:
@@ -56,6 +57,20 @@ Return ONLY valid JSON with keys:
   "include_optout_footer": boolean
 }
 """
+
+STOP_TOKENS = ("stop", "unsubscribe", "end", "quit")
+PRICING_TOKENS = (
+    "otd", "out the door", "out-the-door",
+    "price", "pricing", "best price",
+    "payment", "monthly", "per month",
+    "lease", "apr", "interest",
+    "down payment", "finance", "financing"
+)
+
+def _contains_any(text: str, tokens: tuple[str, ...]) -> bool:
+    t = (text or "").lower()
+    return any(tok in t for tok in tokens)
+
 
 
 def _safe_json_loads(s: str) -> Dict[str, Any]:
@@ -108,7 +123,6 @@ def build_user_prompt(
         f"- include_optout_footer: {include_optout_footer}\n"
         f"\n"
         f"Customer inbound SMS:\n{last_inbound}\n"
-        f"{recent}\n"
         f"\n"
         f"Write Patti's next SMS."
     )
@@ -132,6 +146,28 @@ def generate_sms_reply(
             "needs_handoff": False,
             "handoff_reason": "",
             "include_optout_footer": bool(include_optout_footer),
+        }
+
+      # ✅ Tiny deterministic gates for compliance
+    inbound = (last_inbound or "").strip()
+
+    if _contains_any(inbound, STOP_TOKENS):
+        return {
+            "reply": "You’re all set — we’ll stop texting you. Reply START if you change your mind.",
+            "intent": "opt_out",
+            "needs_handoff": False,
+            "handoff_reason": "",
+            "include_optout_footer": False,
+        }
+
+    if _contains_any(inbound, PRICING_TOKENS):
+        # Pricing/OTD → always handoff; never let the model decide this
+        return {
+            "reply": "Totally — our team is checking the out-the-door numbers now. Are you paying cash or financing?",
+            "intent": "handoff",
+            "needs_handoff": True,
+            "handoff_reason": "pricing",
+            "include_optout_footer": False,
         }
 
     user_prompt = build_user_prompt(
