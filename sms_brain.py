@@ -168,6 +168,8 @@ def generate_sms_reply(
     if intent not in ("reply", "handoff", "opt_out", "close"):
         intent = "reply"
 
+    log.info("SMS brain decision intent=%s handoff=%s reply=%r", intent, needs_handoff, reply[:160])
+
     return {
         "reply": reply,
         "intent": intent,
