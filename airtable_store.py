@@ -674,6 +674,7 @@ def opp_from_record(rec: dict) -> dict:
         opp = _safe_json_loads(fields.get("opp_json")) or {}
     # Always attach Airtable record id
     opp["_airtable_rec_id"] = rec.get("id")
+    opp = canonicalize_opp(opp, fields)
 
     # --- Hydrate Assigned Sales Rep from Airtable column ---
     asr = fields.get("Assigned Sales Rep")
