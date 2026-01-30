@@ -104,6 +104,12 @@ def poll_once():
         # Build GPT reply
         # inbound SMS text
         last_inbound = body or ""
+
+        log.info(
+            "SMS poll: thread context turns=%d (most recent=%r)",
+            len(thread),
+            (thread[-1]["content"][:80] if thread else None),
+        )
         
         # opp is already canonicalized by opp_from_record()
         decision = generate_sms_reply(
