@@ -3,7 +3,7 @@ import os
 import logging
 from datetime import datetime, timezone
 
-from goto_sms import list_conversations, send_sms
+from goto_sms import list_conversations, list_messages, send_sms
 from airtable_store import (
     find_by_customer_phone_loose,
     opp_from_record,
@@ -38,7 +38,6 @@ def poll_once():
     items = data.get("items") or []
     log.info("SMS poll: got %d conversations", len(items))
 
-    msgs = list_messages(owner_phone_e164=owner, contact_phone_e164=author, limit=12)
     for conv in items:
         last = conv.get("lastMessage") or {}
         if not last:
@@ -50,6 +49,31 @@ def poll_once():
         msg_id = last.get("id") or ""
         body = (last.get("body") or "").strip()
         author = last.get("authorPhoneNumber") or ""
+
+        # Pull last N messages in this thread so GPT can interpret short replies like "No thanks"
+        thread = []
+        try:
+            raw = list_messages(owner_phone_e164=owner, contact_phone_e164=author, limit=12)
+            items2 = raw.get("items") or []
+            # Oldest -> newest
+            items2 = sorted(items2, key=lambda m: m.get("timestamp") or "")
+        
+            for m in items2[-12:]:
+                txt = (m.get("body") or "").strip()
+                if not txt:
+                    continue
+        
+                author_num = (m.get("authorPhoneNumber") or "").strip()
+                role = "assistant" if author_num == owner else "user"
+        
+                thread.append({
+                    "role": role,
+                    "content": txt[:800],
+                })
+        except Exception:
+            log.exception("SMS poll: failed to fetch thread messages owner=%s contact=%s", owner, author)
+            thread = []
+
 
         # Find the lead by author phone (customer)
         rec = find_by_customer_phone_loose(author)
@@ -89,7 +113,7 @@ def poll_once():
             salesperson=opp["salesperson_name"],
             vehicle=opp["vehicle"],
             last_inbound=last_inbound,
-            thread_snippet=None,           # optional, keep simple for now
+            thread_snippet=thread,          # ✅ pass real history
             include_optout_footer=False,
         )
         
