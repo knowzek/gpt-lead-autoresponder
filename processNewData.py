@@ -2807,7 +2807,6 @@ def send_first_touch_email(
             
                 # ✅ new
                 template_day=1,          # first-touch
-                ab_variant=variant,
             )
 
         except Exception as e:
