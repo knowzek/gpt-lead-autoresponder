@@ -19,6 +19,55 @@ HEADERS = {
 
 import re
 
+def canonicalize_opp(opp: dict, fields: dict) -> dict:
+    opp = opp or {}
+    fields = fields or {}
+
+    # IDs
+    opp_id = (opp.get("opportunityId") or opp.get("id") or fields.get("opp_id") or fields.get("opportunityId") or "").strip()
+    if opp_id:
+        opp["opportunityId"] = opp_id
+        opp["id"] = opp_id
+
+    sub = (opp.get("_subscription_id") or fields.get("subscription_id") or fields.get("_subscription_id") or "").strip()
+    if sub:
+        opp["_subscription_id"] = sub
+
+    # Rooftop
+    rt = (opp.get("rooftop_name") or fields.get("rooftop_name") or fields.get("Rooftop Name") or "").strip()
+    if rt:
+        opp["rooftop_name"] = rt
+
+    # Customer (prefer Airtable columns)
+    opp["customer_first_name"] = (fields.get("Customer First Name") or opp.get("customer_first_name") or "").strip()
+    opp["customer_last_name"]  = (fields.get("Customer Last Name")  or opp.get("customer_last_name")  or "").strip()
+    opp["customer_email"]      = (fields.get("customer_email") or opp.get("customer_email") or "").strip()
+    opp["customer_phone"]      = (fields.get("customer_phone") or opp.get("customer_phone") or "").strip()
+
+    # Salesperson
+    sp = fields.get("Assigned Sales Rep") or opp.get("salesperson_name") or opp.get("salesperson") or opp.get("Assigned Sales Rep") or ""
+    if isinstance(sp, dict):
+        sp = sp.get("name") or sp.get("value") or ""
+    if isinstance(sp, list):
+        sp = sp[0] if sp else ""
+    opp["salesperson_name"] = str(sp).strip()
+
+    # Vehicle (choose one field name)
+    opp["vehicle"] = (fields.get("vehicle") or fields.get("Vehicle") or opp.get("vehicle") or opp.get("vehicleOfInterest") or "").strip()
+
+    # Patti dict always exists
+    if not isinstance(opp.get("patti"), dict):
+        opp["patti"] = {}
+
+    # Source
+    if not opp.get("source"):
+        src = (fields.get("source") or "").strip()
+        if src:
+            opp["source"] = src
+
+    return opp
+
+
 def _digits(phone: str) -> str:
     return re.sub(r"\D+", "", phone or "")
 
