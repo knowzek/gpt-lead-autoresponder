@@ -43,6 +43,7 @@ Hard rules:
 - If the customer indicates they already bought, not interested, or wants to stop, be polite and stop.
 - If the customer says STOP/UNSUBSCRIBE/END/QUIT, confirm opt-out.
 - Do not ask more than ONE question in a single SMS.
+- Only use intent="close" if the customer clearly ends the conversation (e.g., not interested, bought elsewhere, wrong number). If they say "no thanks" after you offered an appointment/call, treat it as declining that option and continue helping.
 - Keep replies under ~320 characters unless asked a complex question.
 
 Output format:
@@ -84,16 +85,18 @@ def build_user_prompt(
     recent = ""
     if thread_snippet:
         lines = []
-        for m in thread_snippet[-6:]:
-            frm = (m.get("from") or "").strip().lower() or "unknown"
-            txt = (m.get("text") or "").strip()
+        for m in thread_snippet[-10:]:
+            role = (m.get("role") or "").strip().lower()
+            txt = (m.get("content") or "").strip()
             if not txt:
                 continue
-            if len(txt) > 220:
-                txt = txt[:220] + "…"
-            lines.append(f"{frm}: {txt}")
+            if len(txt) > 260:
+                txt = txt[:260] + "…"
+            who = "Customer" if role == "user" else "Patti"
+            lines.append(f"{who}: {txt}")
         if lines:
-            recent = "\n\nRecent thread:\n" + "\n".join(lines)
+            recent = "\n\nConversation so far (most recent last):\n" + "\n".join(lines)
+
 
     return (
         f"Context:\n"
@@ -146,10 +149,20 @@ def generate_sms_reply(
         resp = _oai.chat.completions.create(
             model=SMS_MODEL,
             temperature=0.3,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
+            messages=messages,
+        )
+
+          # If we have thread context, pass it as actual conversation turns
+          if thread_snippet:
+              for m in thread_snippet[-12:]:
+                  role = (m.get("role") or "").strip()
+                  content = (m.get("content") or "").strip()
+                  if role in ("user", "assistant") and content:
+                      messages.append({"role": role, "content": content})
+          
+          # Then add the final instruction as the last user message
+          messages.append({"role": "user", "content": user_prompt})
+
         )
         content = (resp.choices[0].message.content or "").strip()
         data = _safe_json_loads(content)
