@@ -141,28 +141,32 @@ def generate_sms_reply(
         salesperson=salesperson,
         vehicle=vehicle,
         last_inbound=last_inbound,
-        thread_snippet=thread_snippet,
+        thread_snippet=thread_snippet,  # ok to keep; optional
         include_optout_footer=include_optout_footer,
     )
+
+    # ✅ Build chat messages properly (system -> thread -> final instruction)
+    messages: List[Dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+    # If we have thread context, pass it as actual conversation turns
+    if thread_snippet:
+        for m in thread_snippet[-12:]:
+            role = (m.get("role") or "").strip().lower()
+            content = (m.get("content") or "").strip()
+            if not content:
+                continue
+            if role not in ("user", "assistant"):
+                continue
+            messages.append({"role": role, "content": content})
+
+    # Then add the final instruction as the last user message
+    messages.append({"role": "user", "content": user_prompt})
 
     try:
         resp = _oai.chat.completions.create(
             model=SMS_MODEL,
             temperature=0.3,
             messages=messages,
-        )
-
-          # If we have thread context, pass it as actual conversation turns
-          if thread_snippet:
-              for m in thread_snippet[-12:]:
-                  role = (m.get("role") or "").strip()
-                  content = (m.get("content") or "").strip()
-                  if role in ("user", "assistant") and content:
-                      messages.append({"role": role, "content": content})
-          
-          # Then add the final instruction as the last user message
-          messages.append({"role": "user", "content": user_prompt})
-
         )
         content = (resp.choices[0].message.content or "").strip()
         data = _safe_json_loads(content)
