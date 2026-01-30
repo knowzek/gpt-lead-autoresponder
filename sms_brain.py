@@ -64,7 +64,7 @@ PRICING_TOKENS = (
     "price", "pricing", "best price",
     "payment", "monthly", "per month",
     "lease", "apr", "interest",
-    "down payment", "finance", "financing"
+    "down payment"
 )
 
 def _contains_any(text: str, tokens: tuple[str, ...]) -> bool:
