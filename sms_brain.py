@@ -150,9 +150,12 @@ def generate_sms_reply(
         }
 
       # ✅ Tiny deterministic gates for compliance
+    log.info("sms_brain VERSION=2026-01-30-OTD-GATE-A")
+
     inbound = (last_inbound or "").strip()
 
     if _contains_any(inbound, STOP_TOKENS):
+        log.info("sms_brain GATE=stop inbound=%r", inbound[:120])
         return {
             "reply": "You’re all set — we’ll stop texting you. Reply START if you change your mind.",
             "intent": "opt_out",
@@ -165,6 +168,8 @@ def generate_sms_reply(
     looks_like_ask = ("?" in txt) or any(x in txt for x in ("how much", "what", "best", "price", "otd", "out the door"))
     if looks_like_ask and _contains_any(inbound, PRICING_TOKENS):
         # Pricing/OTD → always handoff; never let the model decide this
+        log.info("sms_brain GATE=pricing inbound=%r", inbound[:120])
+
         return {
             "reply": "Totally — our team is checking the out-the-door numbers now. Are you paying cash or financing?",
             "intent": "handoff",
