@@ -19,53 +19,115 @@ HEADERS = {
 
 import re
 
+def _as_str(v) -> str:
+    """
+    Convert common Airtable/Fortellis shapes to a clean string.
+    - None -> ""
+    - str -> stripped
+    - dict -> try common keys, else ""
+    - list -> join str parts
+    - other -> str(v)
+    """
+    if v is None:
+        return ""
+    if isinstance(v, str):
+        return v.strip()
+    if isinstance(v, dict):
+        # common patterns: {"name": "..."}, {"value": "..."}
+        for k in ("display", "name", "value", "label", "text"):
+            if isinstance(v.get(k), str):
+                return v[k].strip()
+        return ""
+    if isinstance(v, list):
+        parts = []
+        for item in v:
+            s = _as_str(item)
+            if s:
+                parts.append(s)
+        return " ".join(parts).strip()
+    return str(v).strip()
+
+
 def canonicalize_opp(opp: dict, fields: dict) -> dict:
+    """
+    Standardize opp at the root so downstream code can trust:
+      - opp["opportunityId"]
+      - opp["_subscription_id"]
+      - opp["rooftop_name"]
+      - opp["customer_first_name"], ["customer_last_name"], ["customer_email"], ["customer_phone"]
+      - opp["salesperson_name"]
+      - opp["vehicle"]
+      - opp["patti"] (dict)
+      - opp["source"] (optional)
+    """
     opp = opp or {}
     fields = fields or {}
 
-    # IDs
-    opp_id = (opp.get("opportunityId") or opp.get("id") or fields.get("opp_id") or fields.get("opportunityId") or "").strip()
+    # ---- IDs ----
+    opp_id = _as_str(
+        opp.get("opportunityId")
+        or opp.get("id")
+        or fields.get("opp_id")
+        or fields.get("opportunityId")
+    )
     if opp_id:
         opp["opportunityId"] = opp_id
-        opp["id"] = opp_id
+        opp["id"] = opp_id  # keep both in sync
 
-    sub = (opp.get("_subscription_id") or fields.get("subscription_id") or fields.get("_subscription_id") or "").strip()
+    sub = _as_str(
+        opp.get("_subscription_id")
+        or fields.get("subscription_id")
+        or fields.get("_subscription_id")
+    )
     if sub:
         opp["_subscription_id"] = sub
 
-    # Rooftop
-    rt = (opp.get("rooftop_name") or fields.get("rooftop_name") or fields.get("Rooftop Name") or "").strip()
+    # ---- Rooftop ----
+    rt = _as_str(
+        opp.get("rooftop_name")
+        or fields.get("rooftop_name")
+        or fields.get("Rooftop Name")
+    )
     if rt:
         opp["rooftop_name"] = rt
 
-    # Customer (prefer Airtable columns)
-    opp["customer_first_name"] = (fields.get("Customer First Name") or opp.get("customer_first_name") or "").strip()
-    opp["customer_last_name"]  = (fields.get("Customer Last Name")  or opp.get("customer_last_name")  or "").strip()
-    opp["customer_email"]      = (fields.get("customer_email") or opp.get("customer_email") or "").strip()
-    opp["customer_phone"]      = (fields.get("customer_phone") or opp.get("customer_phone") or "").strip()
+    # ---- Customer (prefer Airtable columns) ----
+    opp["customer_first_name"] = _as_str(fields.get("Customer First Name") or opp.get("customer_first_name"))
+    opp["customer_last_name"]  = _as_str(fields.get("Customer Last Name")  or opp.get("customer_last_name"))
+    opp["customer_email"]      = _as_str(fields.get("customer_email")      or opp.get("customer_email"))
+    opp["customer_phone"]      = _as_str(fields.get("customer_phone")      or opp.get("customer_phone"))
 
-    # Salesperson
-    sp = fields.get("Assigned Sales Rep") or opp.get("salesperson_name") or opp.get("salesperson") or opp.get("Assigned Sales Rep") or ""
-    if isinstance(sp, dict):
-        sp = sp.get("name") or sp.get("value") or ""
-    if isinstance(sp, list):
-        sp = sp[0] if sp else ""
-    opp["salesperson_name"] = str(sp).strip()
+    # ---- Salesperson ----
+    # Airtable might return a string, a list, or a dict depending on field type.
+    sp = (
+        fields.get("Assigned Sales Rep")
+        or opp.get("salesperson_name")
+        or opp.get("salesperson")
+        or opp.get("Assigned Sales Rep")
+    )
+    opp["salesperson_name"] = _as_str(sp)
 
-    # Vehicle (choose one field name)
-    opp["vehicle"] = (fields.get("vehicle") or fields.get("Vehicle") or opp.get("vehicle") or opp.get("vehicleOfInterest") or "").strip()
+    # ---- Vehicle ----
+    # Fortellis sometimes provides a dict for vehicleOfInterest; Airtable may have Vehicle/vehicle.
+    opp["vehicle"] = _as_str(
+        fields.get("vehicle")
+        or fields.get("Vehicle")
+        or opp.get("vehicle")
+        or opp.get("vehicleOfInterest")
+    )
 
-    # Patti dict always exists
+    # ---- Patti dict always exists ----
     if not isinstance(opp.get("patti"), dict):
         opp["patti"] = {}
 
-    # Source
+    # ---- Source ----
     if not opp.get("source"):
-        src = (fields.get("source") or "").strip()
+        src = _as_str(fields.get("source"))
         if src:
             opp["source"] = src
 
     return opp
+
 
 
 def _digits(phone: str) -> str:
