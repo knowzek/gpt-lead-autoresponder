@@ -8,6 +8,10 @@ import json
 from airtable_store import mark_customer_reply, mark_unsubscribed
 from kbb_ico import _is_optout_text as _kbb_is_optout_text, _is_decline as _kbb_is_decline
 
+from datetime import datetime, timezone, timedelta
+from airtable_store import save_opp
+    
+
 from rooftops import get_rooftop_info
 from fortellis import (
     get_token,
@@ -1093,6 +1097,24 @@ def process_lead_notification(inbound: dict) -> None:
         SAFE_MODE=safe_mode,                
         test_recipient=test_recipient,  
     )
+
+    # right after successful first-touch email send (sent_ok=True)
+    when_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    next_iso = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    
+    # keep in-memory consistent too (optional but nice)
+    opportunity["first_email_sent_at"] = when_iso
+    opportunity["followUP_date"] = next_iso
+    
+    save_opp(
+        opportunity,
+        extra_fields={
+            "first_email_sent_at": when_iso,
+            "follow_up_at": next_iso,
+            "mode": "cadence",
+        },
+    )
+
 
     log.info("Lead notification first-touch sent_ok=%s opp=%s shopper=%s", sent_ok, opp_id, shopper_email)
     return
