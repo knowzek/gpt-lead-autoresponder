@@ -122,6 +122,9 @@ def poll_once():
             thread_snippet=thread,          # ✅ pass real history
             include_optout_footer=False,
         )
+
+        if decision.get("needs_handoff") and decision.get("handoff_reason") == "pricing":
+            save_opp(opp, extra_fields={"sms_handoff_reason": "pricing"})
         
         reply_text = (decision.get("reply")).strip()
 
