@@ -343,7 +343,279 @@ def maybe_send_tk_gm_day2_email(
             log.warning("AI metrics update failed (non-blocking) opp=%s: %s", opportunityId, e)
 
     return sent_ok
+
+
+# --- Tustin Kia Day-3 Walk-around Video Email --------------------------------
+
+# Vehicle model (lowercase) -> YouTube walk-around video URL
+# Based on Kia vehicle lineup commonly sold at Tustin Kia
+# Vehicle model (lowercase) -> YouTube walk-around video URL
+# TODO: Replace these placeholder video IDs with actual YouTube video IDs from Tustin Kia channel
+# YouTube watch URLs should use format: https://www.youtube.com/watch?v={11-char-video-id}
+KIA_WALKAROUND_VIDEOS = {
+    "sportage": "https://www.youtube.com/watch?v=PLACEHOLDER_SPORTAGE",
+    "telluride": "https://www.youtube.com/watch?v=PLACEHOLDER_TELLURIDE",
+    "sorento": "https://www.youtube.com/watch?v=PLACEHOLDER_SORENTO",
+    "soul": "https://www.youtube.com/watch?v=PLACEHOLDER_SOUL",
+    "forte": "https://www.youtube.com/watch?v=PLACEHOLDER_FORTE",
+    "k5": "https://www.youtube.com/watch?v=PLACEHOLDER_K5",
+    "niro": "https://www.youtube.com/watch?v=PLACEHOLDER_NIRO",
+    "niro ev": "https://www.youtube.com/watch?v=PLACEHOLDER_NIRO_EV",
+    "stinger": "https://www.youtube.com/watch?v=PLACEHOLDER_STINGER",
+    "carnival": "https://www.youtube.com/watch?v=PLACEHOLDER_CARNIVAL",
+    "ev6": "https://www.youtube.com/watch?v=PLACEHOLDER_EV6",
+    "ev9": "https://www.youtube.com/watch?v=PLACEHOLDER_EV9",
+    "seltos": "https://www.youtube.com/watch?v=PLACEHOLDER_SELTOS",
+    "rio": "https://www.youtube.com/watch?v=PLACEHOLDER_RIO",
+}
+
+TK_DAY3_WALKAROUND_SUBJECT = "Check out this walk-around video of your {vehicle_make} {vehicle_model}"
+
+
+def get_walkaround_video_url(vehicle_model: str) -> str | None:
+    """
+    Returns the YouTube walk-around video URL for a vehicle model, or None if not found.
+    Uses prefix matching to handle trim levels (e.g., "sportage lx" -> "sportage").
+    """
+    model_lower = (vehicle_model or "").strip().lower()
+    if not model_lower:
+        return None
     
+    # Direct match
+    if model_lower in KIA_WALKAROUND_VIDEOS:
+        return KIA_WALKAROUND_VIDEOS[model_lower]
+    
+    # Prefix match: check if model_lower starts with any known key
+    # This handles cases like "sportage lx" -> "sportage"
+    for key in KIA_WALKAROUND_VIDEOS:
+        if model_lower.startswith(key):
+            return KIA_WALKAROUND_VIDEOS[key]
+    
+    return None
+
+
+def _extract_vehicle_info(opportunity: dict) -> dict:
+    """
+    Extract vehicle year, make, model from opportunity's soughtVehicles.
+    Returns dict with keys: year, make, model, or empty strings if not found.
+    """
+    soughtVehicles = opportunity.get("soughtVehicles") or []
+    if not isinstance(soughtVehicles, list):
+        soughtVehicles = []
+
+    vehicleObj = None
+    for v in soughtVehicles:
+        if isinstance(v, dict) and v.get("isPrimary"):
+            vehicleObj = v
+            break
+    if not vehicleObj:
+        vehicleObj = (soughtVehicles[0] if soughtVehicles and isinstance(soughtVehicles[0], dict) else {})
+
+    return {
+        "year": str(vehicleObj.get("yearFrom") or vehicleObj.get("year") or "").strip(),
+        "make": str(vehicleObj.get("make") or "").strip(),
+        "model": str(vehicleObj.get("model") or "").strip(),
+    }
+
+
+def build_tk_day3_walkaround_html(
+    *,
+    customer_name: str,
+    vehicle_year: str,
+    vehicle_make: str,
+    vehicle_model: str,
+    youtube_walkaround_url: str,
+) -> str:
+    """Build Day 3 walk-around email HTML from template."""
+    cn = (customer_name or "there").strip()
+
+    base_dir = Path(__file__).resolve().parent
+    tpl_path = base_dir / "templates" / "cadence" / "tustin_kia" / "day3_walkaround_email.html"
+
+    html = tpl_path.read_text(encoding="utf-8")
+
+    # Replace all placeholders
+    html = html.replace("{{customer_name}}", cn)
+    html = html.replace("{{vehicle_year}}", vehicle_year or "")
+    html = html.replace("{{vehicle_make}}", vehicle_make or "Kia")
+    html = html.replace("{{vehicle_model}}", vehicle_model or "vehicle")
+    html = html.replace("{{youtube_walkaround_url}}", youtube_walkaround_url or "")
+
+    return html.strip()
+
+
+def _norm_phone_e164_us_local(raw: str) -> str:
+    """Normalize phone to E.164 format for US numbers."""
+    raw = (raw or "").strip()
+    if not raw:
+        return ""
+    digits = re.sub(r"\D+", "", raw)
+    if len(digits) == 10:
+        return "+1" + digits
+    if len(digits) == 11 and digits.startswith("1"):
+        return "+" + digits
+    if raw.startswith("+") and len(digits) >= 10:
+        return "+" + digits
+    return ""
+
+
+def maybe_send_tk_day3_walkaround(
+    *,
+    opportunity: dict,
+    opportunityId: str,
+    token: str,
+    subscription_id: str,
+    rooftop_name: str,
+    rooftop_sender: str,
+    customer_name: str,
+    currDate,
+    currDate_iso: str,
+) -> bool:
+    """
+    Send Day 3 walk-around video email and SMS for Tustin Kia leads.
+    
+    Returns True if sent (or OFFLINE_MODE), else False.
+    
+    Conditions:
+    - Tustin Kia rooftop only
+    - Not already sent (TK Day 3 Walkaround Sent)
+    - Lead is in cadence mode (not convo)
+    - Vehicle of interest has a matching walk-around video
+    """
+
+    # Rooftop gate
+    if not is_tustin_kia_rooftop(rooftop_name):
+        return False
+
+    # Already sent gate
+    if bool(opportunity.get("TK Day 3 Walkaround Sent")):
+        return False
+
+    # Mode gate: skip if lead is in convo mode
+    patti_meta = opportunity.get("patti") or {}
+    mode = (patti_meta.get("mode") or "").strip().lower()
+    if mode == "convo":
+        log.info("TK Day3 Walkaround: skipping opp=%s — mode is 'convo'", opportunityId)
+        return False
+
+    # Extract vehicle info
+    vehicle_info = _extract_vehicle_info(opportunity)
+    vehicle_year = vehicle_info["year"]
+    vehicle_make = vehicle_info["make"]
+    vehicle_model = vehicle_info["model"]
+
+    # Check if we have a walk-around video for this vehicle
+    video_url = get_walkaround_video_url(vehicle_model)
+    if not video_url:
+        log.info(
+            "TK Day3 Walkaround: no video for model=%r opp=%s",
+            vehicle_model, opportunityId
+        )
+        return False
+
+    # Resolve customer email
+    to_addr = resolve_customer_email(opportunity)
+    if not to_addr:
+        log.warning("TK Day3 Walkaround: no deliverable email for opp=%s", opportunityId)
+        return False
+
+    # Check doNotEmail flag
+    cust = opportunity.get("customer") or {}
+    emails = cust.get("emails") or []
+    for e in emails:
+        if isinstance(e, dict) and (e.get("address") or "").strip().lower() == to_addr.lower():
+            if e.get("doNotEmail"):
+                log.info("TK Day3 Walkaround: doNotEmail flagged for %s opp=%s", to_addr, opportunityId)
+                return False
+
+    # Build email
+    subject = TK_DAY3_WALKAROUND_SUBJECT.format(
+        vehicle_make=vehicle_make or "Kia",
+        vehicle_model=vehicle_model or "vehicle"
+    )
+    body_html = build_tk_day3_walkaround_html(
+        customer_name=customer_name,
+        vehicle_year=vehicle_year,
+        vehicle_make=vehicle_make,
+        vehicle_model=vehicle_model,
+        youtube_walkaround_url=video_url,
+    )
+
+    # Send email
+    sent_ok = False
+    if OFFLINE_MODE:
+        sent_ok = True
+    else:
+        from patti_mailer import send_patti_email
+        try:
+            send_patti_email(
+                token=token,
+                subscription_id=subscription_id,
+                opp_id=opportunityId,
+                rooftop_name=rooftop_name,
+                rooftop_sender=rooftop_sender,
+                to_addr=to_addr,
+                subject=subject,
+                body_html=body_html,
+                cc_addrs=[],
+            )
+            sent_ok = True
+        except Exception as e:
+            log.warning("TK Day3 Walkaround email send failed opp=%s: %s", opportunityId, e)
+            sent_ok = False
+
+    # Send SMS with video link (shorter message to stay within 160 chars)
+    sms_sent = False
+    if sent_ok:
+        try:
+            customer_phone = (opportunity.get("customer_phone") or "").strip()
+            phone_e164 = _norm_phone_e164_us_local(customer_phone)
+            
+            if phone_e164:
+                from goto_sms import send_sms
+                from_number = _norm_phone_e164_us_local(os.getenv("PATTI_SMS_NUMBER", ""))
+                
+                if not from_number:
+                    log.warning("TK Day3 SMS: PATTI_SMS_NUMBER not set, skipping SMS opp=%s", opportunityId)
+                else:
+                    # Keep SMS short to stay within 160 character limit
+                    vehicle_short = f"{vehicle_make} {vehicle_model}".strip() or "vehicle"
+                    sms_body = (
+                        f"Hi {customer_name or 'there'}, watch our {vehicle_short} walk-around: {video_url} "
+                        f"- Tustin Kia. STOP to opt out"
+                    ).strip()
+                    
+                    send_sms(from_number=from_number, to_number=phone_e164, body=sms_body)
+                    sms_sent = True
+                    log.info("TK Day3 Walkaround SMS sent to %s opp=%s", phone_e164, opportunityId)
+        except Exception as e:
+            log.warning("TK Day3 Walkaround SMS failed opp=%s: %s", opportunityId, e)
+
+    if sent_ok:
+        # Record in thread history
+        opportunity.setdefault("messages", []).append({
+            "msgFrom": "patti",
+            "subject": subject,
+            "body": body_html,
+            "date": currDate_iso,
+            "trigger": "tk_day3_walkaround",
+            "sms_sent": sms_sent,
+        })
+        opportunity.setdefault("checkedDict", {})["last_msg_by"] = "patti"
+
+        airtable_save(opportunity, extra_fields={
+            "TK Day 3 Walkaround Sent": True,
+            "TK Day 3 Walkaround Sent At": currDate_iso,
+            "last_template_day_sent": 3,
+        })
+
+        try:
+            _bump_ai_send_metrics_in_airtable(opportunityId)
+        except Exception as e:
+            log.warning("AI metrics update failed (non-blocking) opp=%s: %s", opportunityId, e)
+
+    return sent_ok
+
 
 def _next_kbb_followup_iso(*, lead_age_days: int) -> str:
     """
@@ -2145,6 +2417,45 @@ def processHit(hit):
                 opportunity["follow_up_at"] = next_due
                 opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
         
+                if not OFFLINE_MODE:
+                    try:
+                        extra = {"follow_up_at": next_due}
+                        first_sent = opportunity.get("first_email_sent_at")
+                        if first_sent:
+                            extra["first_email_sent_at"] = first_sent
+                        airtable_save(opportunity, extra_fields=extra)
+                    except Exception as e:
+                        log.warning(
+                            "Airtable save failed opp=%s (continuing): %s",
+                            opportunity.get("opportunityId") or opportunity.get("id"),
+                            e
+                        )
+
+                wJson(opportunity, f"jsons/process/{opportunityId}.json")
+                return
+
+        # --- Step 4A.2: Tustin Kia Day-3 Walk-around Video email (when followUP_count == 1) ---
+        # Day-3 = second follow-up run, send walk-around video if vehicle has matching video
+        if due_dt <= now_utc and followUP_count == 1:
+
+            sent_day3 = maybe_send_tk_day3_walkaround(
+                opportunity=opportunity,
+                opportunityId=opportunityId,
+                token=token,
+                subscription_id=subscription_id,
+                rooftop_name=rooftop_name,
+                rooftop_sender=rooftop_sender,
+                customer_name=customer_name,
+                currDate=currDate,
+                currDate_iso=currDate_iso,
+            )
+
+            if sent_day3:
+                # Advance cadence like a normal follow-up
+                next_due = (now_utc + _td(days=2)).replace(microsecond=0).isoformat()
+                opportunity["follow_up_at"] = next_due
+                opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
+
                 if not OFFLINE_MODE:
                     try:
                         extra = {"follow_up_at": next_due}
