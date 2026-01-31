@@ -224,16 +224,31 @@ def resolve_customer_email(
     test_recipient: str | None = None
 ) -> str | None:
     if SAFE_MODE:
-        return (test_recipient or "").strip() or None
+        tr = (test_recipient or "").strip()
+        return tr or None
 
-    # ✅ Canonical: Airtable hydrated field
-    air_email = (opportunity.get("customer_email") or "").strip()
-    if air_email:
-        return air_email
-
-    # Fallback: Fortellis customer.emails
+    # Fortellis customer.emails (used for doNotEmail + fallback)
     cust = opportunity.get("customer") or {}
     emails = cust.get("emails") or []
+
+    def _is_donot(addr: str) -> bool:
+        target = (addr or "").strip().lower()
+        if not target or not isinstance(emails, list):
+            return False
+        for e in emails:
+            if not isinstance(e, dict):
+                continue
+            eaddr = (e.get("address") or "").strip().lower()
+            if eaddr and eaddr == target:
+                return bool(e.get("doNotEmail"))
+        return False
+
+    # ✅ Canonical: Airtable hydrated field (but honor doNotEmail if Fortellis knows it)
+    air_email = (opportunity.get("customer_email") or "").strip()
+    if air_email and not _is_donot(air_email):
+        return air_email
+
+    # Fallback: Fortellis customer.emails (preferred first, else first deliverable)
     preferred = None
     first_ok = None
     if isinstance(emails, list):
@@ -250,7 +265,9 @@ def resolve_customer_email(
             if e.get("isPreferred"):
                 preferred = addr
                 break
+
     return preferred or first_ok
+
 
 
 def maybe_send_tk_gm_day2_email(
