@@ -349,21 +349,24 @@ def maybe_send_tk_gm_day2_email(
 
 # Vehicle model (lowercase) -> YouTube walk-around video URL
 # Based on Kia vehicle lineup commonly sold at Tustin Kia
+# Vehicle model (lowercase) -> YouTube walk-around video URL
+# TODO: Replace these placeholder video IDs with actual YouTube video IDs from Tustin Kia channel
+# YouTube watch URLs should use format: https://www.youtube.com/watch?v={11-char-video-id}
 KIA_WALKAROUND_VIDEOS = {
-    "sportage": "https://www.youtube.com/watch?v=Kia_Sportage_Walkaround",
-    "telluride": "https://www.youtube.com/watch?v=Kia_Telluride_Walkaround",
-    "sorento": "https://www.youtube.com/watch?v=Kia_Sorento_Walkaround",
-    "soul": "https://www.youtube.com/watch?v=Kia_Soul_Walkaround",
-    "forte": "https://www.youtube.com/watch?v=Kia_Forte_Walkaround",
-    "k5": "https://www.youtube.com/watch?v=Kia_K5_Walkaround",
-    "niro": "https://www.youtube.com/watch?v=Kia_Niro_Walkaround",
-    "niro ev": "https://www.youtube.com/watch?v=Kia_Niro_EV_Walkaround",
-    "stinger": "https://www.youtube.com/watch?v=Kia_Stinger_Walkaround",
-    "carnival": "https://www.youtube.com/watch?v=Kia_Carnival_Walkaround",
-    "ev6": "https://www.youtube.com/watch?v=Kia_EV6_Walkaround",
-    "ev9": "https://www.youtube.com/watch?v=Kia_EV9_Walkaround",
-    "seltos": "https://www.youtube.com/watch?v=Kia_Seltos_Walkaround",
-    "rio": "https://www.youtube.com/watch?v=Kia_Rio_Walkaround",
+    "sportage": "https://www.youtube.com/watch?v=PLACEHOLDER_SPORTAGE",
+    "telluride": "https://www.youtube.com/watch?v=PLACEHOLDER_TELLURIDE",
+    "sorento": "https://www.youtube.com/watch?v=PLACEHOLDER_SORENTO",
+    "soul": "https://www.youtube.com/watch?v=PLACEHOLDER_SOUL",
+    "forte": "https://www.youtube.com/watch?v=PLACEHOLDER_FORTE",
+    "k5": "https://www.youtube.com/watch?v=PLACEHOLDER_K5",
+    "niro": "https://www.youtube.com/watch?v=PLACEHOLDER_NIRO",
+    "niro ev": "https://www.youtube.com/watch?v=PLACEHOLDER_NIRO_EV",
+    "stinger": "https://www.youtube.com/watch?v=PLACEHOLDER_STINGER",
+    "carnival": "https://www.youtube.com/watch?v=PLACEHOLDER_CARNIVAL",
+    "ev6": "https://www.youtube.com/watch?v=PLACEHOLDER_EV6",
+    "ev9": "https://www.youtube.com/watch?v=PLACEHOLDER_EV9",
+    "seltos": "https://www.youtube.com/watch?v=PLACEHOLDER_SELTOS",
+    "rio": "https://www.youtube.com/watch?v=PLACEHOLDER_RIO",
 }
 
 TK_DAY3_WALKAROUND_SUBJECT = "Check out this walk-around video of your {vehicle_make} {vehicle_model}"
@@ -372,6 +375,7 @@ TK_DAY3_WALKAROUND_SUBJECT = "Check out this walk-around video of your {vehicle_
 def get_walkaround_video_url(vehicle_model: str) -> str | None:
     """
     Returns the YouTube walk-around video URL for a vehicle model, or None if not found.
+    Uses prefix matching to handle trim levels (e.g., "sportage lx" -> "sportage").
     """
     model_lower = (vehicle_model or "").strip().lower()
     if not model_lower:
@@ -381,9 +385,10 @@ def get_walkaround_video_url(vehicle_model: str) -> str | None:
     if model_lower in KIA_WALKAROUND_VIDEOS:
         return KIA_WALKAROUND_VIDEOS[model_lower]
     
-    # Partial match (e.g., "sportage lx" -> "sportage")
+    # Prefix match: check if model_lower starts with any known key
+    # This handles cases like "sportage lx" -> "sportage"
     for key in KIA_WALKAROUND_VIDEOS:
-        if key in model_lower or model_lower in key:
+        if model_lower.startswith(key):
             return KIA_WALKAROUND_VIDEOS[key]
     
     return None
@@ -559,7 +564,7 @@ def maybe_send_tk_day3_walkaround(
             log.warning("TK Day3 Walkaround email send failed opp=%s: %s", opportunityId, e)
             sent_ok = False
 
-    # Send SMS with video link
+    # Send SMS with video link (shorter message to stay within 160 chars)
     sms_sent = False
     if sent_ok:
         try:
@@ -568,13 +573,16 @@ def maybe_send_tk_day3_walkaround(
             
             if phone_e164:
                 from goto_sms import send_sms
-                from_number = _norm_phone_e164_us_local(os.getenv("PATTI_SMS_NUMBER", "+17145977229"))
+                from_number = _norm_phone_e164_us_local(os.getenv("PATTI_SMS_NUMBER", ""))
                 
-                if from_number:
+                if not from_number:
+                    log.warning("TK Day3 SMS: PATTI_SMS_NUMBER not set, skipping SMS opp=%s", opportunityId)
+                else:
+                    # Keep SMS short to stay within 160 character limit
+                    vehicle_short = f"{vehicle_make} {vehicle_model}".strip() or "vehicle"
                     sms_body = (
-                        f"Hi {customer_name or 'there'}, check out this walk-around video of the "
-                        f"{vehicle_year} {vehicle_make} {vehicle_model}: {video_url} "
-                        f"- Patti @ Tustin Kia. Reply STOP to opt out."
+                        f"Hi {customer_name or 'there'}, watch our {vehicle_short} walk-around: {video_url} "
+                        f"- Tustin Kia. STOP to opt out"
                     ).strip()
                     
                     send_sms(from_number=from_number, to_number=phone_e164, body=sms_body)
