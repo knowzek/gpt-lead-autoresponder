@@ -392,7 +392,8 @@ TK_DAY3_WALKAROUND_SUBJECT = "Check out this walk-around video of your {vehicle_
 def get_walkaround_video_url(vehicle_model: str) -> str | None:
     """
     Returns the YouTube walk-around video URL for a vehicle model, or None if not found.
-    Uses prefix matching to handle trim levels (e.g., "sportage lx" -> "sportage").
+    Uses prefix matching to handle trim levels (e.g., "Rio LX" -> "rio").
+    Matches the longest key first to avoid false positives.
     """
     model_lower = (vehicle_model or "").strip().lower()
     if not model_lower:
@@ -403,8 +404,9 @@ def get_walkaround_video_url(vehicle_model: str) -> str | None:
         return KIA_WALKAROUND_VIDEOS[model_lower]
     
     # Prefix match: check if model_lower starts with any known key
+    # Sort by key length descending to match longest key first
     # This handles cases like "sportage lx" -> "sportage"
-    for key in KIA_WALKAROUND_VIDEOS:
+    for key in sorted(KIA_WALKAROUND_VIDEOS.keys(), key=len, reverse=True):
         if model_lower.startswith(key):
             return KIA_WALKAROUND_VIDEOS[key]
     
@@ -487,6 +489,8 @@ def maybe_send_tk_day3_walkaround(
     customer_name: str,
     currDate,
     currDate_iso: str,
+    SAFE_MODE: bool = False,
+    test_recipient: str | None = None,
 ) -> bool:
     """
     Send Day 3 walk-around video email and SMS for Tustin Kia leads.
@@ -531,7 +535,11 @@ def maybe_send_tk_day3_walkaround(
         return False
 
     # Resolve customer email
-    to_addr = resolve_customer_email(opportunity)
+    to_addr = resolve_customer_email(
+        opportunity,
+        SAFE_MODE=SAFE_MODE,
+        test_recipient=test_recipient
+    )
     if not to_addr:
         log.warning("TK Day3 Walkaround: no deliverable email for opp=%s", opportunityId)
         return False
@@ -593,7 +601,7 @@ def maybe_send_tk_day3_walkaround(
                 from_number = _norm_phone_e164_us_local(os.getenv("PATTI_SMS_NUMBER", ""))
                 
                 if not from_number:
-                    log.warning("TK Day3 SMS: PATTI_SMS_NUMBER not set, skipping SMS opp=%s", opportunityId)
+                    log.info("TK Day3 SMS: PATTI_SMS_NUMBER not set, skipping SMS")
                 else:
                     # Keep SMS short to stay within 160 character limit
                     vehicle_short = f"{vehicle_make} {vehicle_model}".strip() or "vehicle"
@@ -625,11 +633,6 @@ def maybe_send_tk_day3_walkaround(
             "TK Day 3 Walkaround Sent At": currDate_iso,
             "last_template_day_sent": 3,
         })
-
-        try:
-            _bump_ai_send_metrics_in_airtable(opportunityId)
-        except Exception as e:
-            log.warning("AI metrics update failed (non-blocking) opp=%s: %s", opportunityId, e)
 
     return sent_ok
 
@@ -2465,6 +2468,8 @@ def processHit(hit):
                 customer_name=customer_name,
                 currDate=currDate,
                 currDate_iso=currDate_iso,
+                SAFE_MODE=os.getenv("SAFE_MODE", "1") in ("1","true","True"),
+                test_recipient=test_recipient,
             )
 
             if sent_day3:
