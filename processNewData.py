@@ -375,8 +375,11 @@ def resolve_customer_email(
     SAFE_MODE: bool = False,
     test_recipient: str | None = None
 ) -> str | None:
+    opp_id = opportunity.get("opportunityId") or opportunity.get("id") or "unknown"
+    
     if SAFE_MODE:
         tr = (test_recipient or "").strip()
+        log.info("EMAIL_DEBUG opp=%s SAFE_MODE test_recipient=%s", opp_id, tr)
         return tr or None
 
     # Fortellis customer.emails (used for doNotEmail + fallback)
@@ -397,7 +400,15 @@ def resolve_customer_email(
 
     # ✅ Canonical: Airtable hydrated field (but honor doNotEmail if Fortellis knows it)
     air_email = (opportunity.get("customer_email") or "").strip()
+    log.info("EMAIL_DEBUG opp=%s customer_email=%r cust.email=%r emails_count=%d", 
+             opp_id, air_email, cust.get("email"), len(emails) if isinstance(emails, list) else 0)
+    
+    # DETAILED DEBUG: Show all customer-related fields
+    log.info("EMAIL_DEBUG opp=%s detailed_customer_data: customer=%r", opp_id, cust)
+    log.info("EMAIL_DEBUG opp=%s opportunity_keys: %r", opp_id, list(opportunity.keys()))
+    
     if air_email and not _is_donot(air_email):
+        log.info("EMAIL_DEBUG opp=%s resolved from customer_email: %s", opp_id, air_email)
         return air_email
 
     # Fallback: Fortellis customer.emails (preferred first, else first deliverable)
@@ -418,7 +429,13 @@ def resolve_customer_email(
                 preferred = addr
                 break
 
-    return preferred or first_ok
+    result = preferred or first_ok
+    if result:
+        log.info("EMAIL_DEBUG opp=%s resolved from customer.emails: %s", opp_id, result)
+    else:
+        log.warning("EMAIL_DEBUG opp=%s NO EMAIL FOUND", opp_id)
+    
+    return result
 
 
 
@@ -572,9 +589,14 @@ def get_walkaround_video_url(vehicle_model: str) -> str | None:
 def _extract_vehicle_info(opportunity: dict) -> dict:
     """
     Extract vehicle year, make, model from opportunity's soughtVehicles.
-    Returns dict with keys: year, make, model, or empty strings if not found.
+    Returns dict with keys: year, make, model.
+    Returns None if model cannot be determined (caller should skip Day 3).
     """
+    opp_id = opportunity.get("opportunityId") or opportunity.get("id") or "unknown"
+    
     soughtVehicles = opportunity.get("soughtVehicles") or []
+    log.info("DAY3 VEHICLE DEBUG: opp=%s soughtVehicles=%r", opp_id, soughtVehicles)
+    
     if not isinstance(soughtVehicles, list):
         soughtVehicles = []
 
@@ -586,10 +608,42 @@ def _extract_vehicle_info(opportunity: dict) -> dict:
     if not vehicleObj:
         vehicleObj = (soughtVehicles[0] if soughtVehicles and isinstance(soughtVehicles[0], dict) else {})
 
+    log.info("DAY3 VEHICLE DEBUG: opp=%s vehicleObj=%r", opp_id, vehicleObj)
+
+    year = str(vehicleObj.get("yearFrom") or vehicleObj.get("year") or "").strip()
+    make = str(vehicleObj.get("make") or "").strip()
+    model = str(vehicleObj.get("model") or "").strip()
+
+    # Fallback 1: Try opportunity["vehicle"] if available
+    if not model:
+        vehicle_str = opportunity.get("vehicle") or ""
+        if isinstance(vehicle_str, str):
+            model = vehicle_str.strip()
+        elif isinstance(vehicle_str, dict):
+            model = str(vehicle_str.get("model") or "").strip()
+        log.info("DAY3 VEHICLE DEBUG: opp=%s fallback from vehicle field: model=%r", opp_id, model)
+    
+    # Fallback 2: Try extracting from notes using regex (common Kia models)
+    if not model:
+        notes = str(opportunity.get("notes") or "").lower()
+        kia_models = ["sportage", "telluride", "sorento", "soul", "forte", "k5", "niro", "stinger", "carnival", "ev6", "ev9", "seltos", "rio"]
+        for kia_model in kia_models:
+            if kia_model in notes:
+                model = kia_model.title()
+                log.info("DAY3 VEHICLE DEBUG: opp=%s extracted model=%r from notes", opp_id, model)
+                break
+    
+    # If still no model, return None to signal skip
+    if not model:
+        log.info("DAY3 VEHICLE DEBUG: opp=%s NO MODEL FOUND - skipping Day 3", opp_id)
+        return None
+
+    log.info("DAY3 VEHICLE DEBUG: opp=%s extracted year=%r make=%r model=%r", opp_id, year, make, model)
+
     return {
-        "year": str(vehicleObj.get("yearFrom") or vehicleObj.get("year") or "").strip(),
-        "make": str(vehicleObj.get("make") or "").strip(),
-        "model": str(vehicleObj.get("model") or "").strip(),
+        "year": year,
+        "make": make,
+        "model": model,
     }
 
 
@@ -677,6 +731,10 @@ def maybe_send_tk_day3_walkaround(
 
     # Extract vehicle info
     vehicle_info = _extract_vehicle_info(opportunity)
+    if not vehicle_info:
+        log.info("TK Day3 Walkaround: no vehicle model found for opp=%s", opportunityId)
+        return False
+        
     vehicle_year = vehicle_info["year"]
     vehicle_make = vehicle_info["make"]
     vehicle_model = vehicle_info["model"]
@@ -1881,7 +1939,7 @@ def processHit(hit):
                 token=tok,
                 trigger="cron",
                 subscription_id=subscription_id,
-                SAFE_MODE=os.getenv("SAFE_MODE", "1") in ("1","true","True"),
+                SAFE_MODE=os.getenv("SAFE_MODE", "0") in ("1","true","True"),
                 rooftop_sender=rooftop_sender,
             )
         
@@ -2642,7 +2700,7 @@ def processHit(hit):
                 customer_name=customer_name,
                 currDate=currDate,
                 currDate_iso=currDate_iso,
-                SAFE_MODE=os.getenv("SAFE_MODE", "1") in ("1","true","True"),
+                SAFE_MODE=os.getenv("SAFE_MODE", "0") in ("1","true","True"),
                 test_recipient=test_recipient,
             )
 
