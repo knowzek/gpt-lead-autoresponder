@@ -403,11 +403,11 @@ def get_walkaround_video_url(vehicle_model: str) -> str | None:
     if model_lower in KIA_WALKAROUND_VIDEOS:
         return KIA_WALKAROUND_VIDEOS[model_lower]
     
-    # Prefix match: check if model_lower starts with any known key
+    # Prefix/substring match: check if model_lower starts with or contains any known key
     # Sort by key length descending to match longest key first
-    # This handles cases like "sportage lx" -> "sportage"
+    # This handles cases like "sportage lx" -> "sportage", and partial matches like "2024 sportage sx"
     for key in sorted(KIA_WALKAROUND_VIDEOS.keys(), key=len, reverse=True):
-        if model_lower.startswith(key):
+        if model_lower.startswith(key) or key in model_lower:
             return KIA_WALKAROUND_VIDEOS[key]
     
     return None
@@ -430,10 +430,24 @@ def _extract_vehicle_info(opportunity: dict) -> dict:
     if not vehicleObj:
         vehicleObj = (soughtVehicles[0] if soughtVehicles and isinstance(soughtVehicles[0], dict) else {})
 
+    year = str(vehicleObj.get("yearFrom") or vehicleObj.get("year") or "").strip()
+    make = str(vehicleObj.get("make") or "").strip()
+    model = str(
+        vehicleObj.get("model")
+        or vehicleObj.get("modelFrom")
+        or vehicleObj.get("modelTo")
+        or vehicleObj.get("variant")
+        or vehicleObj.get("description")
+        or ""
+    ).strip()
+
+    if not model:
+        model = str(vehicleObj.get("bodyStyle") or make or "vehicle").strip() or "vehicle"
+
     return {
-        "year": str(vehicleObj.get("yearFrom") or vehicleObj.get("year") or "").strip(),
-        "make": str(vehicleObj.get("make") or "").strip(),
-        "model": str(vehicleObj.get("model") or "").strip(),
+        "year": year,
+        "make": make,
+        "model": model,
     }
 
 
@@ -520,7 +534,7 @@ def maybe_send_tk_day3_walkaround(
     patti_meta = opportunity.get("patti") or {}
     mode = (patti_meta.get("mode") or "").strip().lower()
     if mode == "convo":
-        log.info("TK Day3 Walkaround: skipping opp=%s — mode is 'convo'", opportunityId)
+        log.info("DAY3 DEBUG: skipping opp=%s — mode is 'convo'", opportunityId)
         return False
 
     # Extract vehicle info
@@ -533,7 +547,7 @@ def maybe_send_tk_day3_walkaround(
     video_url = get_walkaround_video_url(vehicle_model)
     if not video_url:
         log.info(
-            "TK Day3 Walkaround: no video for model=%r opp=%s",
+            "DAY3 DEBUG: no video for model=%r opp=%s",
             vehicle_model, opportunityId
         )
         return False
@@ -554,7 +568,7 @@ def maybe_send_tk_day3_walkaround(
     for e in emails:
         if isinstance(e, dict) and (e.get("address") or "").strip().lower() == to_addr.lower():
             if e.get("doNotEmail"):
-                log.info("TK Day3 Walkaround: doNotEmail flagged for %s opp=%s", to_addr, opportunityId)
+                log.info("DAY3 DEBUG: doNotEmail flagged for %s opp=%s", to_addr, opportunityId)
                 return False
 
     # Build email
@@ -605,7 +619,7 @@ def maybe_send_tk_day3_walkaround(
                 from_number = _norm_phone_e164_us_local(os.getenv("PATTI_SMS_NUMBER", ""))
                 
                 if not from_number:
-                    log.info("TK Day3 SMS: PATTI_SMS_NUMBER not set, skipping SMS")
+                    log.info("DAY3 DEBUG: PATTI_SMS_NUMBER not set, skipping SMS")
                 else:
                     # Keep SMS short to stay within 160 character limit
                     vehicle_short = f"{vehicle_make} {vehicle_model}".strip() or "vehicle"
@@ -616,7 +630,7 @@ def maybe_send_tk_day3_walkaround(
                     
                     send_sms(from_number=from_number, to_number=phone_e164, body=sms_body)
                     sms_sent = True
-                    log.info("TK Day3 Walkaround SMS sent to %s opp=%s", phone_e164, opportunityId)
+                    log.info("DAY3 DEBUG: SMS sent to %s opp=%s", phone_e164, opportunityId)
         except Exception as e:
             log.warning("TK Day3 Walkaround SMS failed opp=%s: %s", opportunityId, e)
 
@@ -2501,7 +2515,12 @@ def processHit(hit):
 
                 if not OFFLINE_MODE:
                     try:
-                        extra = {"follow_up_at": next_due}
+                        extra = {
+                            "follow_up_at": next_due,
+                            "TK Day 3 Walkaround Sent": True,
+                            "TK Day 3 Walkaround Sent At": currDate_iso,
+                            "last_template_day_sent": 3,
+                        }
                         first_sent = opportunity.get("first_email_sent_at")
                         if first_sent:
                             extra["first_email_sent_at"] = first_sent
