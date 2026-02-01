@@ -355,7 +355,7 @@ def maybe_send_tk_gm_day2_email(
         airtable_save(opportunity, extra_fields={
             "TK GM Day 2 Sent": True,
             "TK GM Day 2 Sent At": currDate_iso,
-            "last_template_day_sent": 2,
+            "last_template_day_sent": 2,,
         })
 
         try:
@@ -2679,9 +2679,38 @@ def processHit(hit):
                 # Advance SalesAI index in-memory
                 patti = opportunity.setdefault("patti", {})
                 patti["salesai_email_idx"] = idx + 1
-            
-                # Advance follow-up counter in-memory (prevents re-trying Day3 forever if something else falls through)
-                opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
+
+                # --- Advance cadence state (single owner: processNewData) ---
+                new_count = int(opportunity.get("followUP_count") or 0) + 1
+                opportunity["followUP_count"] = new_count
+                
+                # compute next_due however you want, BUT do not allow past dates
+                if next_due:
+                    try:
+                        ndt = _dt.fromisoformat(str(next_due).replace("Z", "+00:00"))
+                        if ndt.tzinfo is None:
+                            ndt = ndt.replace(tzinfo=_tz.utc)
+                    except Exception:
+                        ndt = None
+                else:
+                    ndt = None
+                
+                min_next = (now_utc + _td(days=1)).replace(microsecond=0)
+                if (ndt is None) or (ndt < min_next):
+                    next_due = min_next.isoformat()
+                
+                opportunity["follow_up_at"] = next_due
+                
+                if not OFFLINE_MODE:
+                    try:
+                        airtable_save(opportunity, extra_fields={
+                            "followUP_count": new_count,
+                            "follow_up_at": next_due,
+                        })
+                    except Exception as e:
+                        log.warning("Airtable save failed opp=%s (continuing): %s",
+                                    opportunity.get("opportunityId") or opportunity.get("id"), e)
+
             
                 # Persist routing fields (mailer handles follow_up_at via next_follow_up_at)
                 if not OFFLINE_MODE:
