@@ -2679,46 +2679,28 @@ def processHit(hit):
                 )
                 opportunity.setdefault("checkedDict", {})["last_msg_by"] = "patti"
             
-                # ✅ SalesAI cadence advance
+                # Advance SalesAI index in-memory
                 patti = opportunity.setdefault("patti", {})
                 patti["salesai_email_idx"] = idx + 1
-                
-                created_iso = (
-                    patti.get("salesai_created_iso")     # authoritative anchor
-                    or opportunity.get("created_at")
-                    or opportunity.get("dateIn")
-                    or opportunity.get("createdDate")
-                    or opportunity.get("updated_at")     # last resort
-                    or currDate_iso
-                )
-                
-                next_due = _next_salesai_due_iso(created_iso=created_iso, last_idx=idx + 1)
-                
-                if next_due is None:
-                    opportunity["isActive"] = False
-                    opportunity["followUP_date"] = None
-                    extra = {"follow_up_at": None}
-                else:
-                    opportunity["followUP_date"] = next_due
-                    opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
-                    extra = {
-                        "follow_up_at": next_due,
-                        "followUP_count": opportunity.get("followUP_count"),
-                        "followUP_date": opportunity.get("followUP_date"),
-                    }
-                
+            
+                # Advance follow-up counter in-memory (prevents re-trying Day3 forever if something else falls through)
+                opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
+            
+                # Persist routing fields (mailer handles follow_up_at via next_follow_up_at)
                 if not OFFLINE_MODE:
                     try:
-                        airtable_save(opportunity, extra_fields=extra)
+                        airtable_save(opportunity, extra_fields={
+                            "followUP_count": opportunity["followUP_count"],
+                            "followUP_date": next_due,  # optional but useful
+                        })
                     except Exception as e:
                         log.warning(
                             "Airtable save failed opp=%s (continuing): %s",
                             opportunity.get("opportunityId") or opportunity.get("id"),
-                            e,
+                            e
                         )
 
-
-    
+                
     wJson(opportunity, f"jsons/process/{opportunityId}.json")
 
 _CARFAX_EMAIL_RE = re.compile(r"(?i)\bEmail:\s*([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})\b")
