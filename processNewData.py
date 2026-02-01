@@ -647,6 +647,75 @@ def _extract_vehicle_info(opportunity: dict) -> dict:
     }
 
 
+def build_tk_day3_walkaround_gpt(
+    *,
+    customer_name: str,
+    vehicle_year: str,
+    vehicle_make: str,
+    vehicle_model: str,
+    youtube_walkaround_url: str,
+) -> str:
+    """Generate Day 3 walk-around email using GPT with specific template structure."""
+    from gpt import run_gpt
+    
+    cn = (customer_name or "there").strip()
+    
+    # Generate Day 3 email using GPT with the required structure
+    prompt = f"""
+You are Patti, a helpful sales assistant for Tustin Kia.
+
+Generate a Day 3 walk-around video email following this EXACT structure:
+
+Hi {cn},
+
+I wanted to share a quick walk-around video of the {vehicle_year} {vehicle_make} {vehicle_model} you were checking out.
+
+This video gives you a closer look at the exterior, interior, and key features so you can get a better feel for the vehicle.
+
+👉 Watch the walk-around video here: {youtube_walkaround_url}
+
+If you have any questions after watching, feel free to reply. I'm happy to help.
+
+REQUIREMENTS:
+- Keep the exact structure above
+- Use the customer's first name: {cn}
+- Use the vehicle details: {vehicle_year} {vehicle_make} {vehicle_model}
+- Include the exact video URL: {youtube_walkaround_url}
+- Keep it friendly but professional
+- Do NOT add a signature block
+
+Return ONLY the email body in HTML format with proper <p> tags.
+""".strip()
+
+    try:
+        response = run_gpt(
+            messages=[{"role": "user", "content": prompt}],
+            model="gpt-4o",
+            temperature=0.1,
+        )
+        
+        body_html = response.get("response", "").strip()
+        
+        # If GPT response is not in HTML format, wrap in paragraphs
+        if not body_html.startswith("<"):
+            # Split by line breaks and wrap each paragraph
+            paragraphs = [p.strip() for p in body_html.split('\n\n') if p.strip()]
+            body_html = "\n".join(f"<p>{p}</p>" for p in paragraphs)
+        
+        return body_html
+        
+    except Exception as e:
+        log.warning("GPT failed for Day 3 email generation, using fallback template: %s", e)
+        # Fallback to static template
+        return f"""
+<p>Hi {cn},</p>
+<p>I wanted to share a quick walk-around video of the {vehicle_year} {vehicle_make} {vehicle_model} you were checking out.</p>
+<p>This video gives you a closer look at the exterior, interior, and key features so you can get a better feel for the vehicle.</p>
+<p>👉 Watch the walk-around video here: <a href="{youtube_walkaround_url}">{youtube_walkaround_url}</a></p>
+<p>If you have any questions after watching, feel free to reply. I'm happy to help.</p>
+""".strip()
+
+
 def build_tk_day3_walkaround_html(
     *,
     customer_name: str,
@@ -767,12 +836,14 @@ def maybe_send_tk_day3_walkaround(
                 log.info("TK Day3 Walkaround: doNotEmail flagged for %s opp=%s", to_addr, opportunityId)
                 return False
 
-    # Build email
+    # Build email using GPT with Day 3 template structure
     subject = TK_DAY3_WALKAROUND_SUBJECT.format(
         vehicle_make=vehicle_make or "Kia",
         vehicle_model=vehicle_model or "vehicle"
     )
-    body_html = build_tk_day3_walkaround_html(
+    
+    # Generate Day 3 email content using GPT
+    body_html = build_tk_day3_walkaround_gpt(
         customer_name=customer_name,
         vehicle_year=vehicle_year,
         vehicle_make=vehicle_make,
