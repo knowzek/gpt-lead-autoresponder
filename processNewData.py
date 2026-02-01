@@ -2725,6 +2725,7 @@ def processHit(hit):
             messages = opportunity.get("messages") or []
         
             address_line = "28 B Auto Center Dr, Tustin, CA 92782"  # or your rooftop address resolver
+            customer = opportunity.get("customer") or {}
             customer_name = (opportunity.get("customer_first_name") or "").strip() or customer.get("firstName") or "there"
             prompt = build_general_followup_prompt(
                 opportunity=opportunity,
