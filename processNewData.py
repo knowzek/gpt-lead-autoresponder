@@ -403,6 +403,10 @@ def resolve_customer_email(
     log.info("EMAIL_DEBUG opp=%s customer_email=%r cust.email=%r emails_count=%d", 
              opp_id, air_email, cust.get("email"), len(emails) if isinstance(emails, list) else 0)
     
+    # DETAILED DEBUG: Show all customer-related fields
+    log.info("EMAIL_DEBUG opp=%s detailed_customer_data: customer=%r", opp_id, cust)
+    log.info("EMAIL_DEBUG opp=%s opportunity_keys: %r", opp_id, list(opportunity.keys()))
+    
     if air_email and not _is_donot(air_email):
         log.info("EMAIL_DEBUG opp=%s resolved from customer_email: %s", opp_id, air_email)
         return air_email
