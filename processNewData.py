@@ -503,10 +503,6 @@ def maybe_send_tk_day3_walkaround(
     - Lead is in cadence mode (not convo)
     - Vehicle of interest has a matching walk-around video
     """
-    
-    # DAY3 DEBUG: Log entry into function
-    log.info("DAY3 DEBUG: Entered Day 3 send function for opp=%s", opportunityId)
-    log.info("DAY3 DEBUG: SAFE_MODE=%s test_recipient=%s", SAFE_MODE, test_recipient)
 
     # Rooftop gate
     if not is_tustin_kia_rooftop(rooftop_name):
@@ -632,15 +628,11 @@ def maybe_send_tk_day3_walkaround(
         })
         opportunity.setdefault("checkedDict", {})["last_msg_by"] = "patti"
 
-        extra_fields = {
+        airtable_save(opportunity, extra_fields={
             "TK Day 3 Walkaround Sent": True,
             "TK Day 3 Walkaround Sent At": currDate_iso,
             "last_template_day_sent": 3,
-        }
-        airtable_save(opportunity, extra_fields=extra_fields)
-        
-        # DAY3 DEBUG: Log Airtable updated fields
-        log.info("DAY3 DEBUG: Airtable updated fields = %s", extra_fields)
+        })
 
     return sent_ok
 
@@ -2420,20 +2412,7 @@ def processHit(hit):
             return
         
         # ✅ If we reach here: cadence is due now
-        # Read followUP_count from Airtable record first, fallback to patti JSON
-        followUP_count = opportunity.get("followUP_count")
-        if followUP_count is None:
-            followUP_count = (opportunity.get("patti") or {}).get("followUP_count")
-        followUP_count = int(followUP_count or 0)
-        
-        # Read last_template_day_sent from Airtable record first, fallback to patti JSON
-        last_template_day_sent = opportunity.get("last_template_day_sent")
-        if last_template_day_sent is None:
-            last_template_day_sent = (opportunity.get("patti") or {}).get("last_template_day_sent")
-        
-        # DAY3 DEBUG: Log values before condition check
-        log.info("DAY3 DEBUG: mode=%s last_template_day_sent=%s followUP_count=%s due_dt=%s now=%s",
-                 mode, last_template_day_sent, followUP_count, due_dt, now_utc)
+        followUP_count = int(opportunity.get("followUP_count") or 0)
 
     
         # --- Step 4A: Tustin Kia GM Day-2 email (send even if appointment exists) ---
