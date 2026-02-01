@@ -1,3 +1,4 @@
+pytz
 requests
 openai
 python-dotenv
