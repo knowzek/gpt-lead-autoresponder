@@ -106,10 +106,19 @@ def build_general_followup_prompt(
             "simple check-in + visit invite",
             "confirm availability + low-friction next step",
             "ask what they’re trying to accomplish (features/budget/trade)",
+            "weave in Patterson Why Buys: - No Addendums or Dealer MarkUps - Orange County Top Workplace for 20 years running - Community Driven - Master Technicians and Experienced Staff",
         ],
         "value_clarify": [
             "ask 1 helpful question to narrow options",
-            "offer to send a couple similar options if vehicle is gone",
+            "offer to schedule a time to see the vehicle. The hours of this store are:  
+                Sunday	10 AM–6 PM
+                Monday	9 AM–7 PM
+                Tuesday	9 AM–7 PM
+                Wednesday	9 AM–7 PM
+                Thursday	9 AM–7 PM
+                Friday	9 AM–7 PM
+                Saturday	9 AM–8 PM
+                ",
         ],
         "options_offer": [
             "offer 2-3 time windows (today/tomorrow/weekend)",
