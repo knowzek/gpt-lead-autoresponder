@@ -768,8 +768,16 @@ def opp_from_record(rec: dict) -> dict:
 
     # ✅ NEW: load snapshot JSON instead of full opp_json blob
     opp = _safe_json_loads(fields.get("patti_json")) or {}
+    opp_json_full = _safe_json_loads(fields.get("opp_json")) or {}
+    
     if not opp:
-        opp = _safe_json_loads(fields.get("opp_json")) or {}
+        opp = opp_json_full
+    
+    # ✅ Hydrate soughtVehicles from opp_json if missing in patti_json
+    # This is critical for Day 3 walkaround video matching
+    if not opp.get("soughtVehicles") and opp_json_full.get("soughtVehicles"):
+        opp["soughtVehicles"] = opp_json_full["soughtVehicles"]
+    
     # Always attach Airtable record id
     opp["_airtable_rec_id"] = rec.get("id")
     opp = canonicalize_opp(opp, fields)
