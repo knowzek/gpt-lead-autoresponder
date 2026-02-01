@@ -2690,7 +2690,7 @@ def processHit(hit):
                 patti["salesai_email_idx"] = idx + 1
 
                 # --- Advance cadence state (single owner: processNewData) ---
-                new_count = int(opportunity.get("followUP_count")) + 1
+                new_count = int(float(opportunity.get("followUP_count") or 0)) + 1
                 opportunity["followUP_count"] = new_count
                 
                 # compute next_due however you want, BUT do not allow past dates
