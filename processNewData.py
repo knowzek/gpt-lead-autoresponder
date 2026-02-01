@@ -825,12 +825,10 @@ def maybe_send_tk_day3_walkaround(
         )
         return False
 
-    # Resolve customer email
-    to_addr = resolve_customer_email(
-        opportunity,
-        SAFE_MODE=SAFE_MODE,
-        test_recipient=test_recipient
-    )
+    # Resolve customer email (like GM Day 2 - simpler call)
+    to_addr = resolve_customer_email(opportunity)
+    log.info("DAY3 EMAIL DEBUG: opp=%s resolve_customer_email returned=%r (simplified call)", 
+             opportunityId, to_addr)
     if not to_addr:
         log.warning("TK Day3 Walkaround: no deliverable email for opp=%s", opportunityId)
         return False
