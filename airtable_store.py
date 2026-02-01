@@ -930,12 +930,23 @@ def opp_from_record(rec: dict) -> dict:
             p["last_template_day_sent"] = 0
     
     # ✅ TK GM Day 2 Sent (authoritative Airtable checkbox)
+    # Use EXACT same key names as processNewData.py expects for gate checks
     tk_gm_day2_sent = bool(fields.get("TK GM Day 2 Sent"))
-    opp["tk_gm_day2_sent"] = tk_gm_day2_sent
+    opp["TK GM Day 2 Sent"] = tk_gm_day2_sent  # Title Case - matches processNewData.py check
+    opp["tk_gm_day2_sent"] = tk_gm_day2_sent   # Also keep lowercase for backwards compat
     
     tk_gm_day2_sent_at = fields.get("TK GM Day 2 Sent At")
     if tk_gm_day2_sent_at:
-        opp["tk_gm_day2_sent_at"] = tk_gm_day2_sent_at
+        opp["TK GM Day 2 Sent At"] = tk_gm_day2_sent_at  # Title Case - matches processNewData.py check
+        opp["tk_gm_day2_sent_at"] = tk_gm_day2_sent_at   # Also keep lowercase for backwards compat
+    
+    # ✅ TK Day 3 Walkaround Sent (authoritative Airtable checkbox)
+    tk_day3_sent = bool(fields.get("TK Day 3 Walkaround Sent"))
+    opp["TK Day 3 Walkaround Sent"] = tk_day3_sent  # Exact match for processNewData.py gate check
+    
+    tk_day3_sent_at = fields.get("TK Day 3 Walkaround Sent At")
+    if tk_day3_sent_at:
+        opp["TK Day 3 Walkaround Sent At"] = tk_day3_sent_at  # Exact match for processNewData.py gate check
     
     # Optional derived state (only if other cadence code still relies on it)
     if tk_gm_day2_sent and isinstance(p, dict):
@@ -943,6 +954,13 @@ def opp_from_record(rec: dict) -> dict:
             p["last_template_day_sent"] = max(int(p.get("last_template_day_sent") or 0), 2)
         except Exception:
             p["last_template_day_sent"] = 2
+    
+    # Also update last_template_day_sent if Day 3 was sent
+    if tk_day3_sent and isinstance(p, dict):
+        try:
+            p["last_template_day_sent"] = max(int(p.get("last_template_day_sent") or 0), 3)
+        except Exception:
+            p["last_template_day_sent"] = 3
     
     return opp
 
