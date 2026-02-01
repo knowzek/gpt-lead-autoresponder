@@ -2420,6 +2420,9 @@ def processHit(hit):
         # ✅ If we reach here: cadence is due now
         followUP_count = int(opportunity.get("followUP_count") or 0)
 
+        # ✅ SalesAI index (used by cadence end-check + template-day math)
+        patti = opportunity.get("patti") or {}
+        idx = int(patti.get("salesai_email_idx") or -1)
     
         # --- Step 4A: Tustin Kia GM Day-2 email (send even if appointment exists) ---
         # Day-2 in your system = first follow-up run when due_dt is due
@@ -2610,7 +2613,6 @@ def processHit(hit):
 
             # --- Compute next_due BEFORE sending (needed for send_patti_email args) ---
             patti = opportunity.get("patti") or {}
-            idx = int(patti.get("salesai_email_idx") or -1)
             
             created_iso = (
                 patti.get("salesai_created_iso")     # authoritative anchor
@@ -2679,7 +2681,6 @@ def processHit(hit):
             
                 # ✅ SalesAI cadence advance
                 patti = opportunity.setdefault("patti", {})
-                idx = int(patti.get("salesai_email_idx") or -1)
                 patti["salesai_email_idx"] = idx + 1
                 
                 created_iso = (
