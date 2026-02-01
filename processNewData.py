@@ -2418,7 +2418,16 @@ def processHit(hit):
             return
         
         # ✅ If we reach here: cadence is due now
-        followUP_count = int(opportunity.get("followUP_count"))
+        raw_count = opportunity.get("followUP_count")
+
+        # debug once so you can see what you're actually getting
+        log.info("DEBUG followUP_count raw=%r keys_has_followUP_count=%s", raw_count, "followUP_count" in opportunity)
+        
+        try:
+            followUP_count = int(float(raw_count or 0))
+        except Exception:
+            followUP_count = 0
+
 
         # ✅ SalesAI index (used by cadence end-check + template-day math)
         patti = opportunity.get("patti") or {}
