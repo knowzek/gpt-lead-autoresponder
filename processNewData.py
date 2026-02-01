@@ -2716,7 +2716,6 @@ def processHit(hit):
                             force_mode="cadence",                 # ✅ tells Airtable this is cadence
                             next_follow_up_at=next_due,           # ✅ advances follow_up_at
                             template_day=int(patti.get("salesai_email_idx") or -1) + 2,
-                            ab_variant=opportunity.get("ab_variant"),
                         )
                         sent_ok = True
                     except Exception as e:
