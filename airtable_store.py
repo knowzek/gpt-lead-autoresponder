@@ -920,6 +920,18 @@ def opp_from_record(rec: dict) -> dict:
         if isinstance(p, dict):
             p["mode"] = mode_col
 
+    # ✅ Cadence counters (authoritative from Airtable)
+    if "followUP_count" in fields:
+        try:
+            # Airtable numeric often comes as 1.0
+            opp["followUP_count"] = int(float(fields.get("followUP_count") or 0))
+        except Exception:
+            opp["followUP_count"] = 0
+    else:
+        # keep it present so downstream code never sees missing key
+        opp.setdefault("followUP_count", 0)
+
+
 
     # ✅ Normalize cadence state if snapshot has nulls
     p = opp.setdefault("patti", {})
