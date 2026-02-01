@@ -294,8 +294,9 @@ def maybe_send_tk_gm_day2_email(
         return False
 
     # ✅ ROOT GATE: Airtable checkbox only
-    if bool(opportunity.get("TK GM Day 2 Sent")):
+    if opportunity.get("tk_gm_day2_sent") is True:
         return False
+        
         
     # Resolve customer email (preferred + not doNotEmail)
     # ✅ Resolve customer email from Airtable-hydrated field first
@@ -320,6 +321,7 @@ def maybe_send_tk_gm_day2_email(
     else:
         from patti_mailer import send_patti_email
         try:
+            log.info("TK GM Day2: sending opp=%s to=%s", opportunityId, to_addr)
             send_patti_email(
                 token=token,
                 subscription_id=subscription_id,
@@ -332,6 +334,8 @@ def maybe_send_tk_gm_day2_email(
                 cc_addrs=[],
             )
             sent_ok = True
+            log.info("TK GM Day2: sent ok opp=%s", opportunityId)
+
         except Exception as e:
             log.warning("TK GM Day2 send failed opp=%s: %s", opportunityId, e)
             sent_ok = False
