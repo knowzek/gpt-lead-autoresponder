@@ -2655,7 +2655,6 @@ def processHit(hit):
                             force_mode="cadence",
                             next_follow_up_at=next_due,
                             template_day=template_day,
-                            ab_variant=opportunity.get("ab_variant"),
                         )
 
                         sent_ok = True
