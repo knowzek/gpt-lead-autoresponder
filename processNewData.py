@@ -2459,10 +2459,10 @@ def processHit(hit):
         # --- Step 4A.2: Tustin Kia Day-3 Walk-around Video email ---
         # Day-3 triggers when: mode == "cadence", last_template_day_sent == 2, followUP_count == 2
         last_template_day_sent = opportunity.get("last_template_day_sent")
-        if (due_dt <= now_utc 
-            and mode == "cadence" 
-            and last_template_day_sent == 2 
-            and followUP_count == 2):
+        if (due_dt <= now_utc
+                and mode == "cadence"
+                and last_template_day_sent == 2
+                and followUP_count == 2):
 
             sent_day3 = maybe_send_tk_day3_walkaround(
                 opportunity=opportunity,
@@ -2483,8 +2483,7 @@ def processHit(hit):
                 # Advance cadence like a normal follow-up
                 next_due = (now_utc + _td(days=2)).replace(microsecond=0).isoformat()
                 opportunity["follow_up_at"] = next_due
-                # followUP_count is now updated inside maybe_send_tk_day3_walkaround via airtable_save
-                opportunity["followUP_count"] = followUP_count + 1
+                # followUP_count is already updated inside maybe_send_tk_day3_walkaround via airtable_save
 
                 if not OFFLINE_MODE:
                     try:
