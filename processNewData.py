@@ -798,11 +798,16 @@ def maybe_send_tk_day3_walkaround(
         log.info("TK Day3 Walkaround: skipping opp=%s — mode is 'convo'", opportunityId)
         return False
 
-    # Extract vehicle info
+    # Extract vehicle info - use fallback if none found
     vehicle_info = _extract_vehicle_info(opportunity)
     if not vehicle_info:
-        log.info("TK Day3 Walkaround: no vehicle model found for opp=%s", opportunityId)
-        return False
+        log.info("TK Day3 Walkaround: no specific vehicle found for opp=%s, using generic approach", opportunityId)
+        # Use generic vehicle info for Day 3
+        vehicle_info = {
+            "year": "",
+            "make": "Kia", 
+            "model": "vehicle"
+        }
         
     vehicle_year = vehicle_info["year"]
     vehicle_make = vehicle_info["make"]
