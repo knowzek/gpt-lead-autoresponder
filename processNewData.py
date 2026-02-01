@@ -2756,7 +2756,7 @@ def processHit(hit):
             )
             
             next_due = _next_salesai_due_iso(created_iso=created_iso, last_idx=idx + 1)
-            template_day = idx + 2
+            template_day = idx + 1
 
 
             # ✅ SEND the follow-up (currently missing)
