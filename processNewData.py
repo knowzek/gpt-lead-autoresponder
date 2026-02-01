@@ -540,23 +540,23 @@ def maybe_send_tk_gm_day2_email(
 # Vehicle model (lowercase) -> YouTube walk-around video URL
 # Based on Kia vehicle lineup commonly sold at Tustin Kia
 # Vehicle model (lowercase) -> YouTube walk-around video URL
-# TODO: Replace these placeholder video IDs with actual YouTube video IDs from Tustin Kia channel
+# Playlist: https://www.youtube.com/playlist?list=PLnF2qTRxEjYenwcxt3rzMAxi68wnbOZkL
 # YouTube watch URLs should use format: https://www.youtube.com/watch?v={11-char-video-id}
 KIA_WALKAROUND_VIDEOS = {
-    "sportage": "https://www.youtube.com/watch?v=PLACEHOLDER_SPORTAGE",
-    "telluride": "https://www.youtube.com/watch?v=PLACEHOLDER_TELLURIDE",
-    "sorento": "https://www.youtube.com/watch?v=PLACEHOLDER_SORENTO",
-    "soul": "https://www.youtube.com/watch?v=PLACEHOLDER_SOUL",
-    "forte": "https://www.youtube.com/watch?v=PLACEHOLDER_FORTE",
-    "k5": "https://www.youtube.com/watch?v=PLACEHOLDER_K5",
-    "niro": "https://www.youtube.com/watch?v=PLACEHOLDER_NIRO",
-    "niro ev": "https://www.youtube.com/watch?v=PLACEHOLDER_NIRO_EV",
-    "stinger": "https://www.youtube.com/watch?v=PLACEHOLDER_STINGER",
-    "carnival": "https://www.youtube.com/watch?v=PLACEHOLDER_CARNIVAL",
-    "ev6": "https://www.youtube.com/watch?v=PLACEHOLDER_EV6",
-    "ev9": "https://www.youtube.com/watch?v=PLACEHOLDER_EV9",
-    "seltos": "https://www.youtube.com/watch?v=PLACEHOLDER_SELTOS",
-    "rio": "https://www.youtube.com/watch?v=PLACEHOLDER_RIO",
+    "sportage": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",
+    "telluride": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",  # Use Sportage video as fallback
+    "sorento": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",   # Use Sportage video as fallback
+    "soul": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",      # Use Sportage video as fallback
+    "forte": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",     # Use Sportage video as fallback
+    "k5": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",        # Use Sportage video as fallback
+    "niro": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",      # Use Sportage video as fallback
+    "niro ev": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",   # Use Sportage video as fallback
+    "stinger": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",   # Use Sportage video as fallback
+    "carnival": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",  # Use Sportage video as fallback
+    "ev6": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",       # Use Sportage video as fallback
+    "ev9": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",       # Use Sportage video as fallback
+    "seltos": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",    # Use Sportage video as fallback
+    "rio": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",       # Use Sportage video as fallback
 }
 
 TK_DAY3_WALKAROUND_SUBJECT = "Check out this walk-around video of your {vehicle_make} {vehicle_model}"
@@ -689,12 +689,13 @@ Return ONLY the email body in HTML format with proper <p> tags.
 
     try:
         response = run_gpt(
-            messages=[{"role": "user", "content": prompt}],
-            model="gpt-4o",
-            temperature=0.1,
+            prompt,
+            cn,
+            "Tustin Kia",
+            prevMessages=False
         )
         
-        body_html = response.get("response", "").strip()
+        body_html = response.get("body", "").strip()
         
         # If GPT response is not in HTML format, wrap in paragraphs
         if not body_html.startswith("<"):
@@ -921,9 +922,15 @@ def maybe_send_tk_day3_walkaround(
         })
         opportunity.setdefault("checkedDict", {})["last_msg_by"] = "patti"
 
+        # Format date properly for Airtable
+        from datetime import datetime
+        import pytz
+        utc_now = datetime.now(pytz.UTC)
+        airtable_date = utc_now.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        
         airtable_save(opportunity, extra_fields={
             "TK Day 3 Walkaround Sent": True,
-            "TK Day 3 Walkaround Sent At": currDate_iso,
+            "TK Day 3 Walkaround Sent At": airtable_date,
             "last_template_day_sent": 3,
         })
 
@@ -1678,9 +1685,7 @@ def processHit(hit):
 
     # EARLY SKIP: avoid API calls for opps already marked inactive
     patti_meta = opportunity.get("patti") or {}
-    # TEMPORARY: Allow Mohamed opportunity for Day 3 testing
-    if (patti_meta.get("skip") and patti_meta.get("skip_reason") == "inactive_opportunity" 
-        and opportunityId != "362e51d1-bcc4-f011-814f-00505690ec8c"):
+    if patti_meta.get("skip") and patti_meta.get("skip_reason") == "inactive_opportunity":
         log.info("Skipping opp %s (inactive_opportunity in ES).", opportunityId)
         return
 
