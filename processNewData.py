@@ -2724,7 +2724,7 @@ def processHit(hit):
                 messages=messages,
                 address_line=address_line,
             )
-            response = run_gpt(prompt, customerInfo.get("firstName"), rooftop_name, prevMessages=True)
+            response = run_gpt(prompt, customer_name, rooftop_name, prevMessages=True)
 
             subject   = response["subject"]
             body_html = response["body"]
