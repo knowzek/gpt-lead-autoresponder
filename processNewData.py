@@ -91,6 +91,7 @@ def build_general_followup_prompt(
     rooftop_name: str,
     messages: list[dict],
     address_line: str,
+    customer_name: str,
 ) -> str:
     """
     Returns a GPT prompt that varies by Airtable followUP_count.
@@ -145,6 +146,7 @@ def build_general_followup_prompt(
     rules = f"""
 Hard rules:
 - Do NOT start with “I wanted to follow up…” or “Just checking in…” (too repetitive).
+- Begin with exactly: "Hi {customer_name},"
 - Keep it HUMAN and specific. 2–5 short sentences max.
 - Ask ONLY one question.
 - If the guest already proposed a time in the thread, confirm it (don’t re-ask).
@@ -2724,7 +2726,15 @@ def processHit(hit):
                 rooftop_name=rooftop_name,
                 messages=messages,
                 address_line=address_line,
+                customer_name=customer_name,
             )
+
+            log.info("FOLLOWUP NAME DEBUG opp=%s customer_name=%r airtable_first=%r cust_first=%r",
+                 opportunityId,
+                 customer_name,
+                 opportunity.get("customer_first_name"),
+                 (customer.get("firstName") if isinstance(customer, dict) else None))
+
             response = run_gpt(prompt, customer_name, rooftop_name, prevMessages=True)
 
             subject   = response["subject"]
