@@ -2522,13 +2522,18 @@ def processHit(hit):
 
         # --- Step 4A.2: Tustin Kia Day-3 Walk-around Video email (when followUP_count == 1) ---
         # Day-3 = second follow-up run, send walk-around video if vehicle has matching video
-        if (
-            due_dt <= now_utc
-            and bool(opportunity.get("TK GM Day 2 Sent"))
-            and bool(opportunity.get("TK GM Day 2 Sent At"))
-            and not bool(opportunity.get("TK GM Day 3 Sent"))
-            and not bool(opportunity.get("TK GM Day 3 Sent At"))
-        ):
+        # ✅ Accept either TK GM Day 2 Sent checkbox OR last_template_day_sent >= 2
+        day2_was_sent = (
+            bool(opportunity.get("TK GM Day 2 Sent"))
+            or (last_template_day_sent is not None and int(last_template_day_sent) >= 2)
+        )
+        day3_not_sent = (
+            not bool(opportunity.get("TK Day 3 Walkaround Sent"))
+            and (last_template_day_sent is None or int(last_template_day_sent) < 3)
+        )
+        
+        if due_dt <= now_utc and day2_was_sent and day3_not_sent:
+            log.info("DAY3 TRIGGER: Attempting Day 3 walkaround for opp=%s", opportunityId)
 
             sent_day3 = maybe_send_tk_day3_walkaround(
                 opportunity=opportunity,
