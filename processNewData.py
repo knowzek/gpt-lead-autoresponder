@@ -2439,7 +2439,12 @@ def processHit(hit):
         
                 if not OFFLINE_MODE:
                     try:
-                        extra = {"follow_up_at": next_due}
+                        extra = {
+                            "follow_up_at": next_due,
+                            "followUP_count": opportunity.get("followUP_count"),
+                            "followUP_date": opportunity.get("followUP_date"),
+                        }
+
                         first_sent = opportunity.get("first_email_sent_at")
                         if first_sent:
                             extra["first_email_sent_at"] = first_sent
@@ -2474,13 +2479,17 @@ def processHit(hit):
 
             if sent_day3:
                 # Advance cadence like a normal follow-up
-                next_due = (now_utc + _td(days=2)).replace(microsecond=0).isoformat()
+                next_due = (now_utc + _td(days=1)).replace(microsecond=0).isoformat()
                 opportunity["follow_up_at"] = next_due
                 opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
 
                 if not OFFLINE_MODE:
                     try:
-                        extra = {"follow_up_at": next_due}
+                        extra = {
+                            "follow_up_at": next_due,
+                            "followUP_count": opportunity.get("followUP_count"),
+                            "followUP_date": opportunity.get("followUP_date"),
+                        }
                         first_sent = opportunity.get("first_email_sent_at")
                         if first_sent:
                             extra["first_email_sent_at"] = first_sent
