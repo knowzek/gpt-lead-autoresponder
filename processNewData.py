@@ -247,6 +247,11 @@ def resolve_customer_email(
     air_email = (opportunity.get("customer_email") or "").strip()
     if air_email and not _is_donot(air_email):
         return air_email
+    
+    # ✅ Fallback: customer.email from patti_json snapshot
+    cust_email_direct = (cust.get("email") or "").strip()
+    if cust_email_direct and not _is_donot(cust_email_direct):
+        return cust_email_direct
 
     # Fallback: Fortellis customer.emails (preferred first, else first deliverable)
     preferred = None
