@@ -2757,9 +2757,26 @@ def processHit(hit):
                 wJson(opportunity, f"jsons/process/{opportunityId}.json")
                 return
 
-        # --- Step 4A.2: Tustin Kia Day-3 Walk-around Video email (when followUP_count == 1) ---
-        # Day-3 = second follow-up run, send walk-around video if vehicle has matching video
-        if due_dt <= now_utc and followUP_count == 1:
+        # --- Step 4A.2: Tustin Kia Day-3 Walk-around Video email ---
+        # Day 3 triggers when: mode=cadence, last_template_day_sent=2, not already sent
+        patti_meta = opportunity.get("patti") or {}
+        mode = (patti_meta.get("mode") or "").strip().lower()
+        if not mode or mode == "":
+            mode = "cadence"  # Default to cadence for regular follow-ups
+            
+        last_template_day_sent = patti_meta.get("last_template_day_sent")
+        
+        day3_ready = (
+            mode == "cadence"
+            and last_template_day_sent == 2
+            and not bool(opportunity.get("TK Day 3 Walkaround Sent"))
+        )
+        
+        log.info("DAY3 DEBUG: opp=%s mode=%r last_template_day_sent=%r day3_ready=%s patti_keys=%s", 
+                 opportunityId, mode, last_template_day_sent, day3_ready, list(patti_meta.keys()))
+        
+        if day3_ready:
+            log.info("DAY3 TRIGGER: Attempting Day 3 walkaround for opp=%s", opportunityId)
 
             sent_day3 = maybe_send_tk_day3_walkaround(
                 opportunity=opportunity,
