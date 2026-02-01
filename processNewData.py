@@ -442,7 +442,11 @@ def _extract_vehicle_info(opportunity: dict) -> dict:
     Extract vehicle year, make, model from opportunity's soughtVehicles.
     Returns dict with keys: year, make, model, or empty strings if not found.
     """
+    opp_id = opportunity.get("opportunityId") or opportunity.get("id") or "unknown"
+    
     soughtVehicles = opportunity.get("soughtVehicles") or []
+    log.info("DAY3 VEHICLE DEBUG: opp=%s soughtVehicles=%r", opp_id, soughtVehicles)
+    
     if not isinstance(soughtVehicles, list):
         soughtVehicles = []
 
@@ -453,6 +457,8 @@ def _extract_vehicle_info(opportunity: dict) -> dict:
             break
     if not vehicleObj:
         vehicleObj = (soughtVehicles[0] if soughtVehicles and isinstance(soughtVehicles[0], dict) else {})
+
+    log.info("DAY3 VEHICLE DEBUG: opp=%s vehicleObj=%r", opp_id, vehicleObj)
 
     year = str(vehicleObj.get("yearFrom") or vehicleObj.get("year") or "").strip()
     make = str(vehicleObj.get("make") or "").strip()
@@ -467,6 +473,8 @@ def _extract_vehicle_info(opportunity: dict) -> dict:
 
     if not model:
         model = str(vehicleObj.get("bodyStyle") or make or "vehicle").strip() or "vehicle"
+
+    log.info("DAY3 VEHICLE DEBUG: opp=%s extracted year=%r make=%r model=%r", opp_id, year, make, model)
 
     return {
         "year": year,
