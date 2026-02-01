@@ -2540,8 +2540,6 @@ def processHit(hit):
             wJson(opportunity, f"jsons/process/{opportunityId}.json")
             return
 
-        patti = opportunity.get("patti") or {}
-        idx = int(patti.get("salesai_email_idx") or -1)
         if due_dt <= now_utc and idx >= (len(SALES_AI_EMAIL_DAYS) - 1):
             opportunity['isActive'] = False
             opportunity["followUP_date"] = None   
@@ -2610,6 +2608,22 @@ def processHit(hit):
             body_html = _PREFS_RE.sub("", body_html).strip()
             body_html = body_html + build_patti_footer(rooftop_name)
 
+            # --- Compute next_due BEFORE sending (needed for send_patti_email args) ---
+            patti = opportunity.get("patti") or {}
+            idx = int(patti.get("salesai_email_idx") or -1)
+            
+            created_iso = (
+                patti.get("salesai_created_iso")     # authoritative anchor
+                or opportunity.get("created_at")
+                or opportunity.get("dateIn")
+                or opportunity.get("createdDate")
+                or opportunity.get("updated_at")     # last resort
+                or currDate_iso
+            )
+            
+            next_due = _next_salesai_due_iso(created_iso=created_iso, last_idx=idx + 1)
+            template_day = idx + 2
+
 
             # ✅ SEND the follow-up (currently missing)
             sent_ok = False
@@ -2636,11 +2650,12 @@ def processHit(hit):
                             body_html=body_html,
                             cc_addrs=[],
                         
-                            force_mode="cadence",                 # ✅ tells Airtable this is cadence
-                            next_follow_up_at=next_due,           # ✅ advances follow_up_at
-                            template_day=int(patti.get("salesai_email_idx") or -1) + 2,
+                            force_mode="cadence",
+                            next_follow_up_at=next_due,
+                            template_day=template_day,
                             ab_variant=opportunity.get("ab_variant"),
                         )
+
                         sent_ok = True
                     except Exception as e:
                         log.warning("Follow-up send failed for opp %s: %s", opportunityId, e)
@@ -2662,48 +2677,45 @@ def processHit(hit):
                 )
                 opportunity.setdefault("checkedDict", {})["last_msg_by"] = "patti"
             
-                # ✅ SalesAI cadence advance (instead of +1 day)
+                # ✅ SalesAI cadence advance
                 patti = opportunity.setdefault("patti", {})
                 idx = int(patti.get("salesai_email_idx") or -1)
                 patti["salesai_email_idx"] = idx + 1
-            
-                patti = opportunity.get("patti") or {}
+                
                 created_iso = (
-                    patti.get("salesai_created_iso")     # ✅ authoritative anchor
+                    patti.get("salesai_created_iso")     # authoritative anchor
                     or opportunity.get("created_at")
                     or opportunity.get("dateIn")
                     or opportunity.get("createdDate")
                     or opportunity.get("updated_at")     # last resort
                     or currDate_iso
                 )
-
+                
                 next_due = _next_salesai_due_iso(created_iso=created_iso, last_idx=idx + 1)
-            
+                
                 if next_due is None:
                     opportunity["isActive"] = False
                     opportunity["followUP_date"] = None
-                    if not OFFLINE_MODE:
-                        try:
-                            airtable_save(opportunity, extra_fields={"follow_up_at": None})
-                        except Exception as e:
-                            log.warning("Airtable save failed opp=%s (continuing): %s",
-                                        opportunity.get("opportunityId") or opportunity.get("id"), e)
+                    extra = {"follow_up_at": None}
                 else:
                     opportunity["followUP_date"] = next_due
                     opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
-                    if not OFFLINE_MODE:
-                        try:
-                            airtable_save(opportunity, extra_fields={"follow_up_at": next_due})
-                        except Exception as e:
-                            log.warning("Airtable save failed opp=%s (continuing): %s",
-                                        opportunity.get("opportunityId") or opportunity.get("id"), e)
-            
+                    extra = {
+                        "follow_up_at": next_due,
+                        "followUP_count": opportunity.get("followUP_count"),
+                        "followUP_date": opportunity.get("followUP_date"),
+                    }
+                
                 if not OFFLINE_MODE:
                     try:
-                        airtable_save(opportunity)
+                        airtable_save(opportunity, extra_fields=extra)
                     except Exception as e:
-                        log.warning("Airtable save failed opp=%s (continuing): %s",
-                                    opportunity.get("opportunityId") or opportunity.get("id"), e)
+                        log.warning(
+                            "Airtable save failed opp=%s (continuing): %s",
+                            opportunity.get("opportunityId") or opportunity.get("id"),
+                            e,
+                        )
+
 
     
     wJson(opportunity, f"jsons/process/{opportunityId}.json")
