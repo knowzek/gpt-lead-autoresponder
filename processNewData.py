@@ -51,6 +51,156 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
+import random
+
+def _get_followup_count_airtable(opportunity: dict) -> int:
+    """
+    Uses the Airtable-hydrated column followUP_count (top-level on opportunity dict).
+    Falls back safely to 0.
+    """
+    try:
+        return int(opportunity.get("followUP_count") or 0)
+    except Exception:
+        return 0
+
+
+def _nurture_stage_for_followups(n: int) -> str:
+    """
+    n = followUP_count (how many follow-ups have already been sent)
+    We generate the next nudge as "n+1", but stage can use n or n+1—either is fine.
+    """
+    # 0-based count -> stages for a 30-touch nurture
+    if n <= 1:
+        return "early_checkin"          # nudges 1–2
+    if n <= 3:
+        return "value_clarify"          # 3–4
+    if n <= 6:
+        return "options_offer"          # 5–7
+    if n <= 10:
+        return "light_urgency"          # 8–11
+    if n <= 15:
+        return "breakup_or_close_loop"  # 12–16
+    if n <= 21:
+        return "long_nurture"           # 17–22
+    return "final_laps"                 # 23–30
+
+
+def build_general_followup_prompt(
+    *,
+    opportunity: dict,
+    rooftop_name: str,
+    messages: list[dict],
+    address_line: str,
+) -> str:
+    """
+    Returns a GPT prompt that varies by Airtable followUP_count.
+    Assumes the model returns ONLY JSON: {"subject": "...", "body": "..."}.
+    """
+    n = _get_followup_count_airtable(opportunity)
+    nudge_num = n + 1
+    stage = _nurture_stage_for_followups(n)
+
+    # Rotate angles so even within a stage the copy doesn't collapse into one pattern.
+    angles = {
+        "early_checkin": [
+            "simple check-in + visit invite",
+            "confirm availability + low-friction next step",
+            "ask what they’re trying to accomplish (features/budget/trade)",
+            "weave in Patterson Why Buys: - No Addendums or Dealer MarkUps - Orange County Top Workplace for 20 years running - Community Driven - Master Technicians and Experienced Staff",
+        ],
+        "value_clarify": [
+            "ask 1 helpful question to narrow options",
+            "offer to schedule a time to see the vehicle. The hours of this store are:  Sunday	10 AM–6 PM, Monday	9 AM–7 PM, Tuesday	9 AM–7 PM, Wednesday	9 AM–7 PM, Thursday	9 AM–7 PM, Friday	9 AM–7 PM, Saturday	9 AM–8 PM",
+        ],
+        "options_offer": [
+            "offer 2-3 time windows (today/tomorrow/weekend)",
+            "offer remote options (text/call) + confirm best contact method",
+        ],
+        "light_urgency": [
+            "inventory movement framing (gentle)",
+            "offer to hold a time for a quick walkaround",
+            "ask if they want you to keep an eye out for the right one",
+        ],
+        "breakup_or_close_loop": [
+            "polite close-the-loop (‘should I close this out?’)",
+            "permission-based nurture (‘want occasional updates?’)",
+            "confirm if they bought elsewhere (no guilt)",
+        ],
+        "long_nurture": [
+            "seasonal/ownership-value framing (warranty/service/peace of mind)",
+            "light education (differences in trims/features) + offer help",
+            "re-open conversation with a single easy question",
+        ],
+        "final_laps": [
+            "last-touch with clear options: schedule / keep updates / close out",
+            "very short note, super low pressure",
+            "one-line ‘still looking or all set?’",
+        ],
+    }
+
+    angle_list = angles.get(stage) or ["simple check-in + visit invite"]
+    angle = angle_list[n % len(angle_list)]
+
+    # Hard rules to prevent the repetitive “I wanted to follow up…” loop
+    rules = f"""
+Hard rules:
+- Do NOT start with “I wanted to follow up…” or “Just checking in…” (too repetitive).
+- Keep it HUMAN and specific. 2–5 short sentences max.
+- Ask ONLY one question.
+- If the guest already proposed a time in the thread, confirm it (don’t re-ask).
+- Do not mention store hours unless asked.
+- Do not include a signature/footer.
+- Use the dealership name naturally: {rooftop_name}.
+- Include the address once if you’re inviting them in: {address_line}.
+Return ONLY valid JSON with keys: subject, body.
+""".strip()
+
+    # Stage guidance: changes tone and goal.
+    stage_guidance = {
+        "early_checkin": f"""
+Goal (Nudge {nudge_num}/30): Make it easy to reply.
+Angle: {angle}
+""".strip(),
+        "value_clarify": f"""
+Goal (Nudge {nudge_num}/30): Add value + move toward a next step.
+Angle: {angle}
+""".strip(),
+        "options_offer": f"""
+Goal (Nudge {nudge_num}/30): Offer concrete options (time windows / method) without sounding pushy.
+Angle: {angle}
+""".strip(),
+        "light_urgency": f"""
+Goal (Nudge {nudge_num}/30): Gentle urgency without pressure. Keep it calm.
+Angle: {angle}
+""".strip(),
+        "breakup_or_close_loop": f"""
+Goal (Nudge {nudge_num}/30): Close the loop politely OR get permission to keep helping.
+Angle: {angle}
+""".strip(),
+        "long_nurture": f"""
+Goal (Nudge {nudge_num}/30): Stay helpful + reopen the thread with one easy question.
+Angle: {angle}
+""".strip(),
+        "final_laps": f"""
+Goal (Nudge {nudge_num}/30): Final touches. Extremely short, clear options.
+Angle: {angle}
+""".strip(),
+    }.get(stage, "")
+
+    prompt = f"""
+You are Patti, a helpful internet leads assistant for {rooftop_name}.
+
+{rules}
+
+{stage_guidance}
+
+Thread (Python list of dicts):
+{messages}
+""".strip()
+
+    return prompt
+
+
 def _norm_email(s: str | None) -> str | None:
     s = (s or "").strip().lower()
     return s if ("@" in s and "." in s) else None
@@ -230,14 +380,6 @@ def resolve_customer_email(
     # Fortellis customer.emails (used for doNotEmail + fallback)
     cust = opportunity.get("customer") or {}
     emails = cust.get("emails") or []
-    
-    # DEBUG: Log what we're working with
-    opp_id = opportunity.get("opportunityId") or opportunity.get("id") or "unknown"
-    log.info("EMAIL_DEBUG opp=%s customer_email=%r cust.email=%r emails_count=%s",
-             opp_id,
-             opportunity.get("customer_email"),
-             cust.get("email"),
-             len(emails) if isinstance(emails, list) else "N/A")
 
     def _is_donot(addr: str) -> bool:
         target = (addr or "").strip().lower()
@@ -254,14 +396,7 @@ def resolve_customer_email(
     # ✅ Canonical: Airtable hydrated field (but honor doNotEmail if Fortellis knows it)
     air_email = (opportunity.get("customer_email") or "").strip()
     if air_email and not _is_donot(air_email):
-        log.info("EMAIL_DEBUG opp=%s resolved from customer_email: %s", opp_id, air_email)
         return air_email
-    
-    # ✅ Fallback: customer.email from patti_json snapshot
-    cust_email_direct = (cust.get("email") or "").strip()
-    if cust_email_direct and not _is_donot(cust_email_direct):
-        log.info("EMAIL_DEBUG opp=%s resolved from cust.email: %s", opp_id, cust_email_direct)
-        return cust_email_direct
 
     # Fallback: Fortellis customer.emails (preferred first, else first deliverable)
     preferred = None
@@ -281,9 +416,7 @@ def resolve_customer_email(
                 preferred = addr
                 break
 
-    result = preferred or first_ok
-    log.info("EMAIL_DEBUG opp=%s resolved from emails list: %s", opp_id, result)
-    return result
+    return preferred or first_ok
 
 
 
@@ -310,16 +443,10 @@ def maybe_send_tk_gm_day2_email(
     if not is_tustin_kia_rooftop(rooftop_name):
         return False
 
-    # ✅ ROOT GATE: Airtable checkbox (primary)
-    if bool(opportunity.get("TK GM Day 2 Sent")):
+    # ✅ ROOT GATE: Airtable checkbox only
+    if opportunity.get("tk_gm_day2_sent") is True:
         return False
-    
-    # ✅ SECONDARY GATE: Check last_template_day_sent >= 2 (backup if checkbox failed to persist)
-    patti_meta = opportunity.get("patti") or {}
-    last_sent = patti_meta.get("last_template_day_sent")
-    if last_sent is not None and int(last_sent) >= 2:
-        log.info("TK GM Day2: skipping opp=%s — last_template_day_sent=%s >= 2", opportunityId, last_sent)
-        return False
+        
         
     # Resolve customer email (preferred + not doNotEmail)
     # ✅ Resolve customer email from Airtable-hydrated field first
@@ -344,6 +471,7 @@ def maybe_send_tk_gm_day2_email(
     else:
         from patti_mailer import send_patti_email
         try:
+            log.info("TK GM Day2: sending opp=%s to=%s", opportunityId, to_addr)
             send_patti_email(
                 token=token,
                 subscription_id=subscription_id,
@@ -356,6 +484,8 @@ def maybe_send_tk_gm_day2_email(
                 cc_addrs=[],
             )
             sent_ok = True
+            log.info("TK GM Day2: sent ok opp=%s", opportunityId)
+
         except Exception as e:
             log.warning("TK GM Day2 send failed opp=%s: %s", opportunityId, e)
             sent_ok = False
@@ -427,11 +557,11 @@ def get_walkaround_video_url(vehicle_model: str) -> str | None:
     if model_lower in KIA_WALKAROUND_VIDEOS:
         return KIA_WALKAROUND_VIDEOS[model_lower]
     
-    # Prefix/substring match: check if model_lower starts with or contains any known key
+    # Prefix match: check if model_lower starts with any known key
     # Sort by key length descending to match longest key first
-    # This handles cases like "sportage lx" -> "sportage", and partial matches like "2024 sportage sx"
+    # This handles cases like "sportage lx" -> "sportage"
     for key in sorted(KIA_WALKAROUND_VIDEOS.keys(), key=len, reverse=True):
-        if model_lower.startswith(key) or key in model_lower:
+        if model_lower.startswith(key):
             return KIA_WALKAROUND_VIDEOS[key]
     
     return None
@@ -440,14 +570,9 @@ def get_walkaround_video_url(vehicle_model: str) -> str | None:
 def _extract_vehicle_info(opportunity: dict) -> dict:
     """
     Extract vehicle year, make, model from opportunity's soughtVehicles.
-    Returns dict with keys: year, make, model.
-    Returns None if model cannot be determined (caller should skip Day 3).
+    Returns dict with keys: year, make, model, or empty strings if not found.
     """
-    opp_id = opportunity.get("opportunityId") or opportunity.get("id") or "unknown"
-    
     soughtVehicles = opportunity.get("soughtVehicles") or []
-    log.info("DAY3 VEHICLE DEBUG: opp=%s soughtVehicles=%r", opp_id, soughtVehicles)
-    
     if not isinstance(soughtVehicles, list):
         soughtVehicles = []
 
@@ -459,48 +584,10 @@ def _extract_vehicle_info(opportunity: dict) -> dict:
     if not vehicleObj:
         vehicleObj = (soughtVehicles[0] if soughtVehicles and isinstance(soughtVehicles[0], dict) else {})
 
-    log.info("DAY3 VEHICLE DEBUG: opp=%s vehicleObj=%r", opp_id, vehicleObj)
-
-    year = str(vehicleObj.get("yearFrom") or vehicleObj.get("year") or "").strip()
-    make = str(vehicleObj.get("make") or "").strip()
-    model = str(
-        vehicleObj.get("model")
-        or vehicleObj.get("modelFrom")
-        or vehicleObj.get("modelTo")
-        or vehicleObj.get("variant")
-        or vehicleObj.get("description")
-        or ""
-    ).strip()
-
-    # Fallback 1: Try opportunity["vehicle"] if available
-    if not model:
-        vehicle_str = opportunity.get("vehicle") or ""
-        if isinstance(vehicle_str, str):
-            model = vehicle_str.strip()
-        elif isinstance(vehicle_str, dict):
-            model = str(vehicle_str.get("model") or "").strip()
-    
-    # Fallback 2: Try extracting from notes using regex (common Kia models)
-    if not model:
-        notes = str(opportunity.get("notes") or "").lower()
-        kia_models = ["sportage", "telluride", "sorento", "soul", "forte", "k5", "niro", "stinger", "carnival", "ev6", "ev9", "seltos", "rio"]
-        for kia_model in kia_models:
-            if kia_model in notes:
-                model = kia_model.title()
-                log.info("DAY3 VEHICLE DEBUG: opp=%s extracted model=%r from notes", opp_id, model)
-                break
-    
-    # If still no model, return None to signal skip
-    if not model:
-        log.info("DAY3 VEHICLE DEBUG: opp=%s NO MODEL FOUND - skipping Day 3", opp_id)
-        return None
-
-    log.info("DAY3 VEHICLE DEBUG: opp=%s extracted year=%r make=%r model=%r", opp_id, year, make, model)
-
     return {
-        "year": year,
-        "make": make,
-        "model": model,
+        "year": str(vehicleObj.get("yearFrom") or vehicleObj.get("year") or "").strip(),
+        "make": str(vehicleObj.get("make") or "").strip(),
+        "model": str(vehicleObj.get("model") or "").strip(),
     }
 
 
@@ -560,72 +647,56 @@ def maybe_send_tk_day3_walkaround(
     test_recipient: str | None = None,
 ) -> bool:
     """
-    Send Day 3 walk-around video email for Tustin Kia leads.
+    Send Day 3 walk-around video email and SMS for Tustin Kia leads.
     
-    Returns True if sent, else False.
+    Returns True if sent (or OFFLINE_MODE), else False.
     
     Conditions:
     - Tustin Kia rooftop only
-    - mode == "cadence"
-    - TK Day 3 Walkaround Sent != True
-    - last_template_day_sent == 2
-    - Vehicle has a matching walk-around video
+    - Not already sent (TK Day 3 Walkaround Sent)
+    - Lead is in cadence mode (not convo)
+    - Vehicle of interest has a matching walk-around video
     """
-    
-    log.info("DAY3 DEBUG: entering Day 3 check for opp=%s", opportunityId)
 
     # Rooftop gate
     if not is_tustin_kia_rooftop(rooftop_name):
-        log.info("DAY3 DEBUG: skipping opp=%s — not Tustin Kia", opportunityId)
         return False
 
     # Already sent gate
     if bool(opportunity.get("TK Day 3 Walkaround Sent")):
-        log.info("DAY3 DEBUG: skipping opp=%s — already sent", opportunityId)
         return False
-    
-    # Mode and cadence state gates
+
+    # Mode gate: skip if lead is in convo mode
     patti_meta = opportunity.get("patti") or {}
     mode = (patti_meta.get("mode") or "").strip().lower()
-    last_template_day_sent = patti_meta.get("last_template_day_sent")
-    
-    log.info("DAY3 DEBUG: opp=%s mode=%r last_template_day_sent=%r", opportunityId, mode, last_template_day_sent)
-    
-    # Must be in cadence mode
-    if mode != "cadence":
-        log.info("DAY3 DEBUG: skipping opp=%s — mode is not 'cadence'", opportunityId)
-        return False
-    
-    # Must have sent Day 2 (last_template_day_sent == 2)
-    if last_template_day_sent != 2:
-        log.info("DAY3 DEBUG: skipping opp=%s — last_template_day_sent=%r (need 2)", opportunityId, last_template_day_sent)
+    if mode == "convo":
+        log.info("TK Day3 Walkaround: skipping opp=%s — mode is 'convo'", opportunityId)
         return False
 
     # Extract vehicle info
     vehicle_info = _extract_vehicle_info(opportunity)
-    if not vehicle_info:
-        log.info("DAY3 DEBUG: skipping opp=%s — no vehicle model found", opportunityId)
-        return False
-    
     vehicle_year = vehicle_info["year"]
     vehicle_make = vehicle_info["make"]
     vehicle_model = vehicle_info["model"]
 
     # Check if we have a walk-around video for this vehicle
     video_url = get_walkaround_video_url(vehicle_model)
-    log.info("DAY3 DEBUG: video_url=%s for model=%r opp=%s", video_url, vehicle_model, opportunityId)
-    
     if not video_url:
-        log.info("DAY3 DEBUG: no video for model=%r opp=%s", vehicle_model, opportunityId)
+        log.info(
+            "TK Day3 Walkaround: no video for model=%r opp=%s",
+            vehicle_model, opportunityId
+        )
         return False
 
     # Resolve customer email
-    to_addr = resolve_customer_email(opportunity)
+    to_addr = resolve_customer_email(
+        opportunity,
+        SAFE_MODE=SAFE_MODE,
+        test_recipient=test_recipient
+    )
     if not to_addr:
-        log.warning("DAY3 DEBUG: no deliverable email for opp=%s", opportunityId)
+        log.warning("TK Day3 Walkaround: no deliverable email for opp=%s", opportunityId)
         return False
-    
-    log.info("DAY3 DEBUG: sending Day 3 email to %s for opp=%s", to_addr, opportunityId)
 
     # Check doNotEmail flag
     cust = opportunity.get("customer") or {}
@@ -633,10 +704,10 @@ def maybe_send_tk_day3_walkaround(
     for e in emails:
         if isinstance(e, dict) and (e.get("address") or "").strip().lower() == to_addr.lower():
             if e.get("doNotEmail"):
-                log.info("DAY3 DEBUG: doNotEmail flagged for %s opp=%s", to_addr, opportunityId)
+                log.info("TK Day3 Walkaround: doNotEmail flagged for %s opp=%s", to_addr, opportunityId)
                 return False
 
-    # Build email from Day 3 template
+    # Build email
     subject = TK_DAY3_WALKAROUND_SUBJECT.format(
         vehicle_make=vehicle_make or "Kia",
         vehicle_model=vehicle_model or "vehicle"
@@ -649,15 +720,14 @@ def maybe_send_tk_day3_walkaround(
         youtube_walkaround_url=video_url,
     )
 
-    # Send the email using Day 3 template ONLY
-    log.info("DAY3 DEBUG: sending email for opp=%s subject=%r", opportunityId, subject)
-    
+    # Send email
     sent_ok = False
     if OFFLINE_MODE:
         sent_ok = True
     else:
         from patti_mailer import send_patti_email
         try:
+            log.info("Walkaround Day3: sending opp=%s to=%s", opportunityId, to_addr)
             send_patti_email(
                 token=token,
                 subscription_id=subscription_id,
@@ -670,32 +740,57 @@ def maybe_send_tk_day3_walkaround(
                 cc_addrs=[],
             )
             sent_ok = True
-        except Exception as exc:
-            log.error("DAY3 DEBUG: email send failed for opp=%s: %s", opportunityId, exc)
-            return False
-
-    log.info("DAY3 DEBUG: updating Airtable fields for opp=%s", opportunityId)
-    
-    # Update Airtable: mark Day 3 sent and advance cadence
-    now_utc = _dt.now(_tz.utc)
-    next_due = (now_utc + _td(days=2)).replace(microsecond=0).isoformat()
-    
-    opportunity["follow_up_at"] = next_due
-    
-    if not OFFLINE_MODE:
-        try:
-            airtable_save(opportunity, extra_fields={
-                "TK Day 3 Walkaround Sent": True,
-                "TK Day 3 Walkaround Sent At": currDate_iso,
-                "last_template_day_sent": 3,
-                "follow_up_at": next_due,
-            })
+            log.info("Walkaround Day3: sent ok opp=%s", opportunityId)
         except Exception as e:
-            log.warning("DAY3 DEBUG: Airtable save failed opp=%s (continuing): %s", opportunityId, e)
+            log.warning("TK Day3 Walkaround email send failed opp=%s: %s", opportunityId, e)
+            sent_ok = False
 
-    log.info("DAY3 DEBUG: Day 3 complete for opp=%s to=%s next_due=%s", opportunityId, to_addr, next_due)
-    log.info("✅ Sent TK Day 3 Walkaround for opp=%s to=%s", opportunityId, to_addr)
-    return True
+    # Send SMS with video link (shorter message to stay within 160 chars)
+    sms_sent = False
+    if sent_ok:
+        try:
+            customer_phone = (opportunity.get("customer_phone") or "").strip()
+            phone_e164 = _norm_phone_e164_us_local(customer_phone)
+            
+            if phone_e164:
+                from goto_sms import send_sms
+                from_number = _norm_phone_e164_us_local(os.getenv("PATTI_SMS_NUMBER", ""))
+                
+                if not from_number:
+                    log.info("TK Day3 SMS: PATTI_SMS_NUMBER not set, skipping SMS")
+                else:
+                    # Keep SMS short to stay within 160 character limit
+                    vehicle_short = f"{vehicle_make} {vehicle_model}".strip() or "vehicle"
+                    sms_body = (
+                        f"Hi {customer_name or 'there'}, watch our {vehicle_short} walk-around: {video_url} "
+                        f"- Tustin Kia. STOP to opt out"
+                    ).strip()
+                    
+                    send_sms(from_number=from_number, to_number=phone_e164, body=sms_body)
+                    sms_sent = True
+                    log.info("TK Day3 Walkaround SMS sent to %s opp=%s", phone_e164, opportunityId)
+        except Exception as e:
+            log.warning("TK Day3 Walkaround SMS failed opp=%s: %s", opportunityId, e)
+
+    if sent_ok:
+        # Record in thread history
+        opportunity.setdefault("messages", []).append({
+            "msgFrom": "patti",
+            "subject": subject,
+            "body": body_html,
+            "date": currDate_iso,
+            "trigger": "tk_day3_walkaround",
+            "sms_sent": sms_sent,
+        })
+        opportunity.setdefault("checkedDict", {})["last_msg_by"] = "patti"
+
+        airtable_save(opportunity, extra_fields={
+            "TK Day 3 Walkaround Sent": True,
+            "TK Day 3 Walkaround Sent At": currDate_iso,
+            "last_template_day_sent": 3,
+        })
+
+    return sent_ok
 
 
 def _next_kbb_followup_iso(*, lead_age_days: int) -> str:
@@ -2395,11 +2490,10 @@ def processHit(hit):
                 rt = get_rooftop_info(subscription_id)
                 rooftop_sender = rt.get("sender") or TEST_FROM
 
-                # ✅ Use customer email directly, no SAFE_MODE for production
                 actual_to = resolve_customer_email(
                     opportunity,
-                    SAFE_MODE=False,
-                    test_recipient=None
+                    SAFE_MODE=SAFE_MODE,
+                    test_recipient=test_recipient
                 )
                 
                 if actual_to:
@@ -2474,27 +2568,20 @@ def processHit(hit):
             return
         
         # ✅ If we reach here: cadence is due now
-        # Read followUP_count from Airtable record first, fallback to patti JSON
-        followUP_count = opportunity.get("followUP_count")
-        if followUP_count is None:
-            followUP_count = (opportunity.get("patti") or {}).get("followUP_count")
-        followUP_count = int(followUP_count or 0)
-        
-        # Read last_template_day_sent from Airtable record first, fallback to patti JSON
-        last_template_day_sent = opportunity.get("last_template_day_sent")
-        if last_template_day_sent is None:
-            last_template_day_sent = (opportunity.get("patti") or {}).get("last_template_day_sent")
-        
-        # ✅ Default empty mode to "cadence" (only skip if explicitly "convo" or "scheduled")
-        patti_meta = opportunity.get("patti") or {}
-        mode = (patti_meta.get("mode") or "").strip().lower()
-        if not mode or mode == "":
-            mode = "cadence"  # Default to cadence for regular follow-ups
-        
-        # DAY3 DEBUG: Log values before condition check
-        log.info("DAY3 DEBUG: mode=%s last_template_day_sent=%s followUP_count=%s due_dt=%s now=%s",
-                 mode, last_template_day_sent, followUP_count, due_dt, now_utc)
+        raw_count = opportunity.get("followUP_count")
 
+        # debug once so you can see what you're actually getting
+        log.info("DEBUG followUP_count raw=%r keys_has_followUP_count=%s", raw_count, "followUP_count" in opportunity)
+        
+        try:
+            followUP_count = int(float(raw_count or 0))
+        except Exception:
+            followUP_count = 0
+
+
+        # ✅ SalesAI index (used by cadence end-check + template-day math)
+        patti = opportunity.get("patti") or {}
+        idx = int(patti.get("salesai_email_idx") or -1)
     
         # --- Step 4A: Tustin Kia GM Day-2 email (send even if appointment exists) ---
         # Day-2 in your system = first follow-up run when due_dt is due
@@ -2516,11 +2603,15 @@ def processHit(hit):
                 # Advance cadence like a normal follow-up, so we don't also send GPT follow-up today
                 next_due = (now_utc + _td(days=1)).replace(microsecond=0).isoformat()
                 opportunity["follow_up_at"] = next_due
-                opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
+                opportunity["followUP_count"] = int(opportunity.get("followUP_count")) + 1
         
                 if not OFFLINE_MODE:
                     try:
-                        extra = {"follow_up_at": next_due}
+                        extra = {
+                            "follow_up_at": next_due,
+                            "followUP_count": opportunity.get("followUP_count"),
+                        }
+
                         first_sent = opportunity.get("first_email_sent_at")
                         if first_sent:
                             extra["first_email_sent_at"] = first_sent
@@ -2535,16 +2626,9 @@ def processHit(hit):
                 wJson(opportunity, f"jsons/process/{opportunityId}.json")
                 return
 
-        # --- Step 4A.2: Tustin Kia Day-3 Walk-around Video email ---
-        # Day 3 triggers when: mode=cadence, last_template_day_sent=2, not already sent
-        day3_ready = (
-            mode == "cadence"
-            and last_template_day_sent == 2
-            and not bool(opportunity.get("TK Day 3 Walkaround Sent"))
-        )
-        
-        if day3_ready:
-            log.info("DAY3 TRIGGER: Attempting Day 3 walkaround for opp=%s", opportunityId)
+        # --- Step 4A.2: Tustin Kia Day-3 Walk-around Video email (when followUP_count == 1) ---
+        # Day-3 = second follow-up run, send walk-around video if vehicle has matching video
+        if due_dt <= now_utc and followUP_count == 1:
 
             sent_day3 = maybe_send_tk_day3_walkaround(
                 opportunity=opportunity,
@@ -2561,7 +2645,28 @@ def processHit(hit):
             )
 
             if sent_day3:
-                # Day 3 function already saved to Airtable and set next_due
+                # Advance cadence like a normal follow-up
+                next_due = (now_utc + _td(days=1)).replace(microsecond=0).isoformat()
+                opportunity["follow_up_at"] = next_due
+                opportunity["followUP_count"] = int(opportunity.get("followUP_count")) + 1
+
+                if not OFFLINE_MODE:
+                    try:
+                        extra = {
+                            "follow_up_at": next_due,
+                            "followUP_count": opportunity.get("followUP_count"),
+                        }
+                        first_sent = opportunity.get("first_email_sent_at")
+                        if first_sent:
+                            extra["first_email_sent_at"] = first_sent
+                        airtable_save(opportunity, extra_fields=extra)
+                    except Exception as e:
+                        log.warning(
+                            "Airtable save failed opp=%s (continuing): %s",
+                            opportunity.get("opportunityId") or opportunity.get("id"),
+                            e
+                        )
+
                 wJson(opportunity, f"jsons/process/{opportunityId}.json")
                 return
         
@@ -2595,8 +2700,6 @@ def processHit(hit):
             wJson(opportunity, f"jsons/process/{opportunityId}.json")
             return
 
-        patti = opportunity.get("patti") or {}
-        idx = int(patti.get("salesai_email_idx") or -1)
         if due_dt <= now_utc and idx >= (len(SALES_AI_EMAIL_DAYS) - 1):
             opportunity['isActive'] = False
             opportunity["followUP_date"] = None   
@@ -2613,41 +2716,16 @@ def processHit(hit):
             # Use full thread history but be explicit that this is NOT a first email.
             messages = opportunity.get("messages") or []
         
-            prompt = f"""
-        You are generating a FOLLOW-UP email, not a first welcome message.
-        
-        Context:
-        - The guest originally inquired about: {vehicle_str}
-        - Patti has already been in touch with the guest.
-
-        Use the full message history below to see what’s already been discussed,
-        then write the next short follow-up from Patti that makes sense given
-        where the conversation left off.
-        
-        messages between Patti and the customer (python list of dicts):
-        {messages}
-        
-        Follow-up requirements:
-        - Do NOT repeat the full opener or dealership Why Buys from the first email.
-        - Assume they already read your original message.
-        - Keep it short: 2–4 sentences max.
-        - Sound like you’re checking in on a thread you already started
-          (e.g., “I wanted to follow up on my last note about the Sportage.”).
-        - Make one simple, low-pressure ask (e.g., “Are you still considering the Sportage?” or
-          “Would you like me to check availability or options for you?”).
-        - Use a subject line that clearly looks like a follow-up on their vehicle inquiry,
-          not a brand-new outreach.
-        
-        Return ONLY valid JSON with keys: subject, body.
-            """.strip()
-        
-            response = run_gpt(
-                prompt,
-                customer_name,
-                rooftop_name,
-                prevMessages=True,
+            address_line = "28 B Auto Center Dr, Tustin, CA 92782"  # or your rooftop address resolver
+            customer = opportunity.get("customer") or {}
+            customer_name = (opportunity.get("customer_first_name") or "").strip() or customer.get("firstName") or "there"
+            prompt = build_general_followup_prompt(
+                opportunity=opportunity,
+                rooftop_name=rooftop_name,
+                messages=messages,
+                address_line=address_line,
             )
-
+            response = run_gpt(prompt, customer_name, rooftop_name, prevMessages=True)
 
             subject   = response["subject"]
             body_html = response["body"]
@@ -2665,20 +2743,21 @@ def processHit(hit):
             body_html = _PREFS_RE.sub("", body_html).strip()
             body_html = body_html + build_patti_footer(rooftop_name)
 
-            # ✅ Calculate next_due for cadence scheduling
+            # --- Compute next_due BEFORE sending (needed for send_patti_email args) ---
             patti = opportunity.get("patti") or {}
-            idx = int(patti.get("salesai_email_idx") or -1)
+            
             created_iso = (
-                patti.get("salesai_created_iso")
+                patti.get("salesai_created_iso")     # authoritative anchor
                 or opportunity.get("created_at")
                 or opportunity.get("dateIn")
                 or opportunity.get("createdDate")
-                or opportunity.get("updated_at")
+                or opportunity.get("updated_at")     # last resort
+                or currDate_iso
             )
-            next_due = _next_salesai_due_iso(created_iso=created_iso, last_idx=idx + 1) if created_iso else None
-            if not next_due:
-                # Fallback: schedule 2 days from now
-                next_due = (_dt.now(_tz.utc) + _td(days=2)).replace(microsecond=0).isoformat()
+            
+            next_due = _next_salesai_due_iso(created_iso=created_iso, last_idx=idx + 1)
+            template_day = idx + 1
+
 
             # ✅ SEND the follow-up (currently missing)
             sent_ok = False
@@ -2686,11 +2765,10 @@ def processHit(hit):
             if not OFFLINE_MODE:
                 from patti_mailer import send_patti_email  # wrapper: Outlook send + CRM comment
             
-                # ✅ Use customer email directly, no SAFE_MODE for production cadence
                 actual_to = resolve_customer_email(
                     opportunity,
-                    SAFE_MODE=False,
-                    test_recipient=None
+                    SAFE_MODE=SAFE_MODE,
+                    test_recipient=test_recipient
                 )
                 
                 if actual_to:
@@ -2706,10 +2784,11 @@ def processHit(hit):
                             body_html=body_html,
                             cc_addrs=[],
                         
-                            force_mode="cadence",                 # ✅ tells Airtable this is cadence
-                            next_follow_up_at=next_due,           # ✅ advances follow_up_at
-                            template_day=int(patti.get("salesai_email_idx") or -1) + 2,
+                            force_mode="cadence",
+                            next_follow_up_at=next_due,
+                            template_day=template_day,
                         )
+
                         sent_ok = True
                     except Exception as e:
                         log.warning("Follow-up send failed for opp %s: %s", opportunityId, e)
@@ -2731,50 +2810,56 @@ def processHit(hit):
                 )
                 opportunity.setdefault("checkedDict", {})["last_msg_by"] = "patti"
             
-                # ✅ SalesAI cadence advance (instead of +1 day)
+                # Advance SalesAI index in-memory
                 patti = opportunity.setdefault("patti", {})
-                idx = int(patti.get("salesai_email_idx") or -1)
                 patti["salesai_email_idx"] = idx + 1
-            
-                patti = opportunity.get("patti") or {}
-                created_iso = (
-                    patti.get("salesai_created_iso")     # ✅ authoritative anchor
-                    or opportunity.get("created_at")
-                    or opportunity.get("dateIn")
-                    or opportunity.get("createdDate")
-                    or opportunity.get("updated_at")     # last resort
-                    or currDate_iso
-                )
 
-                next_due = _next_salesai_due_iso(created_iso=created_iso, last_idx=idx + 1)
-            
-                if next_due is None:
-                    opportunity["isActive"] = False
-                    opportunity["followUP_date"] = None
-                    if not OFFLINE_MODE:
-                        try:
-                            airtable_save(opportunity, extra_fields={"follow_up_at": None})
-                        except Exception as e:
-                            log.warning("Airtable save failed opp=%s (continuing): %s",
-                                        opportunity.get("opportunityId") or opportunity.get("id"), e)
+                # --- Advance cadence state (single owner: processNewData) ---
+                new_count = int(float(opportunity.get("followUP_count") or 0)) + 1
+                opportunity["followUP_count"] = new_count
+                
+                # compute next_due however you want, BUT do not allow past dates
+                if next_due:
+                    try:
+                        ndt = _dt.fromisoformat(str(next_due).replace("Z", "+00:00"))
+                        if ndt.tzinfo is None:
+                            ndt = ndt.replace(tzinfo=_tz.utc)
+                    except Exception:
+                        ndt = None
                 else:
-                    opportunity["followUP_date"] = next_due
-                    opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
-                    if not OFFLINE_MODE:
-                        try:
-                            airtable_save(opportunity, extra_fields={"follow_up_at": next_due})
-                        except Exception as e:
-                            log.warning("Airtable save failed opp=%s (continuing): %s",
-                                        opportunity.get("opportunityId") or opportunity.get("id"), e)
-            
+                    ndt = None
+                
+                min_next = (now_utc + _td(days=1)).replace(microsecond=0)
+                if (ndt is None) or (ndt < min_next):
+                    next_due = min_next.isoformat()
+                
+                opportunity["follow_up_at"] = next_due
+                
                 if not OFFLINE_MODE:
                     try:
-                        airtable_save(opportunity)
+                        airtable_save(opportunity, extra_fields={
+                            "followUP_count": new_count,
+                            "follow_up_at": next_due,
+                        })
                     except Exception as e:
                         log.warning("Airtable save failed opp=%s (continuing): %s",
                                     opportunity.get("opportunityId") or opportunity.get("id"), e)
 
-    
+            
+                # Persist routing fields (mailer handles follow_up_at via next_follow_up_at)
+                if not OFFLINE_MODE:
+                    try:
+                        airtable_save(opportunity, extra_fields={
+                            "followUP_count": opportunity["followUP_count"],
+                        })
+                    except Exception as e:
+                        log.warning(
+                            "Airtable save failed opp=%s (continuing): %s",
+                            opportunity.get("opportunityId") or opportunity.get("id"),
+                            e
+                        )
+
+                
     wJson(opportunity, f"jsons/process/{opportunityId}.json")
 
 _CARFAX_EMAIL_RE = re.compile(r"(?i)\bEmail:\s*([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})\b")
