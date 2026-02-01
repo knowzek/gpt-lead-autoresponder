@@ -110,12 +110,10 @@ def build_general_followup_prompt(
         "value_clarify": [
             "ask 1 helpful question to narrow options",
             "offer to send a couple similar options if vehicle is gone",
-            "offer quick numbers path (OTD/payment) WITHOUT quoting numbers",
         ],
         "options_offer": [
             "offer 2-3 time windows (today/tomorrow/weekend)",
             "offer remote options (text/call) + confirm best contact method",
-            "offer trade appraisal / pre-approval path",
         ],
         "light_urgency": [
             "inventory movement framing (gentle)",
