@@ -2418,7 +2418,7 @@ def processHit(hit):
             return
         
         # ✅ If we reach here: cadence is due now
-        followUP_count = int(opportunity.get("followUP_count") or 0)
+        followUP_count = int(opportunity.get("followUP_count"))
 
         # ✅ SalesAI index (used by cadence end-check + template-day math)
         patti = opportunity.get("patti") or {}
@@ -2444,7 +2444,7 @@ def processHit(hit):
                 # Advance cadence like a normal follow-up, so we don't also send GPT follow-up today
                 next_due = (now_utc + _td(days=1)).replace(microsecond=0).isoformat()
                 opportunity["follow_up_at"] = next_due
-                opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
+                opportunity["followUP_count"] = int(opportunity.get("followUP_count")) + 1
         
                 if not OFFLINE_MODE:
                     try:
@@ -2489,7 +2489,7 @@ def processHit(hit):
                 # Advance cadence like a normal follow-up
                 next_due = (now_utc + _td(days=1)).replace(microsecond=0).isoformat()
                 opportunity["follow_up_at"] = next_due
-                opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
+                opportunity["followUP_count"] = int(opportunity.get("followUP_count")) + 1
 
                 if not OFFLINE_MODE:
                     try:
@@ -2681,7 +2681,7 @@ def processHit(hit):
                 patti["salesai_email_idx"] = idx + 1
 
                 # --- Advance cadence state (single owner: processNewData) ---
-                new_count = int(opportunity.get("followUP_count") or 0) + 1
+                new_count = int(opportunity.get("followUP_count")) + 1
                 opportunity["followUP_count"] = new_count
                 
                 # compute next_due however you want, BUT do not allow past dates
