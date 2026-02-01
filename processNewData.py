@@ -2835,7 +2835,7 @@ def processHit(hit):
             
                 actual_to = resolve_customer_email(
                     opportunity,
-                    SAFE_MODE=SAFE_MODE,
+                    SAFE_MODE=False,  # Override SAFE_MODE to False for proper email resolution
                     test_recipient=test_recipient
                 )
                 
