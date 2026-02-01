@@ -117,6 +117,7 @@ def canonicalize_opp(opp: dict, fields: dict) -> dict:
     )
     opp["customer_email"] = _as_str(
         fields.get("customer_email")
+        or fields.get("customer_email_lower")  # ✅ Fallback to lowercase field
         or opp.get("customer_email")
         or cust.get("email")
         or opp.get("email")
