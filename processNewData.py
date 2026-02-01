@@ -2672,6 +2672,20 @@ def processHit(hit):
             body_html = _PREFS_RE.sub("", body_html).strip()
             body_html = body_html + build_patti_footer(rooftop_name)
 
+            # ✅ Calculate next_due for cadence scheduling
+            patti = opportunity.get("patti") or {}
+            idx = int(patti.get("salesai_email_idx") or -1)
+            created_iso = (
+                patti.get("salesai_created_iso")
+                or opportunity.get("created_at")
+                or opportunity.get("dateIn")
+                or opportunity.get("createdDate")
+                or opportunity.get("updated_at")
+            )
+            next_due = _next_salesai_due_iso(created_iso=created_iso, last_idx=idx + 1) if created_iso else None
+            if not next_due:
+                # Fallback: schedule 2 days from now
+                next_due = (_dt.now(_tz.utc) + _td(days=2)).replace(microsecond=0).isoformat()
 
             # ✅ SEND the follow-up (currently missing)
             sent_ok = False
