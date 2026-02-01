@@ -2451,7 +2451,6 @@ def processHit(hit):
                         extra = {
                             "follow_up_at": next_due,
                             "followUP_count": opportunity.get("followUP_count"),
-                            "followUP_date": opportunity.get("followUP_date"),
                         }
 
                         first_sent = opportunity.get("first_email_sent_at")
@@ -2497,7 +2496,6 @@ def processHit(hit):
                         extra = {
                             "follow_up_at": next_due,
                             "followUP_count": opportunity.get("followUP_count"),
-                            "followUP_date": opportunity.get("followUP_date"),
                         }
                         first_sent = opportunity.get("first_email_sent_at")
                         if first_sent:
@@ -2690,7 +2688,6 @@ def processHit(hit):
                     try:
                         airtable_save(opportunity, extra_fields={
                             "followUP_count": opportunity["followUP_count"],
-                            "followUP_date": next_due,  # optional but useful
                         })
                     except Exception as e:
                         log.warning(
