@@ -2452,7 +2452,7 @@ def processHit(hit):
     
         # --- Step 4A: Tustin Kia GM Day-2 email (send even if appointment exists) ---
         # Day-2 in your system = first follow-up run when due_dt is due
-        if due_dt <= now_utc and followUP_count == 0:
+        if due_dt <= now_utc and followUP_count == 0 and not bool(opportunity.get("TK GM Day 2 Sent")):
 
             sent_gm = maybe_send_tk_gm_day2_email(
                 opportunity=opportunity,
@@ -2474,7 +2474,10 @@ def processHit(hit):
         
                 if not OFFLINE_MODE:
                     try:
-                        extra = {"follow_up_at": next_due}
+                        extra = {
+                            "follow_up_at": next_due,
+                            "followUP_count": opportunity["followUP_count"]
+                        }
                         first_sent = opportunity.get("first_email_sent_at")
                         if first_sent:
                             extra["first_email_sent_at"] = first_sent
@@ -2495,8 +2498,8 @@ def processHit(hit):
             due_dt <= now_utc
             and bool(opportunity.get("TK GM Day 2 Sent"))
             and bool(opportunity.get("TK GM Day 2 Sent At"))
-            and not bool(opportunity.get("TK GM Day 3 Sent"))
-            and not bool(opportunity.get("TK GM Day 3 Sent At"))
+            and not bool(opportunity.get("TK Day 3 Walkaround Sent"))
+            and not bool(opportunity.get("TK Day 3 Walkaround Sent At"))
         ):
 
             sent_day3 = maybe_send_tk_day3_walkaround(
@@ -2526,6 +2529,7 @@ def processHit(hit):
                             "TK Day 3 Walkaround Sent": True,
                             "TK Day 3 Walkaround Sent At": currDate_iso,
                             "last_template_day_sent": 3,
+                            "followUP_count": opportunity["followUP_count"]
                         }
                         first_sent = opportunity.get("first_email_sent_at")
                         if first_sent:
