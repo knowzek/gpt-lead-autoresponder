@@ -577,6 +577,7 @@ def maybe_send_tk_day3_walkaround(
     else:
         from patti_mailer import send_patti_email
         try:
+            log.info("Walkaround Day3: sending opp=%s to=%s", opportunityId, to_addr)
             send_patti_email(
                 token=token,
                 subscription_id=subscription_id,
@@ -589,6 +590,7 @@ def maybe_send_tk_day3_walkaround(
                 cc_addrs=[],
             )
             sent_ok = True
+            log.info("Walkaround Day3: sent ok opp=%s", opportunityId)
         except Exception as e:
             log.warning("TK Day3 Walkaround email send failed opp=%s: %s", opportunityId, e)
             sent_ok = False
