@@ -171,7 +171,7 @@ Goal (Nudge {nudge_num}/30): Offer concrete options (time windows / method) with
 Angle: {angle}
 """.strip(),
         "light_urgency": f"""
-Goal (Nudge {nudgeudge_num}/30): Gentle urgency without pressure. Keep it calm.
+Goal (Nudge {nudge_num}/30): Gentle urgency without pressure. Keep it calm.
 Angle: {angle}
 """.strip(),
         "breakup_or_close_loop": f"""
