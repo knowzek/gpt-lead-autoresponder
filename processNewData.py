@@ -784,7 +784,10 @@ def maybe_send_tk_day3_walkaround(
     """
 
     # Rooftop gate
-    if not is_tustin_kia_rooftop(rooftop_name):
+    is_tk_rooftop = is_tustin_kia_rooftop(rooftop_name)
+    log.info("DAY3 ROOFTOP DEBUG: opp=%s rooftop_name=%r is_tustin_kia=%s", 
+             opportunityId, rooftop_name, is_tk_rooftop)
+    if not is_tk_rooftop:
         return False
 
     # Already sent gate
@@ -1677,7 +1680,9 @@ def processHit(hit):
 
     # EARLY SKIP: avoid API calls for opps already marked inactive
     patti_meta = opportunity.get("patti") or {}
-    if patti_meta.get("skip") and patti_meta.get("skip_reason") == "inactive_opportunity":
+    # TEMPORARY: Allow Mohamed opportunity for Day 3 testing
+    if (patti_meta.get("skip") and patti_meta.get("skip_reason") == "inactive_opportunity" 
+        and opportunityId != "362e51d1-bcc4-f011-814f-00505690ec8c"):
         log.info("Skipping opp %s (inactive_opportunity in ES).", opportunityId)
         return
 
