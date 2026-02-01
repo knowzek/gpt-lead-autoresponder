@@ -230,6 +230,14 @@ def resolve_customer_email(
     # Fortellis customer.emails (used for doNotEmail + fallback)
     cust = opportunity.get("customer") or {}
     emails = cust.get("emails") or []
+    
+    # DEBUG: Log what we're working with
+    opp_id = opportunity.get("opportunityId") or opportunity.get("id") or "unknown"
+    log.info("EMAIL_DEBUG opp=%s customer_email=%r cust.email=%r emails_count=%s",
+             opp_id,
+             opportunity.get("customer_email"),
+             cust.get("email"),
+             len(emails) if isinstance(emails, list) else "N/A")
 
     def _is_donot(addr: str) -> bool:
         target = (addr or "").strip().lower()
@@ -246,11 +254,13 @@ def resolve_customer_email(
     # ✅ Canonical: Airtable hydrated field (but honor doNotEmail if Fortellis knows it)
     air_email = (opportunity.get("customer_email") or "").strip()
     if air_email and not _is_donot(air_email):
+        log.info("EMAIL_DEBUG opp=%s resolved from customer_email: %s", opp_id, air_email)
         return air_email
     
     # ✅ Fallback: customer.email from patti_json snapshot
     cust_email_direct = (cust.get("email") or "").strip()
     if cust_email_direct and not _is_donot(cust_email_direct):
+        log.info("EMAIL_DEBUG opp=%s resolved from cust.email: %s", opp_id, cust_email_direct)
         return cust_email_direct
 
     # Fallback: Fortellis customer.emails (preferred first, else first deliverable)
@@ -271,7 +281,9 @@ def resolve_customer_email(
                 preferred = addr
                 break
 
-    return preferred or first_ok
+    result = preferred or first_ok
+    log.info("EMAIL_DEBUG opp=%s resolved from emails list: %s", opp_id, result)
+    return result
 
 
 
@@ -2374,10 +2386,11 @@ def processHit(hit):
                 rt = get_rooftop_info(subscription_id)
                 rooftop_sender = rt.get("sender") or TEST_FROM
 
+                # ✅ Use customer email directly, no SAFE_MODE for production
                 actual_to = resolve_customer_email(
                     opportunity,
-                    SAFE_MODE=SAFE_MODE,
-                    test_recipient=test_recipient
+                    SAFE_MODE=False,
+                    test_recipient=None
                 )
                 
                 if actual_to:
@@ -2666,10 +2679,11 @@ def processHit(hit):
             if not OFFLINE_MODE:
                 from patti_mailer import send_patti_email  # wrapper: Outlook send + CRM comment
             
+                # ✅ Use customer email directly, no SAFE_MODE for production cadence
                 actual_to = resolve_customer_email(
                     opportunity,
-                    SAFE_MODE=SAFE_MODE,
-                    test_recipient=test_recipient
+                    SAFE_MODE=False,
+                    test_recipient=None
                 )
                 
                 if actual_to:
