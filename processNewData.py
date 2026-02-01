@@ -2493,8 +2493,6 @@ def processHit(hit):
         # Day-3 = second follow-up run, send walk-around video if vehicle has matching video
         if (
             due_dt <= now_utc
-            and followUP_count == 1
-            and int(last_template_day_sent or 0) == 2
             and bool(opportunity.get("TK GM Day 2 Sent"))
             and bool(opportunity.get("TK GM Day 2 Sent At"))
             and not bool(opportunity.get("TK GM Day 3 Sent"))
