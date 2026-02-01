@@ -355,7 +355,7 @@ def maybe_send_tk_gm_day2_email(
         airtable_save(opportunity, extra_fields={
             "TK GM Day 2 Sent": True,
             "TK GM Day 2 Sent At": currDate_iso,
-            "last_template_day_sent": 2,,
+            "last_template_day_sent": 2,
         })
 
         try:
