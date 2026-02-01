@@ -51,6 +51,157 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
+import random
+
+def _get_followup_count_airtable(opportunity: dict) -> int:
+    """
+    Uses the Airtable-hydrated column followUP_count (top-level on opportunity dict).
+    Falls back safely to 0.
+    """
+    try:
+        return int(opportunity.get("followUP_count") or 0)
+    except Exception:
+        return 0
+
+
+def _nurture_stage_for_followups(n: int) -> str:
+    """
+    n = followUP_count (how many follow-ups have already been sent)
+    We generate the next nudge as "n+1", but stage can use n or n+1—either is fine.
+    """
+    # 0-based count -> stages for a 30-touch nurture
+    if n <= 1:
+        return "early_checkin"          # nudges 1–2
+    if n <= 3:
+        return "value_clarify"          # 3–4
+    if n <= 6:
+        return "options_offer"          # 5–7
+    if n <= 10:
+        return "light_urgency"          # 8–11
+    if n <= 15:
+        return "breakup_or_close_loop"  # 12–16
+    if n <= 21:
+        return "long_nurture"           # 17–22
+    return "final_laps"                 # 23–30
+
+
+def build_general_followup_prompt(
+    *,
+    opportunity: dict,
+    rooftop_name: str,
+    messages: list[dict],
+    address_line: str,
+) -> str:
+    """
+    Returns a GPT prompt that varies by Airtable followUP_count.
+    Assumes the model returns ONLY JSON: {"subject": "...", "body": "..."}.
+    """
+    n = _get_followup_count_airtable(opportunity)
+    nudge_num = n + 1
+    stage = _nurture_stage_for_followups(n)
+
+    # Rotate angles so even within a stage the copy doesn't collapse into one pattern.
+    angles = {
+        "early_checkin": [
+            "simple check-in + visit invite",
+            "confirm availability + low-friction next step",
+            "ask what they’re trying to accomplish (features/budget/trade)",
+        ],
+        "value_clarify": [
+            "ask 1 helpful question to narrow options",
+            "offer to send a couple similar options if vehicle is gone",
+            "offer quick numbers path (OTD/payment) WITHOUT quoting numbers",
+        ],
+        "options_offer": [
+            "offer 2-3 time windows (today/tomorrow/weekend)",
+            "offer remote options (text/call) + confirm best contact method",
+            "offer trade appraisal / pre-approval path",
+        ],
+        "light_urgency": [
+            "inventory movement framing (gentle)",
+            "offer to hold a time for a quick walkaround",
+            "ask if they want you to keep an eye out for the right one",
+        ],
+        "breakup_or_close_loop": [
+            "polite close-the-loop (‘should I close this out?’)",
+            "permission-based nurture (‘want occasional updates?’)",
+            "confirm if they bought elsewhere (no guilt)",
+        ],
+        "long_nurture": [
+            "seasonal/ownership-value framing (warranty/service/peace of mind)",
+            "light education (differences in trims/features) + offer help",
+            "re-open conversation with a single easy question",
+        ],
+        "final_laps": [
+            "last-touch with clear options: schedule / keep updates / close out",
+            "very short note, super low pressure",
+            "one-line ‘still looking or all set?’",
+        ],
+    }
+
+    angle_list = angles.get(stage) or ["simple check-in + visit invite"]
+    angle = angle_list[n % len(angle_list)]
+
+    # Hard rules to prevent the repetitive “I wanted to follow up…” loop
+    rules = f"""
+Hard rules:
+- Do NOT start with “I wanted to follow up…” or “Just checking in…” (too repetitive).
+- Keep it HUMAN and specific. 2–5 short sentences max.
+- Ask ONLY one question.
+- If the guest already proposed a time in the thread, confirm it (don’t re-ask).
+- Do not mention store hours unless asked.
+- Do not include a signature/footer.
+- Use the dealership name naturally: {rooftop_name}.
+- Include the address once if you’re inviting them in: {address_line}.
+Return ONLY valid JSON with keys: subject, body.
+""".strip()
+
+    # Stage guidance: changes tone and goal.
+    stage_guidance = {
+        "early_checkin": f"""
+Goal (Nudge {nudge_num}/30): Make it easy to reply.
+Angle: {angle}
+""".strip(),
+        "value_clarify": f"""
+Goal (Nudge {nudge_num}/30): Add value + move toward a next step.
+Angle: {angle}
+""".strip(),
+        "options_offer": f"""
+Goal (Nudge {nudge_num}/30): Offer concrete options (time windows / method) without sounding pushy.
+Angle: {angle}
+""".strip(),
+        "light_urgency": f"""
+Goal (Nudge {nudgeudge_num}/30): Gentle urgency without pressure. Keep it calm.
+Angle: {angle}
+""".strip(),
+        "breakup_or_close_loop": f"""
+Goal (Nudge {nudge_num}/30): Close the loop politely OR get permission to keep helping.
+Angle: {angle}
+""".strip(),
+        "long_nurture": f"""
+Goal (Nudge {nudge_num}/30): Stay helpful + reopen the thread with one easy question.
+Angle: {angle}
+""".strip(),
+        "final_laps": f"""
+Goal (Nudge {nudge_num}/30): Final touches. Extremely short, clear options.
+Angle: {angle}
+""".strip(),
+    }.get(stage, "")
+
+    prompt = f"""
+You are Patti, a helpful internet leads assistant for {rooftop_name}.
+
+{rules}
+
+{stage_guidance}
+
+Thread (Python list of dicts):
+{messages}
+""".strip()
+
+    return prompt
+
+
 def _norm_email(s: str | None) -> str | None:
     s = (s or "").strip().lower()
     return s if ("@" in s and "." in s) else None
@@ -2566,41 +2717,14 @@ def processHit(hit):
             # Use full thread history but be explicit that this is NOT a first email.
             messages = opportunity.get("messages") or []
         
-            prompt = f"""
-        You are generating a FOLLOW-UP email, not a first welcome message.
-        
-        Context:
-        - The guest originally inquired about: {vehicle_str}
-        - Patti has already been in touch with the guest.
-
-        Use the full message history below to see what’s already been discussed,
-        then write the next short follow-up from Patti that makes sense given
-        where the conversation left off.
-        
-        messages between Patti and the customer (python list of dicts):
-        {messages}
-        
-        Follow-up requirements:
-        - Do NOT repeat the full opener or dealership Why Buys from the first email.
-        - Assume they already read your original message.
-        - Keep it short: 2–4 sentences max.
-        - Sound like you’re checking in on a thread you already started
-          (e.g., “I wanted to follow up on my last note about the Sportage.”).
-        - Make one simple, low-pressure ask (e.g., “Are you still considering the Sportage?” or
-          “Would you like me to check availability or options for you?”).
-        - Use a subject line that clearly looks like a follow-up on their vehicle inquiry,
-          not a brand-new outreach.
-        
-        Return ONLY valid JSON with keys: subject, body.
-            """.strip()
-        
-            response = run_gpt(
-                prompt,
-                customer_name,
-                rooftop_name,
-                prevMessages=True,
+            address_line = "28 B Auto Center Dr, Tustin, CA 92782"  # or your rooftop address resolver
+            prompt = build_general_followup_prompt(
+                opportunity=opportunity,
+                rooftop_name=rooftop_name,
+                messages=messages,
+                address_line=address_line,
             )
-
+            response = run_gpt(prompt, customerInfo.get("firstName"), rooftop_name, prevMessages=True)
 
             subject   = response["subject"]
             body_html = response["body"]
