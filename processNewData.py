@@ -1935,7 +1935,7 @@ def processHit(hit):
                 token=tok,
                 trigger="cron",
                 subscription_id=subscription_id,
-                SAFE_MODE=os.getenv("SAFE_MODE", "1") in ("1","true","True"),
+                SAFE_MODE=os.getenv("SAFE_MODE", "0") in ("1","true","True"),
                 rooftop_sender=rooftop_sender,
             )
         
@@ -2696,7 +2696,7 @@ def processHit(hit):
                 customer_name=customer_name,
                 currDate=currDate,
                 currDate_iso=currDate_iso,
-                SAFE_MODE=os.getenv("SAFE_MODE", "1") in ("1","true","True"),
+                SAFE_MODE=os.getenv("SAFE_MODE", "0") in ("1","true","True"),
                 test_recipient=test_recipient,
             )
 
