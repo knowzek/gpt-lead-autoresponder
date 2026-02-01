@@ -440,7 +440,8 @@ def get_walkaround_video_url(vehicle_model: str) -> str | None:
 def _extract_vehicle_info(opportunity: dict) -> dict:
     """
     Extract vehicle year, make, model from opportunity's soughtVehicles.
-    Returns dict with keys: year, make, model, or empty strings if not found.
+    Returns dict with keys: year, make, model.
+    Returns None if model cannot be determined (caller should skip Day 3).
     """
     opp_id = opportunity.get("opportunityId") or opportunity.get("id") or "unknown"
     
@@ -471,8 +472,28 @@ def _extract_vehicle_info(opportunity: dict) -> dict:
         or ""
     ).strip()
 
+    # Fallback 1: Try opportunity["vehicle"] if available
     if not model:
-        model = str(vehicleObj.get("bodyStyle") or make or "vehicle").strip() or "vehicle"
+        vehicle_str = opportunity.get("vehicle") or ""
+        if isinstance(vehicle_str, str):
+            model = vehicle_str.strip()
+        elif isinstance(vehicle_str, dict):
+            model = str(vehicle_str.get("model") or "").strip()
+    
+    # Fallback 2: Try extracting from notes using regex (common Kia models)
+    if not model:
+        notes = str(opportunity.get("notes") or "").lower()
+        kia_models = ["sportage", "telluride", "sorento", "soul", "forte", "k5", "niro", "stinger", "carnival", "ev6", "ev9", "seltos", "rio"]
+        for kia_model in kia_models:
+            if kia_model in notes:
+                model = kia_model.title()
+                log.info("DAY3 VEHICLE DEBUG: opp=%s extracted model=%r from notes", opp_id, model)
+                break
+    
+    # If still no model, return None to signal skip
+    if not model:
+        log.info("DAY3 VEHICLE DEBUG: opp=%s NO MODEL FOUND - skipping Day 3", opp_id)
+        return None
 
     log.info("DAY3 VEHICLE DEBUG: opp=%s extracted year=%r make=%r model=%r", opp_id, year, make, model)
 
@@ -539,66 +560,72 @@ def maybe_send_tk_day3_walkaround(
     test_recipient: str | None = None,
 ) -> bool:
     """
-    Send Day 3 walk-around video email and SMS for Tustin Kia leads.
+    Send Day 3 walk-around video email for Tustin Kia leads.
     
-    Returns True if sent (or OFFLINE_MODE), else False.
+    Returns True if sent, else False.
     
     Conditions:
     - Tustin Kia rooftop only
-    - Not already sent (TK Day 3 Walkaround Sent)
-    - Lead is in cadence mode (not convo)
-    - Vehicle of interest has a matching walk-around video
+    - mode == "cadence"
+    - TK Day 3 Walkaround Sent != True
+    - last_template_day_sent == 2
+    - Vehicle has a matching walk-around video
     """
     
-    # DAY3 DEBUG: Log entry into function
-    log.info("DAY3 DEBUG: Entered Day 3 send function for opp=%s", opportunityId)
-    log.info("DAY3 DEBUG: SAFE_MODE=%s test_recipient=%s", SAFE_MODE, test_recipient)
+    log.info("DAY3 DEBUG: entering Day 3 check for opp=%s", opportunityId)
 
     # Rooftop gate
     if not is_tustin_kia_rooftop(rooftop_name):
+        log.info("DAY3 DEBUG: skipping opp=%s — not Tustin Kia", opportunityId)
         return False
 
-    # Already sent gate (primary)
+    # Already sent gate
     if bool(opportunity.get("TK Day 3 Walkaround Sent")):
+        log.info("DAY3 DEBUG: skipping opp=%s — already sent", opportunityId)
         return False
     
-    # Already sent gate (backup: check last_template_day_sent >= 3)
+    # Mode and cadence state gates
     patti_meta = opportunity.get("patti") or {}
-    last_sent = patti_meta.get("last_template_day_sent")
-    if last_sent is not None and int(last_sent) >= 3:
-        log.info("TK Day3: skipping opp=%s — last_template_day_sent=%s >= 3", opportunityId, last_sent)
-        return False
-
-    # Mode gate: skip if lead is in convo mode
     mode = (patti_meta.get("mode") or "").strip().lower()
-    if mode == "convo":
-        log.info("DAY3 DEBUG: skipping opp=%s — mode is 'convo'", opportunityId)
+    last_template_day_sent = patti_meta.get("last_template_day_sent")
+    
+    log.info("DAY3 DEBUG: opp=%s mode=%r last_template_day_sent=%r", opportunityId, mode, last_template_day_sent)
+    
+    # Must be in cadence mode
+    if mode != "cadence":
+        log.info("DAY3 DEBUG: skipping opp=%s — mode is not 'cadence'", opportunityId)
+        return False
+    
+    # Must have sent Day 2 (last_template_day_sent == 2)
+    if last_template_day_sent != 2:
+        log.info("DAY3 DEBUG: skipping opp=%s — last_template_day_sent=%r (need 2)", opportunityId, last_template_day_sent)
         return False
 
     # Extract vehicle info
     vehicle_info = _extract_vehicle_info(opportunity)
+    if not vehicle_info:
+        log.info("DAY3 DEBUG: skipping opp=%s — no vehicle model found", opportunityId)
+        return False
+    
     vehicle_year = vehicle_info["year"]
     vehicle_make = vehicle_info["make"]
     vehicle_model = vehicle_info["model"]
 
     # Check if we have a walk-around video for this vehicle
     video_url = get_walkaround_video_url(vehicle_model)
+    log.info("DAY3 DEBUG: video_url=%s for model=%r opp=%s", video_url, vehicle_model, opportunityId)
+    
     if not video_url:
-        log.info(
-            "DAY3 DEBUG: no video for model=%r opp=%s",
-            vehicle_model, opportunityId
-        )
+        log.info("DAY3 DEBUG: no video for model=%r opp=%s", vehicle_model, opportunityId)
         return False
 
     # Resolve customer email
-    to_addr = resolve_customer_email(
-        opportunity,
-        SAFE_MODE=SAFE_MODE,
-        test_recipient=test_recipient
-    )
+    to_addr = resolve_customer_email(opportunity)
     if not to_addr:
-        log.warning("TK Day3 Walkaround: no deliverable email for opp=%s", opportunityId)
+        log.warning("DAY3 DEBUG: no deliverable email for opp=%s", opportunityId)
         return False
+    
+    log.info("DAY3 DEBUG: sending Day 3 email to %s for opp=%s", to_addr, opportunityId)
 
     # Check doNotEmail flag
     cust = opportunity.get("customer") or {}
@@ -609,7 +636,7 @@ def maybe_send_tk_day3_walkaround(
                 log.info("DAY3 DEBUG: doNotEmail flagged for %s opp=%s", to_addr, opportunityId)
                 return False
 
-    # Build email
+    # Build email from Day 3 template
     subject = TK_DAY3_WALKAROUND_SUBJECT.format(
         vehicle_make=vehicle_make or "Kia",
         vehicle_model=vehicle_model or "vehicle"
@@ -622,7 +649,9 @@ def maybe_send_tk_day3_walkaround(
         youtube_walkaround_url=video_url,
     )
 
-    # Send email
+    # Send the email using Day 3 template ONLY
+    log.info("DAY3 DEBUG: sending email for opp=%s subject=%r", opportunityId, subject)
+    
     sent_ok = False
     if OFFLINE_MODE:
         sent_ok = True
@@ -641,60 +670,32 @@ def maybe_send_tk_day3_walkaround(
                 cc_addrs=[],
             )
             sent_ok = True
-        except Exception as e:
-            log.warning("TK Day3 Walkaround email send failed opp=%s: %s", opportunityId, e)
-            sent_ok = False
+        except Exception as exc:
+            log.error("DAY3 DEBUG: email send failed for opp=%s: %s", opportunityId, exc)
+            return False
 
-    # Send SMS with video link (shorter message to stay within 160 chars)
-    sms_sent = False
-    if sent_ok:
+    log.info("DAY3 DEBUG: updating Airtable fields for opp=%s", opportunityId)
+    
+    # Update Airtable: mark Day 3 sent and advance cadence
+    now_utc = _dt.now(_tz.utc)
+    next_due = (now_utc + _td(days=2)).replace(microsecond=0).isoformat()
+    
+    opportunity["follow_up_at"] = next_due
+    
+    if not OFFLINE_MODE:
         try:
-            customer_phone = (opportunity.get("customer_phone") or "").strip()
-            phone_e164 = _norm_phone_e164_us_local(customer_phone)
-            
-            if phone_e164:
-                from goto_sms import send_sms
-                from_number = _norm_phone_e164_us_local(os.getenv("PATTI_SMS_NUMBER", ""))
-                
-                if not from_number:
-                    log.info("DAY3 DEBUG: PATTI_SMS_NUMBER not set, skipping SMS")
-                else:
-                    # Keep SMS short to stay within 160 character limit
-                    vehicle_short = f"{vehicle_make} {vehicle_model}".strip() or "vehicle"
-                    sms_body = (
-                        f"Hi {customer_name or 'there'}, watch our {vehicle_short} walk-around: {video_url} "
-                        f"- Tustin Kia. STOP to opt out"
-                    ).strip()
-                    
-                    send_sms(from_number=from_number, to_number=phone_e164, body=sms_body)
-                    sms_sent = True
-                    log.info("DAY3 DEBUG: SMS sent to %s opp=%s", phone_e164, opportunityId)
+            airtable_save(opportunity, extra_fields={
+                "TK Day 3 Walkaround Sent": True,
+                "TK Day 3 Walkaround Sent At": currDate_iso,
+                "last_template_day_sent": 3,
+                "follow_up_at": next_due,
+            })
         except Exception as e:
-            log.warning("TK Day3 Walkaround SMS failed opp=%s: %s", opportunityId, e)
+            log.warning("DAY3 DEBUG: Airtable save failed opp=%s (continuing): %s", opportunityId, e)
 
-    if sent_ok:
-        # Record in thread history
-        opportunity.setdefault("messages", []).append({
-            "msgFrom": "patti",
-            "subject": subject,
-            "body": body_html,
-            "date": currDate_iso,
-            "trigger": "tk_day3_walkaround",
-            "sms_sent": sms_sent,
-        })
-        opportunity.setdefault("checkedDict", {})["last_msg_by"] = "patti"
-
-        extra_fields = {
-            "TK Day 3 Walkaround Sent": True,
-            "TK Day 3 Walkaround Sent At": currDate_iso,
-            "last_template_day_sent": 3,
-        }
-        airtable_save(opportunity, extra_fields=extra_fields)
-        
-        # DAY3 DEBUG: Log Airtable updated fields
-        log.info("DAY3 DEBUG: Airtable updated fields = %s", extra_fields)
-
-    return sent_ok
+    log.info("DAY3 DEBUG: Day 3 complete for opp=%s to=%s next_due=%s", opportunityId, to_addr, next_due)
+    log.info("✅ Sent TK Day 3 Walkaround for opp=%s to=%s", opportunityId, to_addr)
+    return True
 
 
 def _next_kbb_followup_iso(*, lead_age_days: int) -> str:
@@ -2528,19 +2529,15 @@ def processHit(hit):
                 wJson(opportunity, f"jsons/process/{opportunityId}.json")
                 return
 
-        # --- Step 4A.2: Tustin Kia Day-3 Walk-around Video email (when followUP_count == 1) ---
-        # Day-3 = second follow-up run, send walk-around video if vehicle has matching video
-        # ✅ Accept either TK GM Day 2 Sent checkbox OR last_template_day_sent >= 2
-        day2_was_sent = (
-            bool(opportunity.get("TK GM Day 2 Sent"))
-            or (last_template_day_sent is not None and int(last_template_day_sent) >= 2)
-        )
-        day3_not_sent = (
-            not bool(opportunity.get("TK Day 3 Walkaround Sent"))
-            and (last_template_day_sent is None or int(last_template_day_sent) < 3)
+        # --- Step 4A.2: Tustin Kia Day-3 Walk-around Video email ---
+        # Day 3 triggers when: mode=cadence, last_template_day_sent=2, not already sent
+        day3_ready = (
+            mode == "cadence"
+            and last_template_day_sent == 2
+            and not bool(opportunity.get("TK Day 3 Walkaround Sent"))
         )
         
-        if due_dt <= now_utc and day2_was_sent and day3_not_sent:
+        if day3_ready:
             log.info("DAY3 TRIGGER: Attempting Day 3 walkaround for opp=%s", opportunityId)
 
             sent_day3 = maybe_send_tk_day3_walkaround(
@@ -2558,30 +2555,7 @@ def processHit(hit):
             )
 
             if sent_day3:
-                # Advance cadence like a normal follow-up
-                next_due = (now_utc + _td(days=2)).replace(microsecond=0).isoformat()
-                opportunity["follow_up_at"] = next_due
-                opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
-
-                if not OFFLINE_MODE:
-                    try:
-                        extra = {
-                            "follow_up_at": next_due,
-                            "TK Day 3 Walkaround Sent": True,
-                            "TK Day 3 Walkaround Sent At": currDate_iso,
-                            "last_template_day_sent": 3,
-                        }
-                        first_sent = opportunity.get("first_email_sent_at")
-                        if first_sent:
-                            extra["first_email_sent_at"] = first_sent
-                        airtable_save(opportunity, extra_fields=extra)
-                    except Exception as e:
-                        log.warning(
-                            "Airtable save failed opp=%s (continuing): %s",
-                            opportunity.get("opportunityId") or opportunity.get("id"),
-                            e
-                        )
-
+                # Day 3 function already saved to Airtable and set next_due
                 wJson(opportunity, f"jsons/process/{opportunityId}.json")
                 return
         
