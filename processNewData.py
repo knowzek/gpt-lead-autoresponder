@@ -354,10 +354,7 @@ def maybe_send_tk_gm_day2_email(
             "last_template_day_sent": 2,
         })
 
-        try:
-            _bump_ai_send_metrics_in_airtable(opportunityId)
-        except Exception as e:
-            log.warning("AI metrics update failed (non-blocking) opp=%s: %s", opportunityId, e)
+        # Note: metrics are already bumped inside send_patti_email()
 
     return sent_ok
 
@@ -491,6 +488,7 @@ def maybe_send_tk_day3_walkaround(
     currDate_iso: str,
     SAFE_MODE: bool = False,
     test_recipient: str | None = None,
+    followUP_count: int = 0,
 ) -> bool:
     """
     Send Day 3 walk-around video email and SMS for Tustin Kia leads.
@@ -628,10 +626,14 @@ def maybe_send_tk_day3_walkaround(
         })
         opportunity.setdefault("checkedDict", {})["last_msg_by"] = "patti"
 
+        # Compute new followUP_count
+        new_followup_count = (followUP_count or 0) + 1
+
         airtable_save(opportunity, extra_fields={
             "TK Day 3 Walkaround Sent": True,
             "TK Day 3 Walkaround Sent At": currDate_iso,
             "last_template_day_sent": 3,
+            "followUP_count": new_followup_count,
         })
 
     return sent_ok
@@ -2454,9 +2456,13 @@ def processHit(hit):
                 wJson(opportunity, f"jsons/process/{opportunityId}.json")
                 return
 
-        # --- Step 4A.2: Tustin Kia Day-3 Walk-around Video email (when followUP_count == 1) ---
-        # Day-3 = second follow-up run, send walk-around video if vehicle has matching video
-        if due_dt <= now_utc and followUP_count == 1:
+        # --- Step 4A.2: Tustin Kia Day-3 Walk-around Video email ---
+        # Day-3 triggers when: mode == "cadence", last_template_day_sent == 2, followUP_count == 2
+        last_template_day_sent = opportunity.get("last_template_day_sent")
+        if (due_dt <= now_utc 
+            and mode == "cadence" 
+            and last_template_day_sent == 2 
+            and followUP_count == 2):
 
             sent_day3 = maybe_send_tk_day3_walkaround(
                 opportunity=opportunity,
@@ -2470,13 +2476,15 @@ def processHit(hit):
                 currDate_iso=currDate_iso,
                 SAFE_MODE=os.getenv("SAFE_MODE", "1") in ("1","true","True"),
                 test_recipient=test_recipient,
+                followUP_count=followUP_count,
             )
 
             if sent_day3:
                 # Advance cadence like a normal follow-up
                 next_due = (now_utc + _td(days=2)).replace(microsecond=0).isoformat()
                 opportunity["follow_up_at"] = next_due
-                opportunity["followUP_count"] = int(opportunity.get("followUP_count") or 0) + 1
+                # followUP_count is now updated inside maybe_send_tk_day3_walkaround via airtable_save
+                opportunity["followUP_count"] = followUP_count + 1
 
                 if not OFFLINE_MODE:
                     try:
