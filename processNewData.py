@@ -2485,6 +2485,12 @@ def processHit(hit):
         if last_template_day_sent is None:
             last_template_day_sent = (opportunity.get("patti") or {}).get("last_template_day_sent")
         
+        # ✅ Default empty mode to "cadence" (only skip if explicitly "convo" or "scheduled")
+        patti_meta = opportunity.get("patti") or {}
+        mode = (patti_meta.get("mode") or "").strip().lower()
+        if not mode or mode == "":
+            mode = "cadence"  # Default to cadence for regular follow-ups
+        
         # DAY3 DEBUG: Log values before condition check
         log.info("DAY3 DEBUG: mode=%s last_template_day_sent=%s followUP_count=%s due_dt=%s now=%s",
                  mode, last_template_day_sent, followUP_count, due_dt, now_utc)
