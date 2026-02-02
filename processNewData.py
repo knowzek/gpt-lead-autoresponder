@@ -2942,7 +2942,7 @@ def processHit(hit):
             )
             
             next_due = _next_salesai_due_iso(created_iso=created_iso, last_idx=idx + 1)
-            template_day = idx + 1
+            template_day = SALES_AI_EMAIL_DAYS[idx + 1]
 
 
             # ✅ SEND the follow-up (currently missing)
@@ -3020,11 +3020,13 @@ def processHit(hit):
                     next_due = min_next.isoformat()
                 
                 opportunity["follow_up_at"] = next_due
+                opportunity["last_template_day_sent"] = int(template_day)
                 
                 if not OFFLINE_MODE:
                     try:
                         airtable_save(opportunity, extra_fields={
                             "followUP_count": new_count,
+                            "last_template_day_sent": int(template_day),
                             "follow_up_at": next_due,
                         })
                     except Exception as e:
