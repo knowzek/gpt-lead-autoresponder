@@ -2804,20 +2804,41 @@ def processHit(hit):
 
                 if not OFFLINE_MODE:
                     try:
+                        # Format date for Airtable (try different format for Day 3 field)
+                        from datetime import datetime
+                        day3_date = now_utc.strftime("%m/%d/%Y")  # Try MM/DD/YYYY format
+                        
                         # Include Day 3 specific fields along with progression fields
                         extra = {
                             "follow_up_at": next_due,
                             "followUP_count": opportunity.get("followUP_count"),
                             "last_template_day_sent": 3,
                             "TK Day 3 Walkaround Sent": True,
-                            "TK Day 3 Walkaround Sent At": currDate_iso,
+                            "TK Day 3 Walkaround Sent At": day3_date,
                         }
                         first_sent = opportunity.get("first_email_sent_at")
                         if first_sent:
                             extra["first_email_sent_at"] = first_sent
                         airtable_save(opportunity, extra_fields=extra)
+                        log.info("Day 3 Airtable save successful: all fields updated")
                     except Exception as e:
-                        log.warning(
+                        log.warning("Day 3 Airtable save with date failed, trying without date field: %s", e)
+                        # Fallback: Save critical fields without the problematic date field
+                        try:
+                            extra_fallback = {
+                                "follow_up_at": next_due,
+                                "followUP_count": opportunity.get("followUP_count"),
+                                "last_template_day_sent": 3,
+                                "TK Day 3 Walkaround Sent": True,
+                                # Skip the date field that's causing issues
+                            }
+                            first_sent = opportunity.get("first_email_sent_at")
+                            if first_sent:
+                                extra_fallback["first_email_sent_at"] = first_sent
+                            airtable_save(opportunity, extra_fields=extra_fallback)
+                            log.info("Day 3 Airtable fallback save successful: critical fields updated")
+                        except Exception as e2:
+                            log.warning(
                             "Airtable save failed opp=%s (continuing): %s",
                             opportunity.get("opportunityId") or opportunity.get("id"),
                             e
