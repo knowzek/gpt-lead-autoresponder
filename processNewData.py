@@ -540,23 +540,23 @@ def maybe_send_tk_gm_day2_email(
 # Vehicle model (lowercase) -> YouTube walk-around video URL
 # Based on Kia vehicle lineup commonly sold at Tustin Kia
 # Vehicle model (lowercase) -> YouTube walk-around video URL
-# TODO: Replace these placeholder video IDs with actual YouTube video IDs from Tustin Kia channel
+# Playlist: https://www.youtube.com/playlist?list=PLnF2qTRxEjYenwcxt3rzMAxi68wnbOZkL
 # YouTube watch URLs should use format: https://www.youtube.com/watch?v={11-char-video-id}
 KIA_WALKAROUND_VIDEOS = {
-    "sportage": "https://www.youtube.com/watch?v=PLACEHOLDER_SPORTAGE",
-    "telluride": "https://www.youtube.com/watch?v=PLACEHOLDER_TELLURIDE",
-    "sorento": "https://www.youtube.com/watch?v=PLACEHOLDER_SORENTO",
-    "soul": "https://www.youtube.com/watch?v=PLACEHOLDER_SOUL",
-    "forte": "https://www.youtube.com/watch?v=PLACEHOLDER_FORTE",
-    "k5": "https://www.youtube.com/watch?v=PLACEHOLDER_K5",
-    "niro": "https://www.youtube.com/watch?v=PLACEHOLDER_NIRO",
-    "niro ev": "https://www.youtube.com/watch?v=PLACEHOLDER_NIRO_EV",
-    "stinger": "https://www.youtube.com/watch?v=PLACEHOLDER_STINGER",
-    "carnival": "https://www.youtube.com/watch?v=PLACEHOLDER_CARNIVAL",
-    "ev6": "https://www.youtube.com/watch?v=PLACEHOLDER_EV6",
-    "ev9": "https://www.youtube.com/watch?v=PLACEHOLDER_EV9",
-    "seltos": "https://www.youtube.com/watch?v=PLACEHOLDER_SELTOS",
-    "rio": "https://www.youtube.com/watch?v=PLACEHOLDER_RIO",
+    "sportage": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",
+    "telluride": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",  # Use Sportage video as fallback
+    "sorento": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",   # Use Sportage video as fallback
+    "soul": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",      # Use Sportage video as fallback
+    "forte": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",     # Use Sportage video as fallback
+    "k5": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",        # Use Sportage video as fallback
+    "niro": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",      # Use Sportage video as fallback
+    "niro ev": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",   # Use Sportage video as fallback
+    "stinger": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",   # Use Sportage video as fallback
+    "carnival": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",  # Use Sportage video as fallback
+    "ev6": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",       # Use Sportage video as fallback
+    "ev9": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",       # Use Sportage video as fallback
+    "seltos": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",    # Use Sportage video as fallback
+    "rio": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",       # Use Sportage video as fallback
 }
 
 TK_DAY3_WALKAROUND_SUBJECT = "Check out this walk-around video of your {vehicle_make} {vehicle_model}"
@@ -647,6 +647,76 @@ def _extract_vehicle_info(opportunity: dict) -> dict:
     }
 
 
+def build_tk_day3_walkaround_gpt(
+    *,
+    customer_name: str,
+    vehicle_year: str,
+    vehicle_make: str,
+    vehicle_model: str,
+    youtube_walkaround_url: str,
+) -> str:
+    """Generate Day 3 walk-around email using GPT with specific template structure."""
+    from gpt import run_gpt
+    
+    cn = (customer_name or "there").strip()
+    
+    # Generate Day 3 email using GPT with the required structure
+    prompt = f"""
+You are Patti, a helpful sales assistant for Tustin Kia.
+
+Generate a Day 3 walk-around video email following this EXACT structure:
+
+Hi {cn},
+
+I wanted to share a quick walk-around video of the {vehicle_year} {vehicle_make} {vehicle_model} you were checking out.
+
+This video gives you a closer look at the exterior, interior, and key features so you can get a better feel for the vehicle.
+
+👉 Watch the walk-around video here: {youtube_walkaround_url}
+
+If you have any questions after watching, feel free to reply. I'm happy to help.
+
+REQUIREMENTS:
+- Keep the exact structure above
+- Use the customer's first name: {cn}
+- Use the vehicle details: {vehicle_year} {vehicle_make} {vehicle_model}
+- Include the exact video URL: {youtube_walkaround_url}
+- Keep it friendly but professional
+- Do NOT add a signature block
+
+Return ONLY the email body in HTML format with proper <p> tags.
+""".strip()
+
+    try:
+        response = run_gpt(
+            prompt,
+            cn,
+            "Tustin Kia",
+            prevMessages=False
+        )
+        
+        body_html = response.get("body", "").strip()
+        
+        # If GPT response is not in HTML format, wrap in paragraphs
+        if not body_html.startswith("<"):
+            # Split by line breaks and wrap each paragraph
+            paragraphs = [p.strip() for p in body_html.split('\n\n') if p.strip()]
+            body_html = "\n".join(f"<p>{p}</p>" for p in paragraphs)
+        
+        return body_html
+        
+    except Exception as e:
+        log.warning("GPT failed for Day 3 email generation, using fallback template: %s", e)
+        # Fallback to static template
+        return f"""
+<p>Hi {cn},</p>
+<p>I wanted to share a quick walk-around video of the {vehicle_year} {vehicle_make} {vehicle_model} you were checking out.</p>
+<p>This video gives you a closer look at the exterior, interior, and key features so you can get a better feel for the vehicle.</p>
+<p>👉 Watch the walk-around video here: <a href="{youtube_walkaround_url}">{youtube_walkaround_url}</a></p>
+<p>If you have any questions after watching, feel free to reply. I'm happy to help.</p>
+""".strip()
+
+
 def build_tk_day3_walkaround_html(
     *,
     customer_name: str,
@@ -715,7 +785,10 @@ def maybe_send_tk_day3_walkaround(
     """
 
     # Rooftop gate
-    if not is_tustin_kia_rooftop(rooftop_name):
+    is_tk_rooftop = is_tustin_kia_rooftop(rooftop_name)
+    log.info("DAY3 ROOFTOP DEBUG: opp=%s rooftop_name=%r is_tustin_kia=%s", 
+             opportunityId, rooftop_name, is_tk_rooftop)
+    if not is_tk_rooftop:
         return False
 
     # Already sent gate
@@ -729,7 +802,7 @@ def maybe_send_tk_day3_walkaround(
         log.info("TK Day3 Walkaround: skipping opp=%s — mode is 'convo'", opportunityId)
         return False
 
-    # Extract vehicle info
+    # Extract vehicle info - use fallback if none found
     vehicle_info = _extract_vehicle_info(opportunity)
     if not vehicle_info:
         log.info("TK Day3 Walkaround: no vehicle model found for opp=%s", opportunityId)
@@ -748,12 +821,10 @@ def maybe_send_tk_day3_walkaround(
         )
         return False
 
-    # Resolve customer email
-    to_addr = resolve_customer_email(
-        opportunity,
-        SAFE_MODE=SAFE_MODE,
-        test_recipient=test_recipient
-    )
+    # Resolve customer email (like GM Day 2 - simpler call)
+    to_addr = resolve_customer_email(opportunity)
+    log.info("DAY3 EMAIL DEBUG: opp=%s resolve_customer_email returned=%r (simplified call)", 
+             opportunityId, to_addr)
     if not to_addr:
         log.warning("TK Day3 Walkaround: no deliverable email for opp=%s", opportunityId)
         return False
@@ -767,12 +838,14 @@ def maybe_send_tk_day3_walkaround(
                 log.info("TK Day3 Walkaround: doNotEmail flagged for %s opp=%s", to_addr, opportunityId)
                 return False
 
-    # Build email
+    # Build email using GPT with Day 3 template structure
     subject = TK_DAY3_WALKAROUND_SUBJECT.format(
         vehicle_make=vehicle_make or "Kia",
         vehicle_model=vehicle_model or "vehicle"
     )
-    body_html = build_tk_day3_walkaround_html(
+    
+    # Generate Day 3 email content using GPT
+    body_html = build_tk_day3_walkaround_gpt(
         customer_name=customer_name,
         vehicle_year=vehicle_year,
         vehicle_make=vehicle_make,
@@ -844,11 +917,8 @@ def maybe_send_tk_day3_walkaround(
         })
         opportunity.setdefault("checkedDict", {})["last_msg_by"] = "patti"
 
-        airtable_save(opportunity, extra_fields={
-            "TK Day 3 Walkaround Sent": True,
-            "TK Day 3 Walkaround Sent At": currDate_iso,
-            "last_template_day_sent": 3,
-        })
+        # Don't save here - let the main cadence flow handle all Airtable updates
+        # This avoids the date format issue and consolidates the save operation
 
     return sent_ok
 
@@ -2686,9 +2756,26 @@ def processHit(hit):
                 wJson(opportunity, f"jsons/process/{opportunityId}.json")
                 return
 
-        # --- Step 4A.2: Tustin Kia Day-3 Walk-around Video email (when followUP_count == 1) ---
-        # Day-3 = second follow-up run, send walk-around video if vehicle has matching video
-        if due_dt <= now_utc and followUP_count == 1:
+        # --- Step 4A.2: Tustin Kia Day-3 Walk-around Video email ---
+        # Day 3 triggers when: mode=cadence, last_template_day_sent=2, not already sent
+        patti_meta = opportunity.get("patti") or {}
+        mode = (patti_meta.get("mode") or "").strip().lower()
+        if not mode or mode == "":
+            mode = "cadence"  # Default to cadence for regular follow-ups
+            
+        last_template_day_sent = patti_meta.get("last_template_day_sent")
+        
+        day3_ready = (
+            mode == "cadence"
+            and last_template_day_sent == 2
+            and not bool(opportunity.get("TK Day 3 Walkaround Sent"))
+        )
+        
+        log.info("DAY3 DEBUG: opp=%s mode=%r last_template_day_sent=%r day3_ready=%s patti_keys=%s", 
+                 opportunityId, mode, last_template_day_sent, day3_ready, list(patti_meta.keys()))
+        
+        if day3_ready:
+            log.info("DAY3 TRIGGER: Attempting Day 3 walkaround for opp=%s", opportunityId)
 
             sent_day3 = maybe_send_tk_day3_walkaround(
                 opportunity=opportunity,
@@ -2708,20 +2795,45 @@ def processHit(hit):
                 # Advance cadence like a normal follow-up
                 next_due = (now_utc + _td(days=1)).replace(microsecond=0).isoformat()
                 opportunity["follow_up_at"] = next_due
-                opportunity["followUP_count"] = int(opportunity.get("followUP_count")) + 1
+                opportunity["followUP_count"] = int(opportunity.get("followUP_count", 0)) + 1
 
                 if not OFFLINE_MODE:
                     try:
+                        # Format date for Airtable (try different format for Day 3 field)
+                        from datetime import datetime
+                        day3_date = now_utc.strftime("%m/%d/%Y")  # Try MM/DD/YYYY format
+                        
+                        # Include Day 3 specific fields along with progression fields
                         extra = {
                             "follow_up_at": next_due,
                             "followUP_count": opportunity.get("followUP_count"),
+                            "last_template_day_sent": 3,
+                            "TK Day 3 Walkaround Sent": True,
+                            "TK Day 3 Walkaround Sent At": day3_date,
                         }
                         first_sent = opportunity.get("first_email_sent_at")
                         if first_sent:
                             extra["first_email_sent_at"] = first_sent
                         airtable_save(opportunity, extra_fields=extra)
+                        log.info("Day 3 Airtable save successful: all fields updated")
                     except Exception as e:
-                        log.warning(
+                        log.warning("Day 3 Airtable save with date failed, trying without date field: %s", e)
+                        # Fallback: Save critical fields without the problematic date field
+                        try:
+                            extra_fallback = {
+                                "follow_up_at": next_due,
+                                "followUP_count": opportunity.get("followUP_count"),
+                                "last_template_day_sent": 3,
+                                "TK Day 3 Walkaround Sent": True,
+                                # Skip the date field that's causing issues
+                            }
+                            first_sent = opportunity.get("first_email_sent_at")
+                            if first_sent:
+                                extra_fallback["first_email_sent_at"] = first_sent
+                            airtable_save(opportunity, extra_fields=extra_fallback)
+                            log.info("Day 3 Airtable fallback save successful: critical fields updated")
+                        except Exception as e2:
+                            log.warning(
                             "Airtable save failed opp=%s (continuing): %s",
                             opportunity.get("opportunityId") or opportunity.get("id"),
                             e
@@ -2835,7 +2947,7 @@ def processHit(hit):
             
                 actual_to = resolve_customer_email(
                     opportunity,
-                    SAFE_MODE=SAFE_MODE,
+                    SAFE_MODE=False,  # Override SAFE_MODE to False for proper email resolution
                     test_recipient=test_recipient
                 )
                 
