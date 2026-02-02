@@ -2808,7 +2808,6 @@ def processHit(hit):
                     try:
                         # Format date for Airtable (try different format for Day 3 field)
                         from datetime import datetime
-                        day3_date = now_utc.strftime("%m/%d/%Y")  # Try MM/DD/YYYY format
                         
                         # Include Day 3 specific fields along with progression fields
                         extra = {
