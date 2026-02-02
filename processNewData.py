@@ -792,7 +792,7 @@ def maybe_send_tk_day3_walkaround(
         return False
 
     # Already sent gate
-    if bool(opportunity.get("TK Day 3 Walkaround Sent")):
+    if opportunity.get("tk_day3_walkaround_sent") is True:
         return False
 
     # Mode gate: skip if lead is in convo mode
@@ -805,13 +805,8 @@ def maybe_send_tk_day3_walkaround(
     # Extract vehicle info - use fallback if none found
     vehicle_info = _extract_vehicle_info(opportunity)
     if not vehicle_info:
-        log.info("TK Day3 Walkaround: no specific vehicle found for opp=%s, using generic approach", opportunityId)
-        # Use generic vehicle info for Day 3
-        vehicle_info = {
-            "year": "",
-            "make": "Kia", 
-            "model": "vehicle"
-        }
+        log.info("TK Day3 Walkaround: no vehicle model found for opp=%s", opportunityId)
+        return False
         
     vehicle_year = vehicle_info["year"]
     vehicle_make = vehicle_info["make"]

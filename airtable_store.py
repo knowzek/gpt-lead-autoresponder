@@ -963,6 +963,21 @@ def opp_from_record(rec: dict) -> dict:
             p["last_template_day_sent"] = max(int(p.get("last_template_day_sent") or 0), 2)
         except Exception:
             p["last_template_day_sent"] = 2
+
+    # ✅ TK Day 3 Walkaround Sent (authoritative Airtable checkbox)
+    tk_day3_sent = bool(fields.get("TK Day 3 Walkaround Sent"))
+    opp["tk_day3_walkaround_sent"] = tk_day3_sent
+
+    tk_day3_sent_at = fields.get("TK Day 3 Walkaround Sent At")
+    if tk_day3_sent_at:
+        opp["tk_day3_walkaround_sent_at"] = tk_day3_sent_at
+
+    # Optional derived state (keep cadence state consistent)
+    if tk_day3_sent and isinstance(p, dict):
+        try:
+            p["last_template_day_sent"] = max(int(p.get("last_template_day_sent") or 0), 3)
+        except Exception:
+            p["last_template_day_sent"] = 3
     
     return opp
 
