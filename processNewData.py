@@ -822,7 +822,11 @@ def maybe_send_tk_day3_walkaround(
         return False
 
     # Resolve customer email (like GM Day 2 - simpler call)
-    to_addr = resolve_customer_email(opportunity)
+    to_addr = resolve_customer_email(
+        opportunity,
+        SAFE_MODE=SAFE_MODE,
+        test_recipient=test_recipient
+    )
     log.info("DAY3 EMAIL DEBUG: opp=%s resolve_customer_email returned=%r (simplified call)", 
              opportunityId, to_addr)
     if not to_addr:
@@ -916,7 +920,7 @@ def maybe_send_tk_day3_walkaround(
             "sms_sent": sms_sent,
         })
         opportunity.setdefault("checkedDict", {})["last_msg_by"] = "patti"
-
+    
         # Don't save here - let the main cadence flow handle all Airtable updates
         # This avoids the date format issue and consolidates the save operation
 
@@ -2763,12 +2767,15 @@ def processHit(hit):
         if not mode or mode == "":
             mode = "cadence"  # Default to cadence for regular follow-ups
             
-        last_template_day_sent = patti_meta.get("last_template_day_sent")
+        last_template_day_sent = opportunity.get("last_template_day_sent")
+        if last_template_day_sent is None:
+            last_template_day_sent = patti_meta.get("last_template_day_sent")
+
         
         day3_ready = (
             mode == "cadence"
             and last_template_day_sent == 2
-            and not bool(opportunity.get("TK Day 3 Walkaround Sent"))
+            and opportunity.get("tk_day3_walkaround_sent") is not True
         )
         
         log.info("DAY3 DEBUG: opp=%s mode=%r last_template_day_sent=%r day3_ready=%s patti_keys=%s", 
@@ -2809,7 +2816,7 @@ def processHit(hit):
                             "followUP_count": opportunity.get("followUP_count"),
                             "last_template_day_sent": 3,
                             "TK Day 3 Walkaround Sent": True,
-                            "TK Day 3 Walkaround Sent At": day3_date,
+                            "TK Day 3 Walkaround Sent At": currDate_iso,
                         }
                         first_sent = opportunity.get("first_email_sent_at")
                         if first_sent:
