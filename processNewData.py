@@ -3670,7 +3670,7 @@ def send_thread_reply_now(
                     p["opted_out_at"] = inbound_ts or currDate_iso
                 
                 try:
-                    airtable_save(opportunity, extra_fields={"follow_up_at": None}))
+                    airtable_save(opportunity, extra_fields={"follow_up_at": None})
                 except Exception:
                     pass
                     
