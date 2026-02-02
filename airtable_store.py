@@ -900,6 +900,12 @@ def opp_from_record(rec: dict) -> dict:
         if p.get("last_template_day_sent") is None:
             p["last_template_day_sent"] = 0
 
+    # ✅ Cadence counters (authoritative from Airtable)
+    try:
+        opp["followUP_count"] = int(float(fields.get("followUP_count") or 0))
+    except Exception:
+        opp["followUP_count"] = 0
+    
 
     # ✅ Hydrate first-touch + routing flag (authoritative for cron routing)
     fes = (
