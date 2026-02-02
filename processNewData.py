@@ -661,7 +661,7 @@ def build_tk_day3_walkaround_gpt(
     cn = (customer_name or "there").strip()
     
     # Generate Day 3 email using GPT with the required structure
-    prompt = f"""
+    prompt = f'''
 You are Patti, a helpful sales assistant for Tustin Kia.
 
 Generate a Day 3 walk-around video email following this EXACT structure:
@@ -672,7 +672,7 @@ I wanted to share a quick walk-around video of the {vehicle_year} {vehicle_make}
 
 This video gives you a closer look at the exterior, interior, and key features so you can get a better feel for the vehicle.
 
-👉 Watch the walk-around video here: {youtube_walkaround_url}
+Watch the walk-around video here: {youtube_walkaround_url}
 
 If you have any questions after watching, feel free to reply. I'm happy to help.
 
@@ -685,7 +685,7 @@ REQUIREMENTS:
 - Do NOT add a signature block
 
 Return ONLY the email body in HTML format with proper <p> tags.
-""".strip()
+'''.strip()
 
     try:
         response = run_gpt(
@@ -709,12 +709,12 @@ Return ONLY the email body in HTML format with proper <p> tags.
         log.warning("GPT failed for Day 3 email generation, using fallback template: %s", e)
         # Fallback to static template
         return f"""
-<p>Hi {cn},</p>
-<p>I wanted to share a quick walk-around video of the {vehicle_year} {vehicle_make} {vehicle_model} you were checking out.</p>
-<p>This video gives you a closer look at the exterior, interior, and key features so you can get a better feel for the vehicle.</p>
-<p>👉 Watch the walk-around video here: <a href="{youtube_walkaround_url}">{youtube_walkaround_url}</a></p>
-<p>If you have any questions after watching, feel free to reply. I'm happy to help.</p>
-""".strip()
+            <p>Hi {cn},</p>
+            <p>I wanted to share a quick walk-around video of the {vehicle_year} {vehicle_make} {vehicle_model} you were checking out.</p>
+            <p>This video gives you a closer look at the exterior, interior, and key features so you can get a better feel for the vehicle.</p>
+            <p>👉 Watch the walk-around video here: <a href="{youtube_walkaround_url}">{youtube_walkaround_url}</a></p>
+            <p>If you have any questions after watching, feel free to reply. I'm happy to help.</p>
+            """.strip()
 
 
 def build_tk_day3_walkaround_html(
