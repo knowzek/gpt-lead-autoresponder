@@ -719,7 +719,7 @@ def maybe_send_tk_day3_walkaround(
         return False
 
     # Already sent gate
-    if bool(opportunity.get("TK Day 3 Walkaround Sent")):
+    if opportunity.get("tk_day3_walkaround_sent") is True:
         return False
 
     # Mode gate: skip if lead is in convo mode
