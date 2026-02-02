@@ -922,17 +922,8 @@ def maybe_send_tk_day3_walkaround(
         })
         opportunity.setdefault("checkedDict", {})["last_msg_by"] = "patti"
 
-        # Format date properly for Airtable
-        from datetime import datetime
-        import pytz
-        utc_now = datetime.now(pytz.UTC)
-        airtable_date = utc_now.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-        
-        airtable_save(opportunity, extra_fields={
-            "TK Day 3 Walkaround Sent": True,
-            "TK Day 3 Walkaround Sent At": airtable_date,
-            "last_template_day_sent": 3,
-        })
+        # Don't save here - let the main cadence flow handle all Airtable updates
+        # This avoids the date format issue and consolidates the save operation
 
     return sent_ok
 
@@ -2809,13 +2800,17 @@ def processHit(hit):
                 # Advance cadence like a normal follow-up
                 next_due = (now_utc + _td(days=1)).replace(microsecond=0).isoformat()
                 opportunity["follow_up_at"] = next_due
-                opportunity["followUP_count"] = int(opportunity.get("followUP_count")) + 1
+                opportunity["followUP_count"] = int(opportunity.get("followUP_count", 0)) + 1
 
                 if not OFFLINE_MODE:
                     try:
+                        # Include Day 3 specific fields along with progression fields
                         extra = {
                             "follow_up_at": next_due,
                             "followUP_count": opportunity.get("followUP_count"),
+                            "last_template_day_sent": 3,
+                            "TK Day 3 Walkaround Sent": True,
+                            "TK Day 3 Walkaround Sent At": currDate_iso,
                         }
                         first_sent = opportunity.get("first_email_sent_at")
                         if first_sent:
