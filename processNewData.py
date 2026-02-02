@@ -53,6 +53,35 @@ load_dotenv()
 
 import random
 
+def _normalize_cadence_brain_fields(opportunity: dict) -> None:
+    """
+    Canonical cadence fields:
+      - follow_up_at (ONLY)
+      - followUP_count
+      - last_template_day_sent (Airtable column mirrored at root only)
+      - patti.salesai_email_idx, patti.mode
+    """
+    # 1) follow_up_at is canonical. If legacy key exists, migrate once in-memory.
+    if not opportunity.get("follow_up_at") and opportunity.get("followUP_date"):
+        opportunity["follow_up_at"] = opportunity.get("followUP_date")
+
+    # 2) Stop carrying legacy key forward (prevents confusion)
+    # (leave it alone if other modules still write it, but don't read it anywhere else)
+    # opportunity.pop("followUP_date", None)   # optional if you want to be strict
+
+    # 3) followUP_count always numeric
+    try:
+        opportunity["followUP_count"] = int(float(opportunity.get("followUP_count") or 0))
+    except Exception:
+        opportunity["followUP_count"] = 0
+
+    # 4) last_template_day_sent should live at root (Airtable column)
+    # If it only exists in patti snapshot, mirror it to root once
+    p = opportunity.get("patti") if isinstance(opportunity.get("patti"), dict) else {}
+    if opportunity.get("last_template_day_sent") is None and p.get("last_template_day_sent") is not None:
+        opportunity["last_template_day_sent"] = p.get("last_template_day_sent")
+
+
 def _get_followup_count_airtable(opportunity: dict) -> int:
     """
     Uses the Airtable-hydrated column followUP_count (top-level on opportunity dict).
@@ -1258,7 +1287,7 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
                 opportunity["alreadyProcessedActivities"] = apa
 
                 if not OFFLINE_MODE:
-                    opportunity["followUP_date"] = None
+                    opportunity["follow_up_at"] = None
                     airtable_save(opportunity, extra_fields={"follow_up_at": None})
 
                 wJson(opportunity, f"jsons/process/{opportunity['opportunityId']}.json")
@@ -1874,9 +1903,9 @@ def processHit(hit):
             
             if not OFFLINE_MODE:
                 # also clear follow-up so it won't keep showing as due
-                opportunity["followUP_date"] = None
+                opportunity["follow_up_at"] = None
                 try:
-                    airtable_save(opportunity)
+                    airtable_save(opportunity, extra_fields={"follow_up_at": None})
                 except Exception as e:
                     log.warning(
                         "Airtable save failed opp=%s (continuing): %s",
@@ -2410,7 +2439,7 @@ def processHit(hit):
                 opportunity["checkedDict"] = checkedDict
             
                 opportunity["isActive"] = False
-                opportunity["followUP_date"] = None    
+                opportunity["follow_up_at"] = None
             
                 patti_meta = opportunity.get("patti") or {}
                 patti_meta["email_blocked_do_not_email"] = True
@@ -2437,7 +2466,7 @@ def processHit(hit):
             
             if customerFirstMsgDict.get('salesAlreadyContact', False):
                 opportunity['isActive'] = False
-                opportunity["followUP_date"] = None   
+                opportunity["follow_up_at"] = None
                 opportunity['checkedDict']['is_sales_contacted'] = True
                 if not OFFLINE_MODE:
                     airtable_save(opportunity, extra_fields={"follow_up_at": None})
@@ -2674,6 +2703,7 @@ def processHit(hit):
             return
         
         # ✅ Airtable cadence timing (follow_up_at is the brain)
+        _normalize_cadence_brain_fields(opportunity)
         due_iso = (opportunity.get("follow_up_at") or "").strip()
         
         if not due_iso:
@@ -2880,7 +2910,7 @@ def processHit(hit):
 
         if due_dt <= now_utc and idx >= (len(SALES_AI_EMAIL_DAYS) - 1):
             opportunity['isActive'] = False
-            opportunity["followUP_date"] = None   
+            opportunity["follow_up_at"] = None  
             if not OFFLINE_MODE:
                 try:
                     airtable_save(opportunity, extra_fields={"follow_up_at": None})
@@ -3641,7 +3671,7 @@ def send_thread_reply_now(
                     log.warning("mark_unsubscribed failed opp=%s: %s", opportunityId, e)
             
                 # Clear follow-up so it doesn't keep showing as due
-                opportunity["followUP_date"] = None
+                opportunity["follow_up_at"] = None
                 opportunity["isActive"] = False
                 p = opportunity.setdefault("patti", {})
                 if isinstance(p, dict):
@@ -3650,7 +3680,7 @@ def send_thread_reply_now(
                     p["opted_out_at"] = inbound_ts or currDate_iso
                 
                 try:
-                    save_opp(opportunity)
+                    airtable_save(opportunity, extra_fields={"follow_up_at": None}))
                 except Exception:
                     pass
                     
