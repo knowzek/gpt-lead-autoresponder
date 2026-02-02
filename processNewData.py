@@ -38,7 +38,7 @@ from fortellis import (
     set_opportunity_substatus,
 )
 
-from patti_common import _SCHED_ANY_RE, enforce_standard_schedule_sentence, EMAIL_RE
+from patti_common import _SCHED_ANY_RE, enforce_standard_schedule_sentence, EMAIL_RE, get_next_template_day
 from patti_common import fmt_local_human, normalize_patti_body, append_soft_schedule_sentence, rewrite_sched_cta_for_booked 
 from patti_triage import classify_inbound_email, handoff_to_human, should_triage
 from airtable_store import find_by_customer_email
@@ -2942,7 +2942,17 @@ def processHit(hit):
             )
             
             next_due = _next_salesai_due_iso(created_iso=created_iso, last_idx=idx + 1)
-            template_day = SALES_AI_EMAIL_DAYS[idx + 1]
+            last_sent = opportunity.get("last_template_day_sent")
+
+            template_day = get_next_template_day(
+                last_template_day_sent=last_sent,
+                cadence_days=SALES_AI_EMAIL_DAYS,
+            )
+            
+            if template_day is None:
+                log.info("No remaining cadence days; stopping nudges opp=%s", opportunityId)
+                return False
+
 
 
             # ✅ SEND the follow-up (currently missing)
@@ -3020,13 +3030,13 @@ def processHit(hit):
                     next_due = min_next.isoformat()
                 
                 opportunity["follow_up_at"] = next_due
-                opportunity["last_template_day_sent"] = int(template_day)
+                opportunity["last_template_day_sent"] = template_day
                 
                 if not OFFLINE_MODE:
                     try:
                         airtable_save(opportunity, extra_fields={
                             "followUP_count": new_count,
-                            "last_template_day_sent": int(template_day),
+                            "last_template_day_sent": template_day,
                             "follow_up_at": next_due,
                         })
                     except Exception as e:
