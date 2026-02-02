@@ -2764,28 +2764,18 @@ def processHit(hit):
             )
         
             if sent_gm:
-                # Advance cadence like a normal follow-up, so we don't also send GPT follow-up today
                 next_due = (now_utc + _td(days=1)).replace(microsecond=0).isoformat()
+                new_count = followUP_count + 1
+            
                 opportunity["follow_up_at"] = next_due
-                opportunity["followUP_count"] = int(opportunity.get("followUP_count")) + 1
-        
+                opportunity["followUP_count"] = new_count
+            
                 if not OFFLINE_MODE:
-                    try:
-                        extra = {
-                            "follow_up_at": next_due,
-                            "followUP_count": opportunity.get("followUP_count"),
-                        }
-
-                        first_sent = opportunity.get("first_email_sent_at")
-                        if first_sent:
-                            extra["first_email_sent_at"] = first_sent
-                        airtable_save(opportunity, extra_fields=extra)
-                    except Exception as e:
-                        log.warning(
-                            "Airtable save failed opp=%s (continuing): %s",
-                            opportunity.get("opportunityId") or opportunity.get("id"),
-                            e
-                        )
+                    airtable_save(opportunity, extra_fields={
+                        "follow_up_at": next_due,
+                        "followUP_count": new_count,
+                        "last_template_day_sent": 2,  # (optional but consistent with GM day2)
+                    })
 
                 wJson(opportunity, f"jsons/process/{opportunityId}.json")
                 return
@@ -2797,10 +2787,7 @@ def processHit(hit):
         if not mode or mode == "":
             mode = "cadence"  # Default to cadence for regular follow-ups
             
-        last_template_day_sent = opportunity.get("last_template_day_sent")
-        if last_template_day_sent is None:
-            last_template_day_sent = patti_meta.get("last_template_day_sent")
-
+        last_template_day_sent = int(opportunity.get("last_template_day_sent") or 0)
         
         day3_ready = (
             mode == "cadence"
@@ -2832,51 +2819,54 @@ def processHit(hit):
                 # Advance cadence like a normal follow-up
                 next_due = (now_utc + _td(days=1)).replace(microsecond=0).isoformat()
                 opportunity["follow_up_at"] = next_due
-                opportunity["followUP_count"] = int(opportunity.get("followUP_count", 0)) + 1
-
+            
+                # ✅ safe numeric increment (no int(None) crashes)
+                try:
+                    cur = int(float(opportunity.get("followUP_count") or 0))
+                except Exception:
+                    cur = 0
+                opportunity["followUP_count"] = cur + 1
+            
+                # ✅ keep cadence state consistent (root column is authoritative)
+                opportunity["last_template_day_sent"] = 3
+            
                 if not OFFLINE_MODE:
+                    extra = {
+                        "follow_up_at": next_due,
+                        "followUP_count": opportunity["followUP_count"],
+                        "last_template_day_sent": 3,
+                        "TK Day 3 Walkaround Sent": True,
+                        "TK Day 3 Walkaround Sent At": currDate_iso,
+                        # (optional but safe) keep mode explicit if your save_opp brain rules depend on it
+                        "mode": "cadence",
+                    }
+            
+                    # keep first_email_sent_at stable if it exists
+                    first_sent = opportunity.get("first_email_sent_at")
+                    if first_sent:
+                        extra["first_email_sent_at"] = first_sent
+            
                     try:
-                        # Format date for Airtable (try different format for Day 3 field)
-                        from datetime import datetime
-                        
-                        # Include Day 3 specific fields along with progression fields
-                        extra = {
-                            "follow_up_at": next_due,
-                            "followUP_count": opportunity.get("followUP_count"),
-                            "last_template_day_sent": 3,
-                            "TK Day 3 Walkaround Sent": True,
-                            "TK Day 3 Walkaround Sent At": currDate_iso,
-                        }
-                        first_sent = opportunity.get("first_email_sent_at")
-                        if first_sent:
-                            extra["first_email_sent_at"] = first_sent
                         airtable_save(opportunity, extra_fields=extra)
                         log.info("Day 3 Airtable save successful: all fields updated")
                     except Exception as e:
-                        log.warning("Day 3 Airtable save with date failed, trying without date field: %s", e)
-                        # Fallback: Save critical fields without the problematic date field
+                        # If the date field is what’s breaking Airtable, retry without it
+                        log.warning("Day 3 Airtable save failed, retrying without Sent At: %s", e)
+            
+                        extra.pop("TK Day 3 Walkaround Sent At", None)
                         try:
-                            extra_fallback = {
-                                "follow_up_at": next_due,
-                                "followUP_count": opportunity.get("followUP_count"),
-                                "last_template_day_sent": 3,
-                                "TK Day 3 Walkaround Sent": True,
-                                # Skip the date field that's causing issues
-                            }
-                            first_sent = opportunity.get("first_email_sent_at")
-                            if first_sent:
-                                extra_fallback["first_email_sent_at"] = first_sent
-                            airtable_save(opportunity, extra_fields=extra_fallback)
+                            airtable_save(opportunity, extra_fields=extra)
                             log.info("Day 3 Airtable fallback save successful: critical fields updated")
                         except Exception as e2:
                             log.warning(
-                            "Airtable save failed opp=%s (continuing): %s",
-                            opportunity.get("opportunityId") or opportunity.get("id"),
-                            e
-                        )
-
+                                "Airtable save failed opp=%s (continuing): %s",
+                                opportunity.get("opportunityId") or opportunity.get("id"),
+                                e2,
+                            )
+            
                 wJson(opportunity, f"jsons/process/{opportunityId}.json")
                 return
+
         
         # --- Step 4B: pause cadence if there is an upcoming appointment (normal behavior) ---
         patti_meta = opportunity.get("patti") or {}
@@ -2971,7 +2961,7 @@ def processHit(hit):
                 or currDate_iso
             )
             
-            next_due = _next_salesai_due_iso(created_iso=created_iso, last_idx=idx + 1)
+            next_due = _next_salesai_due_iso(created_iso=created_iso, last_idx=idx)
             last_sent = opportunity.get("last_template_day_sent")
 
             template_day = get_next_template_day(
