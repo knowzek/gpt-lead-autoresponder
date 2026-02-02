@@ -117,6 +117,7 @@ def canonicalize_opp(opp: dict, fields: dict) -> dict:
     )
     opp["customer_email"] = _as_str(
         fields.get("customer_email")
+        or fields.get("customer_email_lower")  # ✅ Fallback to lowercase field
         or opp.get("customer_email")
         or cust.get("email")
         or opp.get("email")
@@ -767,8 +768,27 @@ def opp_from_record(rec: dict) -> dict:
 
     # ✅ NEW: load snapshot JSON instead of full opp_json blob
     opp = _safe_json_loads(fields.get("patti_json")) or {}
+    opp_json_full = _safe_json_loads(fields.get("opp_json")) or {}
+    
+    # DEBUG: Log what we're loading
+    rec_id = rec.get("id", "unknown")
+    has_patti = bool(opp)
+    has_opp_json = bool(opp_json_full)
+    
     if not opp:
-        opp = _safe_json_loads(fields.get("opp_json")) or {}
+        opp = opp_json_full
+    
+    # ✅ Hydrate soughtVehicles from opp_json if missing in patti_json
+    # This is critical for Day 3 walkaround video matching
+    sought_before = opp.get("soughtVehicles")
+    sought_full = opp_json_full.get("soughtVehicles")
+    
+    if not sought_before and sought_full:
+        opp["soughtVehicles"] = sought_full
+        print(f"HYDRATION DEBUG: rec={rec_id} hydrated soughtVehicles from opp_json: {len(sought_full)} vehicles")
+    else:
+        print(f"HYDRATION DEBUG: rec={rec_id} has_patti={has_patti} has_opp_json={has_opp_json} sought_before={bool(sought_before)} sought_full={bool(sought_full)}")
+    
     # Always attach Airtable record id
     opp["_airtable_rec_id"] = rec.get("id")
     opp = canonicalize_opp(opp, fields)
@@ -880,6 +900,12 @@ def opp_from_record(rec: dict) -> dict:
         if p.get("last_template_day_sent") is None:
             p["last_template_day_sent"] = 0
 
+    # ✅ Cadence counters (authoritative from Airtable)
+    try:
+        opp["followUP_count"] = int(float(fields.get("followUP_count") or 0))
+    except Exception:
+        opp["followUP_count"] = 0
+    
 
     # ✅ Hydrate first-touch + routing flag (authoritative for cron routing)
     fes = (
@@ -943,6 +969,21 @@ def opp_from_record(rec: dict) -> dict:
             p["last_template_day_sent"] = max(int(p.get("last_template_day_sent") or 0), 2)
         except Exception:
             p["last_template_day_sent"] = 2
+
+    # ✅ TK Day 3 Walkaround Sent (authoritative Airtable checkbox)
+    tk_day3_sent = bool(fields.get("TK Day 3 Walkaround Sent"))
+    opp["tk_day3_walkaround_sent"] = tk_day3_sent
+
+    tk_day3_sent_at = fields.get("TK Day 3 Walkaround Sent At")
+    if tk_day3_sent_at:
+        opp["tk_day3_walkaround_sent_at"] = tk_day3_sent_at
+
+    # Optional derived state (keep cadence state consistent)
+    if tk_day3_sent and isinstance(p, dict):
+        try:
+            p["last_template_day_sent"] = max(int(p.get("last_template_day_sent") or 0), 3)
+        except Exception:
+            p["last_template_day_sent"] = 3
     
     return opp
 
