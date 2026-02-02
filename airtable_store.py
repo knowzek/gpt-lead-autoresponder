@@ -793,6 +793,22 @@ def opp_from_record(rec: dict) -> dict:
     opp["_airtable_rec_id"] = rec.get("id")
     opp = canonicalize_opp(opp, fields)
 
+    # ✅ Hydrate last_template_day_sent from Airtable column (authoritative)
+    # This prevents regression caused by stale patti_json values.
+    try:
+        lts = int(float(fields.get("last_template_day_sent") or 0))
+    except Exception:
+        lts = 0
+
+    opp["last_template_day_sent"] = lts
+
+    # Optional: keep patti dict consistent until patti_json is fully retired
+    p = opp.setdefault("patti", {})
+    if isinstance(p, dict):
+        # Don't let snapshot drive this value anymore
+        p["last_template_day_sent"] = lts
+
+
     # --- Hydrate Assigned Sales Rep from Airtable column ---
     asr = fields.get("Assigned Sales Rep")
     if asr:
