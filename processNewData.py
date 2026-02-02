@@ -708,13 +708,13 @@ Return ONLY the email body in HTML format with proper <p> tags.
     except Exception as e:
         log.warning("GPT failed for Day 3 email generation, using fallback template: %s", e)
         # Fallback to static template
-        return f"""
+        return f'''
             <p>Hi {cn},</p>
             <p>I wanted to share a quick walk-around video of the {vehicle_year} {vehicle_make} {vehicle_model} you were checking out.</p>
             <p>This video gives you a closer look at the exterior, interior, and key features so you can get a better feel for the vehicle.</p>
             <p>👉 Watch the walk-around video here: <a href="{youtube_walkaround_url}">{youtube_walkaround_url}</a></p>
             <p>If you have any questions after watching, feel free to reply. I'm happy to help.</p>
-            """.strip()
+            '''.strip()
 
 
 def build_tk_day3_walkaround_html(
