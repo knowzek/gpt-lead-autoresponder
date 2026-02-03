@@ -3864,6 +3864,15 @@ def send_thread_reply_now(
         "inbound_ts": inbound_ts,
     })
 
+    # Refresh from Airtable before resolving recipient (source of truth)
+    try:
+        rec = find_by_opp_id(opportunityId)
+        if rec:
+            opportunity = opp_from_record(rec)
+    except Exception as e:
+        log.warning("EMAIL_DEBUG opp=%s refresh from airtable failed: %s", opportunityId, e)
+
+
     to_addr = resolve_customer_email(
         opportunity,
         SAFE_MODE=SAFE_MODE,
