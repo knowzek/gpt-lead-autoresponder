@@ -562,6 +562,8 @@ def maybe_send_tk_gm_day2_email(
             "last_template_day_sent": 2,
         })
 
+        opportunity["last_template_day_sent"] = 2
+
         try:
             _bump_ai_send_metrics_in_airtable(opportunityId)
         except Exception as e:
@@ -2787,8 +2789,7 @@ def processHit(hit):
 
         # --- Step 4A.2: Tustin Kia Day-3 Walk-around Video email ---
         # Day 3 triggers when: mode=cadence, last_template_day_sent=2, not already sent
-        patti_meta = opportunity.get("patti") or {}
-        mode = (patti_meta.get("mode") or "").strip().lower()
+        mode = (get_mode_airtable(opportunity) or "").strip().lower() or "cadence"
         if not mode or mode == "":
             mode = "cadence"  # Default to cadence for regular follow-ups
             
@@ -2966,13 +2967,7 @@ def processHit(hit):
             )
             
             next_due = _next_salesai_due_iso(created_iso=created_iso, last_day_sent=template_day)
-            last_sent = opportunity.get("last_template_day_sent")
-            
-            if template_day is None:
-                log.info("No remaining cadence days; stopping nudges opp=%s", opportunityId)
-                return False
-
-
+            last_sent = opportunity.get("last_template_day_sent")        
 
             # ✅ SEND the follow-up (currently missing)
             sent_ok = False
@@ -3062,21 +3057,6 @@ def processHit(hit):
                     except Exception as e:
                         log.warning("Airtable save failed opp=%s (continuing): %s",
                                     opportunity.get("opportunityId") or opportunity.get("id"), e)
-
-            
-                # Persist routing fields (mailer handles follow_up_at via next_follow_up_at)
-                if not OFFLINE_MODE:
-                    try:
-                        airtable_save(opportunity, extra_fields={
-                            "followUP_count": opportunity["followUP_count"],
-                        })
-                    except Exception as e:
-                        log.warning(
-                            "Airtable save failed opp=%s (continuing): %s",
-                            opportunity.get("opportunityId") or opportunity.get("id"),
-                            e
-                        )
-
                 
     wJson(opportunity, f"jsons/process/{opportunityId}.json")
 
@@ -3525,6 +3505,7 @@ def send_first_touch_email(
                 cc_addrs=[],
                 force_mode="cadence",
                 next_follow_up_at=next_due,
+                template_day=1,
             )
             
             opportunity["last_template_day_sent"] = template_day
@@ -3573,6 +3554,9 @@ def send_first_touch_email(
                     "ab_variant": variant,
                     "first_email_sent_at": opportunity["first_email_sent_at"],
                     "mode": "cadence",
+                    "last_template_day_sent": 1,
+                    "follow_up_at": next_due,
+                    "followUP_count": 0,
                 }
             )
     
