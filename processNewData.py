@@ -246,19 +246,31 @@ test_recipient = (os.getenv("TEST_RECIPIENT") or "").strip() or None
 
 SALES_AI_EMAIL_DAYS = [1, 2, 3, 5, 8, 11, 14, 17, 21, 28, 31, 32, 34, 37, 40, 44, 51]
 
-def _next_salesai_due_iso(*, created_iso: str, last_idx: int) -> str | None:
+def _next_salesai_due_iso(*, created_iso: str, last_day_sent: int) -> str | None:
     """
     created_iso = lead create timestamp (UTC ISO)
-    last_idx = index of last sent cadence email in SALES_AI_EMAIL_DAYS (start at -1)
-    Returns next due date ISO in UTC, or None if cadence complete.
+    last_day_sent = the cadence day number we JUST sent (ex: 1,2,3,5,8...)
+    Returns next due ISO in UTC, or None if cadence complete.
     """
-    if last_idx + 1 >= len(SALES_AI_EMAIL_DAYS):
+    try:
+        last_day_sent = int(last_day_sent or 0)
+    except Exception:
+        last_day_sent = 0
+
+    # find next day strictly greater than last_day_sent
+    next_day = None
+    for d in SALES_AI_EMAIL_DAYS:
+        if int(d) > last_day_sent:
+            next_day = int(d)
+            break
+
+    if next_day is None:
         return None
 
     created_dt = _dt.fromisoformat(str(created_iso).replace("Z", "+00:00"))
-    day_num = SALES_AI_EMAIL_DAYS[last_idx + 1]
-    due_dt = (created_dt + _td(days=int(day_num))).astimezone(_tz.utc)
+    due_dt = (created_dt + _td(days=next_day)).astimezone(_tz.utc)
     return due_dt.isoformat()
+
 
 
 def is_exit_message(msg: str) -> bool:
@@ -2737,9 +2749,8 @@ def processHit(hit):
             followUP_count = 0
 
 
-        # ✅ SalesAI index (used by cadence end-check + template-day math)
-        patti = opportunity.get("patti") or {}
-        idx = int(patti.get("salesai_email_idx") or -1)
+        # Source of truth: Airtable last_template_day_sent (day number, not index)
+        last_sent_day = int(opportunity.get("last_template_day_sent") or 0)
     
         # --- Step 4A: Tustin Kia GM Day-2 email (send even if appointment exists) ---
         # Day-2 in your system = first follow-up run when due_dt is due
@@ -2892,17 +2903,16 @@ def processHit(hit):
             wJson(opportunity, f"jsons/process/{opportunityId}.json")
             return
 
-        if due_dt <= now_utc and idx >= (len(SALES_AI_EMAIL_DAYS) - 1):
-            opportunity['isActive'] = False
-            opportunity["follow_up_at"] = None  
+        last_sent = int(opportunity.get("last_template_day_sent") or 0)
+        template_day = get_next_template_day(last_template_day_sent=last_sent, cadence_days=SALES_AI_EMAIL_DAYS)
+        
+        if template_day is None:
+            opportunity["is_active"] = False  # or whatever your Airtable column name is
+            opportunity["follow_up_at"] = None
             if not OFFLINE_MODE:
-                try:
-                    airtable_save(opportunity, extra_fields={"follow_up_at": None})
-                except Exception as e:
-                    log.warning("Airtable save failed opp=%s (continuing): %s",
-                                opportunity.get("opportunityId") or opportunity.get("id"), e)
-            wJson(opportunity, f"jsons/process/{opportunityId}.json")
+                airtable_save(opportunity, extra_fields={"follow_up_at": None, "is_active": False})
             return
+
 
         elif due_dt <= now_utc:
             # Use full thread history but be explicit that this is NOT a first email.
@@ -2955,13 +2965,8 @@ def processHit(hit):
                 or currDate_iso
             )
             
-            next_due = _next_salesai_due_iso(created_iso=created_iso, last_idx=idx)
+            next_due = _next_salesai_due_iso(created_iso=created_iso, last_day_sent=template_day)
             last_sent = opportunity.get("last_template_day_sent")
-
-            template_day = get_next_template_day(
-                last_template_day_sent=last_sent,
-                cadence_days=SALES_AI_EMAIL_DAYS,
-            )
             
             if template_day is None:
                 log.info("No remaining cadence days; stopping nudges opp=%s", opportunityId)
@@ -3022,11 +3027,12 @@ def processHit(hit):
             
                 # Advance SalesAI index in-memory
                 patti = opportunity.setdefault("patti", {})
-                patti["salesai_email_idx"] = idx + 1
 
                 # --- Advance cadence state (single owner: processNewData) ---
                 new_count = int(float(opportunity.get("followUP_count") or 0)) + 1
                 opportunity["followUP_count"] = new_count
+                opportunity["last_template_day_sent"] = template_day
+                opportunity["follow_up_at"] = next_due
                 
                 # compute next_due however you want, BUT do not allow past dates
                 if next_due:
@@ -3503,8 +3509,9 @@ def send_first_touch_email(
                 or currDate_iso
             )
     
-            idx = int(patti.get("salesai_email_idx") if patti.get("salesai_email_idx") is not None else -1)
-            next_due = _next_salesai_due_iso(created_iso=created_iso, last_idx=idx)
+            template_day = 1
+            next_due = _next_salesai_due_iso(created_iso=created_iso, last_day_sent=template_day)
+
     
             sent_ok = send_patti_email(
                 token=token,
@@ -3518,10 +3525,10 @@ def send_first_touch_email(
                 cc_addrs=[],
                 force_mode="cadence",
                 next_follow_up_at=next_due,
-            
-                # ✅ new
-                template_day=1,          # first-touch
             )
+            
+            opportunity["last_template_day_sent"] = template_day
+            opportunity["follow_up_at"] = next_due
 
         except Exception as e:
             log.warning("Failed to send Patti general lead email for opp %s: %s", opportunityId, e)
@@ -3545,10 +3552,6 @@ def send_first_touch_email(
         # ✅ set first_email_sent_at ONLY AFTER success
         now_iso = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
         opportunity["first_email_sent_at"] = opportunity.get("first_email_sent_at") or now_iso
-    
-        # cadence enrollment
-        patti_meta = opportunity.setdefault("patti", {})
-        patti_meta.setdefault("salesai_email_idx", -1)
     
         created_iso = (
             patti_meta.get("salesai_created_iso")
