@@ -3500,10 +3500,23 @@ def send_thread_reply_now(
     try:
         rec = find_by_opp_id(opportunityId)
         if rec:
-            opportunity = opp_from_record(rec)
+            hydrated = opp_from_record(rec)
+    
+            # ✅ Merge canonical identity fields into the working opportunity
+            for k in ("customer_email", "customer_email_lower", "customer_first_name", "customer_last_name", "customer_phone"):
+                v = hydrated.get(k)
+                if v and not opportunity.get(k):
+                    opportunity[k] = v
+    
+            # ✅ Also merge the nested customer email if you use it anywhere
+            hcust = hydrated.get("customer") or {}
+            ocust = opportunity.get("customer") or {}
+            if hcust.get("email") and not ocust.get("email"):
+                ocust["email"] = hcust["email"]
+                opportunity["customer"] = ocust
+    
     except Exception as e:
         log.warning("EMAIL_DEBUG opp=%s refresh from airtable failed: %s", opportunityId, e)
-
 
     to_addr = resolve_customer_email(
         opportunity,
