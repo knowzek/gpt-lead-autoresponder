@@ -75,12 +75,6 @@ def _normalize_cadence_brain_fields(opportunity: dict) -> None:
     except Exception:
         opportunity["followUP_count"] = 0
 
-    # 4) last_template_day_sent should live at root (Airtable column)
-    # If it only exists in patti snapshot, mirror it to root once
-    p = opportunity.get("patti") if isinstance(opportunity.get("patti"), dict) else {}
-    if opportunity.get("last_template_day_sent") is None and p.get("last_template_day_sent") is not None:
-        opportunity["last_template_day_sent"] = p.get("last_template_day_sent")
-
 
 def _get_followup_count_airtable(opportunity: dict) -> int:
     """
