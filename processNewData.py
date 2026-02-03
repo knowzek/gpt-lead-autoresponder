@@ -3518,6 +3518,11 @@ def send_thread_reply_now(
     except Exception as e:
         log.warning("EMAIL_DEBUG opp=%s refresh from airtable failed: %s", opportunityId, e)
 
+    log.info(
+        "EMAIL_DEBUG pre-resolve opp=%s found_rec=%s customer_email=%r customer_email_lower=%r",
+        opportunityId, bool(rec), opportunity.get("customer_email"), opportunity.get("customer_email_lower")
+    )
+
     to_addr = resolve_customer_email(
         opportunity,
         SAFE_MODE=SAFE_MODE,
