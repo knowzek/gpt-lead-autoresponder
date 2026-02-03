@@ -12,7 +12,15 @@ from kbb_ico import _top_reply_only, _is_optout_text as _kbb_is_optout_text, _is
 from kbb_ico import _patch_address_placeholders, build_patti_footer, _PREFS_RE
 from rooftops import get_rooftop_info
 from constants import *
-from gpt import run_gpt, getCustomerMsgDict, extract_appt_time
+from gpt import (
+    run_gpt,
+    getCustomerMsgDict,
+    extract_appt_time,
+    _getClarifyTimePrompts,
+    _getDigPrefsPrompts,
+    _getMultiOptionPrompts,
+    _getAlreadyBookedGuardrails
+)
 import re
 import logging
 import hashlib, json, time
@@ -54,6 +62,49 @@ load_dotenv()
 def _norm_email(s: str | None) -> str | None:
     s = (s or "").strip().lower()
     return s if ("@" in s and "." in s) else None
+
+
+def classify_scheduling_intent(extraction: dict) -> str:
+    """
+    Maps extraction results to a concrete System Action.
+    
+    Returns one of:
+    - "SCHEDULE": Auto-book the appointment.
+    - "CLARIFY_TIME": Ask for specific time (date known or vague).
+    - "DIG_PREFS": Ask narrowing questions (open-ended).
+    - "HANDLE_MULTI": Ask user to pick one of multiple options.
+    - "DEFAULT_REPLY": No scheduling intent; use standard chat.
+    """
+    cls = (extraction.get("classification") or "NO_INTENT").upper()
+    iso = (extraction.get("iso") or "").strip()
+    conf = float(extraction.get("confidence") or 0.0)
+
+    # 1. Exact Time: Only schedule if we have a valid ISO and high confidence
+    if cls == "EXACT_TIME":
+        if iso and conf >= 0.60:
+            return "SCHEDULE"
+        else:
+            # If GPT thought it was exact but failed confidence/parsing, treat as vague
+            return "CLARIFY_TIME"
+
+    # 2. Vague Dates/Windows: Always clarify
+    if cls in ("VAGUE_DATE", "VAGUE_WINDOW"):
+        return "CLARIFY_TIME"
+
+    # 3. Open-Ended: Dig for preferences
+    if cls == "OPEN_ENDED":
+        return "DIG_PREFS"
+
+    # 4. Multiple Options: Ask user to confirm
+    if cls == "MULTI_OPTION":
+        return "HANDLE_MULTI"
+
+    # 5. Reschedule: Treat as clarification for now (advanced: update existing appt)
+    if cls == "RESCHEDULE":
+        return "CLARIFY_TIME"
+
+    # Fallback
+    return "DEFAULT_REPLY"
 
 
 RUN_KBB = os.getenv("RUN_KBB", "0").lower() in ("1", "true", "yes")
@@ -992,57 +1043,72 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
 
                 appt_iso = ""
                 conf = 0.0
+                intent_action = "DEFAULT_REPLY"
+                override_prompt = None
+
                 if not already_scheduled:
                     proposed = extract_appt_time(customer_body or "", tz="America/Los_Angeles")
                     appt_iso = (proposed.get("iso") or "").strip()
                     conf = float(proposed.get("confidence") or 0.0)
+                    
+                    # Decision logic
+                    intent_action = classify_scheduling_intent(proposed)
+                    log.info("Scheduling Intent: %s (iso=%r, conf=%.2f) opp=%s",
+                             intent_action, appt_iso, conf, opportunity['opportunityId'])
 
+                    if intent_action == "SCHEDULE":
+                        try:
+                            dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
+                            due_dt_iso_utc = dt_local.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                            
+                            appt_human = fmt_local_human(dt_local)
+                            
+                            schedule_appointment_with_notify(
+                                token,
+                                subscription_id,
+                                opportunity['opportunityId'],
+                                due_dt_iso_utc=due_dt_iso_utc,
+                                activity_name="Sales Appointment",
+                                activity_type="Appointment",
+                                comments=f"Auto-scheduled from Patti based on customer reply: {customer_body[:200]}",
+                                opportunity=opportunity,
+                                fresh_opp=fresh_opp if "fresh_opp" in locals() else {},
+                                rooftop_name=rooftop_name,
+                                appt_human=appt_human,
+                                customer_reply=customer_body,
+                            )
+                            
+                            created_appt_ok = True
 
-                if appt_iso and conf >= 0.60:
-                    try:
-                        dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
-                        due_dt_iso_utc = dt_local.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-                        
-                        appt_human = fmt_local_human(dt_local)
-                        
-                        schedule_appointment_with_notify(
-                            token,
-                            subscription_id,
-                            opportunity['opportunityId'],
-                            due_dt_iso_utc=due_dt_iso_utc,
-                            activity_name="Sales Appointment",
-                            activity_type="Appointment",
-                            comments=f"Auto-scheduled from Patti based on customer reply: {customer_body[:200]}",
-                            opportunity=opportunity,
-                            fresh_opp=fresh_opp if "fresh_opp" in locals() else {},
-                            rooftop_name=rooftop_name,
-                            appt_human=appt_human,
-                            customer_reply=customer_body,
-                        )
-                        
-                        created_appt_ok = True
+                            patti_meta["mode"] = "scheduled"
+                            patti_meta["appt_due_utc"] = due_dt_iso_utc
+                            patti_meta["appt_confirm_email_sent"] = True
+                            opportunity["patti"] = patti_meta
 
-                        
-                        patti_meta["mode"] = "scheduled"
-                        patti_meta["appt_due_utc"] = due_dt_iso_utc
-                        # GPT reply will confirm this, so mark to prevent duplicates.
-                        patti_meta["appt_confirm_email_sent"] = True
-                        opportunity["patti"] = patti_meta
+                            log.info(
+                                "✅ Auto-scheduled appointment from reply for %s at %s (conf=%.2f)",
+                                opportunity['opportunityId'],
+                                appt_human,
+                                conf,
+                            )
+                        except Exception as e:
+                            log.error(
+                                "Failed to auto-schedule appointment from reply for %s (appt_iso=%r): %s",
+                                opportunity['opportunityId'],
+                                appt_iso,
+                                e,
+                            )
+                    
+                    # Handle other non-scheduling intents by setting override prompts
+                    elif intent_action == "CLARIFY_TIME":
+                        override_prompt = _getClarifyTimePrompts()
+                    elif intent_action == "DIG_PREFS":
+                        override_prompt = _getDigPrefsPrompts()
+                    elif intent_action == "HANDLE_MULTI":
+                        override_prompt = _getMultiOptionPrompts()
+                    elif intent_action == "RESCHEDULE":
+                        override_prompt = _getClarifyTimePrompts()  # Treat as clarify for now
 
-                        
-                        log.info(
-                            "✅ Auto-scheduled appointment from reply for %s at %s (conf=%.2f)",
-                            opportunity['opportunityId'],
-                            appt_human,
-                            conf,
-                        )
-                    except Exception as e:
-                        log.error(
-                            "Failed to auto-schedule appointment from reply for %s (appt_iso=%r): %s",
-                            opportunity['opportunityId'],
-                            appt_iso,
-                            e,
-                        )
             except Exception as e:
                 log.warning(
                     "Reply-based appointment detection failed for %s: %s",
@@ -1066,8 +1132,12 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
             Here are the messages (Python list of dicts):
             {messages}
             """
+            elif override_prompt:
+                # Use the specialized prompt determined by classification
+                prompt = override_prompt + f"\n\nMessages (Python list of dicts):\n{messages}"
+                log.info("Using OVERRIDE prompt for intent=%s opp=%s", intent_action, opportunity['opportunityId'])
             else:
-                prompt = f"""
+                base_prompt = f"""
             You are replying to an ACTIVE email thread (not a first welcome email).
             
             Hard rules:
@@ -1083,6 +1153,12 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
             Messages (python list of dicts):
             {messages}
             """.strip()
+                
+                if already_scheduled:
+                    prompt = _getAlreadyBookedGuardrails() + "\n\n" + base_prompt
+                    log.info("Applied AlreadyBookedGuardrails for opp=%s", opportunity['opportunityId'])
+                else:
+                    prompt = base_prompt
 
             response = run_gpt(
                 prompt,

@@ -3,6 +3,7 @@ from datetime import datetime
 from openai import OpenAI
 from openai import APIStatusError, NotFoundError  # available in recent SDKs; if import fails, just catch Exception
 from rooftops import ROOFTOP_INFO
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -453,6 +454,46 @@ def _getFollowUPRules():
         """
     )
 
+def _getClarifyTimePrompts():
+    return (
+        'The customer has shown interest in an appointment but the time is missing or vague (e.g. "tomorrow" or "Wednesday morning").\n'
+        'Your goal: Ask ONE specific question to narrow down the exact time.\n'
+        'Rules:\n'
+        '- If they said "Tomorrow", ask "What time tomorrow works best?"\n'
+        '- If they said "Afternoon", propose a specific slot like "Does 2:00 PM work?"\n'
+        '- Keep it short (1 sentence).\n'
+        '- Do not be pushy.\n'
+        'Return JSON: {"subject": "...", "body": "..."}'
+    )
+
+def _getDigPrefsPrompts():
+    return (
+        'The customer wants to visit but hasn\'t proposed a time (e.g. "When can I come?").\n'
+        'Your goal: Narrow down their preferences.\n'
+        'Rules:\n'
+        '- Ask: "Do you prefer weekdays or weekends?" or "Mornings or afternoons?"\n'
+        '- Offer general hours (e.g. "We are open 9am-9pm").\n'
+        '- Return JSON: {"subject": "...", "body": "..."}'
+    )
+
+def _getMultiOptionPrompts():
+    return (
+        'The customer proposed multiple times (e.g. "Tuesday at 3 or Thursday at 5").\n'
+        'Your goal: Ask them to confirm ONE specific time.\n'
+        'Rules:\n'
+        '- Example: "Tuesday at 3 works great. Shall I book that?"\n'
+        '- Return JSON: {"subject": "...", "body": "..."}'
+    )
+
+def _getAlreadyBookedGuardrails():
+    return (
+        'CRITICAL GUARDRAIL: The customer ALREADY has a confirmed appointment scheduled in our system.\n'
+        'DO NOT ask "When would you like to come in?" or "What time works?".\n'
+        'DO NOT propose new times.\n'
+        'ONLY confirm details, answer questions, or end politely.\n'
+        'If they say "Ok thanks", just say "You\'re welcome, see you then!"'
+    )
+
 def run_gpt(prompt: str,
             customer_name: str,
             rooftop_name: str = None,
@@ -674,27 +715,89 @@ def getCustomerMsgDict(inqueryTextBody):
 
     return dictResult
 
+def _validate_extraction(iso, confidence, window, classification, reason):
+    """
+    Validates appointment extraction results for scheduling.
+    
+    Returns:
+        dict: {
+            "iso": ISO8601 string (or empty string if invalid/past),
+            "confidence": float (0 if invalid),
+            "window": time window string ("exact", "morning", "afternoon", or "evening"; empty if invalid),
+            "classification": intent classification string,
+            "reason": reasoning string
+        }
+    """
+    out = {
+        "iso": (iso or "").strip(),
+        "confidence": confidence if 0 <= confidence <= 1 else 0.0,
+        "window": window if window in {"exact", "morning", "afternoon", "evening"} else "",
+        "classification": classification or "NO_INTENT",
+        "reason": reason or ""
+    }
+
+    # If iso is present, validate parsing and future check
+    if out["iso"]:
+        try:
+            dt = datetime.fromisoformat(out["iso"])
+            # If date is in the past, invalidate the actionable ISO but keep classification context
+            if dt < datetime.now(dt.tzinfo):
+                out["iso"] = ""
+                out["confidence"] = 0.0
+                out["window"] = ""
+                out["reason"] += " (Date in past)"
+        except Exception:
+            out["iso"] = ""
+            out["confidence"] = 0.0
+            out["window"] = ""
+
+    return out
+
 def extract_appt_time(text: str, tz: str = "America/Los_Angeles") -> dict:
     """
-    Use GPT to extract one proposed appointment datetime from customer text.
-    Returns: {"iso": "2025-11-06T15:00:00-08:00", "confidence": 0.0-1.0, "window": "exact|morning|afternoon|evening"}
-    If nothing found, returns {"iso":"", "confidence":0, "window":""}
+    Use GPT to extract scheduling intent and proposed appointment datetime.
+    
+    Returns: {
+        "classification": "EXACT_TIME | VAGUE_DATE | VAGUE_WINDOW | OPEN_ENDED | MULTI_OPTION | RESCHEDULE | NO_INTENT",
+        "iso": "2025-11-06T15:00:00-08:00" (if applicable),
+        "confidence": 0.0-1.0,
+        "window": "exact|morning|afternoon|evening",
+        "reason": "..."
+    }
     """
     if not (text or "").strip():
-        return {"iso": "", "confidence": 0, "window": ""}
+        return {"iso": "", "confidence": 0, "window": "", "classification": "NO_INTENT", "reason": "Empty text"}
 
     system = {
         "role": "system",
         "content": (
-            "You extract one proposed meeting time from natural language. "
-            "Assume the user and dealership are in the same time zone. "
-            "Return JSON only: {\"iso\":\"<ISO8601 with timezone>\",\"confidence\":0-1,\"window\":\"exact|morning|afternoon|evening\"}. "
-            "Use the given timezone. If vague like 'Wednesday morning', choose 10:00 in that timezone and set window accordingly. "
-            "If 'next Wednesday', interpret as the next occurrence after today. "
-            "If no date is present, return empty values."
+            "Analyze the text for appointment scheduling intent.\n"
+            "Classifications:\n"
+            "- EXACT_TIME: Specific date AND specific time provided (e.g. 'Wednesday at 4pm').\n"
+            "- VAGUE_DATE: Specific date provided, but time is missing or ambiguous (e.g. 'Tomorrow', 'Next Tuesday').\n"
+            "- VAGUE_WINDOW: Date provided with vague time window (e.g. 'Wednesday morning', 'After work').\n"
+            "- OPEN_ENDED: Intent to schedule, but no date/time proposed (e.g. 'When can I come in?', 'What are your hours?').\n"
+            "- MULTI_OPTION: User provided multiple distinct options (e.g. 'Tuesday at 3 or Thursday at 5').\n"
+            "- RESCHEDULE: Explicit intent to change an existing appointment.\n"
+            "- NO_INTENT: No scheduling signal found.\n\n"
+            "Rules:\n"
+            "- If EXACT_TIME: Set 'iso' to the ISO8601 datetime with timezone. Confidence > 0.9.\n"
+            "- If VAGUE_DATE/VAGUE_WINDOW: Set 'iso' to the date at 10:00am (placeholder). Confidence < 0.6.\n"
+            "- If MULTI_OPTION: Leave 'iso' empty. Classification takes precedence.\n"
+            "- Always respect the provided timezone for relative dates (Today/Tomorrow/Next).\n\n"
+            "Return JSON only:\n"
+            "{\n"
+            "  \"classification\": \"...\",\n"
+            "  \"iso\": \"...\",\n"
+            "  \"confidence\": 0.0,\n"
+            "  \"window\": \"exact|morning|afternoon|evening\",\n"
+            "  \"reason\": \"...\"\n"
+            "}"
         )
     }
-    now_local = datetime.now().astimezone()  # used so model has 'today' concept implicitly
+    
+    # now_local = datetime.now().astimezone()  # used so model has 'today' concept implicitly
+    now_local = datetime.now(ZoneInfo(tz)) # GPT now gets the correct “today”.
     user = {
         "role": "user",
         "content": f"Timezone: {tz}\nNow Local ISO: {now_local.isoformat()}\nText: {text}"
@@ -702,7 +805,7 @@ def extract_appt_time(text: str, tz: str = "America/Los_Angeles") -> dict:
     model_used, resp = chat_complete_with_fallback(
         [system, user],
         want_json=True,
-        temperature=0.2
+        temperature=0.0
     )
     text_out = _safe_extract_text(resp)
     try:
@@ -710,9 +813,12 @@ def extract_appt_time(text: str, tz: str = "America/Los_Angeles") -> dict:
         iso = (data.get("iso") or "").strip()
         conf = float(data.get("confidence") or 0)
         window = (data.get("window") or "").strip()
-        return {"iso": iso, "confidence": conf, "window": window}
+        classification = (data.get("classification") or "NO_INTENT").strip()
+        reason = (data.get("reason") or "").strip()
+        
+        return _validate_extraction(iso, conf, window, classification, reason)
     except Exception:
-        return {"iso": "", "confidence": 0, "window": ""}
+        return {"iso": "", "confidence": 0, "window": "", "classification": "NO_INTENT", "reason": "JSON parse error"}
 
 
 if __name__ == "__main__":
