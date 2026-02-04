@@ -3,7 +3,7 @@ import os, json, uuid
 from datetime import datetime, timedelta, timezone
 import requests
 import hashlib
-import logging
+
 
 AIRTABLE_API_TOKEN = os.getenv("AIRTABLE_API_TOKEN")
 AIRTABLE_BASE_ID   = os.getenv("AIRTABLE_BASE_ID")
@@ -881,13 +881,6 @@ def opp_from_record(rec: dict) -> dict:
 
     opp["human_review_reason"] = (fields.get("Human Review Reason") or "").strip() or None
     opp["human_review_at"] = fields.get("Human Review At") or None
-    
-    log.info(
-        "HUMAN_REVIEW_HYDRATE needs_human_review=%r has_field=%s raw_field=%r",
-        opp.get("needs_human_review"),
-        ("Needs Human Review" in fields),
-        fields.get("Needs Human Review"),
-    )
 
 
     # ✅ NEW: Hydrate suppression/compliance from Airtable columns (authoritative for gating)
