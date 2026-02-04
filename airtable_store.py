@@ -647,8 +647,6 @@ def find_by_opp_id(opp_id: str) -> dict | None:
     params = {"filterByFormula": f'{{opp_id}}="{opp_id}"', "pageSize": 1}
     data = _request("GET", BASE_URL, params=params)
     recs = data.get("records", [])
-    log.info("AIRTABLE_LOOKUP find_by_opp_id opp=%s base=%s table=%s rec_id=%s", opp_id, AIRTABLE_BASE_ID, AIRTABLE_TABLE)
-
     return recs[0] if recs else None
 
 def upsert_lead(opp_id: str, fields: dict) -> dict:
