@@ -548,6 +548,13 @@ def handoff_to_human(
     if not opp_id:
         raise ValueError("Missing opportunityId for human handoff.")
 
+    log.warning(
+        "HR_WRITE handoff_to_human opp=%s rec_id=%s reason=%r",
+        opportunity.get("id") or opportunity.get("opportunityId"),
+        opportunity.get("_airtable_rec_id"),
+        (triage.get("reason") if isinstance(triage, dict) else None) or opportunity.get("human_review_reason"),
+    )
+
     now_iso = inbound_ts or _now_iso()
 
     rec_id = opportunity.get("_airtable_rec_id")
