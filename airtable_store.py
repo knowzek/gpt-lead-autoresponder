@@ -657,7 +657,23 @@ def upsert_lead(opp_id: str, fields: dict) -> dict:
     return _request("POST", BASE_URL, json=payload)
 
 def patch_by_id(rec_id: str, fields: dict) -> dict:
+    # 🔍 Log any Human Review writes at the last possible moment
+    try:
+        hr_keys = [
+            k for k in fields.keys()
+            if ("Human Review" in k) or ("needs_human" in k.lower())
+        ]
+        if hr_keys:
+            log.warning(
+                "HR_WRITE patch_by_id rec_id=%s payload=%r",
+                rec_id,
+                {k: fields.get(k) for k in hr_keys},
+            )
+    except Exception:
+        pass
+
     return _request("PATCH", f"{BASE_URL}/{rec_id}", json={"fields": fields})
+
 
 def query_view(view: str, max_records: int = 200) -> list[dict]:
     out = []
@@ -1144,6 +1160,20 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
     # ---------------------------
     if extra_fields:
         patch.update(extra_fields)
+
+    # ✅ HR write detector: tell us when code is PATCHing human review fields
+    try:
+        hr_keys = [k for k in patch.keys() if ("Needs Human Review" in k) or ("Human Review" in k)]
+        if hr_keys:
+            log.warning(
+                "HR_WRITE save_opp rec_id=%s opp=%s payload=%r",
+                rec_id,
+                opp.get("opportunityId") or opp.get("id"),
+                {k: patch.get(k) for k in hr_keys},
+            )
+    except Exception:
+        pass
+
 
     # ✅ HR write detector (final patch going to Airtable)
     try:
