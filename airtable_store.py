@@ -3,6 +3,8 @@ import os, json, uuid
 from datetime import datetime, timedelta, timezone
 import requests
 import hashlib
+import logging
+log = logging.getLogger("patti.airtable")
 
 
 AIRTABLE_API_TOKEN = os.getenv("AIRTABLE_API_TOKEN")
@@ -645,6 +647,8 @@ def find_by_opp_id(opp_id: str) -> dict | None:
     params = {"filterByFormula": f'{{opp_id}}="{opp_id}"', "pageSize": 1}
     data = _request("GET", BASE_URL, params=params)
     recs = data.get("records", [])
+    log.info("AIRTABLE_LOOKUP find_by_opp_id opp=%s base=%s table=%s rec_id=%s", opp_id, BASE_ID, TABLE_NAME, rec_id)
+
     return recs[0] if recs else None
 
 def upsert_lead(opp_id: str, fields: dict) -> dict:
@@ -1080,6 +1084,15 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
             follow_up_at_value = None
 
     # Base patch (caller can still override after this)
+
+    try:
+        if extra_fields:
+            hr_keys = [k for k in extra_fields.keys() if "Human Review" in k or "needs_human" in k.lower()]
+            if hr_keys:
+                log.info("HR_TRACE step=save_opp extra_hr_keys=%s extra_hr_payload=%r", hr_keys, {k: extra_fields.get(k) for k in hr_keys})
+    except Exception:
+        pass
+
     patch = {
         "is_active": is_active,
         "follow_up_at": _iso(follow_up_at_value),
@@ -1094,7 +1107,7 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
     try:
         snapshot_obj = _build_patti_snapshot(opp)  # ✅ tiny snapshot only
         snapshot_str = json.dumps(snapshot_obj, sort_keys=True, ensure_ascii=False, default=str)
-    
+
         MAX = 95_000
         if len(snapshot_str) > MAX:
             # Fail-open: don't write it at all
@@ -1115,6 +1128,13 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
         # Fail-open: don't block saving brain fields if snapshot serialization fails
         pass
 
+    try:
+        if extra_fields:
+            hr_keys = [k for k in extra_fields.keys() if "Human Review" in k or "needs_human" in k.lower()]
+            if hr_keys:
+                log.info("HR_TRACE step=save_opp extra_hr_keys=%s extra_hr_payload=%r", hr_keys, {k: extra_fields.get(k) for k in hr_keys})
+    except Exception:
+        pass
 
     # ---------------------------
     # Mirror compliance into columns (safe)
