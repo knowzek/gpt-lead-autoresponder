@@ -1126,13 +1126,6 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
         # Fail-open: don't block saving brain fields if snapshot serialization fails
         pass
 
-    try:
-        if extra_fields:
-            hr_keys = [k for k in extra_fields.keys() if "Human Review" in k or "needs_human" in k.lower()]
-            if hr_keys:
-                log.info("HR_TRACE step=save_opp extra_hr_keys=%s extra_hr_payload=%r", hr_keys, {k: extra_fields.get(k) for k in hr_keys})
-    except Exception:
-        pass
 
     # ---------------------------
     # Mirror compliance into columns (safe)
@@ -1151,6 +1144,21 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
     # ---------------------------
     if extra_fields:
         patch.update(extra_fields)
+
+    # ✅ HR write detector (final patch going to Airtable)
+    try:
+        hr_keys = [k for k in patch.keys() if ("Human Review" in k) or ("needs_human" in k.lower())]
+        if hr_keys:
+            log.warning(
+                "HR_WRITE final_patch rec_id=%s opp=%s keys=%s payload=%r",
+                rec_id,
+                opp.get("opportunityId") or opp.get("id"),
+                hr_keys,
+                {k: patch.get(k) for k in hr_keys},
+            )
+    except Exception:
+        pass
+
 
     # ---------------------------
     # Never PATCH computed/formula/rollup fields
