@@ -1458,6 +1458,33 @@ def process_inbound_email(inbound: dict) -> None:
             return
     
         opportunity = opp_from_record(rec2)
+
+    # ------------------------------------------------------------------
+    # ✅ Backfill Airtable customer_email from inbound sender if missing
+    # Prevents "NO EMAIL FOUND" later when Patti tries to reply.
+    # ------------------------------------------------------------------
+    try:
+        # NOTE: at this point, `sender_email` may already have been swapped to the real
+        # customer email for provider/no-reply cases (carfax/cars.com) earlier in this function.
+        canonical_email = (sender_email or _extract_email(sender_raw) or "").strip().lower()
+
+        existing = (opportunity.get("customer_email") or "").strip().lower()
+        if canonical_email and not existing:
+            # Set in-memory (used immediately downstream)
+            opportunity["customer_email"] = canonical_email
+
+            # Also set nested customer.email if empty (helps other paths / logging)
+            cust = opportunity.get("customer")
+            if isinstance(cust, dict) and not (cust.get("email") or "").strip():
+                cust["email"] = canonical_email
+
+            # Persist to Airtable so future sends resolve cleanly
+            try:
+                save_opp(opportunity, extra_fields={"customer_email": canonical_email})
+            except Exception:
+                pass
+    except Exception:
+        pass
         
     block_auto_reply = bool(opportunity.get("needs_human_review") is True)
         
