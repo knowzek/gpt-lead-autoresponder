@@ -1486,7 +1486,10 @@ def process_inbound_email(inbound: dict) -> None:
     except Exception:
         pass
         
-    block_auto_reply = bool(opportunity.get("needs_human_review") is True)
+    fields = rec.get("fields", {}) if rec else {}
+
+    block_auto_reply = bool(fields.get("Needs Human Review") is True)
+    
         
     source = (opportunity.get("source") or "").lower()
     is_kbb = _is_kbb_opp(opportunity)
