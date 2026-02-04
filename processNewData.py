@@ -3978,6 +3978,12 @@ def send_thread_reply_now(
             "No customer email resolved; blocking send and escalating opp=%s",
             opportunityId,
         )
+        log.warning(
+            "HR_WRITE missing_email_escalation opp=%s rec_id=%s cust_email=%r",
+            opp_id,
+            opportunity.get("_airtable_rec_id"),
+            opportunity.get("customer_email"),
+        )
         opportunity["needs_human_review"] = True
         airtable_save(
             opportunity,
