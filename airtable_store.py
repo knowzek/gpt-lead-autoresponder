@@ -873,16 +873,21 @@ def opp_from_record(rec: dict) -> dict:
         opp.setdefault("customer_last_name", aln)
 
     # --- Hydrate human review flags from Airtable columns ---
-    if "Needs Human Review" in fields:
-        opp["needs_human_review"] = bool(fields.get("Needs Human Review"))
-    else:
-        opp.setdefault("needs_human_review", False)
+    # Airtable often omits unchecked checkbox fields entirely.
+    # Treat missing as False (authoritative) so stale snapshot True can't persist.
+    opp["needs_human_review"] = bool(fields.get("Needs Human Review", False))
 
-    if fields.get("Human Review Reason") and not opp.get("human_review_reason"):
-        opp["human_review_reason"] = fields.get("Human Review Reason")
 
-    if fields.get("Human Review At") and not opp.get("human_review_at"):
-        opp["human_review_at"] = fields.get("Human Review At")
+    opp["human_review_reason"] = (fields.get("Human Review Reason") or "").strip() or None
+    opp["human_review_at"] = fields.get("Human Review At") or None
+    
+    log.info(
+        "HUMAN_REVIEW_HYDRATE needs_human_review=%r has_field=%s raw_field=%r",
+        opp.get("needs_human_review"),
+        ("Needs Human Review" in fields),
+        fields.get("Needs Human Review"),
+    )
+
 
     # ✅ NEW: Hydrate suppression/compliance from Airtable columns (authoritative for gating)
     if fields.get("Suppressed") is True:
