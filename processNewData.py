@@ -4004,6 +4004,16 @@ def send_thread_reply_now(
 
     
     if not to_addr:
+        log.error(
+            "HR_SET missing_email_escalation firing opp=%s rec_id=%s cust_email=%r cust.email=%r SAFE_MODE=%s test_recipient=%r",
+            opportunityId,
+            opportunity.get("_airtable_rec_id"),
+            opportunity.get("customer_email"),
+            ((opportunity.get("customer") or {}).get("email") if isinstance(opportunity.get("customer"), dict) else None),
+            SAFE_MODE,
+            test_recipient,
+        )
+
         log.warning(
             "No customer email resolved; blocking send and escalating opp=%s",
             opportunityId,
