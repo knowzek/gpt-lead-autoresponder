@@ -1428,8 +1428,29 @@ def process_inbound_email(inbound: dict) -> None:
     
     # Now try Airtable
     rec = find_by_opp_id(opp_id)
+    try:
+        _f = (rec or {}).get("fields", {}) or {}
+        log.info(
+            "HR_TRACE step=after_find_by_opp_id opp=%s rec_id=%s airtable_has=%s airtable_val=%r keys_has=%s",
+            opp_id,
+            (rec or {}).get("id"),
+            ("Needs Human Review" in _f),
+            _f.get("Needs Human Review"),
+            [k for k in _f.keys() if "Human Review" in k or "needs_human" in k.lower()],
+        )
+    except Exception:
+        pass
+
     if rec:
         opportunity = opp_from_record(rec)
+        log.info(
+            "HR_TRACE step=after_opp_from_record opp=%s rec_id=%s opp.needs_human_review=%r opp.hr_reason=%r",
+            opp_id,
+            rec.get("id") if rec else None,
+            opportunity.get("needs_human_review"),
+            opportunity.get("human_review_reason") or opportunity.get("patti", {}).get("human_review_reason"),
+        )
+
         salesperson = (opportunity.get("Assigned Sales Rep") or "").strip() or salesperson
     else:
         # Bootstrap from Fortellis by opp_id, then create Airtable lead
@@ -1488,6 +1509,19 @@ def process_inbound_email(inbound: dict) -> None:
         pass
         
     fields = rec.get("fields", {}) if rec else {}
+
+    try:
+        _f = (rec or {}).get("fields", {}) or {}
+        log.info(
+            "HR_TRACE step=before_guard opp=%s rec_id=%s airtable_val=%r opp_val=%r",
+            opp_id,
+            (rec or {}).get("id"),
+            _f.get("Needs Human Review"),
+            opportunity.get("needs_human_review"),
+        )
+    except Exception:
+        pass
+
 
     block_auto_reply = bool(fields.get("Needs Human Review") is True)
     
