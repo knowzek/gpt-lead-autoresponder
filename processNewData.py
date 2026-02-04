@@ -489,6 +489,7 @@ def resolve_customer_email(
     log.info("EMAIL_DEBUG opp=%s customer_email=%r cust.email=%r emails_count=%d", 
              opp_id, air_email, cust.get("email"), len(emails) if isinstance(emails, list) else 0)
     
+    
     # DETAILED DEBUG: Show all customer-related fields
     log.info("EMAIL_DEBUG opp=%s detailed_customer_data: customer=%r", opp_id, cust)
     log.info("EMAIL_DEBUG opp=%s opportunity_keys: %r", opp_id, list(opportunity.keys()))
@@ -3945,33 +3946,62 @@ def send_thread_reply_now(
         rec = find_by_opp_id(opportunityId)
         if rec:
             hydrated = opp_from_record(rec)
-    
+
             # ✅ Merge canonical identity fields into the working opportunity
             for k in ("customer_email", "customer_email_lower", "customer_first_name", "customer_last_name", "customer_phone"):
                 v = hydrated.get(k)
                 if v and not opportunity.get(k):
                     opportunity[k] = v
-    
-            # ✅ Also merge the nested customer email if you use it anywhere
+
+            # ✅ Also merge nested customer email if present
             hcust = hydrated.get("customer") or {}
             ocust = opportunity.get("customer") or {}
-            if hcust.get("email") and not ocust.get("email"):
-                ocust["email"] = hcust["email"]
+            if (hcust.get("email") or "").strip() and not (ocust.get("email") or "").strip():
+                ocust["email"] = (hcust.get("email") or "").strip()
                 opportunity["customer"] = ocust
-    
+
+        # ✅ Normalize / promote nested -> flat (keep canonical field populated)
+        cust = opportunity.get("customer") or {}
+        nested_email = (cust.get("email") or "").strip()
+        if not (opportunity.get("customer_email") or "").strip() and nested_email:
+            opportunity["customer_email"] = nested_email
+
     except Exception as e:
         log.warning("EMAIL_DEBUG opp=%s refresh from airtable failed: %s", opportunityId, e)
+        rec = None  # so bool(rec) logging doesn’t crash
 
     log.info(
         "EMAIL_DEBUG pre-resolve opp=%s found_rec=%s customer_email=%r customer_email_lower=%r",
         opportunityId, bool(rec), opportunity.get("customer_email"), opportunity.get("customer_email_lower")
     )
 
+    # ✅ Auto-clear stale "missing email" human review lock once email exists
+    try:
+        hr = bool(opportunity.get("needs_human_review") is True)
+        reason = (opportunity.get("human_review_reason") or "").strip().lower()
+
+        has_email = bool(
+            (opportunity.get("customer_email") or "").strip()
+            or ((opportunity.get("customer") or {}).get("email") or "").strip()
+        )
+
+        if hr and has_email and "missing customer email" in reason:
+            log.warning("HR_CLEAR stale_missing_email_lock opp=%s", opportunityId)
+            opportunity["needs_human_review"] = False
+            opportunity["human_review_reason"] = ""
+            airtable_save(opportunity, extra_fields={
+                "Needs Human Review": False,
+                "Human Review Reason": "",
+            })
+    except Exception:
+        pass
+
     to_addr = resolve_customer_email(
         opportunity,
         SAFE_MODE=SAFE_MODE,
         test_recipient=test_recipient,
     )
+
     
     if not to_addr:
         log.warning(
@@ -3980,7 +4010,7 @@ def send_thread_reply_now(
         )
         log.warning(
             "HR_WRITE missing_email_escalation opp=%s rec_id=%s cust_email=%r",
-            opp_id,
+            opportunityId,
             opportunity.get("_airtable_rec_id"),
             opportunity.get("customer_email"),
         )
