@@ -2,6 +2,7 @@
 import os
 import re
 import logging
+log = logging.getLogger("patti.airtable")
 from datetime import datetime as _dt, timezone as _tz
 from datetime import timedelta
 import json
@@ -1568,6 +1569,13 @@ def process_inbound_email(inbound: dict) -> None:
         log.info("Inbound opt-out/decline detected; unsubscribed opp=%s", opp_id)
         return
 
+    log.info(
+            "HUMAN_REVIEW_RUNTIME opp=%s fields_has=%s fields_val=%r opp_val=%r",
+            opp_id,
+            ("Needs Human Review" in fields),
+            fields.get("Needs Human Review"),
+            opportunity.get("needs_human_review"),
+        )
 
     if block_auto_reply:
         log.info("Blocking inbound auto-reply (but reply logged): Needs Human Review opp=%s", opp_id)
