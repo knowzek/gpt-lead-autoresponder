@@ -3,6 +3,7 @@ import os, json, uuid
 from datetime import datetime, timedelta, timezone
 import requests
 import hashlib
+import logging
 
 AIRTABLE_API_TOKEN = os.getenv("AIRTABLE_API_TOKEN")
 AIRTABLE_BASE_ID   = os.getenv("AIRTABLE_BASE_ID")
