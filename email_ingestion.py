@@ -1,16 +1,17 @@
-#email_ingestion.py
+# email_ingestion.py
 import os
 import re
 import logging
 from datetime import datetime as _dt, timezone as _tz
 from datetime import timedelta
 import json
+from typing import Optional
 from airtable_store import mark_customer_reply, mark_unsubscribed
 from kbb_ico import _is_optout_text as _kbb_is_optout_text, _is_decline as _kbb_is_decline
 
 from datetime import datetime, timezone, timedelta
 from airtable_store import save_opp
-    
+
 
 from rooftops import get_rooftop_info
 from fortellis import (
@@ -37,6 +38,13 @@ from airtable_store import (
     save_opp,
     upsert_lead,
 )
+
+from prompt.customer_phone_number_extraction import CUSTOMER_PHONE_EXTRACTION_PROMPT
+from pydantic import BaseModel
+from openai import OpenAI
+
+OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY") or "").strip()
+
 log = logging.getLogger("patti.email_ingestion")
 
 def _norm_phone_e164_us(raw: str) -> str:
@@ -140,6 +148,33 @@ _PROVIDER_FIELD_LINE_RE = re.compile(
     r")\s*:\s*(?:\$?\s*[\d,]+(?:\.\d{2})?|[A-Z0-9\-]{6,}|.+?)\s*$"
 )
 
+_E164_STRICT_RE = re.compile(r"^\+\d{10,15}$")
+
+
+def _validate_e164(phone: Optional[str]) -> str:
+    """
+    Validates a phone number against strict E.164 format.
+
+    Rules:
+    - Must start with '+'
+    - Must contain only digits after '+'
+    - Total digits must be between 10 and 15 (inclusive)
+    - Anything else is rejected
+
+    :param phone: Phone number string to validate
+    :return: Valid E.164 phone number or empty string if invalid
+    """
+    if not phone:
+        return ""
+
+    phone = phone.strip()
+
+    if _E164_STRICT_RE.fullmatch(phone):
+        return phone
+
+    return ""
+
+
 def _resolve_subscription_id(inbound: dict, headers: dict | None) -> str | None:
     # 1) Prefer body fields (Power Automate is sending these)
     for k in ("subscription_id", "subscriptionId", "subscription", "sub_id"):
@@ -177,7 +212,6 @@ def extract_phone_from_text(body_text: str) -> str | None:
     if m:
         return re.sub(r"\s+", " ", m.group(2)).strip()
     return None
-
 
 
 def _find_best_active_opp_for_email(*, shopper_email: str, token: str, subscription_id: str) -> str | None:
@@ -301,6 +335,53 @@ def _looks_like_adf_xml(s: str) -> bool:
     s0 = (s or "").lstrip()
     return s0.startswith("<") and "<adf" in s0.lower() and "<prospect" in s0.lower()
 
+
+def _sanitize_xml(xml_str: str) -> str:
+    # Replace & that are NOT already part of an entity
+    return re.sub(r"&(?!amp;|lt;|gt;|apos;|quot;|#\d+;)", "&amp;", xml_str)
+
+def _extract_phone_number_from_email_body_using_llm(email_body: str) -> str:
+    """
+    Responsible for extracting customer phone number from the email body, ignoring lead provider's phone number [+1XXXXXXXXXX]
+    
+    :param email_body: Email body containing the customer's phone number and the provider's phone number.
+    :type email_body: str
+    :return: Customer's phone number OR empty string (in case of no customer phone number being present)
+    :rtype: str
+    """
+
+    class CustomerPhoneNumber(BaseModel):
+        customer_phone_number: str
+
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    try:
+        response = client.beta.chat.completions.parse(
+            model="gpt-4.1-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": CUSTOMER_PHONE_EXTRACTION_PROMPT,
+                },
+                {"role": "user", "content": email_body},
+            ],
+            response_format=CustomerPhoneNumber,
+        )
+    except Exception as e:
+        log.error(f"Exception while extracting phone number using llm: {e}")
+        return ""
+    customer_phone_number = response.choices[0].message.parsed.customer_phone_number
+    return _validate_e164(customer_phone_number)
+
+
+def _maybe_set_phone(current_phone: str, candidate_phone: str) -> str:
+    """
+    Set phone only if we don't already have a valid one.
+    """
+    if current_phone:
+        return current_phone
+    return candidate_phone
+
+
 def _extract_adf_fields(adf_xml: str) -> dict:
     """
     Returns dict with: email, first, last, phone, comments
@@ -308,7 +389,8 @@ def _extract_adf_fields(adf_xml: str) -> dict:
     """
     out = {"email": "", "first": "", "last": "", "phone": "", "comments": ""}
     try:
-        root = ET.fromstring(adf_xml)
+        clean_adf_xml = _sanitize_xml(adf_xml)
+        root = ET.fromstring(clean_adf_xml)
 
         # Email / phone
         email_el = root.find(".//customer/contact/email")
@@ -332,6 +414,7 @@ def _extract_adf_fields(adf_xml: str) -> dict:
             out["comments"] = _html.unescape((c_el.text or "").strip())
 
     except Exception:
+        log.error("adf fields extraction error")
         # keep defaults
         pass
 
@@ -517,8 +600,6 @@ def _extract_first_last_from_provider(body_text: str) -> tuple[str, str]:
     return first, last
 
 
-
-
 _KBB_SOURCES = {"kbb instant cash offer", "kbb servicedrive", "kbb service drive"}
 
 def _is_kbb_opp(opp: dict) -> bool:
@@ -531,13 +612,13 @@ def process_lead_notification(inbound: dict) -> None:
     provider_template = False
     body_html = inbound.get("body_html") or ""
     body_text_in = inbound.get("body_text") or ""
-    
+
     raw_html = (body_html or "").strip()
     raw_text = (body_text_in or "").strip()
-    
+
     # Always keep a cleaned version for provider regex extraction (Carfax often needs this)
     cleaned_text = (clean_html(raw_html) or "").strip() if raw_html else ""
-    
+
     # Choose the best body_text for general parsing / logging
     if raw_text:
         body_text = raw_text
@@ -546,7 +627,7 @@ def process_lead_notification(inbound: dict) -> None:
     else:
         body_text = cleaned_text
 
-
+    phone = ""
 
     # ✅ ADF (CarGurus) structured parse first
     adf_src = raw_html if (raw_html.lstrip().startswith("<?xml") or "<adf" in raw_html.lower()) else body_text
@@ -554,11 +635,13 @@ def process_lead_notification(inbound: dict) -> None:
 
     first_name = ""
     last_name = ""
-    
+
     if adf:
         first_name = _clean_first_name(adf.get("first", "") or "")
         last_name  = (adf.get("last", "") or "").strip()
-    
+        candidate_phone = _extract_phone_number_from_email_body_using_llm(str(adf))
+        phone = _maybe_set_phone(current_phone=phone, candidate_phone=candidate_phone)
+
     if not first_name and not last_name:
         first_name, last_name = _extract_first_last_from_provider(cleaned_text)
 
@@ -569,18 +652,17 @@ def process_lead_notification(inbound: dict) -> None:
         subject[:120],
         (body_text or "")[:260],
     )
-    
-    phone = ""  # single source of truth
+
     customer_comment = ""
     triage_text = body_text  # default
-    
+
     # ✅ If ADF gave us structured phone/comments, use them
     if adf:
         customer_comment = (adf.get("comments", "") or "").strip()
         triage_text = customer_comment  # ✅ ADF: never triage the XML
         if not triage_text.strip():
             triage_text = ""  # keep it empty on purpose
-    
+
     sender = (inbound.get("from") or "").lower()
     is_cars = ("cars.com" in sender) or ("salesleads@cars.com" in sender) or ("you have a new lead from cars.com" in body_text.lower())
     log.info("lead_notification is_cars=%s sender=%r", is_cars, sender)
@@ -600,19 +682,18 @@ def process_lead_notification(inbound: dict) -> None:
 
     if not customer_comment and provider_template:
         customer_comment = extract_customer_comment_from_provider(body_text)
-    
+
     log.info("TRIAGE DEBUG provider_template=%s source=%r sender=%r", provider_template, source, sender)
 
-    
     if is_cars:
         log.info(
             "cars.com before extract len=%d head=%r",
             len(body_text or ""),
             (body_text or "")[:300],
         )
-    
+
         cf, cl, ph = _extract_carscom_name_email_phone(body_text)
-    
+
         log.info(
             "cars.com extracted first=%r last=%r phone=%r (pre-merge first=%r last=%r)",
             cf, cl, ph, first_name, last_name
@@ -623,27 +704,23 @@ def process_lead_notification(inbound: dict) -> None:
         if cl:
             last_name = cl
         if ph:
-            phone = ph
+            candidate_phone = _extract_phone_number_from_email_body_using_llm(str(body_text))
+            phone = _maybe_set_phone(current_phone=phone, candidate_phone=candidate_phone)
 
         # normalize once after possible assignment
-        phone = _norm_phone_e164_us(phone)
-    
+        # phone = _norm_phone_e164_us(phone) # Dont't have to normalize, since the phone extracted using the llm is already in the format +1XXXXXXXXXX
+
     is_adf = bool(adf)  # already parsed from _looks_like_adf_xml(body_text)
 
     # If it's ADF and customer phone is blank, do NOT scrape provider numbers from the blob.
     if not phone and not is_adf:
-        phone = _norm_phone_e164_us(extract_phone_from_text(body_text) or "")
-    
-    if not phone and not is_adf:
-        m = PHONE_RE.search(body_text or "")
-        if m:
-            phone = _norm_phone_e164_us(m.group(0))
+        candidate_phone = _extract_phone_number_from_email_body_using_llm(str(body_text))
+        phone = _maybe_set_phone(current_phone=phone, candidate_phone=candidate_phone)  # Act's as a verification step for phone num extraction
 
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     headers = inbound.get("headers") or {}
     safe_mode = _safe_mode_from(inbound)
     test_recipient = (inbound.get("test_email") or os.getenv("TEST_TO")) if safe_mode else None
-
 
     log.info(
         "DEBUG resolve_subscription: inbound.subscription_id=%r inbound.subscriptionId=%r inbound.source=%r inbound.to=%r headers_keys=%s headers=%r",
@@ -665,17 +742,16 @@ def process_lead_notification(inbound: dict) -> None:
     shopper_email = (adf.get("email", "") or "").strip() if adf else ""
     if not shopper_email:
         shopper_email = _extract_shopper_email_from_provider(body_text)
-    
+
     if not shopper_email and cleaned_text:
         shopper_email = _extract_shopper_email_from_provider(cleaned_text)
-    
+
     if not shopper_email and raw_html:
         shopper_email = _extract_shopper_email_from_provider(raw_html)
-    
+
     if not shopper_email:
         log.warning("No shopper email found in provider lead email. subj=%r", subject[:120])
         return
-
 
     opp_id = _find_best_active_opp_for_email(
         shopper_email=shopper_email,
@@ -688,7 +764,7 @@ def process_lead_notification(inbound: dict) -> None:
 
     # ✅ Guard KBB opps from General Leads
     opp = get_opportunity(opp_id, tok, subscription_id)
-    
+
     if _is_kbb_opp(opp):
         log.info(
             "Skipping General Leads lead_notification bootstrap for KBB opp=%s source=%r",
@@ -715,7 +791,7 @@ def process_lead_notification(inbound: dict) -> None:
             team = opp.get("salesTeam") or []
             if isinstance(team, dict):
                 team = [team]
-        
+
             primary = None
             for m in team:
                 if not isinstance(m, dict):
@@ -723,11 +799,11 @@ def process_lead_notification(inbound: dict) -> None:
                 if m.get("isPrimary") is True or m.get("isPositionPrimary") is True:
                     primary = m
                     break
-        
+
             # fallback: first team member
             if primary is None and team:
                 primary = team[0] if isinstance(team[0], dict) else None
-        
+
             if primary:
                 fn = (primary.get("firstName") or "").strip()
                 ln = (primary.get("lastName") or "").strip()
@@ -763,7 +839,7 @@ def process_lead_notification(inbound: dict) -> None:
 
     # Seed message into thread for GPT context
     msg_body = customer_comment or body_text[:1500]
-    
+
     opportunity.setdefault("messages", []).append({
         "msgFrom": "customer",
         "subject": subject,
@@ -776,7 +852,7 @@ def process_lead_notification(inbound: dict) -> None:
 
     # Persist guest email once, forever
     opportunity["customer_email"] = shopper_email
-    
+
     extra = {
         "customer_email": shopper_email,
         "Customer First Name": first_name,
@@ -784,7 +860,7 @@ def process_lead_notification(inbound: dict) -> None:
         "customer_phone": phone,
         "Customer Comments": customer_comment,
     }
-    
+
     save_opp(opportunity, extra_fields=extra)
 
     # ✅ Call existing internet lead first-touch logic (the extracted helper)
@@ -792,12 +868,12 @@ def process_lead_notification(inbound: dict) -> None:
     fresh_opp = get_opportunity(opp_id, tok, subscription_id) or {}
 
     vehicle_str = "one of our vehicles"
-    
+
     # Rooftop / sender
     rt = get_rooftop_info(subscription_id) or {}
     rooftop_name   = rt.get("name") or rt.get("rooftop_name") or "Rooftop"
     rooftop_sender = rt.get("sender") or rt.get("patti_email") or os.getenv("TEST_FROM") or ""
-    
+
     # --- STEP 1: First SMS on new lead (General Leads only) ---
     try:
         # Only send SMS on first-time bootstrap (new record)
@@ -827,10 +903,10 @@ def process_lead_notification(inbound: dict) -> None:
                     if to_number:
                         # Impel-style first text (shorter than email, still crisp)
                         rooftop_display = rooftop_name or "Patterson Autos"
-                        
+
                         vehicle_phrase = vehicle_str if (vehicle_str and vehicle_str != "one of our vehicles") else "your vehicle inquiry"
                         call_line = f"If you’d rather talk first, we can call {phone}." if phone else ""
-                        
+
                         msg = (
                             f"Hi {first_name or 'there'}, this is Patti with {rooftop_display}. "
                             f"Thanks for reaching out about {vehicle_phrase}. "
@@ -838,7 +914,6 @@ def process_lead_notification(inbound: dict) -> None:
                             f"{call_line} "
                             f"Opt-out reply STOP"
                         ).strip()
-
 
                         resp = send_sms(from_number=from_number, to_number=to_number, body=msg)
 
@@ -856,13 +931,12 @@ def process_lead_notification(inbound: dict) -> None:
     except Exception as e:
         log.exception("SMS first-touch failed opp=%s err=%s", opp_id, e)
 
-
     # Customer name (prefer Airtable-hydrated first/last, then Fortellis, else "there")
     cust = fresh_opp.get("customer") or opportunity.get("customer") or {}
     afn = (opportunity.get("customer_first_name") or (cust.get("firstName") or "")).strip()
     aln = (opportunity.get("customer_last_name") or (cust.get("lastName") or "")).strip()
     customer_name = afn or "there"
-    
+
     # ✅ For provider lead notifications, always send to the provider-extracted shopper email
     customer_email = shopper_email
 
@@ -873,53 +947,53 @@ def process_lead_notification(inbound: dict) -> None:
     try:
         if should_triage(is_kbb=False):
             log.info("lead_notification triage running opp=%s shopper=%s", opp_id, shopper_email)
-    
+
             triage = None
-    
+
             if is_adf:
                 # ✅ ADF: NEVER triage XML. Only triage customer comments.
                 triage_text = (customer_comment or "").strip()
-    
+
                 if not triage_text:
                     triage = {
                         "classification": "AUTO_REPLY_SAFE",
                         "reason": "ADF lead with no customer comments"
                     }
                 # else: we will run GPT on triage_text below
-    
+
             else:
                 # Non-ADF providers
                 triage_text = (customer_comment or "").strip() or (body_text or "")
-    
+
             log.info("TRIAGE DEBUG provider_hint_body=%s provider_hint_triage=%s",
                      bool(_PROVIDER_TEMPLATE_HINT_RE.search(body_text or "")),
                      bool(_PROVIDER_TEMPLATE_HINT_RE.search(triage_text or "")))
-    
+
             # Provider template? Only triage guest-written comment (non-ADF only)
             if provider_template and not is_adf:
                 comment = extract_customer_comment_from_provider(triage_text)
-    
+
                 log.info("TRIAGE DEBUG extracted_comment_len=%s", len(comment or ""))
                 log.info("TRIAGE DEBUG extracted_comment_preview=%r", (comment or "")[:220])
-    
+
                 triage_text = comment.strip() if comment else ""
-    
+
                 if not triage_text:
                     triage = {
                         "classification": "AUTO_REPLY_SAFE",
                         "reason": "Provider lead template with no customer-written comments"
                     }
-    
+
             # ✅ Only call GPT if triage still unset AND there's real text
             if triage is None:
                 if triage_text.strip():
                     triage = classify_inbound_email(triage_text, provider_template=provider_template)
                 else:
                     triage = {"classification": "AUTO_REPLY_SAFE", "reason": "Empty triage text"}
-    
+
             classification = (triage.get("classification") or "").strip().upper()
             reason = (triage.get("reason") or "").strip()
-    
+
             log.info(
                 "lead_notification triage classification=%s reason=%r opp=%s shopper=%s",
                 classification, reason[:220], opp_id, shopper_email
@@ -935,13 +1009,12 @@ def process_lead_notification(inbound: dict) -> None:
                 )
                 return
 
-    
             if classification == "HUMAN_REVIEW_REQUIRED":
                 triage_intended_handoff = True
                 opportunity["needs_human_review"] = True
                 opportunity.setdefault("patti", {})["human_review_reason"] = (reason or "Human review required").strip()
                 save_opp(opportunity)
-    
+
                 handoff_to_human(
                     opportunity=opportunity,
                     fresh_opp=fresh_opp,
@@ -954,11 +1027,11 @@ def process_lead_notification(inbound: dict) -> None:
                     triage=triage,
                 )
                 return
-    
+
             if classification == "NON_LEAD":
                 log.info("lead_notification triage NON_LEAD opp=%s - ignoring", opp_id)
                 return
-    
+
             if classification == "EXPLICIT_OPTOUT":
                 log.info(
                     "lead_notification triage EXPLICIT_OPTOUT opp=%s - suppressing + stopping",
@@ -1062,7 +1135,7 @@ def process_lead_notification(inbound: dict) -> None:
 
     patti = opportunity.get("patti") or {}
     checked = opportunity.get("checkedDict") or {}
-    
+
     if opportunity.get("needs_human_review") is True or patti.get("human_review_reason"):
         log.warning("Blocking first-touch: human review lock opp=%s", opp_id)
         return
@@ -1074,7 +1147,6 @@ def process_lead_notification(inbound: dict) -> None:
         opp_id,
     )
 
-    
     sent_ok = send_first_touch_email(
         opportunity=opportunity,
         fresh_opp=fresh_opp,
@@ -1101,11 +1173,11 @@ def process_lead_notification(inbound: dict) -> None:
     # right after successful first-touch email send (sent_ok=True)
     when_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     next_iso = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
-    
+
     # keep in-memory consistent too (optional but nice)
     opportunity["first_email_sent_at"] = when_iso
     opportunity["followUP_date"] = next_iso
-    
+
     save_opp(
         opportunity,
         extra_fields={
@@ -1115,10 +1187,8 @@ def process_lead_notification(inbound: dict) -> None:
         },
     )
 
-
     log.info("Lead notification first-touch sent_ok=%s opp=%s shopper=%s", sent_ok, opp_id, shopper_email)
     return
-
 
 
 def _safe_mode_from(inbound: dict) -> bool:
@@ -1191,7 +1261,6 @@ def _find_opportunity_by_sender(sender_email: str):
 
     opp = opp_from_record(rec)
     return opp.get("opportunityId") or opp.get("id"), opp
-
 
 
 def is_test_opp(opp: dict, opp_id: str | None) -> bool:
@@ -1389,6 +1458,33 @@ def process_inbound_email(inbound: dict) -> None:
             return
     
         opportunity = opp_from_record(rec2)
+
+    # ------------------------------------------------------------------
+    # ✅ Backfill Airtable customer_email from inbound sender if missing
+    # Prevents "NO EMAIL FOUND" later when Patti tries to reply.
+    # ------------------------------------------------------------------
+    try:
+        # NOTE: at this point, `sender_email` may already have been swapped to the real
+        # customer email for provider/no-reply cases (carfax/cars.com) earlier in this function.
+        canonical_email = (sender_email or _extract_email(sender_raw) or "").strip().lower()
+
+        existing = (opportunity.get("customer_email") or "").strip().lower()
+        if canonical_email and not existing:
+            # Set in-memory (used immediately downstream)
+            opportunity["customer_email"] = canonical_email
+
+            # Also set nested customer.email if empty (helps other paths / logging)
+            cust = opportunity.get("customer")
+            if isinstance(cust, dict) and not (cust.get("email") or "").strip():
+                cust["email"] = canonical_email
+
+            # Persist to Airtable so future sends resolve cleanly
+            try:
+                save_opp(opportunity, extra_fields={"customer_email": canonical_email})
+            except Exception:
+                pass
+    except Exception:
+        pass
         
     block_auto_reply = bool(opportunity.get("needs_human_review") is True)
         

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import requests
 import hashlib
 
+
 AIRTABLE_API_TOKEN = os.getenv("AIRTABLE_API_TOKEN")
 AIRTABLE_BASE_ID   = os.getenv("AIRTABLE_BASE_ID")
 AIRTABLE_TABLE     = os.getenv("AIRTABLE_TABLE_NAME", "Leads")
@@ -117,6 +118,7 @@ def canonicalize_opp(opp: dict, fields: dict) -> dict:
     )
     opp["customer_email"] = _as_str(
         fields.get("customer_email")
+        or fields.get("customer_email_lower")  # ✅ Fallback to lowercase field
         or opp.get("customer_email")
         or cust.get("email")
         or opp.get("email")
@@ -767,11 +769,46 @@ def opp_from_record(rec: dict) -> dict:
 
     # ✅ NEW: load snapshot JSON instead of full opp_json blob
     opp = _safe_json_loads(fields.get("patti_json")) or {}
+    opp_json_full = _safe_json_loads(fields.get("opp_json")) or {}
+    
+    # DEBUG: Log what we're loading
+    rec_id = rec.get("id", "unknown")
+    has_patti = bool(opp)
+    has_opp_json = bool(opp_json_full)
+    
     if not opp:
-        opp = _safe_json_loads(fields.get("opp_json")) or {}
+        opp = opp_json_full
+    
+    # ✅ Hydrate soughtVehicles from opp_json if missing in patti_json
+    # This is critical for Day 3 walkaround video matching
+    sought_before = opp.get("soughtVehicles")
+    sought_full = opp_json_full.get("soughtVehicles")
+    
+    if not sought_before and sought_full:
+        opp["soughtVehicles"] = sought_full
+        print(f"HYDRATION DEBUG: rec={rec_id} hydrated soughtVehicles from opp_json: {len(sought_full)} vehicles")
+    else:
+        print(f"HYDRATION DEBUG: rec={rec_id} has_patti={has_patti} has_opp_json={has_opp_json} sought_before={bool(sought_before)} sought_full={bool(sought_full)}")
+    
     # Always attach Airtable record id
     opp["_airtable_rec_id"] = rec.get("id")
     opp = canonicalize_opp(opp, fields)
+
+    # ✅ Hydrate last_template_day_sent from Airtable column (authoritative)
+    # This prevents regression caused by stale patti_json values.
+    try:
+        lts = int(float(fields.get("last_template_day_sent") or 0))
+    except Exception:
+        lts = 0
+
+    opp["last_template_day_sent"] = lts
+
+    # Optional: keep patti dict consistent until patti_json is fully retired
+    p = opp.setdefault("patti", {})
+    if isinstance(p, dict):
+        # Don't let snapshot drive this value anymore
+        p["last_template_day_sent"] = lts
+
 
     # --- Hydrate Assigned Sales Rep from Airtable column ---
     asr = fields.get("Assigned Sales Rep")
@@ -837,20 +874,14 @@ def opp_from_record(rec: dict) -> dict:
         opp.setdefault("customer_last_name", aln)
 
     # --- Hydrate human review flags from Airtable columns ---
-    # if "Needs Human Review" in fields:
-    #     opp["needs_human_review"] = bool(fields.get("Needs Human Review"))
-    # else:
-    #     opp.setdefault("needs_human_review", False)
+    # Airtable often omits unchecked checkbox fields entirely.
+    # Treat missing as False (authoritative) so stale snapshot True can't persist.
+    opp["needs_human_review"] = bool(fields.get("Needs Human Review", False))
 
-    # # Airtable is the source of truth. If the checkbox is unchecked, the field is often omitted.
-    # # We must FORCE False in that case, not just setdefault (which leaves old True values stuck).
-    opp["needs_human_review"] = bool(fields.get("Needs Human Review"))
-    
-    if fields.get("Human Review Reason") and not opp.get("human_review_reason"):
-        opp["human_review_reason"] = fields.get("Human Review Reason")
 
-    if fields.get("Human Review At") and not opp.get("human_review_at"):
-        opp["human_review_at"] = fields.get("Human Review At")
+    opp["human_review_reason"] = (fields.get("Human Review Reason") or "").strip() or None
+    opp["human_review_at"] = fields.get("Human Review At") or None
+
 
     # ✅ NEW: Hydrate suppression/compliance from Airtable columns (authoritative for gating)
     if fields.get("Suppressed") is True:
@@ -884,6 +915,12 @@ def opp_from_record(rec: dict) -> dict:
         if p.get("last_template_day_sent") is None:
             p["last_template_day_sent"] = 0
 
+    # ✅ Cadence counters (authoritative from Airtable)
+    try:
+        opp["followUP_count"] = int(float(fields.get("followUP_count") or 0))
+    except Exception:
+        opp["followUP_count"] = 0
+    
 
     # ✅ Hydrate first-touch + routing flag (authoritative for cron routing)
     fes = (
@@ -947,6 +984,21 @@ def opp_from_record(rec: dict) -> dict:
             p["last_template_day_sent"] = max(int(p.get("last_template_day_sent") or 0), 2)
         except Exception:
             p["last_template_day_sent"] = 2
+
+    # ✅ TK Day 3 Walkaround Sent (authoritative Airtable checkbox)
+    tk_day3_sent = bool(fields.get("TK Day 3 Walkaround Sent"))
+    opp["tk_day3_walkaround_sent"] = tk_day3_sent
+
+    tk_day3_sent_at = fields.get("TK Day 3 Walkaround Sent At")
+    if tk_day3_sent_at:
+        opp["tk_day3_walkaround_sent_at"] = tk_day3_sent_at
+
+    # Optional derived state (keep cadence state consistent)
+    if tk_day3_sent and isinstance(p, dict):
+        try:
+            p["last_template_day_sent"] = max(int(p.get("last_template_day_sent") or 0), 3)
+        except Exception:
+            p["last_template_day_sent"] = 3
     
     return opp
 

@@ -66,6 +66,28 @@ PROVIDER_BOILERPLATE_LINES_RE = re.compile(
 
 _WS_RE = re.compile(r"\s+")
 
+def get_next_template_day(
+    *,
+    last_template_day_sent: int | None,
+    cadence_days: list[int],
+) -> int | None:
+    """
+    Returns the next cadence day strictly greater than last_template_day_sent.
+    If none remain, returns None.
+    """
+    if not cadence_days:
+        return None
+
+    if not last_template_day_sent:
+        return cadence_days[0]
+
+    for day in cadence_days:
+        if day > last_template_day_sent:
+            return day
+
+    return None
+
+
 def _norm_provider_line(s: str) -> str:
     """
     Normalize a single provider line for matching/filtering.
