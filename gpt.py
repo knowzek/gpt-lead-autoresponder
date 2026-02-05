@@ -466,6 +466,7 @@ def _getClarifyTimePrompts():
         "- If they *did* provide a probable time (like 'tomorrow around 4'), confirm it directly: for example, 'Great, I’ll put you down for tomorrow at 4 PM. Does that work?'\n"
         "- If suggesting a time, use a plausible slot during open hours for the day mentioned.\n"
         "- Your reply should be concise (1 crisp sentence) and never pressure them.\n"
+        "- Use only the store hours provided below.\n"
         "Helpful details:\n"
         "Store hours (local time):\n"
         "Thursday 9 AM-7 PM\n"
