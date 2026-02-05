@@ -3679,6 +3679,7 @@ def send_thread_reply_now(
 
 
     ctx = _build_email_context(opportunity=opportunity, fresh_opp=fresh_opp, subscription_id=subscription_id, token=token)
+    log.debug(f"Email context for opp {opportunity.get('opportunityId') or opportunity.get('id')}: {ctx!r}")
     customer_name   = ctx["customer_name"]
     customer_email  = ctx["customer_email"]
     rooftop_name    = ctx["rooftop_name"]
@@ -3972,14 +3973,14 @@ def send_thread_reply_now(
     - Never invent store hours. Use only the store hours provided below.
     - Always include the address in the confirmation sentence.
     
-    Store hours (local time):
-    Mon: 9 AM–7 PM
-    Tue: 9 AM–7 PM
-    Wed: 9 AM–7 PM
-    Thu: 9 AM–7 PM
-    Fri: 9 AM–7 PM
-    Sat: 9 AM–8 PM
-    Sun: 10 AM–6 PM
+    'Store hours (local time):\n'
+    'Thursday 9 AM-7 PM\n'
+    'Friday 9 AM-7 PM\n'
+    'Saturday 9 AM-8 PM\n'
+    'Sunday 10 AM-6 PM\n'
+    'Monday 9 AM-7 PM\n'
+    'Tuesday 9 AM-7 PM\n'
+    'Wednesday 9 AM-7 PM\n'
     
     Address: 28 B Auto Center Dr, Tustin, CA 92782
     

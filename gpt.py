@@ -464,9 +464,9 @@ def _getClarifyTimePrompts():
         '- If they said "Tomorrow", ask "What time tomorrow works best?"\n'
         '- If they said "Afternoon", propose a specific slot like "Does 2:00 PM work?"\n'
         '- If the guest proposes a visit time (including casual phrasing like "tomorrow around 4"), CONFIRM it.\n'
-        '- Do NOT ask "what day/time works best?" after they already proposed a time.\n'
-        '- Do NOT mention store hours unless (a) the guest asks, or (b) the proposed time is outside store hours.\n'
-        '- Never invent store hours. Use only the store hours provided below.\n'
+        # '- Do NOT ask "what day/time works best?" after they already proposed a time.\n'
+        # '- Do NOT mention store hours unless (a) the guest asks, or (b) the proposed time is outside store hours.\n'
+        # '- Never invent store hours. Use only the store hours provided below.\n'
         # - Always include the address in the confirmation sentence.
         '- Keep it short (1 sentence).\n'
         '- Do not be pushy.\n'
