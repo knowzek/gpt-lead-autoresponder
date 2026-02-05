@@ -457,61 +457,26 @@ def _getFollowUPRules():
 
 def _getClarifyTimePrompts():
     return (
-        'You are replying to an ACTIVE email thread (not a first welcome message).\n'
-        'The customer has shown interest in an appointment but the time is missing or vague (e.g. "tomorrow" or "Wednesday morning").\n'
-        'Your goal: Ask ONE specific question to narrow down the exact time.\n'
-        'Rules:\n'
-        '- If they said "Tomorrow", ask "What time tomorrow works best?"\n'
-        '- If they said "Afternoon", propose a specific slot like "Does 2:00 PM work?"\n'
-        '- If the guest proposes a visit time (including casual phrasing like "tomorrow around 4"), CONFIRM it.\n'
-        # '- Do NOT ask "what day/time works best?" after they already proposed a time.\n'
-        # '- Do NOT mention store hours unless (a) the guest asks, or (b) the proposed time is outside store hours.\n'
-        # '- Never invent store hours. Use only the store hours provided below.\n'
-        # - Always include the address in the confirmation sentence.
-        '- Keep it short (1 sentence).\n'
-        '- Do not be pushy.\n'
-        
-        'Store hours (local time):\n'
-        'Thursday 9 AM-7 PM\n'
-        'Friday 9 AM-7 PM\n'
-        'Saturday 9 AM-8 PM\n'
-        'Sunday 10 AM-6 PM\n'
-        'Monday 9 AM-7 PM\n'
-        'Tuesday 9 AM-7 PM\n'
-        'Wednesday 9 AM-7 PM\n'
-        
-        # Address: 28 B Auto Center Dr, Tustin, CA 92782
-        
-        'Return JSON: {"subject": "...", "body": "..."}'
-        
-        # Thursday 9 AM–7 PM
-        # Friday 9 AM–7 PM
-        # Saturday 9 AM–8 PM
-        # Sunday 10 AM–6 PM
-        # Monday 9 AM–7 PM
-        # Tuesday 9 AM–7 PM
-        # Wednesday 9 AM–7 PM
-        
-        # You are replying to an ACTIVE email thread (not a first welcome message).
-    
-        # Context:
-        # - The guest originally inquired about: {vehicle_str}
-        
-        # Hard rules:
-        # - If the guest proposes a visit time (including casual phrasing like "tomorrow around 4"), CONFIRM it.
-        # - Do NOT ask "what day/time works best?" after they already proposed a time.
-        # - Do NOT mention store hours unless (a) the guest asks, or (b) the proposed time is outside store hours.
-        # - Never invent store hours. Use only the store hours provided below.
-        # - Always include the address in the confirmation sentence.
-        
-        # Store hours (local time):
-        # Mon: 9 AM–7 PM
-        # Tue: 9 AM–7 PM
-        # Wed: 9 AM–7 PM
-        # Thu: 9 AM–7 PM
-        # Fri: 9 AM–7 PM
-        # Sat: 9 AM–8 PM
-        # Sun: 10 AM–6 PM
+        "You are replying to an active email conversation where the guest is interested in making an appointment, but their message is vague or missing a specific time (for example, they said 'tomorrow', 'this weekend', or 'morning').\n"
+        "Your TOP priority is to quickly and politely get a specific answer to the key question: what exact date and time works best for their visit?\n"
+        "Instructions:\n"
+        "- Ask a single, direct follow-up question—no extra commentary or filler. Your message should make it as easy as possible for the user to just answer with the time.\n"
+        "- ALWAYS phrase it so they only have to reply with a time. For example: 'What time tomorrow works for you?' or 'Would the afternoon, around 2:00 PM, be good?'\n"
+        "- If the customer was vague (like 'tomorrow' or 'morning'), turn it into a precise time question. Example: 'What time tomorrow?' or 'Do you prefer morning or afternoon tomorrow?'\n"
+        "- If they *did* provide a probable time (like 'tomorrow around 4'), confirm it directly: for example, 'Great, I’ll put you down for tomorrow at 4 PM. Does that work?'\n"
+        "- If suggesting a time, use a plausible slot during open hours for the day mentioned.\n"
+        "- Your reply should be concise (1 crisp sentence) and never pressure them.\n"
+        "Helpful details:\n"
+        "Store hours (local time):\n"
+        "Thursday 9 AM-7 PM\n"
+        "Friday 9 AM-7 PM\n"
+        "Saturday 9 AM-8 PM\n"
+        "Sunday 10 AM-6 PM\n"
+        "Monday 9 AM-7 PM\n"
+        "Tuesday 9 AM-7 PM\n"
+        "Wednesday 9 AM-7 PM\n"
+        "Address: 28 B Auto Center Dr, Tustin, CA 92782\n"
+        "Output ONLY valid JSON: {\"subject\": \"...\", \"body\": \"...\"}\n"
     )
 
 def _getDigPrefsPrompts():
