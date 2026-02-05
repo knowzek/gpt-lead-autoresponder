@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 load_dotenv()
+
 client = OpenAI(api_key = os.getenv("OPENAI_API_KEY"))
 
 log = logging.getLogger("patti.gpt")
@@ -456,14 +457,61 @@ def _getFollowUPRules():
 
 def _getClarifyTimePrompts():
     return (
+        'You are replying to an ACTIVE email thread (not a first welcome message).\n'
         'The customer has shown interest in an appointment but the time is missing or vague (e.g. "tomorrow" or "Wednesday morning").\n'
         'Your goal: Ask ONE specific question to narrow down the exact time.\n'
         'Rules:\n'
         '- If they said "Tomorrow", ask "What time tomorrow works best?"\n'
         '- If they said "Afternoon", propose a specific slot like "Does 2:00 PM work?"\n'
+        '- If the guest proposes a visit time (including casual phrasing like "tomorrow around 4"), CONFIRM it.\n'
+        '- Do NOT ask "what day/time works best?" after they already proposed a time.\n'
+        '- Do NOT mention store hours unless (a) the guest asks, or (b) the proposed time is outside store hours.\n'
+        '- Never invent store hours. Use only the store hours provided below.\n'
+        # - Always include the address in the confirmation sentence.
         '- Keep it short (1 sentence).\n'
         '- Do not be pushy.\n'
+        
+        'Store hours (local time):\n'
+        'Thursday 9 AM-7 PM\n'
+        'Friday 9 AM-7 PM\n'
+        'Saturday 9 AM-8 PM\n'
+        'Sunday 10 AM-6 PM\n'
+        'Monday 9 AM-7 PM\n'
+        'Tuesday 9 AM-7 PM\n'
+        'Wednesday 9 AM-7 PM\n'
+        
+        # Address: 28 B Auto Center Dr, Tustin, CA 92782
+        
         'Return JSON: {"subject": "...", "body": "..."}'
+        
+        # Thursday 9 AM–7 PM
+        # Friday 9 AM–7 PM
+        # Saturday 9 AM–8 PM
+        # Sunday 10 AM–6 PM
+        # Monday 9 AM–7 PM
+        # Tuesday 9 AM–7 PM
+        # Wednesday 9 AM–7 PM
+        
+        # You are replying to an ACTIVE email thread (not a first welcome message).
+    
+        # Context:
+        # - The guest originally inquired about: {vehicle_str}
+        
+        # Hard rules:
+        # - If the guest proposes a visit time (including casual phrasing like "tomorrow around 4"), CONFIRM it.
+        # - Do NOT ask "what day/time works best?" after they already proposed a time.
+        # - Do NOT mention store hours unless (a) the guest asks, or (b) the proposed time is outside store hours.
+        # - Never invent store hours. Use only the store hours provided below.
+        # - Always include the address in the confirmation sentence.
+        
+        # Store hours (local time):
+        # Mon: 9 AM–7 PM
+        # Tue: 9 AM–7 PM
+        # Wed: 9 AM–7 PM
+        # Thu: 9 AM–7 PM
+        # Fri: 9 AM–7 PM
+        # Sat: 9 AM–8 PM
+        # Sun: 10 AM–6 PM
     )
 
 def _getDigPrefsPrompts():
@@ -543,6 +591,8 @@ def run_gpt(prompt: str,
     if addr_msg:
         system_msgs.insert(0, addr_msg)   # make sure the address is available to the model
 
+    log.info("RUN_GPT debug: prevMessages %s", prevMessages)
+    log.info("RUN_GPT debug: input prompt=%r", prompt)
     if prevMessages:
         messages = system_msgs + [
             {"role": "user", "content": prompt}
