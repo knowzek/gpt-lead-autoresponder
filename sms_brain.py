@@ -44,7 +44,6 @@ def _handoff(reply: str, reason: str):
         "include_optout_footer": False,
     }
 
-
 def _is_vehicle_question(t: str) -> bool:
     tl = (t or "").lower()
     return any(x in tl for x in VEHICLE_Q_TOKENS)
