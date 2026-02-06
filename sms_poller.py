@@ -2,6 +2,9 @@
 import os
 import logging
 from datetime import datetime, timezone
+from datetime import timedelta
+from gpt import extract_appt_time
+from fortellis import get_token, schedule_activity
 
 from goto_sms import list_conversations, list_messages, send_sms
 from airtable_store import (
@@ -125,6 +128,47 @@ def poll_once():
 
         if decision.get("needs_handoff") and decision.get("handoff_reason") == "pricing":
             save_opp(opp, extra_fields={"sms_handoff_reason": "pricing"})
+
+        # --- Appointment detect + schedule (authoritative actions happen here, not in GPT text) ---
+        appt = extract_appt_time(last_inbound, tz="America/Los_Angeles")
+        appt_iso = (appt.get("iso") or "").strip()
+        appt_conf = float(appt.get("confidence") or 0)
+        
+        if appt_iso and appt_conf >= 0.80:
+            try:
+                # Convert local ISO w/ offset -> UTC Z for Fortellis
+                dt_local = datetime.fromisoformat(appt_iso)
+                dt_utc = dt_local.astimezone(timezone.utc)
+                due_utc = dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+        
+                # Get CRM token + schedule activity
+                token = get_token()
+                schedule_activity(
+                    token,
+                    opp["subscription_id"],
+                    opp["opportunityId"],
+                    due_dt_iso_utc=due_utc,
+                    activity_name="Sales Appointment",
+                    activity_type=7,
+                    comments=f"Patti scheduled via SMS based on customer reply: {last_inbound[:200]}",
+                )
+        
+                # Update Airtable appointment + metrics fields
+                now_iso = _now_iso()
+                extra_appt = {
+                    "AI Set Appointment": True,
+                    "AI Appointment At": due_utc,            # or store appt_iso if your field expects local
+                    "last_sms_sent_at": now_iso,
+                    "sms_followup_due_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+                    # bump counters safely
+                    "sms_nudge_count": int(opp.get("sms_nudge_count") or 0) + 1,
+                    "# AI Texts Sent": int(opp.get("# AI Texts Sent") or 0) + 1,
+                }
+                save_opp(opp, extra_fields=extra_appt)
+        
+            except Exception:
+                log.exception("SMS poll: failed to schedule appointment opp=%s appt_iso=%r", opp.get("opportunityId"), appt_iso)
+
         
         reply_text = (decision.get("reply")).strip()
 
@@ -136,5 +180,14 @@ def poll_once():
         try:
             send_sms(from_number=owner, to_number=to_number, body=reply_text)
             log.info("SMS poll: replied to=%s (test=%s)", to_number, _sms_test_enabled())
+            now_iso = _now_iso()
+            extra_sent = {
+                "last_sms_sent_at": now_iso,
+                "sms_followup_due_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+                "sms_nudge_count": int(opp.get("sms_nudge_count") or 0) + 1,
+                "# AI Texts Sent": int(opp.get("# AI Texts Sent") or 0) + 1,
+            }
+            save_opp(opp, extra_fields=extra_sent)
+
         except Exception:
             log.exception("SMS poll: reply send failed opp=%s", opp.get("opportunityId"))
