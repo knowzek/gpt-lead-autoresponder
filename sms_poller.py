@@ -121,39 +121,27 @@ def poll_once():
             customer_first_name=opp["customer_first_name"],
             customer_phone=opp["customer_phone"],
             salesperson=opp["salesperson_name"],
-            vehicle=opp["vehicle"],
+            vehicle=opp.get("vehicle") or "",
             last_inbound=last_inbound,
             thread_snippet=thread,          # ✅ pass real history
             include_optout_footer=False,
         )
 
-        if decision.get("needs_handoff") and decision.get("handoff_reason") == "pricing":
-        try:
-            save_opp(opp, extra_fields={
-                "Needs Human Review": True,
-                "Human Review Reason": "SMS: pricing question",
-                "Human Review At": _now_iso(),   # only if you have this column; otherwise remove
-            })
-        except Exception:
-            log.exception("SMS poll: failed to set Needs Human Review fields opp=%s", opp.get("opportunityId"))
-
-        try:
-            subscription_id = opp.get("subscription_id") or opp.get("dealer_key")
-            token = get_token(subscription_id)
+        needs_handoff = bool(decision.get("needs_handoff"))
+        handoff_reason = (decision.get("handoff_reason") or "other").strip().lower()
         
-            handoff_to_human(
-                opportunity=opp,
-                fresh_opp=None,  # ok; it will still email using fallback + what’s in Airtable
-                token=token,
-                subscription_id=subscription_id,
-                rooftop_name=opp.get("rooftop_name") or "",
-                inbound_subject="SMS: pricing question",
-                inbound_text=last_inbound,
-                inbound_ts=_now_iso(),
-                triage={"reason": "SMS: pricing question", "confidence": 1.0},
-            )
-        except Exception:
-            log.exception("SMS poll: failed to trigger handoff_to_human for pricing opp=%s", opp.get("opportunityId"))
+        if needs_handoff:
+            name = (opp.get("customer_first_name") or "").strip()
+            prefix = f"Thanks, {name}. " if name else "Thanks. "
+        
+            if handoff_reason == "pricing":
+                decision["reply"] = prefix + "I’ll have the team follow up with pricing details shortly."
+            elif handoff_reason == "phone_call":
+                decision["reply"] = prefix + "I’ll have someone give you a quick call shortly."
+            elif handoff_reason in ("angry", "complaint"):
+                decision["reply"] = prefix + "I’m sorry about that. I’m looping in a manager now so we can help."
+            else:
+                decision["reply"] = prefix + "I’m looping in a team member to help, and they’ll follow up shortly."
 
 
         # --- Appointment detect + schedule (authoritative actions happen here, not in GPT text) ---
@@ -201,24 +189,63 @@ def poll_once():
                 log.exception("SMS poll: failed to schedule appointment opp=%s appt_iso=%r", opp.get("opportunityId"), appt_iso)
 
         
-        reply_text = (decision.get("reply")).strip()
-
+        # --- Send SMS reply + persist metrics + optional handoff escalation ---
+        reply_text = (decision.get("reply") or "").strip()
+        if not reply_text:
+            reply_text = "Thanks — what day/time works best for you to come in?"
 
         to_number = author
         if _sms_test_enabled() and _sms_test_to():
             to_number = _sms_test_to()
 
         try:
+            # 1) Send the SMS reply first
             send_sms(from_number=owner, to_number=to_number, body=reply_text)
             log.info("SMS poll: replied to=%s (test=%s)", to_number, _sms_test_enabled())
+
+            # 2) Always update “sent” metrics (fail-open)
             now_iso = _now_iso()
-            extra_sent = {
-                "last_sms_sent_at": now_iso,
-                "sms_followup_due_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
-                "sms_nudge_count": int(opp.get("sms_nudge_count") or 0) + 1,
-                "AI Texts Sent": int(opp.get("AI Texts Sent") or 0) + 1,
-            }
-            save_opp(opp, extra_fields=extra_sent)
+            next_due = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+
+            try:
+                extra_sent = {
+                    "last_sms_sent_at": now_iso,
+                    "sms_followup_due_at": next_due,
+                    "sms_nudge_count": int(opp.get("sms_nudge_count") or 0) + 1,
+                    "AI Texts Sent": int(opp.get("AI Texts Sent") or 0) + 1,
+                }
+                save_opp(opp, extra_fields=extra_sent)
+            except Exception:
+                log.exception("SMS poll: failed to save SMS sent metrics opp=%s", opp.get("opportunityId"))
+
+            # 3) If handoff, flag Airtable + notify salesperson/GMs (fail-open)
+            if needs_handoff:
+                try:
+                    save_opp(opp, extra_fields={
+                        "Needs Human Review": True,
+                        "Human Review Reason": f"SMS handoff: {handoff_reason}",
+                        # "Human Review At": now_iso,  # only if this Airtable field exists
+                    })
+                except Exception:
+                    log.exception("SMS poll: failed to set Needs Human Review fields opp=%s", opp.get("opportunityId"))
+
+                try:
+                    subscription_id = opp.get("subscription_id") or opp.get("dealer_key")
+                    token = get_token(subscription_id)
+
+                    handoff_to_human(
+                        opportunity=opp,
+                        fresh_opp=None,
+                        token=token,
+                        subscription_id=subscription_id,
+                        rooftop_name=opp.get("rooftop_name") or "",
+                        inbound_subject=f"SMS handoff: {handoff_reason}",
+                        inbound_text=last_inbound,
+                        inbound_ts=now_iso,
+                        triage={"reason": f"SMS handoff: {handoff_reason}", "confidence": 1.0},
+                    )
+                except Exception:
+                    log.exception("SMS poll: failed to trigger handoff_to_human opp=%s", opp.get("opportunityId"))
 
         except Exception:
             log.exception("SMS poll: reply send failed opp=%s", opp.get("opportunityId"))
