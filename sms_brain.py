@@ -89,6 +89,28 @@ def _safe_json_loads(s: str) -> Dict[str, Any]:
     except Exception:
         return {}
 
+def _extract_first_json_object(text: str) -> Dict[str, Any]:
+    text = (text or "").strip()
+    if not text:
+        return {}
+    # Fast path
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+
+    # Try to grab the first {...} block
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        snippet = text[start:end+1]
+        try:
+            return json.loads(snippet)
+        except Exception:
+            return {}
+    return {}
+
+
 
 def build_user_prompt(
     *,
@@ -216,17 +238,32 @@ def generate_sms_reply(
     # Then add the final instruction as the last user message
     messages.append({"role": "user", "content": user_prompt})
 
+    data = {}
+
     try:
-        resp = _oai.chat.completions.create(
-            model=SMS_MODEL,
-            temperature=0.3,
-            messages=messages,
-        )
+        try:
+            # Preferred: force JSON-only output if supported
+            resp = _oai.chat.completions.create(
+                model=SMS_MODEL,
+                temperature=0.3,
+                messages=messages,
+                response_format={"type": "json_object"},
+            )
+        except TypeError:
+            # Older SDK/runtime: response_format not supported
+            resp = _oai.chat.completions.create(
+                model=SMS_MODEL,
+                temperature=0.3,
+                messages=messages,
+            )
+    
         content = (resp.choices[0].message.content or "").strip()
-        data = _safe_json_loads(content)
+        data = _extract_first_json_object(content)
+    
     except Exception as e:
         log.warning("sms_brain OpenAI call failed: %r", e)
         data = {}
+
 
     reply = (data.get("reply") or "").strip()
     intent = (data.get("intent") or "reply").strip()
