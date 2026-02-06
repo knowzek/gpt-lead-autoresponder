@@ -1097,26 +1097,15 @@ def process_lead_notification(inbound: dict) -> None:
             return
         # otherwise: continue to normal first-touch
 
-    # Vehicle string (best-effort)
+    # Vehicle string (Airtable fields are canonical source)
     vehicle_str = "one of our vehicles"
-    sought = fresh_opp.get("soughtVehicles") or opportunity.get("soughtVehicles") or []
-    if isinstance(sought, list) and sought:
-        primary = None
-        for v in sought:
-            if isinstance(v, dict) and v.get("isPrimary"):
-                primary = v
-                break
-        if not primary and isinstance(sought[0], dict):
-            primary = sought[0]
-
-        if primary:
-            make  = str(primary.get("make") or "").strip()
-            model = str(primary.get("model") or "").strip()
-            year  = str(primary.get("yearFrom") or primary.get("year") or "").strip()
-            trim  = str(primary.get("trim") or "").strip()
-            tmp = f"{year} {make} {model} {trim}".strip()
-            if tmp:
-                vehicle_str = tmp
+    make  = (opportunity.get("Make") or "").strip()
+    model = (opportunity.get("Model") or "").strip()
+    year  = (opportunity.get("Year") or "").strip()
+    trim  = (opportunity.get("Trim") or "").strip()
+    tmp = f"{year} {make} {model} {trim}".strip()
+    if tmp:
+        vehicle_str = tmp
 
     # Source label for the email copy
     source_label = (inbound.get("source") or "internet lead").strip()
