@@ -6,7 +6,7 @@ import logging
 from datetime import datetime as _dt, timezone as _tz
 
 from airtable_store import find_by_customer_phone, opp_from_record, save_opp
-from from goto_sms import send_sms, list_messages
+from goto_sms import send_sms, list_messages
 from sms_brain import generate_sms_reply
 
 
