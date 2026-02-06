@@ -162,7 +162,7 @@ def poll_once():
                     "sms_followup_due_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
                     # bump counters safely
                     "sms_nudge_count": int(opp.get("sms_nudge_count") or 0) + 1,
-                    "# AI Texts Sent": int(opp.get("# AI Texts Sent") or 0) + 1,
+                    "AI Texts Sent": int(opp.get("AI Texts Sent") or 0) + 1,
                 }
                 save_opp(opp, extra_fields=extra_appt)
         
@@ -185,7 +185,7 @@ def poll_once():
                 "last_sms_sent_at": now_iso,
                 "sms_followup_due_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
                 "sms_nudge_count": int(opp.get("sms_nudge_count") or 0) + 1,
-                "# AI Texts Sent": int(opp.get("# AI Texts Sent") or 0) + 1,
+                "AI Texts Sent": int(opp.get("AI Texts Sent") or 0) + 1,
             }
             save_opp(opp, extra_fields=extra_sent)
 
