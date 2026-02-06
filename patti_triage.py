@@ -227,22 +227,15 @@ def _first_phone(cust: dict) -> str:
     return ""
 
 def _vehicle_str(opportunity: dict, fresh_opp: Optional[dict]) -> str:
-    sought = (fresh_opp or {}).get("soughtVehicles") or opportunity.get("soughtVehicles") or []
-    if isinstance(sought, list) and sought:
-        primary = None
-        for v in sought:
-            if isinstance(v, dict) and v.get("isPrimary"):
-                primary = v
-                break
-        if not primary and isinstance(sought[0], dict):
-            primary = sought[0]
-        if primary:
-            year = str(primary.get("yearFrom") or primary.get("year") or "").strip()
-            make = str(primary.get("make") or "").strip()
-            model = str(primary.get("model") or "").strip()
-            trim = str(primary.get("trim") or "").strip()
-            return f"{year} {make} {model} {trim}".strip()
-    return ""
+    """
+    Build vehicle display string from Airtable-hydrated fields (canonical source).
+    Falls back to empty string if no vehicle data is available.
+    """
+    year  = (opportunity.get("Year") or "").strip()
+    make  = (opportunity.get("Make") or "").strip()
+    model = (opportunity.get("Model") or "").strip()
+    trim  = (opportunity.get("Trim") or "").strip()
+    return f"{year} {make} {model} {trim}".strip()
 
 def _primary_salesperson(sales_team: Any) -> Tuple[str, str]:
     """
