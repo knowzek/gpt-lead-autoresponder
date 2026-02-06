@@ -3783,6 +3783,7 @@ def send_thread_reply_now(
     # --- Step 2: try to auto-schedule an appointment from this reply (WEBHOOK PATH) ---
     created_appt_ok = False
     appt_human = None
+    intent_action = None
     
     # NOTE: no SAFE_MODE gating here by request (SAFE_MODE can still create Fortellis appts)
     if (not OFFLINE_MODE) and token and subscription_id and opportunityId:
@@ -3800,140 +3801,143 @@ def send_thread_reply_now(
                 except Exception:
                     pass
     
-            # appt_iso = ""
-            # conf = 0.0
+            appt_iso = ""
+            conf = 0.0
             
-            # if (not already_scheduled) and customer_body:
-            #     proposed = extract_appt_time(customer_body, tz="America/Los_Angeles")
-            #     appt_iso = (proposed.get("iso") or "").strip()
-            #     conf = float(proposed.get("confidence") or 0.0)
+            log.info("Customer body for appt extraction: %r", customer_body)
+            if (not already_scheduled) and customer_body:
+                proposed = extract_appt_time(customer_body, tz="America/Los_Angeles")
+                appt_iso = (proposed.get("iso") or "").strip()
+                conf = float(proposed.get("confidence") or 0.0)
+                intent_action = proposed.get("classification")
+                log.info("Extracted proposed appointment: %r", proposed)
 
             # ----
-            try:
-                # # Skip if we already know about a future appointment
-                # patti_meta = opportunity.get("patti") or {}
-                # appt_due_utc = patti_meta.get("appt_due_utc")
-                # already_scheduled = False
-                # if appt_due_utc:
-                #     try:
-                #         appt_dt = _dt.fromisoformat(str(appt_due_utc).replace("Z", "+00:00"))
-                #         if appt_dt > _dt.now(_tz.utc):
-                #             already_scheduled = True
-                #     except Exception:
-                #         pass
+            # try:
+            #     # # Skip if we already know about a future appointment
+            #     # patti_meta = opportunity.get("patti") or {}
+            #     # appt_due_utc = patti_meta.get("appt_due_utc")
+            #     # already_scheduled = False
+            #     # if appt_due_utc:
+            #     #     try:
+            #     #         appt_dt = _dt.fromisoformat(str(appt_due_utc).replace("Z", "+00:00"))
+            #     #         if appt_dt > _dt.now(_tz.utc):
+            #     #             already_scheduled = True
+            #     #     except Exception:
+            #     #         pass
 
-                appt_iso = ""
-                conf = 0.0
-                intent_action = "DEFAULT_REPLY"
-                override_prompt = None
+            #     appt_iso = ""
+            #     conf = 0.0
+            #     intent_action = "DEFAULT_REPLY"
+            #     override_prompt = None
 
-                if not already_scheduled:
-                    proposed = extract_appt_time(customer_body or "", tz="America/Los_Angeles")
-                    appt_iso = (proposed.get("iso") or "").strip()
-                    conf = float(proposed.get("confidence") or 0.0)
+            #     if not already_scheduled:
+            #         proposed = extract_appt_time(customer_body or "", tz="America/Los_Angeles")
+            #         appt_iso = (proposed.get("iso") or "").strip()
+            #         conf = float(proposed.get("confidence") or 0.0)
                     
-                    # Decision logic
-                    intent_action = classify_scheduling_intent(proposed)
-                    log.info("Scheduling Intent: %s (iso=%r, conf=%.2f) opp=%s",
-                             intent_action, appt_iso, conf, opportunity['opportunityId'])
+            #         # Decision logic
+            #         intent_action = classify_scheduling_intent(proposed)
+            #         log.info("Scheduling Intent: %s (iso=%r, conf=%.2f) opp=%s",
+            #                  intent_action, appt_iso, conf, opportunity['opportunityId'])
 
-                    if intent_action == "SCHEDULE":
-                        try:
-                            dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
-                            due_dt_iso_utc = dt_local.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            #         if intent_action == "SCHEDULE":
+            #             try:
+            #                 dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
+            #                 due_dt_iso_utc = dt_local.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
                             
-                            appt_human = fmt_local_human(dt_local)
+            #                 appt_human = fmt_local_human(dt_local)
                             
-                            schedule_appointment_with_notify(
-                                token,
-                                subscription_id,
-                                opportunity['opportunityId'],
-                                due_dt_iso_utc=due_dt_iso_utc,
-                                activity_name="Sales Appointment",
-                                activity_type="Appointment",
-                                comments=f"Auto-scheduled from Patti based on customer reply: {customer_body[:200]}",
-                                opportunity=opportunity,
-                                fresh_opp=fresh_opp if "fresh_opp" in locals() else {},
-                                rooftop_name=rooftop_name,
-                                appt_human=appt_human,
-                                customer_reply=customer_body,
-                            )
+            #                 schedule_appointment_with_notify(
+            #                     token,
+            #                     subscription_id,
+            #                     opportunity['opportunityId'],
+            #                     due_dt_iso_utc=due_dt_iso_utc,
+            #                     activity_name="Sales Appointment",
+            #                     activity_type="Appointment",
+            #                     comments=f"Auto-scheduled from Patti based on customer reply: {customer_body[:200]}",
+            #                     opportunity=opportunity,
+            #                     fresh_opp=fresh_opp if "fresh_opp" in locals() else {},
+            #                     rooftop_name=rooftop_name,
+            #                     appt_human=appt_human,
+            #                     customer_reply=customer_body,
+            #                 )
                             
-                            created_appt_ok = True
+            #                 created_appt_ok = True
 
-                            patti_meta["mode"] = "scheduled"
-                            patti_meta["appt_due_utc"] = due_dt_iso_utc
-                            patti_meta["appt_confirm_email_sent"] = True
-                            opportunity["patti"] = patti_meta
+            #                 patti_meta["mode"] = "scheduled"
+            #                 patti_meta["appt_due_utc"] = due_dt_iso_utc
+            #                 patti_meta["appt_confirm_email_sent"] = True
+            #                 opportunity["patti"] = patti_meta
 
-                            log.info(
-                                "✅ Auto-scheduled appointment from reply for %s at %s (conf=%.2f)",
-                                opportunity['opportunityId'],
-                                appt_human,
-                                conf,
-                            )
-                        except Exception as e:
-                            log.error(
-                                "Failed to auto-schedule appointment from reply for %s (appt_iso=%r): %s",
-                                opportunity['opportunityId'],
-                                appt_iso,
-                                e,
-                            )
+            #                 log.info(
+            #                     "✅ Auto-scheduled appointment from reply for %s at %s (conf=%.2f)",
+            #                     opportunity['opportunityId'],
+            #                     appt_human,
+            #                     conf,
+            #                 )
+            #             except Exception as e:
+            #                 log.error(
+            #                     "Failed to auto-schedule appointment from reply for %s (appt_iso=%r): %s",
+            #                     opportunity['opportunityId'],
+            #                     appt_iso,
+            #                     e,
+            #                 )
                     
-                    # Handle other non-scheduling intents by setting override prompts
-                    elif intent_action == "CLARIFY_TIME":
-                        override_prompt = _getClarifyTimePrompts()
-                    elif intent_action == "DIG_PREFS":
-                        override_prompt = _getDigPrefsPrompts()
-                    elif intent_action == "HANDLE_MULTI":
-                        override_prompt = _getMultiOptionPrompts()
-                    elif intent_action == "RESCHEDULE":
-                        override_prompt = _getClarifyTimePrompts()  # Treat as clarify for now
+            #         # Handle other non-scheduling intents by setting override prompts
+            #         elif intent_action == "CLARIFY_TIME":
+            #             override_prompt = _getClarifyTimePrompts()
+            #         elif intent_action == "DIG_PREFS":
+            #             override_prompt = _getDigPrefsPrompts()
+            #         elif intent_action == "HANDLE_MULTI":
+            #             override_prompt = _getMultiOptionPrompts()
+            #         elif intent_action == "RESCHEDULE":
+            #             override_prompt = _getClarifyTimePrompts()  # Treat as clarify for now
 
-            except Exception as e:
-                log.warning(
-                    "Reply-based appointment detection failed for %s: %s",
-                    opportunity.get('opportunityId'),
-                    e,
+            # except Exception as e:
+            #     log.warning(
+            #         "Reply-based appointment detection failed for %s: %s",
+            #         opportunity.get('opportunityId'),
+            #         e,
+            #     )
+            # ----
+            if appt_iso and conf >= 0.60:
+                # appt_iso is expected to be parseable by fromisoformat when Z->+00:00
+                dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
+    
+                due_dt_iso_utc = dt_local.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+                appt_human = fmt_local_human(dt_local)
+
+                schedule_appointment_with_notify(
+                    token,
+                    subscription_id,
+                    opportunityId,
+                    due_dt_iso_utc=due_dt_iso_utc,
+                    activity_name="Sales Appointment",
+                    activity_type="Appointment",
+                    comments=f"Auto-scheduled from Patti based on customer reply: {customer_body[:200]}",
+                    opportunity=opportunity,
+                    fresh_opp=fresh_opp if "fresh_opp" in locals() else {},
+                    rooftop_name=rooftop_name,
+                    appt_human=appt_human,
+                    customer_reply=customer_body,
                 )
-            # ----
-            # if appt_iso and conf >= 0.60:
-            #     # appt_iso is expected to be parseable by fromisoformat when Z->+00:00
-            #     dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
-    
-            #     due_dt_iso_utc = dt_local.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    
-            #     appt_human = fmt_local_human(dt_local)
-
-            #     schedule_appointment_with_notify(
-            #         token,
-            #         subscription_id,
-            #         opportunityId,
-            #         due_dt_iso_utc=due_dt_iso_utc,
-            #         activity_name="Sales Appointment",
-            #         activity_type="Appointment",
-            #         comments=f"Auto-scheduled from Patti based on customer reply: {customer_body[:200]}",
-            #         opportunity=opportunity,
-            #         fresh_opp=fresh_opp if "fresh_opp" in locals() else {},
-            #         rooftop_name=rooftop_name,
-            #         appt_human=appt_human,
-            #         customer_reply=customer_body,
-            #     )
                 
-            #     created_appt_ok = True
+                created_appt_ok = True
     
-            #     # Persist appointment state in Airtable “brain”
-            #     patti_meta["mode"] = "scheduled"
-            #     patti_meta["appt_due_utc"] = due_dt_iso_utc
-            #     # We’re about to confirm in the reply, so mark it to prevent duplicates.
-            #     opportunity["patti"] = patti_meta
+                # Persist appointment state in Airtable “brain”
+                patti_meta["mode"] = "scheduled"
+                patti_meta["appt_due_utc"] = due_dt_iso_utc
+                # We’re about to confirm in the reply, so mark it to prevent duplicates.
+                opportunity["patti"] = patti_meta
     
-            #     log.info(
-            #         "✅ Auto-scheduled appointment from webhook reply for %s at %s (conf=%.2f)",
-            #         opportunityId,
-            #         appt_human,
-            #         conf,
-            #     )
+                log.info(
+                    "✅ Auto-scheduled appointment from webhook reply for %s at %s (conf=%.2f)",
+                    opportunityId,
+                    appt_human,
+                    conf,
+                )
     
         except Exception as e:
             log.warning(
@@ -3959,39 +3963,55 @@ def send_thread_reply_now(
         )
         skip_footer = True
     else:
-        log.debug(f"override_prompt in webhook reply: {repr(override_prompt)[:200]}")
-        prompt = override_prompt or f"""
-    You are replying to an ACTIVE email thread (not a first welcome message).
-    
-    Context:
-    - The guest originally inquired about: {vehicle_str}
-    
-    Hard rules:
-    - If the guest proposes a visit time (including casual phrasing like "tomorrow around 4"), CONFIRM it.
-    - Do NOT ask "what day/time works best?" after they already proposed a time.
-    - Do NOT mention store hours unless (a) the guest asks, or (b) the proposed time is outside store hours.
-    - Never invent store hours. Use only the store hours provided below.
-    - Always include the address in the confirmation sentence.
-    
-    'Store hours (local time):\n'
-    'Thursday 9 AM-7 PM\n'
-    'Friday 9 AM-7 PM\n'
-    'Saturday 9 AM-8 PM\n'
-    'Sunday 10 AM-6 PM\n'
-    'Monday 9 AM-7 PM\n'
-    'Tuesday 9 AM-7 PM\n'
-    'Wednesday 9 AM-7 PM\n'
-    
-    Address: 28 B Auto Center Dr, Tustin, CA 92782
-    
-    messages between Patti and the customer (python list of dicts):
-    {messages}
-    
-    Return ONLY valid JSON with keys: subject, body.
-    """.strip()
+        # log.debug(f"override_prompt in webhook reply: {repr(override_prompt)[:200]}")
+        # Handle other non-scheduling intents by setting override prompts
+        
+        log.info("Vehicle string: %s", vehicle_str)
+        log.info("Previous messages: %r", messages)
+        log.info("Determined intent action: %s", intent_action)
+        
+        if intent_action == "CLARIFY_TIME":
+            prompt = _getClarifyTimePrompts()
+        elif intent_action == "DIG_PREFS":
+            prompt = _getDigPrefsPrompts()
+        elif intent_action == "HANDLE_MULTI":
+            prompt = _getMultiOptionPrompts()
+        elif intent_action == "RESCHEDULE":
+            prompt = _getClarifyTimePrompts()  # Treat as clarify for now
+        else:
+            prompt = f"""
+        You are replying to an ACTIVE email thread (not a first welcome message).
+        
+        Context:
+        - The guest originally inquired about: {vehicle_str}
+        
+        Hard rules:
+        - If the guest proposes a visit time (including casual phrasing like "tomorrow around 4"), CONFIRM it.
+        - Do NOT ask "what day/time works best?" after they already proposed a time.
+        - Do NOT mention store hours unless (a) the guest asks, or (b) the proposed time is outside store hours.
+        - Never invent store hours. Use only the store hours provided below.
+        - Always include the address in the confirmation sentence.
+        
+        'Store hours (local time):\n'
+        'Thursday 9 AM-7 PM\n'
+        'Friday 9 AM-7 PM\n'
+        'Saturday 9 AM-8 PM\n'
+        'Sunday 10 AM-6 PM\n'
+        'Monday 9 AM-7 PM\n'
+        'Tuesday 9 AM-7 PM\n'
+        'Wednesday 9 AM-7 PM\n'
+        
+        Address: 28 B Auto Center Dr, Tustin, CA 92782
+        
+        messages between Patti and the customer (python list of dicts):
+        {messages}
+        
+        Return ONLY valid JSON with keys: subject, body.
+        """.strip()
 
 
     
+        log.info("[SEND_THREAD_REPLY] Using prompt:\n%s", prompt)
         response = run_gpt(prompt, customer_name, rooftop_name, prevMessages=True)
         subject   = response["subject"]
         body_html = response["body"]

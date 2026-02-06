@@ -805,7 +805,7 @@ def extract_appt_time(text: str, tz: str = "America/Los_Angeles") -> dict:
             "- If EXACT_TIME: Set 'iso' to the ISO8601 datetime with timezone. Confidence > 0.9.\n"
             "- If VAGUE_DATE/VAGUE_WINDOW: Set 'iso' to the date at 10:00am (placeholder). Confidence < 0.6.\n"
             "- If MULTI_OPTION: Leave 'iso' empty. Classification takes precedence.\n"
-            "- Always respect the provided timezone for relative dates (Today/Tomorrow/Next).\n\n"
+            "- Always respect the provided timezone for relative dates (Today/Tomorrow/Next/Coming/After).\n\n"
             "Return JSON only:\n"
             "{\n"
             "  \"classification\": \"...\",\n"
