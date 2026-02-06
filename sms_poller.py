@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from datetime import timedelta
 from gpt import extract_appt_time
 from fortellis import get_token, schedule_activity
+from patti_triage import handoff_to_human
 
 from goto_sms import list_conversations, list_messages, send_sms
 from airtable_store import (
@@ -127,7 +128,33 @@ def poll_once():
         )
 
         if decision.get("needs_handoff") and decision.get("handoff_reason") == "pricing":
-            save_opp(opp, extra_fields={"sms_handoff_reason": "pricing"})
+        try:
+            save_opp(opp, extra_fields={
+                "Needs Human Review": True,
+                "Human Review Reason": "SMS: pricing question",
+                "Human Review At": _now_iso(),   # only if you have this column; otherwise remove
+            })
+        except Exception:
+            log.exception("SMS poll: failed to set Needs Human Review fields opp=%s", opp.get("opportunityId"))
+
+        try:
+            subscription_id = opp.get("subscription_id") or opp.get("dealer_key")
+            token = get_token(subscription_id)
+        
+            handoff_to_human(
+                opportunity=opp,
+                fresh_opp=None,  # ok; it will still email using fallback + what’s in Airtable
+                token=token,
+                subscription_id=subscription_id,
+                rooftop_name=opp.get("rooftop_name") or "",
+                inbound_subject="SMS: pricing question",
+                inbound_text=last_inbound,
+                inbound_ts=_now_iso(),
+                triage={"reason": "SMS: pricing question", "confidence": 1.0},
+            )
+        except Exception:
+            log.exception("SMS poll: failed to trigger handoff_to_human for pricing opp=%s", opp.get("opportunityId"))
+
 
         # --- Appointment detect + schedule (authoritative actions happen here, not in GPT text) ---
         appt = extract_appt_time(last_inbound, tz="America/Los_Angeles")
