@@ -24,7 +24,8 @@ from fortellis import (
     get_token,
     get_recent_opportunities,   
     get_customer_by_url,
-    get_activities
+    get_activities,
+    fetch_and_select_vehicle,
 )
 
 # Accept both classic ICO and ServiceDrive variants
@@ -295,7 +296,9 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
         docToIndex["updated_at"] = now_iso
         docToIndex.setdefault("tradeIns", op.get("tradeIns") or [])
         docToIndex.setdefault("salesTeam", op.get("salesTeam") or [])
-        docToIndex.setdefault("soughtVehicles", op.get("soughtVehicles") or [])
+        # NOTE: soughtVehicles intentionally NOT stored in JSON blob.
+        # Vehicle data is written to Airtable fields (Year, Make, Model, Trim, Vin, stockNumber)
+        # via the vehicle enrichment step below.
     
         # default follow-up only for NON-KBB (or only when brand new)
         if not is_kbb:
@@ -352,6 +355,36 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
         # ✅ NEW record: persist initial snapshot once (cheap + guarantees patti_json exists)
         if created_now and docToIndex.get("_airtable_rec_id"):
             save_opp(docToIndex)
+
+        # ── Vehicle enrichment from Fortellis → Airtable fields ──────────
+        # Populate Year, Make, Model, Trim, Vin, stockNumber on new records
+        # or on existing records that are missing vehicle data.
+        _should_enrich_vehicle = False
+        if created_now:
+            _should_enrich_vehicle = True
+        elif existing_fields:
+            # Existing record missing any of the core vehicle fields
+            _has_vehicle = (
+                (existing_fields.get("Year") or "").strip()
+                and (existing_fields.get("Make") or "").strip()
+                and (existing_fields.get("Model") or "").strip()
+            )
+            if not _has_vehicle:
+                _should_enrich_vehicle = True
+
+        if _should_enrich_vehicle and opp_id and rec_id:
+            try:
+                vehicle_fields = fetch_and_select_vehicle(opp_id, token, subscription_id)
+                # Only patch if we got at least one non-empty field
+                _has_any = any(v for v in vehicle_fields.values())
+                if _has_any:
+                    from airtable_store import patch_by_id
+                    patch_by_id(rec_id, vehicle_fields)
+                    log.info("Vehicle enrichment OK opp=%s fields=%s", opp_id, vehicle_fields)
+                else:
+                    log.info("Vehicle enrichment: no vehicle data from Fortellis opp=%s", opp_id)
+            except Exception as e:
+                log.warning("Vehicle enrichment failed opp=%s: %s", opp_id, e)
 
         # If created now, optionally hydrate customer+activities then upsert again
         if created_now:
