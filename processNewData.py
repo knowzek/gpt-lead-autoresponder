@@ -3806,7 +3806,8 @@ def send_thread_reply_now(
             
             log.info("Customer body for appt extraction: %r", customer_body)
             if (not already_scheduled) and customer_body:
-                proposed = extract_appt_time(customer_body, tz="America/Los_Angeles")
+                extraction = extract_appt_time(customer_body, tz="America/Los_Angeles")
+                proposed = classify_scheduling_intent(extraction)
                 appt_iso = (proposed.get("iso") or "").strip()
                 conf = float(proposed.get("confidence") or 0.0)
                 intent_action = proposed.get("classification")
@@ -3969,7 +3970,7 @@ def send_thread_reply_now(
         log.info("Vehicle string: %s", vehicle_str)
         log.info("Previous messages: %r", messages)
         log.info("Determined intent action: %s", intent_action)
-        
+
         if intent_action == "CLARIFY_TIME":
             prompt = _getClarifyTimePrompts()
         elif intent_action == "DIG_PREFS":
