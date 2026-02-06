@@ -24,6 +24,27 @@ VEHICLE_Q_TOKENS = (
     "what did i inquire", "what am i looking", "what was i looking",
 )
 
+HANDOFF_REASONS = {
+    "pricing",
+    "phone_call",
+    "angry",
+    "complaint",
+    "missing_vehicle",
+    "schedule_issue",
+    "other",
+}
+
+def _handoff(reply: str, reason: str):
+    r = reason if reason in HANDOFF_REASONS else "other"
+    return {
+        "reply": reply,
+        "intent": "handoff",
+        "needs_handoff": True,
+        "handoff_reason": r,
+        "include_optout_footer": False,
+    }
+
+
 def _is_vehicle_question(t: str) -> bool:
     tl = (t or "").lower()
     return any(x in tl for x in VEHICLE_Q_TOKENS)
@@ -88,7 +109,7 @@ Return ONLY valid JSON with keys:
   "reply": string,
   "intent": "reply"|"handoff"|"opt_out"|"close",
   "needs_handoff": boolean,
-  "handoff_reason": ""|"pricing"|"policy"|"other",
+  "handoff_reason": ""|"pricing"|"phone_call"|"angry"|"complaint"|"missing_vehicle"|"schedule_issue"|"other",
   "include_optout_footer": boolean
 }
 """
@@ -180,6 +201,7 @@ def build_user_prompt(
         f"- Why buy from us (use when asked 'why buy from you/us/Tustin'): {WHY_BUY_TEXT}\n"
         f"- Vehicle: {vehicle}\n"
         f"- include_optout_footer: {include_optout_footer}\n"
+        f"{recent}\n"
         f"\n"
         f"Customer inbound SMS:\n{last_inbound}\n"
         f"\n"
@@ -228,23 +250,33 @@ def generate_sms_reply(
         # Pricing/OTD → always handoff; never let the model decide this
         log.info("sms_brain GATE=pricing inbound=%r", inbound[:120])
 
-        return {
-            "reply": "I will check in with the team on that. Are you paying cash or financing?",
-            "intent": "handoff",
-            "needs_handoff": True,
-            "handoff_reason": "pricing",
-            "include_optout_footer": False,
-        }
+        return _handoff(
+            "I’ll have the team follow up with pricing details shortly.",
+            "pricing",
+        )
 
     if _is_vehicle_question(last_inbound) and _vehicle_missing(vehicle):
-      return {
-          "reply": "Let me check which vehicle you inquired on and confirm it for you. Want me to text you back here, or have someone give you a quick call?",
-          "intent": "handoff",
-          "needs_handoff": True,
-          "handoff_reason": "missing_vehicle",
-          "include_optout_footer": False,
-      }
+      return _handoff(
+        "Let me confirm and a team member will follow up shortly.",
+        "missing_vehicle",
+    )
 
+    PHONE_TOKENS = ("call me", "phone call", "give me a call", "can you call", "call back", "ring me")
+    ANGRY_TOKENS = ("angry", "upset", "mad", "frustrated", "annoyed", "ridiculous", "terrible", "worst")
+    
+    if _contains_any(inbound, PHONE_TOKENS):
+        log.info("sms_brain GATE=phone_call inbound=%r", inbound[:120])
+        return _handoff(
+            "Absolutely — I’ll have someone give you a quick call shortly.",
+            "phone_call",
+        )
+    
+    if _contains_any(inbound, ANGRY_TOKENS):
+        log.info("sms_brain GATE=angry inbound=%r", inbound[:120])
+        return _handoff(
+            "I’m sorry about that. I’m looping in a manager now so we can help.",
+            "angry",
+        )
 
     user_prompt = build_user_prompt(
         rooftop_name=rooftop_name,
@@ -295,6 +327,11 @@ def generate_sms_reply(
     
         content = (resp.choices[0].message.content or "").strip()
         data = _extract_first_json_object(content)
+
+        if data.get("needs_handoff") and not data.get("handoff_reason"):
+            data["handoff_reason"] = "other"
+            if not data.get("handoff_reason"):
+                data["handoff_reason"] = "other"
     
     except Exception as e:
         log.warning("sms_brain OpenAI call failed: %r", e)
