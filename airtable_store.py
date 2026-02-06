@@ -1,4 +1,4 @@
-#airtable_store.py
+# airtable_store.py
 import os, json, uuid
 from datetime import datetime, timedelta, timezone
 import requests
@@ -10,11 +10,14 @@ log = logging.getLogger("patti.airtable")
 AIRTABLE_API_TOKEN = os.getenv("AIRTABLE_API_TOKEN")
 AIRTABLE_BASE_ID   = os.getenv("AIRTABLE_BASE_ID")
 AIRTABLE_TABLE     = os.getenv("AIRTABLE_TABLE_NAME", "Leads")
+CONVERSATIONS_TABLE_NAME = os.getenv("CONVERSATIONS_TABLE_NAME", "Conversations")
+MESSAGES_TABLE_NAME = os.getenv("MESSAGE_TABLE_NAME", "_Messages") # _Messages only until decided what to do with the already existing table Messages.
 
 if not AIRTABLE_API_TOKEN or not AIRTABLE_BASE_ID:
     raise RuntimeError("Missing AIRTABLE_API_TOKEN or AIRTABLE_BASE_ID")
 
 BASE_URL = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{AIRTABLE_TABLE}"
+RETURN_TABLE_URL = lambda table_name: f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{table_name}"
 HEADERS = {
     "Authorization": f"Bearer {AIRTABLE_API_TOKEN}",
     "Content-Type": "application/json",
@@ -172,7 +175,6 @@ def canonicalize_opp(opp: dict, fields: dict) -> dict:
             opp["source"] = src
 
     return opp
-
 
 
 def _digits(phone: str) -> str:
@@ -786,7 +788,6 @@ def release_lock(rec_id: str, token: str):
     patch_by_id(rec_id, {"lock_until": None, "lock_token": ""})
 
 
-
 def opp_from_record(rec: dict) -> dict:
     """
     Return the opportunity dict from Airtable record (patti_json snapshot).
@@ -1031,10 +1032,8 @@ def opp_from_record(rec: dict) -> dict:
     return opp
 
 
-
 def get_by_id(rec_id: str) -> dict:
     return _request("GET", f"{BASE_URL}/{rec_id}")
-
 
 
 def save_opp(opp: dict, *, extra_fields: dict | None = None):
@@ -1127,7 +1126,7 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
     # Snapshot hashing for patti_json (safe)
     # ---------------------------
     prev_hash = (fields.get("patti_hash") or "").strip()
-    
+
     try:
         snapshot_obj = _build_patti_snapshot(opp)  # ✅ tiny snapshot only
         snapshot_str = json.dumps(snapshot_obj, sort_keys=True, ensure_ascii=False, default=str)
@@ -1142,16 +1141,15 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
             if snapshot_hash and snapshot_hash != prev_hash:
                 patch["patti_json"] = snapshot_str
                 patch["patti_hash"] = snapshot_hash
-    
+
         # Absolute safety: never allow oversize patti_json into the patch
         if "patti_json" in patch and len(patch["patti_json"]) > MAX:
             patch.pop("patti_json", None)
             patch.pop("patti_hash", None)
-    
+
     except Exception:
         # Fail-open: don't block saving brain fields if snapshot serialization fails
         pass
-
 
     # ---------------------------
     # Mirror compliance into columns (safe)
@@ -1184,7 +1182,6 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
     except Exception:
         pass
 
-
     # ✅ HR write detector (final patch going to Airtable)
     try:
         hr_keys = [k for k in patch.keys() if ("Human Review" in k) or ("needs_human" in k.lower())]
@@ -1199,7 +1196,6 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
     except Exception:
         pass
 
-
     # ---------------------------
     # Never PATCH computed/formula/rollup fields
     # ---------------------------
@@ -1212,3 +1208,18 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
             patch.pop(k, None)
 
     return patch_by_id(rec_id, patch)
+
+
+## Conversation // Message table upsert operations.
+
+
+def find_by_conversation_id(conversation_id: str) -> dict | None:
+    params = {"filterByFormula": f'{{conversation_id}}="{conversation_id}"', "pageSize": 1}
+    data = _request("GET", RETURN_TABLE_URL(CONVERSATIONS_TABLE_NAME), params=params)
+    recs = data.get("records", [])
+    return recs[0] if recs else None
+
+
+def upsert_conversation(conversation_id: str, fields: dict) -> dict:
+    conversation_exists = find_by_conversation_id(conversation_id)
+    payload = {}
