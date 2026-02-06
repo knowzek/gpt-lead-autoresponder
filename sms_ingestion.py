@@ -287,8 +287,7 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
         salesperson=(opp.get("Assigned Sales Rep") or "our team"),
         vehicle=vehicle,
         last_inbound=body,
--        thread_snippet=None,
-+        thread_snippet=thread,
+        thread_snippet=thread,
         include_optout_footer=False,
     )
 
