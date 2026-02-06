@@ -24,6 +24,15 @@ log = logging.getLogger("patti.sms_brain")
 OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY") or "").strip()
 SMS_MODEL = (os.getenv("SMS_OPENAI_MODEL") or os.getenv("OPENAI_MODEL") or "gpt-4o-mini").strip()
 
+STORE_HOURS = (os.getenv("STORE_HOURS_TEXT") or """Friday 9 AM–7 PM
+Saturday 9 AM–8 PM
+Sunday 10 AM–6 PM
+Monday 9 AM–7 PM
+Tuesday 9 AM–7 PM
+Wednesday 9 AM–7 PM
+Thursday 9 AM–7 PM""").strip()
+
+
 _oai = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 SYSTEM_PROMPT = """You are Patti, an AI online relations assistant for a car dealership.
@@ -120,6 +129,7 @@ def build_user_prompt(
         f"- Customer first name: {customer_first_name}\n"
         f"- Customer phone: {customer_phone}\n"
         f"- Assigned rep (human): {salesperson}\n"
+        f"- Store hours:\n{STORE_HOURS}\n"
         f"- Vehicle: {vehicle}\n"
         f"- include_optout_footer: {include_optout_footer}\n"
         f"\n"
