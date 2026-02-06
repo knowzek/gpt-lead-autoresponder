@@ -142,7 +142,11 @@ def poll_once():
                 due_utc = dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
         
                 # Get CRM token + schedule activity
-                token = get_token()
+                dealer_key = opp.get("subscription_id") or opp.get("dealer_key")
+                if not dealer_key:
+                    raise RuntimeError(f"Missing subscription_id/dealer_key for opp={opp.get('opportunityId')}")
+                token = get_token(dealer_key)
+
                 schedule_activity(
                     token,
                     opp["subscription_id"],
