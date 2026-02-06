@@ -143,16 +143,17 @@ def canonicalize_opp(opp: dict, fields: dict) -> dict:
     )
     opp["salesperson_name"] = _as_str(sp)
 
-    # ---- Vehicle ----
-    voi = opp.get("vehicleOfInterest")
-    opp["vehicle"] = _as_str(
+    # ---- Vehicle (Airtable fields are canonical) ----
+    # Build display string from Airtable Year/Make/Model/Trim fields
+    _yr = _as_str(fields.get("Year") or opp.get("Year"))
+    _mk = _as_str(fields.get("Make") or opp.get("Make"))
+    _md = _as_str(fields.get("Model") or opp.get("Model"))
+    _tr = _as_str(fields.get("Trim") or opp.get("Trim"))
+    _vehicle_display = f"{_yr} {_mk} {_md} {_tr}".strip()
+    opp["vehicle"] = _vehicle_display or _as_str(
         fields.get("vehicle")
         or fields.get("Vehicle")
         or opp.get("vehicle")
-        or (voi or {}).get("display")            # if dict
-        or (voi or {}).get("name")
-        or (voi or {}).get("value")
-        or voi
     )
 
     # ---- Patti dict always exists ----
@@ -476,7 +477,6 @@ def _build_patti_snapshot(opp: dict) -> dict:
     metrics = opp.get("patti_metrics") if isinstance(opp.get("patti_metrics"), dict) else {}
 
     cust = opp.get("customer") if isinstance(opp.get("customer"), dict) else {}
-    veh  = opp.get("vehicle") if isinstance(opp.get("vehicle"), dict) else {}
 
     return {
         "opportunityId": opp.get("opportunityId") or opp.get("id"),
@@ -489,10 +489,12 @@ def _build_patti_snapshot(opp: dict) -> dict:
             "phone":     opp.get("customer_phone") or "",
         },
         "vehicle": {
-            "year":  veh.get("year") or opp.get("year") or "",
-            "make":  veh.get("make") or opp.get("make") or "",
-            "model": veh.get("model") or opp.get("model") or "",
-            "vin":   veh.get("vin") or opp.get("vin") or "",
+            "year":  opp.get("Year") or "",
+            "make":  opp.get("Make") or "",
+            "model": opp.get("Model") or "",
+            "trim":  opp.get("Trim") or "",
+            "vin":   opp.get("Vin") or "",
+            "stockNumber": opp.get("stockNumber") or "",
         },
         "patti": {
             "mode": patti.get("mode") or "",
@@ -797,17 +799,16 @@ def opp_from_record(rec: dict) -> dict:
     if not opp:
         opp = opp_json_full
     
-    # ✅ Hydrate soughtVehicles from opp_json if missing in patti_json
-    # This is critical for Day 3 walkaround video matching
-    sought_before = opp.get("soughtVehicles")
-    sought_full = opp_json_full.get("soughtVehicles")
-    
-    if not sought_before and sought_full:
-        opp["soughtVehicles"] = sought_full
-        print(f"HYDRATION DEBUG: rec={rec_id} hydrated soughtVehicles from opp_json: {len(sought_full)} vehicles")
-    else:
-        print(f"HYDRATION DEBUG: rec={rec_id} has_patti={has_patti} has_opp_json={has_opp_json} sought_before={bool(sought_before)} sought_full={bool(sought_full)}")
-    
+    # ── Vehicle fields: Airtable is the canonical source ────────────
+    # Read Year, Make, Model, Trim, Vin, stockNumber from Airtable columns.
+    # These are populated at ingestion time from Fortellis.
+    opp["Year"]        = (fields.get("Year") or "").strip()
+    opp["Make"]        = (fields.get("Make") or "").strip()
+    opp["Model"]       = (fields.get("Model") or "").strip()
+    opp["Trim"]        = (fields.get("Trim") or "").strip()
+    opp["Vin"]         = (fields.get("Vin") or "").strip()
+    opp["stockNumber"] = (fields.get("stockNumber") or "").strip()
+
     # Always attach Airtable record id
     opp["_airtable_rec_id"] = rec.get("id")
     opp = canonicalize_opp(opp, fields)
