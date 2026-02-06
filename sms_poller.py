@@ -176,12 +176,7 @@ def poll_once():
                 now_iso = _now_iso()
                 extra_appt = {
                     "AI Set Appointment": True,
-                    "AI Appointment At": due_utc,            # or store appt_iso if your field expects local
-                    "last_sms_sent_at": now_iso,
-                    "sms_followup_due_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
-                    # bump counters safely
-                    "sms_nudge_count": int(opp.get("sms_nudge_count") or 0) + 1,
-                    "AI Texts Sent": int(opp.get("AI Texts Sent") or 0) + 1,
+                    "AI Appointment At": due_utc,
                 }
                 save_opp(opp, extra_fields=extra_appt)
         
