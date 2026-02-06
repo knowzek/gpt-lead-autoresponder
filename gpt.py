@@ -457,16 +457,21 @@ def _getFollowUPRules():
 
 def _getClarifyTimePrompts():
     return (
-        "You are replying to an active email conversation where the guest is interested in making an appointment, but their message is vague or missing a specific time (for example, they said 'tomorrow', 'this weekend', or 'morning').\n"
-        "Your TOP priority is to quickly and politely get a specific answer to the key question: what exact date and time works best for their visit?\n"
-        "Instructions:\n"
-        "- Ask a single, direct follow-up question—no extra commentary or filler. Your message should make it as easy as possible for the user to just answer with the time.\n"
-        "- ALWAYS phrase it so they only have to reply with a time. For example: 'What time tomorrow works for you?' or 'Would the afternoon, around 2:00 PM, be good?'\n"
-        "- If the customer was vague (like 'tomorrow' or 'morning'), turn it into a precise time question. Example: 'What time tomorrow?' or 'Do you prefer morning or afternoon tomorrow?'\n"
-        "- If they *did* provide a probable time (like 'tomorrow around 4'), confirm it directly: for example, 'Great, I’ll put you down for tomorrow at 4 PM. Does that work?'\n"
-        "- If suggesting a time, use a plausible slot during open hours for the day mentioned.\n"
-        "- Your reply should be concise (1 crisp sentence) and never pressure them.\n"
-        "- Use only the store hours provided below.\n"
+        "You are replying to a customer who wants to make an appointment, but their message is vague, ambiguous, or missing a specific time (for example: 'later today', 'this weekend', 'tomorrow', 'after 3', 'morning', 'next week').\n"
+        "Your main goal is to gently probe until you have a clear, bookable time that can be sent to the salesperson (for CRM/scheduling). Be concise, natural, and helpful.\n"
+        "\n"
+        "DIRECTIVES:\n"
+        "- If the customer stated an exact date *and* a specific time (e.g. 'Wednesday at 4pm'), confirm it directly: 'Great, I’ll put you down for Wednesday at 4pm. Does that work?'\n"
+        "- If they said something vague about a day or time (e.g. 'tomorrow', 'this weekend', 'after 3', 'later today'), your job is to ask ONE ultra-clear, direct question to get the missing info, so you can suggest a bookable slot. Examples:\n"
+        "  - For 'tomorrow': 'What time tomorrow works best for you?'\n"
+        "  - For 'after 3': 'Would 3:00 PM or 4:00 PM tomorrow work for you?'\n"
+        "  - For 'this weekend': 'Which day and time this weekend is best for you? I can get you penciled in so the salesperson can have the vehicle ready.'\n"
+        "- NEVER return to broad open-ended questions (like 'What day/time works?') if the customer already provided part of the info. Drill down: if they said 'next week', ask 'Is there a day or time next week that works best?' If they said 'afternoon', ask 'What time in the afternoon would work for you?'\n"
+        "- If they say something like 'later today', respond: 'Is there a time later today that works best for you? I can have the salesperson ready.'\n"
+        "- Once the guest provides a bookable time window (e.g. 'after 3pm'), you may propose the earliest reasonable slot in that window based on store hours. For example, reply 'I’ll put you down for 3 PM. Does that work?'\n"
+        "- Do not create artificial urgency or pressure. Keep it friendly, warm, polite, and professional.\n"
+        "- Use only the exact store hours below for suggestions or confirmations.\n"
+        "\n"
         "Helpful details:\n"
         "Store hours (local time):\n"
         "Thursday 9 AM-7 PM\n"
@@ -477,7 +482,7 @@ def _getClarifyTimePrompts():
         "Tuesday 9 AM-7 PM\n"
         "Wednesday 9 AM-7 PM\n"
         "Address: 28 B Auto Center Dr, Tustin, CA 92782\n"
-        "Output ONLY valid JSON: {\"subject\": \"...\", \"body\": \"...\"}\n"
+        'Output ONLY valid JSON: {"subject": "...", "body": "..."}\n'
     )
 
 def _getDigPrefsPrompts():
