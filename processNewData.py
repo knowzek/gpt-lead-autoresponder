@@ -3806,11 +3806,10 @@ def send_thread_reply_now(
             
             log.info("Customer body for appt extraction: %r", customer_body)
             if (not already_scheduled) and customer_body:
-                extraction = extract_appt_time(customer_body, tz="America/Los_Angeles")
-                proposed = classify_scheduling_intent(extraction)
+                proposed = extract_appt_time(customer_body, tz="America/Los_Angeles")
+                intent_action = classify_scheduling_intent(proposed)
                 appt_iso = (proposed.get("iso") or "").strip()
                 conf = float(proposed.get("confidence") or 0.0)
-                intent_action = proposed.get("classification")
                 log.info("Extracted proposed appointment: %r", proposed)
 
             # ----
