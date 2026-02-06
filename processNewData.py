@@ -677,57 +677,24 @@ def get_walkaround_video_url(vehicle_model: str) -> str | None:
 
 def _extract_vehicle_info(opportunity: dict) -> dict:
     """
-    Extract vehicle year, make, model from opportunity's soughtVehicles.
+    Extract vehicle year, make, model from Airtable-hydrated fields on the opportunity.
     Returns dict with keys: year, make, model.
     Returns None if model cannot be determined (caller should skip Day 3).
+
+    Airtable fields (Year, Make, Model) are the canonical source.
     """
     opp_id = opportunity.get("opportunityId") or opportunity.get("id") or "unknown"
-    
-    soughtVehicles = opportunity.get("soughtVehicles") or []
-    log.info("DAY3 VEHICLE DEBUG: opp=%s soughtVehicles=%r", opp_id, soughtVehicles)
-    
-    if not isinstance(soughtVehicles, list):
-        soughtVehicles = []
 
-    vehicleObj = None
-    for v in soughtVehicles:
-        if isinstance(v, dict) and v.get("isPrimary"):
-            vehicleObj = v
-            break
-    if not vehicleObj:
-        vehicleObj = (soughtVehicles[0] if soughtVehicles and isinstance(soughtVehicles[0], dict) else {})
+    year = (opportunity.get("Year") or "").strip()
+    make = (opportunity.get("Make") or "").strip()
+    model = (opportunity.get("Model") or "").strip()
 
-    log.info("DAY3 VEHICLE DEBUG: opp=%s vehicleObj=%r", opp_id, vehicleObj)
+    log.info("DAY3 VEHICLE DEBUG: opp=%s Year=%r Make=%r Model=%r (from Airtable fields)", opp_id, year, make, model)
 
-    year = str(vehicleObj.get("yearFrom") or vehicleObj.get("year") or "").strip()
-    make = str(vehicleObj.get("make") or "").strip()
-    model = str(vehicleObj.get("model") or "").strip()
-
-    # Fallback 1: Try opportunity["vehicle"] if available
-    if not model:
-        vehicle_str = opportunity.get("vehicle") or ""
-        if isinstance(vehicle_str, str):
-            model = vehicle_str.strip()
-        elif isinstance(vehicle_str, dict):
-            model = str(vehicle_str.get("model") or "").strip()
-        log.info("DAY3 VEHICLE DEBUG: opp=%s fallback from vehicle field: model=%r", opp_id, model)
-    
-    # Fallback 2: Try extracting from notes using regex (common Kia models)
-    if not model:
-        notes = str(opportunity.get("notes") or "").lower()
-        kia_models = ["sportage", "telluride", "sorento", "soul", "forte", "k5", "niro", "stinger", "carnival", "ev6", "ev9", "seltos", "rio"]
-        for kia_model in kia_models:
-            if kia_model in notes:
-                model = kia_model.title()
-                log.info("DAY3 VEHICLE DEBUG: opp=%s extracted model=%r from notes", opp_id, model)
-                break
-    
     # If still no model, return None to signal skip
     if not model:
-        log.info("DAY3 VEHICLE DEBUG: opp=%s NO MODEL FOUND - skipping Day 3", opp_id)
+        log.info("DAY3 VEHICLE DEBUG: opp=%s NO MODEL FOUND in Airtable - skipping Day 3", opp_id)
         return None
-
-    log.info("DAY3 VEHICLE DEBUG: opp=%s extracted year=%r make=%r model=%r", opp_id, year, make, model)
 
     return {
         "year": year,
@@ -2330,25 +2297,12 @@ def processHit(hit):
                         opportunity.get("opportunityId") or opportunity.get("id"), e)
 
 
-    # === Vehicle & SRP link =============================================
-    soughtVehicles = opportunity.get('soughtVehicles') or []
-    if not isinstance(soughtVehicles, list):
-        soughtVehicles = []
-    vehicleObj = None
-    for vehicle in soughtVehicles:
-        if not vehicle.get('isPrimary'):
-            continue
-        vehicleObj = vehicle
-        break
-
-    if not vehicleObj:
-        vehicleObj = (soughtVehicles[0] if soughtVehicles and isinstance(soughtVehicles[0], dict) else {})
-
-    make  = str(vehicleObj.get("make") or "")
-    model = str(vehicleObj.get("model") or "")
-    year  = str(vehicleObj.get("yearFrom") or vehicleObj.get("year") or "")
-    trim  = str(vehicleObj.get("trim") or "")
-    stock = str(vehicleObj.get("stockNumber") or "")
+    # === Vehicle & SRP link (Airtable fields are canonical) ============
+    make  = (opportunity.get("Make") or "").strip()
+    model = (opportunity.get("Model") or "").strip()
+    year  = (opportunity.get("Year") or "").strip()
+    trim  = (opportunity.get("Trim") or "").strip()
+    stock = (opportunity.get("stockNumber") or "").strip()
 
     vehicle_str = f"{year} {make} {model} {trim}".strip() or "one of our vehicles"
     base_url = DEALERSHIP_URL_MAP.get(dealership)
@@ -3252,23 +3206,11 @@ def _build_email_context(*, opportunity: dict, fresh_opp: dict, subscription_id:
     rooftop_name   = rt.get("name")   or "Patterson Auto Group"
     rooftop_sender = rt.get("sender") or TEST_FROM
 
-    # --- Vehicle ---
-    soughtVehicles = opportunity.get("soughtVehicles") or []
-    if not isinstance(soughtVehicles, list):
-        soughtVehicles = []
-
-    vehicleObj = None
-    for v in soughtVehicles:
-        if isinstance(v, dict) and v.get("isPrimary"):
-            vehicleObj = v
-            break
-    if not vehicleObj:
-        vehicleObj = (soughtVehicles[0] if soughtVehicles and isinstance(soughtVehicles[0], dict) else {})
-
-    make  = str(vehicleObj.get("make") or "")
-    model = str(vehicleObj.get("model") or "")
-    year  = str(vehicleObj.get("yearFrom") or vehicleObj.get("year") or "")
-    trim  = str(vehicleObj.get("trim") or "")
+    # --- Vehicle (Airtable fields are canonical) ---
+    make  = (opportunity.get("Make") or "").strip()
+    model = (opportunity.get("Model") or "").strip()
+    year  = (opportunity.get("Year") or "").strip()
+    trim  = (opportunity.get("Trim") or "").strip()
 
     vehicle_str = f"{year} {make} {model} {trim}".strip() or "one of our vehicles"
 
