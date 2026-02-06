@@ -3979,8 +3979,8 @@ def send_thread_reply_now(
         elif intent_action == "RESCHEDULE":
             prompt = _getClarifyTimePrompts()  # Treat as clarify for now
         else:
+        # You are replying to an ACTIVE email thread (not a first welcome message).
             prompt = f"""
-        You are replying to an ACTIVE email thread (not a first welcome message).
         
         Context:
         - The guest originally inquired about: {vehicle_str}
@@ -4009,8 +4009,19 @@ def send_thread_reply_now(
         Return ONLY valid JSON with keys: subject, body.
         """.strip()
 
-
-    
+        # - Begin with exactly `Hi {customer_name},`
+        prompt = f"""
+        You are replying to an ACTIVE email thread (not a first welcome message).
+        
+        {prompt}
+        
+        Context:
+        - The guest originally inquired about: {vehicle_str}
+        
+        messages between Patti and the customer (python list of dicts):
+        {messages}
+        """
+        
         log.info("[SEND_THREAD_REPLY] Using prompt:\n%s", prompt)
         response = run_gpt(prompt, customer_name, rooftop_name, prevMessages=True)
         subject   = response["subject"]
