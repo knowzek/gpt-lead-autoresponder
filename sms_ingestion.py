@@ -6,7 +6,7 @@ import logging
 from datetime import datetime as _dt, timezone as _tz
 
 from airtable_store import find_by_customer_phone, opp_from_record, save_opp
-from goto_sms import send_sms
+from from goto_sms import send_sms, list_messages
 from sms_brain import generate_sms_reply
 
 
@@ -258,6 +258,28 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
     
     # Impel-style GPT reply (single question, no opt-out footer once guest replies)
     vehicle = (opp.get("vehicle") or opp.get("Vehicle") or "").strip() or "the vehicle you asked about"
+
+    # Pull last N messages in this thread so GPT can interpret short replies & be conversational
+    thread = []
+    try:
+        owner = _patti_from_number()
+        raw = list_messages(owner_phone_e164=owner, contact_phone_e164=from_phone, limit=12)
+        items2 = raw.get("items") or []
+        # Oldest -> newest
+        items2 = sorted(items2, key=lambda m: m.get("timestamp") or "")
+
+        for m in items2[-12:]:
+            txt = (m.get("body") or "").strip()
+            if not txt:
+                continue
+
+            author_num = (m.get("authorPhoneNumber") or "").strip()
+            role = "assistant" if author_num == owner else "user"
+            thread.append({"role": role, "content": txt[:800]})
+    except Exception:
+        log.exception("SMS inbound: failed to fetch thread messages owner=%s contact=%s", _patti_from_number(), from_phone)
+        thread = []
+
     decision = generate_sms_reply(
         rooftop_name=(opp.get("rooftop_name") or ""),
         customer_first_name=(opp.get("customer_first_name") or ""),
@@ -265,9 +287,11 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
         salesperson=(opp.get("Assigned Sales Rep") or "our team"),
         vehicle=vehicle,
         last_inbound=body,
-        thread_snippet=None,
+-        thread_snippet=None,
++        thread_snippet=thread,
         include_optout_footer=False,
     )
+
     reply_text = (decision.get("reply") or "Thanks — what day/time works best for you to connect?").strip()
     
 
