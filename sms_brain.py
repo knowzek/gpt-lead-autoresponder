@@ -19,6 +19,20 @@ from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
 
+VEHICLE_Q_TOKENS = (
+    "what vehicle", "which vehicle", "what car", "which car",
+    "what did i inquire", "what am i looking", "what was i looking",
+)
+
+def _is_vehicle_question(t: str) -> bool:
+    tl = (t or "").lower()
+    return any(x in tl for x in VEHICLE_Q_TOKENS)
+
+def _vehicle_missing(vehicle: str) -> bool:
+    v = (vehicle or "").strip().lower()
+    return (not v) or (v == "the vehicle you asked about") or (v == "the car you asked about")
+
+
 log = logging.getLogger("patti.sms_brain")
 
 OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY") or "").strip()
@@ -32,7 +46,15 @@ Tuesday 9 AM–7 PM
 Wednesday 9 AM–7 PM
 Thursday 9 AM–7 PM""").strip()
 
-WHY_BUY_TEXT = (os.getenv("WHY_BUY_TEXT") or "").strip()
+WHY_BUYS = [
+    "No addendums or dealer markups",
+    "Orange County Top Workplace for 20 years running",
+    "Community driven",
+    "Master technicians and experienced staff",
+]
+
+WHY_BUY_TEXT = " • ".join(WHY_BUYS)
+
 
 _oai = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
@@ -154,7 +176,7 @@ def build_user_prompt(
         f"- Customer phone: {customer_phone}\n"
         f"- Assigned rep (human): {salesperson}\n"
         f"- Store hours:\n{STORE_HOURS}\n"
-        f"- Why buy here (use if asked): {WHY_BUY_TEXT or 'N/A'}\n"
+        f"- Why buy from us (use when asked 'why buy from you/us/Tustin'): {WHY_BUY_TEXT}\n"
         f"- Vehicle: {vehicle}\n"
         f"- include_optout_footer: {include_optout_footer}\n"
         f"\n"
@@ -177,7 +199,7 @@ def generate_sms_reply(
 ) -> Dict[str, Any]:
     if not _oai:
         return {
-            "reply": "Thanks — what day/time works best for you to come in?",
+            "reply": "Thanks, what day/time works best for you to come in?",
             "intent": "reply",
             "needs_handoff": False,
             "handoff_reason": "",
@@ -206,12 +228,22 @@ def generate_sms_reply(
         log.info("sms_brain GATE=pricing inbound=%r", inbound[:120])
 
         return {
-            "reply": "Totally — our team is checking the out-the-door numbers now. Are you paying cash or financing?",
+            "reply": "I will check in with the team on that. Are you paying cash or financing?",
             "intent": "handoff",
             "needs_handoff": True,
             "handoff_reason": "pricing",
             "include_optout_footer": False,
         }
+
+    if _is_vehicle_question(last_inbound) and _vehicle_missing(vehicle):
+      return {
+          "reply": "Let me check which vehicle you inquired on and confirm it for you. Want me to text you back here, or have someone give you a quick call?",
+          "intent": "handoff",
+          "needs_handoff": True,
+          "handoff_reason": "missing_vehicle",
+          "include_optout_footer": False,
+      }
+
 
     user_prompt = build_user_prompt(
         rooftop_name=rooftop_name,
