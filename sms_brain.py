@@ -32,6 +32,7 @@ Tuesday 9 AM–7 PM
 Wednesday 9 AM–7 PM
 Thursday 9 AM–7 PM""").strip()
 
+WHY_BUY_TEXT = (os.getenv("WHY_BUY_TEXT") or "").strip()
 
 _oai = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
@@ -56,6 +57,7 @@ Hard rules:
 - If you asked a question and the customer answered it, acknowledge it and ask the next single best question OR tell them what happens next.
 - If they say "no thanks" after you offered an appointment/call, treat it as declining that option and continue helping.
 - Keep replies under ~320 characters unless asked a complex question.
+- If you do not have a specific fact (vehicle, name, availability), say you’ll check and offer to pass along to their assigned salesteam. Do NOT guess.
 
 Output format:
 Return ONLY valid JSON with keys:
@@ -152,6 +154,7 @@ def build_user_prompt(
         f"- Customer phone: {customer_phone}\n"
         f"- Assigned rep (human): {salesperson}\n"
         f"- Store hours:\n{STORE_HOURS}\n"
+        f"- Why buy here (use if asked): {WHY_BUY_TEXT or 'N/A'}\n"
         f"- Vehicle: {vehicle}\n"
         f"- include_optout_footer: {include_optout_footer}\n"
         f"\n"
