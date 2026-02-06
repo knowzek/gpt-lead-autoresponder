@@ -485,30 +485,50 @@ def _getClarifyTimePrompts():
 
 def _getDigPrefsPrompts():
     return (
-        'The customer wants to visit but hasn\'t proposed a time (e.g. "When can I come?").\n'
-        'Your goal: Narrow down their preferences.\n'
-        'Rules:\n'
-        '- Ask: "Do you prefer weekdays or weekends?" or "Mornings or afternoons?"\n'
-        '- Offer general hours (e.g. "We are open 9am-9pm").\n'
-        '- Return JSON: {"subject": "...", "body": "..."}'
+        "The customer wants to visit but hasn't proposed a time (e.g. 'When can I come?').\n"
+        "Your goal: Gently narrow down the customer's scheduling preferences to move closer to setting an appointment.\n"
+        "\n"
+        "Guidelines:\n"
+        "- Always be warm, friendly, and helpful — never pushy.\n"
+        "- Ask ONE clear, specific question to discover their preferences. For example:\n"
+        "    • 'Do you prefer weekdays or weekends?'\n"
+        "    • 'Are mornings or afternoons better for you?'\n"
+        "- Mention our most popular appointment windows if helpful (e.g. 'Most guests come in around lunchtime or after 4 PM').\n"
+        "- Offer a concise summary of store hours (local time):\n"
+        "    • Monday–Friday: 9:00 AM – 7:00 PM\n"
+        "    • Saturday: 9:00 AM – 8:00 PM\n"
+        "    • Sunday: 10:00 AM – 6:00 PM\n"
+        "- Do NOT propose a specific date & time yet (wait for the guest’s preferences first).\n"
+        "- Never ask both day and time in the same reply—clarify one thing at a time.\n"
+        "- Only include the business address if the customer asks for it.\n"
+        "\n"
+        "Output: Return valid JSON only, e.g. {\"subject\": \"...\", \"body\": \"...\"}"
     )
 
 def _getMultiOptionPrompts():
     return (
-        'The customer proposed multiple times (e.g. "Tuesday at 3 or Thursday at 5").\n'
-        'Your goal: Ask them to confirm ONE specific time.\n'
-        'Rules:\n'
-        '- Example: "Tuesday at 3 works great. Shall I book that?"\n'
-        '- Return JSON: {"subject": "...", "body": "..."}'
+        "The customer gave MULTIPLE possible appointment times or days in their message (for example: \"Tuesday at 3 or Thursday at 5\").\n"
+        "Your job: Help them quickly lock in a single, specific slot.\n"
+        "\n"
+        "Guidelines:\n"
+        "- Politely pick ONE of the offered times—prefer the soonest reasonable slot unless context suggests a better choice.\n"
+        "- Confirm plainly: Echo the chosen time and ask for confirmation (example: \"Tuesday at 3 works great. Shall I book that?\").\n"
+        "- DO NOT ask them to list times again.\n"
+        "- DO NOT add new times or propose alternatives—stick to those offered by the customer.\n"
+        "- Be concise, warm, and helpful. Never sound pushy.\n"
+        "\n"
+        "Output: ONLY valid JSON like {\"subject\": \"...\", \"body\": \"...\"}"
     )
 
 def _getAlreadyBookedGuardrails():
     return (
-        'CRITICAL GUARDRAIL: The customer ALREADY has a confirmed appointment scheduled in our system.\n'
-        'DO NOT ask "When would you like to come in?" or "What time works?".\n'
-        'DO NOT propose new times.\n'
-        'ONLY confirm details, answer questions, or end politely.\n'
-        'If they say "Ok thanks", just say "You\'re welcome, see you then!"'
+        "IMPORTANT: The customer ALREADY has a confirmed appointment scheduled in our system.\n"
+        "- DO NOT ask 'When would you like to come in?' or 'What time works for you?'\n"
+        "- DO NOT propose any new or alternative times or dates for an appointment.\n"
+        "- DO NOT attempt to reschedule or offer changes unless the customer directly requests it.\n"
+        "- Your job is ONLY to confirm their existing appointment details, answer any related questions, or politely conclude the conversation if appropriate.\n"
+        "- If the customer says something like 'Ok thanks' or simply acknowledges, respond warmly and confirm they are all set (e.g., 'You're welcome, see you at your appointment!').\n"
+        "Be brief, clear, and friendly. Never suggest additional actions or changes unless asked."
     )
 
 def run_gpt(prompt: str,
