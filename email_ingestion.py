@@ -911,10 +911,10 @@ def process_lead_notification(inbound: dict) -> None:
                         msg = (
                             f"Hi {first_name or 'there'}, this is Patti with {rooftop_display}. "
                             f"Thanks for reaching out about {vehicle_phrase}. "
-                            f"What day/time works best to come by? "
-                            f"{call_line} "
-                            f"Opt-out reply STOP"
-                        ).strip()
+                            f"I'm happy to confirm it’s currently available. "
+                            f"If you’d like to come by to see it in person or for a test drive, just let me know a day and time and I’ll set it up. "
+                            f"Or, would you prefer a quick call instead?"
+                        )
 
                         resp = send_sms(from_number=from_number, to_number=to_number, body=msg)
 
