@@ -23,6 +23,8 @@ from fortellis import (
     find_recent_opportunity_by_email,
     get_recent_opportunities,
     get_opps_by_customer_id,
+    select_vehicle_from_sought,
+    map_vehicle_to_airtable_fields,
 )
 from processNewData import send_first_touch_email
 from fortellis import complete_activity
@@ -38,6 +40,7 @@ from airtable_store import (
     opp_from_record,
     save_opp,
     upsert_lead,
+    patch_by_id,
 )
 
 from prompt.customer_phone_number_extraction import CUSTOMER_PHONE_EXTRACTION_PROMPT
@@ -837,6 +840,38 @@ def process_lead_notification(inbound: dict) -> None:
             log.warning("Bootstrap upsert did not produce record opp=%s", opp_id)
             return
         opportunity = opp_from_record(rec2)
+
+    # ── Vehicle enrichment from Fortellis soughtVehicles ──────────
+    # `opp` already holds the full Fortellis payload from get_opportunity()
+    # above. Extract vehicle fields and patch Airtable if any are missing.
+    try:
+        rec_id = opportunity.get("_airtable_rec_id")
+        _existing_make  = (opportunity.get("Make") or "").strip()
+        _existing_model = (opportunity.get("Model") or "").strip()
+        _existing_year  = (opportunity.get("Year") or "").strip()
+
+        if rec_id and not (_existing_make and _existing_model and _existing_year):
+            sought = opp.get("soughtVehicles") or []
+            vehicle = select_vehicle_from_sought(sought)
+            veh_fields = map_vehicle_to_airtable_fields(vehicle)
+
+            # Only write fields that are currently empty
+            patch_veh = {}
+            for k in ("Year", "Make", "Model", "Trim", "Vin", "stockNumber"):
+                if not (opportunity.get(k) or "").strip() and (veh_fields.get(k) or "").strip():
+                    patch_veh[k] = veh_fields[k]
+
+            if patch_veh:
+                patch_by_id(rec_id, patch_veh)
+                # Keep in-memory opportunity consistent
+                opportunity.update(patch_veh)
+                log.info("Vehicle enriched opp=%s fields=%s", opp_id, patch_veh)
+            else:
+                log.info("Vehicle enrichment: no new fields to write opp=%s", opp_id)
+        else:
+            log.info("Vehicle enrichment: skipped (already populated or no rec_id) opp=%s", opp_id)
+    except Exception as e:
+        log.warning("Vehicle enrichment failed opp=%s: %s", opp_id, e)
 
     # Seed message into thread for GPT context
     msg_body = customer_comment or body_text[:1500]
