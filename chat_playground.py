@@ -411,11 +411,11 @@ def seed_state(firstName, lastName, email, phone, make, model, year, source, not
         "source": source or "Website",
         "upType": "Internet",
         # Vehicle data stored in Airtable fields (canonical)
-        "Year": str(year or 2025),
-        "Make": make or "Mazda",
-        "Model": model or "CX-5",
-        "Trim": "",
-        "Vin": "",
+        "year": str(year or 2025),
+        "make": make or "Mazda",
+        "model": model or "CX-5",
+        "trim": "",
+        "vin": "",
         "stockNumber": "",
         "salesTeam": [{
             "firstName": "Veronica",
