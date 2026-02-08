@@ -365,9 +365,9 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
         elif existing_fields:
             # Existing record missing any of the core vehicle fields
             _has_vehicle = (
-                (existing_fields.get("Year") or "").strip()
-                and (existing_fields.get("Make") or "").strip()
-                and (existing_fields.get("Model") or "").strip()
+                (existing_fields.get("year") or "").strip()
+                and (existing_fields.get("make") or "").strip()
+                and (existing_fields.get("model") or "").strip()
             )
             if not _has_vehicle:
                 _should_enrich_vehicle = True
