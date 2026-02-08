@@ -112,11 +112,11 @@ def fetch_records_missing_vehicle() -> list[dict]:
             "fields[]": [
                 "opp_id",
                 "subscription_id",
-                "Year",
-                "Make",
-                "Model",
-                "Trim",
-                "Vin",
+                "year",
+                "make",
+                "model",
+                "trim",
+                "vin",
                 "stockNumber",
             ],
         }
@@ -140,9 +140,9 @@ def fetch_records_missing_vehicle() -> list[dict]:
 def _has_all_vehicle_fields(fields: dict) -> bool:
     """Check if a record already has all core vehicle fields populated."""
     return bool(
-        (fields.get("Year") or "").strip()
-        and (fields.get("Make") or "").strip()
-        and (fields.get("Model") or "").strip()
+        (fields.get("year") or "").strip()
+        and (fields.get("make") or "").strip()
+        and (fields.get("model") or "").strip()
     )
 
 
@@ -239,7 +239,7 @@ def backfill():
 
             # Only write fields that are currently empty (don't overwrite existing)
             patch_fields = {}
-            for key in ("Year", "Make", "Model", "Trim", "Vin", "stockNumber"):
+            for key in ("year", "make", "model", "trim", "vin", "stockNumber"):
                 existing_val = (fields.get(key) or "").strip()
                 new_val = (vehicle_fields.get(key) or "").strip()
                 if not existing_val and new_val:
