@@ -537,10 +537,10 @@ from fortellis import select_vehicle_from_sought, map_vehicle_to_airtable_fields
 _sought = opportunity.get("soughtVehicles") or []
 _selected = select_vehicle_from_sought(_sought)
 _vf = map_vehicle_to_airtable_fields(_selected)
-make  = _vf["Make"]
-model = _vf["Model"]
-year  = _vf["Year"]
-trim  = _vf["Trim"]
+make  = _vf["make"]
+model = _vf["model"]
+year  = _vf["year"]
+trim  = _vf["trim"]
 stock = _vf["stockNumber"]
 
 vehicle_str = f"{year} {make} {model} {trim}".strip() or "one of our vehicles"
