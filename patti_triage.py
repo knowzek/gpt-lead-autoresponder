@@ -231,10 +231,10 @@ def _vehicle_str(opportunity: dict, fresh_opp: Optional[dict]) -> str:
     Build vehicle display string from Airtable-hydrated fields (canonical source).
     Falls back to empty string if no vehicle data is available.
     """
-    year  = (opportunity.get("Year") or "").strip()
-    make  = (opportunity.get("Make") or "").strip()
-    model = (opportunity.get("Model") or "").strip()
-    trim  = (opportunity.get("Trim") or "").strip()
+    year  = (opportunity.get("year") or "").strip()
+    make  = (opportunity.get("make") or "").strip()
+    model = (opportunity.get("model") or "").strip()
+    trim  = (opportunity.get("trim") or "").strip()
     return f"{year} {make} {model} {trim}".strip()
 
 def _primary_salesperson(sales_team: Any) -> Tuple[str, str]:
