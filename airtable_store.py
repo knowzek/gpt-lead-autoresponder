@@ -145,10 +145,10 @@ def canonicalize_opp(opp: dict, fields: dict) -> dict:
 
     # ---- Vehicle (Airtable fields are canonical) ----
     # Build display string from Airtable Year/Make/Model/Trim fields
-    _yr = _as_str(fields.get("Year") or opp.get("Year"))
-    _mk = _as_str(fields.get("Make") or opp.get("Make"))
-    _md = _as_str(fields.get("Model") or opp.get("Model"))
-    _tr = _as_str(fields.get("Trim") or opp.get("Trim"))
+    _yr = _as_str(fields.get("year") or opp.get("year"))
+    _mk = _as_str(fields.get("make") or opp.get("make"))
+    _md = _as_str(fields.get("model") or opp.get("model"))
+    _tr = _as_str(fields.get("trim") or opp.get("trim"))
     _vehicle_display = f"{_yr} {_mk} {_md} {_tr}".strip()
     opp["vehicle"] = _vehicle_display or _as_str(
         fields.get("vehicle")
@@ -489,11 +489,11 @@ def _build_patti_snapshot(opp: dict) -> dict:
             "phone":     opp.get("customer_phone") or "",
         },
         "vehicle": {
-            "year":  opp.get("Year") or "",
-            "make":  opp.get("Make") or "",
-            "model": opp.get("Model") or "",
-            "trim":  opp.get("Trim") or "",
-            "vin":   opp.get("Vin") or "",
+            "year":  opp.get("year") or "",
+            "make":  opp.get("make") or "",
+            "model": opp.get("model") or "",
+            "trim":  opp.get("trim") or "",
+            "vin":   opp.get("vin") or "",
             "stockNumber": opp.get("stockNumber") or "",
         },
         "patti": {
@@ -800,14 +800,14 @@ def opp_from_record(rec: dict) -> dict:
         opp = opp_json_full
     
     # ── Vehicle fields: Airtable is the canonical source ────────────
-    # Read Year, Make, Model, Trim, Vin, stockNumber from Airtable columns.
+    # Read year, make, model, trim, vin, stockNumber from Airtable columns.
     # These are populated at ingestion time from Fortellis.
-    opp["Year"]        = (fields.get("Year") or "").strip()
-    opp["Make"]        = (fields.get("Make") or "").strip()
-    opp["Model"]       = (fields.get("Model") or "").strip()
-    opp["Trim"]        = (fields.get("Trim") or "").strip()
-    opp["Vin"]         = (fields.get("Vin") or "").strip()
-    opp["stockNumber"] = (fields.get("stockNumber") or "").strip()
+    opp["year"]         = (fields.get("year") or "").strip()
+    opp["make"]         = (fields.get("make") or "").strip()
+    opp["model"]        = (fields.get("model") or "").strip()
+    opp["trim"]         = (fields.get("trim") or "").strip()
+    opp["vin"]          = (fields.get("vin") or "").strip()
+    opp["stockNumber"]  = (fields.get("stockNumber") or "").strip()
 
     # Always attach Airtable record id
     opp["_airtable_rec_id"] = rec.get("id")
