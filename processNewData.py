@@ -685,11 +685,11 @@ def _extract_vehicle_info(opportunity: dict) -> dict:
     """
     opp_id = opportunity.get("opportunityId") or opportunity.get("id") or "unknown"
 
-    year = (opportunity.get("Year") or "").strip()
-    make = (opportunity.get("Make") or "").strip()
-    model = (opportunity.get("Model") or "").strip()
+    year = (opportunity.get("year") or "").strip()
+    make = (opportunity.get("make") or "").strip()
+    model = (opportunity.get("model") or "").strip()
 
-    log.info("DAY3 VEHICLE DEBUG: opp=%s Year=%r Make=%r Model=%r (from Airtable fields)", opp_id, year, make, model)
+    log.info("DAY3 VEHICLE DEBUG: opp=%s year=%r make=%r model=%r (from Airtable fields)", opp_id, year, make, model)
 
     # If still no model, return None to signal skip
     if not model:
@@ -2298,10 +2298,10 @@ def processHit(hit):
 
 
     # === Vehicle & SRP link (Airtable fields are canonical) ============
-    make  = (opportunity.get("Make") or "").strip()
-    model = (opportunity.get("Model") or "").strip()
-    year  = (opportunity.get("Year") or "").strip()
-    trim  = (opportunity.get("Trim") or "").strip()
+    make  = (opportunity.get("make") or "").strip()
+    model = (opportunity.get("model") or "").strip()
+    year  = (opportunity.get("year") or "").strip()
+    trim  = (opportunity.get("trim") or "").strip()
     stock = (opportunity.get("stockNumber") or "").strip()
 
     vehicle_str = f"{year} {make} {model} {trim}".strip() or "one of our vehicles"
@@ -3207,10 +3207,10 @@ def _build_email_context(*, opportunity: dict, fresh_opp: dict, subscription_id:
     rooftop_sender = rt.get("sender") or TEST_FROM
 
     # --- Vehicle (Airtable fields are canonical) ---
-    make  = (opportunity.get("Make") or "").strip()
-    model = (opportunity.get("Model") or "").strip()
-    year  = (opportunity.get("Year") or "").strip()
-    trim  = (opportunity.get("Trim") or "").strip()
+    make  = (opportunity.get("make") or "").strip()
+    model = (opportunity.get("model") or "").strip()
+    year  = (opportunity.get("year") or "").strip()
+    trim  = (opportunity.get("trim") or "").strip()
 
     vehicle_str = f"{year} {make} {model} {trim}".strip() or "one of our vehicles"
 
