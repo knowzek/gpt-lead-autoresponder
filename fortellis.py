@@ -1448,16 +1448,16 @@ def map_vehicle_to_airtable_fields(vehicle: dict | None) -> dict:
     """
     Map a single Fortellis soughtVehicle dict to canonical Airtable field names.
 
-    Returns a dict with keys: Year, Make, Model, Trim, Vin, stockNumber.
+    Returns a dict with keys: year, make, model, trim, vin, stockNumber.
     All values are strings (empty string if missing).
     """
     if not vehicle or not isinstance(vehicle, dict):
         return {
-            "Year": "",
-            "Make": "",
-            "Model": "",
-            "Trim": "",
-            "Vin": "",
+            "year": "",
+            "make": "",
+            "model": "",
+            "trim": "",
+            "vin": "",
             "stockNumber": "",
         }
 
@@ -1466,11 +1466,11 @@ def map_vehicle_to_airtable_fields(vehicle: dict | None) -> dict:
     year = year_from or year_to
 
     return {
-        "Year": year,
-        "Make": str(vehicle.get("make") or "").strip(),
-        "Model": str(vehicle.get("model") or "").strip(),
-        "Trim": str(vehicle.get("trim") or "").strip(),
-        "Vin": str(vehicle.get("vin") or "").strip(),
+        "year": year,
+        "make": str(vehicle.get("make") or "").strip(),
+        "model": str(vehicle.get("model") or "").strip(),
+        "trim": str(vehicle.get("trim") or "").strip(),
+        "vin": str(vehicle.get("vin") or "").strip(),
         "stockNumber": str(vehicle.get("stockNumber") or "").strip(),
     }
 
