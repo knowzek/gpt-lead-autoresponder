@@ -846,9 +846,9 @@ def process_lead_notification(inbound: dict) -> None:
     # above. Extract vehicle fields and patch Airtable if any are missing.
     try:
         rec_id = opportunity.get("_airtable_rec_id")
-        _existing_make  = (opportunity.get("Make") or "").strip()
-        _existing_model = (opportunity.get("Model") or "").strip()
-        _existing_year  = (opportunity.get("Year") or "").strip()
+        _existing_make  = (opportunity.get("make") or "").strip()
+        _existing_model = (opportunity.get("model") or "").strip()
+        _existing_year  = (opportunity.get("year") or "").strip()
 
         if rec_id and not (_existing_make and _existing_model and _existing_year):
             sought = opp.get("soughtVehicles") or []
@@ -857,7 +857,7 @@ def process_lead_notification(inbound: dict) -> None:
 
             # Only write fields that are currently empty
             patch_veh = {}
-            for k in ("Year", "Make", "Model", "Trim", "Vin", "stockNumber"):
+            for k in ("year", "make", "model", "trim", "vin", "stockNumber"):
                 if not (opportunity.get(k) or "").strip() and (veh_fields.get(k) or "").strip():
                     patch_veh[k] = veh_fields[k]
 
@@ -1134,10 +1134,10 @@ def process_lead_notification(inbound: dict) -> None:
 
     # Vehicle string (Airtable fields are canonical source)
     vehicle_str = "one of our vehicles"
-    make  = (opportunity.get("Make") or "").strip()
-    model = (opportunity.get("Model") or "").strip()
-    year  = (opportunity.get("Year") or "").strip()
-    trim  = (opportunity.get("Trim") or "").strip()
+    make  = (opportunity.get("make") or "").strip()
+    model = (opportunity.get("model") or "").strip()
+    year  = (opportunity.get("year") or "").strip()
+    trim  = (opportunity.get("trim") or "").strip()
     tmp = f"{year} {make} {model} {trim}".strip()
     if tmp:
         vehicle_str = tmp
