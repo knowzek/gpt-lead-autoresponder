@@ -12,6 +12,7 @@ from airtable_store import (
     find_by_customer_phone_loose,
     opp_from_record,
     save_opp,
+    should_suppress_all_sends_airtable,
 )
 from sms_brain import generate_sms_reply
 
@@ -21,14 +22,27 @@ log = logging.getLogger("patti.sms.poller")
 def _now_iso():
     return datetime.now(timezone.utc).isoformat()
 
+def _norm_phone_e164_us(raw: str) -> str:
+    raw = (raw or "").strip()
+    if not raw:
+        return ""
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if len(digits) == 10:
+        return "+1" + digits
+    if len(digits) == 11 and digits.startswith("1"):
+        return "+" + digits
+    if raw.startswith("+") and len(digits) >= 10:
+        return "+" + digits
+    return ""
+
 def _sms_test_enabled() -> bool:
     return (os.getenv("SMS_TEST", "0").strip() == "1")
 
 def _sms_test_to() -> str:
-    return os.getenv("SMS_TEST_TO", "").strip()
+    return _norm_phone_e164_us(os.getenv("SMS_TEST_TO", "").strip())
 
 def _patti_number() -> str:
-    return os.getenv("PATTI_SMS_NUMBER", "+17145977229").strip()
+    return _norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", "+17145977229").strip())
 
 def poll_once():
     """
@@ -78,6 +92,23 @@ def poll_once():
             log.exception("SMS poll: failed to fetch thread messages owner=%s contact=%s", owner, author)
             thread = []
 
+        # ✅ Hard gate: only reply if the guest is STILL the last message in the thread
+        # This prevents double-replies when another process/user already responded.
+        if items2:
+            newest = items2[-1]
+            newest_id = (newest.get("id") or "").strip()
+            newest_author = (newest.get("authorPhoneNumber") or "").strip()
+
+            # If the newest message isn't THIS inbound message, skip
+            if newest_id and msg_id and newest_id != msg_id:
+                log.info("SMS poll: skip (newest_id != msg_id) newest_id=%s msg_id=%s", newest_id, msg_id)
+                continue
+
+            # If the newest message was authored by Patti (OUT), skip
+            if newest_author == owner:
+                log.info("SMS poll: skip (Patti already last message) newest_id=%s", newest_id)
+                continue
+
 
         # Find the lead by author phone (customer)
         rec = find_by_customer_phone_loose(author)
@@ -87,6 +118,22 @@ def poll_once():
 
         opp = opp_from_record(rec)
         patti = opp.setdefault("patti", {})
+
+        # ✅ Hard suppression gate (STOP/opt-out/suppressed/etc.)
+        stop, reason = should_suppress_all_sends_airtable(opp)
+        if stop:
+            # Still record inbound id so we don't spin on it forever
+            extra = {
+                "last_sms_inbound_message_id": msg_id,
+                "last_sms_inbound_at": last.get("timestamp") or _now_iso(),
+            }
+            try:
+                save_opp(opp, extra_fields=extra)
+            except Exception:
+                log.exception("SMS poll: failed to save inbound markers while suppressed opp=%s", opp.get("opportunityId"))
+            log.info("SMS poll: suppressed=%s opp=%s (no reply)", reason, opp.get("opportunityId"))
+            continue
+
 
         # Dedupe: only act once per inbound message id
         last_seen = (opp.get("last_sms_inbound_message_id") or "").strip()
