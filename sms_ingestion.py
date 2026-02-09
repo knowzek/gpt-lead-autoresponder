@@ -5,7 +5,7 @@ import json
 import logging
 from datetime import datetime as _dt, timezone as _tz
 
-from airtable_store import find_by_customer_phone, opp_from_record, save_opp
+from airtable_store import find_by_customer_phone, opp_from_record, save_opp, should_suppress_all_sends_airtable
 from goto_sms import send_sms, list_messages
 from sms_brain import generate_sms_reply
 
@@ -172,6 +172,21 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
         "sms_conversation_id": inbound.get("conversation_id") or (opp.get("sms_conversation_id") or ""),
     }
 
+    # ✅ Suppression gate: if already opted-out/suppressed, do not send replies.
+    # (STOP handling below still works; if they text again post-opt-out, we simply no-op.)
+    stop_send, stop_reason = should_suppress_all_sends_airtable(opp)
+
+    if stop_send:
+        # Still record inbound markers so we don't reprocess this message
+        save_opp(opp, extra_fields=base_patch)
+        log.info(
+            "SMS inbound suppressed=%s opp=%s (no reply)",
+            stop_reason,
+            opp.get("opportunityId"),
+        )
+        return {"status": "ok", "action": "suppressed_no_reply"}
+
+
     # --- Rule 1: STOP / opt-out ---
     if _STOP_RE.search(body):
         opp["patti"]["mode"] = "opt_out"
@@ -279,6 +294,12 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
     except Exception:
         log.exception("SMS inbound: failed to fetch thread messages owner=%s contact=%s", _patti_from_number(), from_phone)
         thread = []
+
+    # ✅ Only reply if the newest message is from the guest (not Patti)
+    if thread and thread[-1].get("role") != "user":
+        log.info("SMS inbound: skip reply because Patti is last message opp=%s", opp.get("opportunityId"))
+        return {"status": "ok", "action": "skip_patti_last"}
+
 
     decision = generate_sms_reply(
         rooftop_name=(opp.get("rooftop_name") or ""),
