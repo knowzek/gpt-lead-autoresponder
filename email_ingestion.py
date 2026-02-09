@@ -913,7 +913,7 @@ def process_lead_notification(inbound: dict) -> None:
                             f"Thanks for reaching out about {vehicle_phrase}. "
                             f"I'm happy to confirm it’s currently available. "
                             f"If you’d like to come by to see it in person or for a test drive, just let me know a day and time and I’ll set it up. "
-                            f"Or, would you prefer a quick call instead?"
+                            f"Or, would you prefer a quick call instead? Opt-out reply STOP"
                         )
 
                         resp = send_sms(from_number=from_number, to_number=to_number, body=msg)
