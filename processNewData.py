@@ -3980,10 +3980,9 @@ def send_thread_reply_now(
             prompt = _getClarifyTimePrompts()  # Treat as clarify for now
         else:
         # You are replying to an ACTIVE email thread (not a first welcome message).
+        # Context:
+        # - The guest originally inquired about: {vehicle_str}
             prompt = f"""
-        
-        Context:
-        - The guest originally inquired about: {vehicle_str}
         
         Hard rules:
         - If the guest proposes a visit time (including casual phrasing like "tomorrow around 4"), CONFIRM it.
@@ -4003,20 +4002,20 @@ def send_thread_reply_now(
         
         Address: 28 B Auto Center Dr, Tustin, CA 92782
         
-        messages between Patti and the customer (python list of dicts):
-        {messages}
-        
         Return ONLY valid JSON with keys: subject, body.
         """.strip()
+        
+        # messages between Patti and the customer (python list of dicts):
+        # {messages}
 
-        # - Begin with exactly `Hi {customer_name},`
         prompt = f"""
         You are replying to an ACTIVE email thread (not a first welcome message).
         
-        {prompt}
-        
         Context:
+        - Begin with exactly `Hi {customer_name},`
         - The guest originally inquired about: {vehicle_str}
+        
+        {prompt}
         
         messages between Patti and the customer (python list of dicts):
         {messages}
