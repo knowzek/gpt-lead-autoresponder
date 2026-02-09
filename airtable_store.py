@@ -4,26 +4,30 @@ from datetime import datetime, timedelta, timezone
 import requests
 import hashlib
 import logging
+
+from models.airtable_upsert_model import Message
+
 log = logging.getLogger("patti.airtable")
 
 
 AIRTABLE_API_TOKEN = os.getenv("AIRTABLE_API_TOKEN")
-AIRTABLE_BASE_ID   = os.getenv("AIRTABLE_BASE_ID")
-AIRTABLE_TABLE     = os.getenv("AIRTABLE_TABLE_NAME", "Leads")
+AIRTABLE_BASE_ID = os.getenv("AIRTABLE_BASE_ID")
+AIRTABLE_TABLE = os.getenv("AIRTABLE_TABLE_NAME", "Leads")
 CONVERSATIONS_TABLE_NAME = os.getenv("CONVERSATIONS_TABLE_NAME", "Conversations")
-MESSAGES_TABLE_NAME = os.getenv("MESSAGE_TABLE_NAME", "_Messages") # _Messages only until decided what to do with the already existing table Messages.
+MESSAGES_TABLE_NAME = os.getenv("MESSAGE_TABLE_NAME", "Messages")
 
 if not AIRTABLE_API_TOKEN or not AIRTABLE_BASE_ID:
     raise RuntimeError("Missing AIRTABLE_API_TOKEN or AIRTABLE_BASE_ID")
 
 BASE_URL = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{AIRTABLE_TABLE}"
-RETURN_TABLE_URL = lambda table_name: f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{table_name}"
+return_table_url = lambda table_name: f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{table_name}"
 HEADERS = {
     "Authorization": f"Bearer {AIRTABLE_API_TOKEN}",
     "Content-Type": "application/json",
 }
 
 import re
+
 
 def _as_str(v) -> str:
     """
@@ -82,21 +86,12 @@ def canonicalize_opp(opp: dict, fields: dict) -> dict:
         opp.setdefault(k, "")
 
     # ---- IDs ----
-    opp_id = _as_str(
-        opp.get("opportunityId")
-        or opp.get("id")
-        or fields.get("opp_id")
-        or fields.get("opportunityId")
-    )
+    opp_id = _as_str(opp.get("opportunityId") or opp.get("id") or fields.get("opp_id") or fields.get("opportunityId"))
     if opp_id:
         opp["opportunityId"] = opp_id
         opp["id"] = opp_id  # keep both in sync
 
-    sub = _as_str(
-        opp.get("_subscription_id")
-        or fields.get("subscription_id")
-        or fields.get("_subscription_id")
-    )
+    sub = _as_str(opp.get("_subscription_id") or fields.get("subscription_id") or fields.get("_subscription_id"))
     if sub:
         opp["_subscription_id"] = sub
 
@@ -121,10 +116,7 @@ def canonicalize_opp(opp: dict, fields: dict) -> dict:
         or opp.get("firstName")
     )
     opp["customer_last_name"] = _as_str(
-        fields.get("Customer Last Name")
-        or opp.get("customer_last_name")
-        or cust.get("lastName")
-        or opp.get("lastName")
+        fields.get("Customer Last Name") or opp.get("customer_last_name") or cust.get("lastName") or opp.get("lastName")
     )
     opp["customer_email"] = _as_str(
         fields.get("customer_email")
@@ -180,6 +172,7 @@ def canonicalize_opp(opp: dict, fields: dict) -> dict:
 def _digits(phone: str) -> str:
     return re.sub(r"\D+", "", phone or "")
 
+
 def find_by_customer_phone_loose(phone_any: str):
     """
     Matches Airtable customer_phone stored as 714-xxx-xxxx against
@@ -212,8 +205,10 @@ def find_by_customer_phone_loose(phone_any: str):
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
+
 def _now_iso_utc():
     return datetime.now(timezone.utc).isoformat()
+
 
 def mark_customer_reply(opp: dict, *, when_iso: str | None = None):
     when_iso = when_iso or _now_iso_utc()
@@ -230,17 +225,21 @@ def mark_customer_reply(opp: dict, *, when_iso: str | None = None):
         p["mode"] = "convo"
         p["last_customer_msg_at"] = when_iso
 
-    return save_opp(opp, extra_fields={
-        "Customer Replied": True,
-        "First Customer Reply At": m["first_customer_reply_at"],
-        "Last Customer Reply At": m["last_customer_reply_at"],
-        "mode": "convo",
-        "follow_up_at": None,   # ✅ critical
-    })
+    return save_opp(
+        opp,
+        extra_fields={
+            "Customer Replied": True,
+            "First Customer Reply At": m["first_customer_reply_at"],
+            "Last Customer Reply At": m["last_customer_reply_at"],
+            "mode": "convo",
+            "follow_up_at": None,  # ✅ critical
+        },
+    )
 
 
 def _truthy(x) -> bool:
     return bool(x) and str(x).strip() not in ("", "0", "False", "false", "None", "null")
+
 
 def already_contacted_airtable(opp: dict) -> bool:
     """
@@ -264,6 +263,7 @@ def already_contacted_airtable(opp: dict) -> bool:
 
     return False
 
+
 def is_customer_replied_airtable(opp: dict) -> bool:
     # Checkbox + derived metrics
     if opp.get("Customer Replied") is True:
@@ -271,14 +271,16 @@ def is_customer_replied_airtable(opp: dict) -> bool:
     m = opp.get("patti_metrics") if isinstance(opp.get("patti_metrics"), dict) else {}
     return bool(m.get("customer_replied"))
 
+
 def get_mode_airtable(opp: dict) -> str:
     mode = ""
     if isinstance(opp.get("patti"), dict):
-        mode = (opp["patti"].get("mode") or "")
+        mode = opp["patti"].get("mode") or ""
     # also allow top-level column hydration (opp_from_record adds it)
     if not mode:
-        mode = (opp.get("mode") or "")
+        mode = opp.get("mode") or ""
     return (mode or "").strip().lower()
+
 
 def should_suppress_all_sends_airtable(opp: dict, *, now_utc: datetime | None = None) -> tuple[bool, str]:
     """
@@ -319,6 +321,7 @@ def should_suppress_all_sends_airtable(opp: dict, *, now_utc: datetime | None = 
 
     return False, ""
 
+
 def pause_cadence_on_customer_reply(opp: dict, *, when_iso: str | None = None):
     """
     Single place to enforce:
@@ -340,7 +343,7 @@ def pause_cadence_on_customer_reply(opp: dict, *, when_iso: str | None = None):
     extra = {
         "Customer Replied": True,
         "mode": "convo",
-        "follow_up_at": None,              # ✅ crucial
+        "follow_up_at": None,  # ✅ crucial
         "Last Customer Reply At": when_iso,
     }
     # Don't overwrite first reply if it exists
@@ -348,6 +351,7 @@ def pause_cadence_on_customer_reply(opp: dict, *, when_iso: str | None = None):
         extra["First Customer Reply At"] = when_iso
 
     return save_opp(opp, extra_fields=extra)
+
 
 def mark_ai_email_sent(
     opp: dict,
@@ -436,8 +440,10 @@ def mark_ai_email_sent(
 def _sha1(s: str) -> str:
     return hashlib.sha1(s.encode("utf-8")).hexdigest()
 
+
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
 
 def _extract_compliance(opp: dict) -> dict:
     """
@@ -464,6 +470,7 @@ def _extract_compliance(opp: dict) -> dict:
         "at": (comp.get("at") or _iso_now()),
     }
 
+
 def is_opp_suppressed(opp_id: str) -> tuple[bool, str]:
     """
     Returns (suppressed, reason). Uses Airtable checkbox + reason field.
@@ -477,7 +484,7 @@ def is_opp_suppressed(opp_id: str) -> tuple[bool, str]:
     if not rec:
         return False, ""
 
-    fields = (rec.get("fields") or {})
+    fields = rec.get("fields") or {}
     if fields.get("Suppressed") is True:
         return True, (fields.get("Suppression Reason") or "suppressed")
     return False, ""
@@ -495,9 +502,9 @@ def _build_patti_snapshot(opp: dict) -> dict:
         "source": opp.get("source") or "",
         "customer": {
             "firstName": cust.get("firstName") or opp.get("customer_first_name") or "",
-            "lastName":  cust.get("lastName")  or opp.get("customer_last_name")  or "",
-            "email":     opp.get("customer_email") or cust.get("email") or "",
-            "phone":     opp.get("customer_phone") or "",
+            "lastName": cust.get("lastName") or opp.get("customer_last_name") or "",
+            "email": opp.get("customer_email") or cust.get("email") or "",
+            "phone": opp.get("customer_phone") or "",
         },
         "vehicle": {
             "year":  opp.get("year") or "",
@@ -545,14 +552,18 @@ def mark_unsubscribed(opp: dict, *, when_iso: str | None = None, reason: str = "
         "at": when_iso,
     }
 
-    return save_opp(opp, extra_fields={
-        "Unsubscribed": True,
-        "is_active": False,
-        "follow_up_at": None,          # ✅ important
-        "Suppressed": True,
-        "Suppression Reason": reason or "unsubscribe",
-        "Suppressed At": when_iso,
-    })
+    return save_opp(
+        opp,
+        extra_fields={
+            "Unsubscribed": True,
+            "is_active": False,
+            "follow_up_at": None,  # ✅ important
+            "Suppressed": True,
+            "Suppression Reason": reason or "unsubscribe",
+            "Suppressed At": when_iso,
+        },
+    )
+
 
 def find_by_customer_email(email: str):
     email = (email or "").strip().lower()
@@ -565,6 +576,7 @@ def find_by_customer_email(email: str):
     data = _request("GET", BASE_URL, params=params)
     recs = data.get("records") or []
     return recs[0] if recs else None
+
 
 def find_by_customer_phone(phone_e164: str):
     phone_e164 = (phone_e164 or "").strip()
@@ -588,11 +600,13 @@ def _iso(dt: datetime | str | None) -> str | None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc).isoformat()
 
+
 def _safe_json_dumps(obj) -> str:
     """
     Airtable Long text has practical limits; also opp blobs can grow huge.
     Keep opp_json stable by removing very large fields and hard-capping size.
     """
+
     def _slim(o: dict) -> dict:
         if not isinstance(o, dict):
             return o or {}
@@ -650,17 +664,20 @@ def _safe_json_loads(s: str | None):
     except Exception:
         return {}
 
+
 def _request(method: str, url: str, **kwargs):
     r = requests.request(method, url, headers=HEADERS, timeout=30, **kwargs)
     if r.status_code >= 400:
         raise RuntimeError(f"Airtable {method} failed {r.status_code}: {r.text[:800]}")
     return r.json()
 
+
 def find_by_opp_id(opp_id: str) -> dict | None:
     params = {"filterByFormula": f'{{opp_id}}="{opp_id}"', "pageSize": 1}
     data = _request("GET", BASE_URL, params=params)
     recs = data.get("records", [])
     return recs[0] if recs else None
+
 
 def upsert_lead(opp_id: str, fields: dict) -> dict:
     existing = find_by_opp_id(opp_id)
@@ -669,13 +686,11 @@ def upsert_lead(opp_id: str, fields: dict) -> dict:
         return _request("PATCH", f"{BASE_URL}/{existing['id']}", json=payload)
     return _request("POST", BASE_URL, json=payload)
 
+
 def patch_by_id(rec_id: str, fields: dict) -> dict:
     # 🔍 Log any Human Review writes at the last possible moment
     try:
-        hr_keys = [
-            k for k in fields.keys()
-            if ("Human Review" in k) or ("needs_human" in k.lower())
-        ]
+        hr_keys = [k for k in fields.keys() if ("Human Review" in k) or ("needs_human" in k.lower())]
         if hr_keys:
             log.warning(
                 "HR_WRITE patch_by_id rec_id=%s payload=%r",
@@ -702,6 +717,8 @@ def query_view(view: str, max_records: int = 200) -> list[dict]:
         offset = data.get("offset")
         if not offset:
             return out
+
+
 """
 
 def acquire_lock(rec_id: str, lock_minutes: int = 10) -> str | None:
@@ -732,6 +749,7 @@ def release_lock(rec_id: str, token: str):
     patch_by_id(rec_id, {"lock_until": None, "lock_token": ""})
 
 """
+
 
 def acquire_lock(rec_or_id, lock_minutes: int = 10) -> str | None:
     """
@@ -767,10 +785,13 @@ def acquire_lock(rec_or_id, lock_minutes: int = 10) -> str | None:
             pass
 
     token = uuid.uuid4().hex
-    patch_by_id(rec_id, {
-        "lock_until": _iso(now + timedelta(minutes=lock_minutes)),
-        "lock_token": token,
-    })
+    patch_by_id(
+        rec_id,
+        {
+            "lock_until": _iso(now + timedelta(minutes=lock_minutes)),
+            "lock_token": token,
+        },
+    )
     return token
 
 
@@ -800,12 +821,12 @@ def opp_from_record(rec: dict) -> dict:
     # ✅ NEW: load snapshot JSON instead of full opp_json blob
     opp = _safe_json_loads(fields.get("patti_json")) or {}
     opp_json_full = _safe_json_loads(fields.get("opp_json")) or {}
-    
+
     # DEBUG: Log what we're loading
     rec_id = rec.get("id", "unknown")
     has_patti = bool(opp)
     has_opp_json = bool(opp_json_full)
-    
+
     if not opp:
         opp = opp_json_full
     
@@ -838,7 +859,6 @@ def opp_from_record(rec: dict) -> dict:
         # Don't let snapshot drive this value anymore
         p["last_template_day_sent"] = lts
 
-
     # --- Hydrate Assigned Sales Rep from Airtable column ---
     asr = fields.get("Assigned Sales Rep")
     if asr:
@@ -860,7 +880,6 @@ def opp_from_record(rec: dict) -> dict:
                 opp["_kbb_offer_ctx"] = parsed
         except Exception:
             pass
-
 
     # --- Hydrate canonical opp id ---
     airtable_opp_id = (fields.get("opp_id") or fields.get("opportunityId") or fields.get("id") or "").strip()
@@ -907,10 +926,8 @@ def opp_from_record(rec: dict) -> dict:
     # Treat missing as False (authoritative) so stale snapshot True can't persist.
     opp["needs_human_review"] = bool(fields.get("Needs Human Review", False))
 
-
     opp["human_review_reason"] = (fields.get("Human Review Reason") or "").strip() or None
     opp["human_review_at"] = fields.get("Human Review At") or None
-
 
     # ✅ NEW: Hydrate suppression/compliance from Airtable columns (authoritative for gating)
     if fields.get("Suppressed") is True:
@@ -925,17 +942,13 @@ def opp_from_record(rec: dict) -> dict:
             opp["compliance"] = {"suppressed": False}
 
     # ✅ Cadence anchor (authoritative from Airtable)
-    anchor = (
-        fields.get("salesai_created_iso")
-        or fields.get("Lead Created At")
-        or fields.get("Created At")
-    )
+    anchor = fields.get("salesai_created_iso") or fields.get("Lead Created At") or fields.get("Created At")
     if anchor:
         p = opp.setdefault("patti", {})
         if isinstance(p, dict):
             # do NOT overwrite if snapshot already has one
             p.setdefault("salesai_created_iso", anchor)
-            
+
     # ✅ Normalize cadence state if snapshot has nulls
     p = opp.setdefault("patti", {})
     if isinstance(p, dict):
@@ -949,13 +962,10 @@ def opp_from_record(rec: dict) -> dict:
         opp["followUP_count"] = int(float(fields.get("followUP_count") or 0))
     except Exception:
         opp["followUP_count"] = 0
-    
 
     # ✅ Hydrate first-touch + routing flag (authoritative for cron routing)
     fes = (
-        fields.get("first_email_sent_at")
-        or fields.get("First Email Sent At")
-        or fields.get("AI First Message Sent At")
+        fields.get("first_email_sent_at") or fields.get("First Email Sent At") or fields.get("AI First Message Sent At")
     )
 
     if fes:
@@ -972,8 +982,14 @@ def opp_from_record(rec: dict) -> dict:
         opp["Customer Replied"] = bool(fields.get("Customer Replied"))
 
     # Timestamps used for gating decisions
-    for k in ("first_email_sent_at", "follow_up_at", "First Customer Reply At", "Last Customer Reply At",
-              "AI First Message Sent At", "Last AI Message At"):
+    for k in (
+        "first_email_sent_at",
+        "follow_up_at",
+        "First Customer Reply At",
+        "Last Customer Reply At",
+        "AI First Message Sent At",
+        "Last AI Message At",
+    ):
         if fields.get(k) and not opp.get(k):
             opp[k] = fields.get(k)
 
@@ -990,7 +1006,6 @@ def opp_from_record(rec: dict) -> dict:
         if isinstance(p, dict):
             p["mode"] = mode_col
 
-
     # ✅ Normalize cadence state if snapshot has nulls
     p = opp.setdefault("patti", {})
     if isinstance(p, dict):
@@ -998,15 +1013,15 @@ def opp_from_record(rec: dict) -> dict:
             p["salesai_email_idx"] = -1
         if p.get("last_template_day_sent") is None:
             p["last_template_day_sent"] = 0
-    
+
     # ✅ TK GM Day 2 Sent (authoritative Airtable checkbox)
     tk_gm_day2_sent = bool(fields.get("TK GM Day 2 Sent"))
     opp["tk_gm_day2_sent"] = tk_gm_day2_sent
-    
+
     tk_gm_day2_sent_at = fields.get("TK GM Day 2 Sent At")
     if tk_gm_day2_sent_at:
         opp["tk_gm_day2_sent_at"] = tk_gm_day2_sent_at
-    
+
     # Optional derived state (only if other cadence code still relies on it)
     if tk_gm_day2_sent and isinstance(p, dict):
         try:
@@ -1028,7 +1043,7 @@ def opp_from_record(rec: dict) -> dict:
             p["last_template_day_sent"] = max(int(p.get("last_template_day_sent") or 0), 3)
         except Exception:
             p["last_template_day_sent"] = 3
-    
+
     return opp
 
 
@@ -1077,20 +1092,14 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
     # caller extra_fields wins
     # ---------------------------
     patti = opp.get("patti") if isinstance(opp.get("patti"), dict) else {}
-    mode_value = (
-        extra_fields.get("mode")
-        or patti.get("mode")
-        or opp.get("mode")
-        or ""
-    )
+    mode_value = extra_fields.get("mode") or patti.get("mode") or opp.get("mode") or ""
     mode_norm = str(mode_value).strip().lower()
 
     # ---------------------------
     # customer replied (Airtable brain signals)
     # ---------------------------
-    customer_replied = (
-        (opp.get("Customer Replied") is True)
-        or (isinstance(opp.get("patti_metrics"), dict) and bool(opp["patti_metrics"].get("customer_replied")))
+    customer_replied = (opp.get("Customer Replied") is True) or (
+        isinstance(opp.get("patti_metrics"), dict) and bool(opp["patti_metrics"].get("customer_replied"))
     )
 
     # ---------------------------
@@ -1112,7 +1121,11 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
         if extra_fields:
             hr_keys = [k for k in extra_fields.keys() if "Human Review" in k or "needs_human" in k.lower()]
             if hr_keys:
-                log.info("HR_TRACE step=save_opp extra_hr_keys=%s extra_hr_payload=%r", hr_keys, {k: extra_fields.get(k) for k in hr_keys})
+                log.info(
+                    "HR_TRACE step=save_opp extra_hr_keys=%s extra_hr_payload=%r",
+                    hr_keys,
+                    {k: extra_fields.get(k) for k in hr_keys},
+                )
     except Exception:
         pass
 
@@ -1210,14 +1223,50 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
     return patch_by_id(rec_id, patch)
 
 
-## Conversation // Message table upsert operations.
+## Conversation // Message table log / upsert operations.
+
+
+def _get_conversation_record_id_by_opportunity_id(opportunity_id: str) -> str | None:
+    """Gets record_id by filtering the records on the basis of opportunity id
+
+    - Parms:
+        - opportunity_id
+    - Returns:
+        - record_id
+    """
+    TABLE_URL = return_table_url(CONVERSATIONS_TABLE_NAME)
+    params = {"filterByFormula": f'{{opportunity_id}}="{opportunity_id}"', "pageSize": 1}
+    data = _request("GET", TABLE_URL, params=params)
+    recs = data.get("records", [])
+    return recs[0].get("id", "") if recs else None
 
 
 def find_by_conversation_id(conversation_id: str) -> dict | None:
     params = {"filterByFormula": f'{{conversation_id}}="{conversation_id}"', "pageSize": 1}
-    data = _request("GET", RETURN_TABLE_URL(CONVERSATIONS_TABLE_NAME), params=params)
+    data = _request("GET", return_table_url(CONVERSATIONS_TABLE_NAME), params=params)
     recs = data.get("records", [])
     return recs[0] if recs else None
+
+
+def log_message(message_data: Message) -> bool:
+    """
+    Insert a Message record into the Airtable Messages table.
+
+    Serializes the provided Message model (using field aliases to match
+    Airtable column names) and sends a POST request to create the record.
+
+    Returns:
+        bool: True if the record was successfully created, otherwise False.
+    """
+    try:
+        url = return_table_url(MESSAGES_TABLE_NAME)
+        fields = message_data.model_dump(mode="json", exclude_none=True, by_alias=True)
+        payload = {"records": [{"fields": fields}], "typecast": True}
+        data = _request("POST", url, json=payload)
+        recs = data.get("records", [])
+    except Exception as e:
+        log.error(f"Something went wrong while logging message: {e}")
+    return bool(recs) if recs else False
 
 
 def upsert_conversation(conversation_id: str, fields: dict) -> dict:

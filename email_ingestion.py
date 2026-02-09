@@ -611,6 +611,8 @@ def process_lead_notification(inbound: dict) -> None:
     raw_html = (body_html or "").strip()
     raw_text = (body_text_in or "").strip()
 
+    message_id = inbound.get("message_id", "")
+
     # Always keep a cleaned version for provider regex extraction (Carfax often needs this)
     cleaned_text = (clean_html(raw_html) or "").strip() if raw_html else ""
 
@@ -1480,6 +1482,7 @@ def process_lead_notification(inbound: dict) -> None:
         OFFLINE_MODE=OFFLINE_MODE,
         SAFE_MODE=safe_mode,                
         test_recipient=test_recipient,  
+        message_id=message_id
     )
 
     # right after successful first-touch email send (sent_ok=True)
@@ -1628,6 +1631,8 @@ def process_inbound_email(inbound: dict) -> None:
     
     body_html = inbound.get("body_html") or ""
     raw_text = inbound.get("body_text") or clean_html(body_html)
+
+    message_id = inbound.get("message_id", "")
 
     # Start with raw text as a fallback
     body_text = raw_text
@@ -2074,6 +2079,7 @@ def process_inbound_email(inbound: dict) -> None:
                 test_recipient=test_recipient,
                 inbound_ts=ts,
                 inbound_subject=subject,
+                message_id=message_id
             )
     
             if isinstance(state, dict):

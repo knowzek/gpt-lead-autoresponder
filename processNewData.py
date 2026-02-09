@@ -628,6 +628,7 @@ def maybe_send_tk_gm_day2_email(
         from patti_mailer import send_patti_email
         try:
             log.info("TK GM Day2: sending opp=%s to=%s", opportunityId, to_addr)
+            source = opportunity.get("source", "")
             send_patti_email(
                 token=token,
                 subscription_id=subscription_id,
@@ -638,6 +639,8 @@ def maybe_send_tk_gm_day2_email(
                 subject=TK_GM_DAY2_SUBJECT,
                 body_html=body_html,
                 cc_addrs=[],
+                source=source,
+                timestamp=currDate
             )
             sent_ok = True
             log.info("TK GM Day2: sent ok opp=%s", opportunityId)
@@ -1003,6 +1006,7 @@ def maybe_send_tk_day3_walkaround(
         from patti_mailer import send_patti_email
         try:
             log.info("Walkaround Day3: sending opp=%s to=%s", opportunityId, to_addr)
+            source = opportunity.get("source", "")
             send_patti_email(
                 token=token,
                 subscription_id=subscription_id,
@@ -1013,6 +1017,8 @@ def maybe_send_tk_day3_walkaround(
                 subject=subject,
                 body_html=body_html,
                 cc_addrs=[],
+                source=source,
+                timestamp=currDate
             )
             sent_ok = True
             log.info("Walkaround Day3: sent ok opp=%s", opportunityId)
@@ -1281,6 +1287,7 @@ def process_general_lead_convo_reply(
         raise ValueError("No recipient email resolved for general lead reply")
 
     from patti_mailer import send_patti_email
+    source = opportunity.get("source", "")
     send_patti_email(
         token=token,
         subscription_id=subscription_id,
@@ -1291,6 +1298,7 @@ def process_general_lead_convo_reply(
         subject=subject,
         body_html=body_html,
         cc_addrs=[],
+        source=source
         # if your wrapper supports flags, pass safe/test metadata here
     )
 
@@ -1638,6 +1646,8 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
                     try:
                         from patti_mailer import send_patti_email
 
+                        source = opportunity.get("source", "")
+
                         send_patti_email(
                             token=token,
                             subscription_id=subscription_id,
@@ -1648,6 +1658,8 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
                             subject=subject,
                             body_html=body_html,
                             cc_addrs=[],
+                            timestamp=currDate,
+                            source=source
                         )
 
                     except Exception as e:
@@ -2796,6 +2808,8 @@ def processHit(hit):
                             cc_addrs=[],
                             force_mode="convo",          # ✅ this is a thread reply / confirmation
                             next_follow_up_at=None,      # ✅ no cadence scheduling here
+                            timestamp=currDate,
+                            source=source
                         )
                         sent_ok = True
                     except Exception as e:
@@ -3110,6 +3124,9 @@ def processHit(hit):
                             force_mode="cadence",
                             next_follow_up_at=next_due,
                             template_day=template_day,
+                            timestamp=currDate,
+                            source=source
+
                         )
 
                         sent_ok = True
@@ -3337,6 +3354,7 @@ def send_first_touch_email(
     OFFLINE_MODE: bool,
     SAFE_MODE: bool = False,
     test_recipient: str | None = None,
+    message_id: str | None = None,
 ) -> bool:
     """
     Returns sent_ok (True only if actually sent or OFFLINE_MODE).
@@ -3637,6 +3655,9 @@ def send_first_touch_email(
                 force_mode="cadence",
                 next_follow_up_at=next_due,
                 template_day=1,
+                message_id=message_id,
+                timestamp=currDate,
+                source=source
             )
             
             opportunity["last_template_day_sent"] = template_day
@@ -3714,6 +3735,7 @@ def send_thread_reply_now(
     test_recipient: str | None = None,
     inbound_ts: str | None = None,
     inbound_subject: str | None = None,
+    message_id: str | None = None,
 ) -> tuple[bool, dict]:
 
     currDate = _dt.now(_tz.utc)
@@ -4100,6 +4122,7 @@ def send_thread_reply_now(
         if to_addr:
             try:
                 from patti_mailer import send_patti_email
+                src = opportunity.get("source", "").strip().lower()
                 sent_ok = bool(send_patti_email(
                     token=token,
                     subscription_id=subscription_id,
@@ -4110,6 +4133,9 @@ def send_thread_reply_now(
                     subject=subject,
                     body_html=body_html,
                     cc_addrs=[],
+                    message_id=message_id,
+                    timestamp=currDate,
+                    source=src
                 ))
             except Exception as e:
                 log.warning("Thread reply send failed opp %s: %s", opportunityId, e)

@@ -27,18 +27,20 @@ class Conversations(BaseModel):
     message_count_outbound: Optional[int]
 
 
-class Messages(BaseModel):
+class Message(BaseModel):
     """Type class for Messages table"""
     message_id: str = Field(..., description="Unique id for message received or sent")
-    conversastion: str = Field(..., description="Reference to the conversation to which this message corresponds (recordId).")
+    conversation: str = Field(..., description="Reference to the conversation to which this message corresponds (recordId).")
     direction: Literal['inbound', 'outbound'] = Field(..., description="Direction of the message.")
     channel: Literal['sms', 'email'] = Field(..., description="Channel through which the message came in / was sent.")
     timestamp: str = Field(..., description="Timestamp of the message sent/received.")
-    from_: str = Field(...)
+    from_: Optional[str] = Field(default="patti@pattersonautos.com", alias="from")
     to: str = Field(...)
     subject: Optional[str] = Field(description="Only in case when the channel is email.")
-    body_text: str = Field(..., description="Text body of the message sent or received (clean html tags in case of email).")
+    body_text: Optional[str] = Field(..., description="Text body of the message sent or received (clean html tags in case of email).")
     body_html: Optional[str] = Field(..., description="Email body html (only valid for the case of email).")
-    provider: str = Field(..., description="Providers of the lead.")
+    provider: Optional[str] = Field(..., description="Providers of the lead.")
     opp_id: str = Field(..., description="Opportunity id received from the inbound payload, indexed for debugging.")
     delivery_status: Literal['sent', 'received', 'failed', 'unknown'] = Field(...)
+    rooftop_name: str
+    rooftop_sender: str
