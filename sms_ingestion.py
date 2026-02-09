@@ -101,6 +101,31 @@ def _extract_inbound(payload: dict, raw_text: str) -> dict:
     conversation_id = _find_first_str(payload, ["conversationId", "conversation_id", "threadId", "thread_id", "chatId", "id"])
     ts = _find_first_str(payload, ["timestamp", "time", "createdAt", "created_at"])
 
+    # ✅ Message id (prefer nested lastMessage.id, then lastMessageId)
+    message_id = ""
+    if isinstance(payload.get("lastMessage"), dict):
+        message_id = _find_first_str(payload["lastMessage"], ["id"])
+    if not message_id:
+        message_id = _find_first_str(payload, ["lastMessageId", "messageId", "message_id", "id"])
+
+    # ------------------------------------------------------------------
+    # ✅ DIRECTION GUARD (ADD HERE)
+    # ------------------------------------------------------------------
+    direction = ""
+    if isinstance(payload.get("lastMessage"), dict):
+        direction = _find_first_str(payload["lastMessage"], ["direction"])
+
+    # If this payload represents an OUTBOUND (Patti) message, ignore it
+    if direction and direction.upper() != "IN":
+        return {
+            "from_phone": "",
+            "to_phone": "",
+            "body": "",
+            "conversation_id": "",
+            "message_id": "",
+            "ts": ts or _now_iso(),
+        }
+
     # If body is nested as an object (e.g. {"message":{"body":"..."}})
     if not body and isinstance(payload.get("message"), dict):
         body = _find_first_str(payload["message"], ["body", "text", "content"])
@@ -128,6 +153,7 @@ def _extract_inbound(payload: dict, raw_text: str) -> dict:
         "to_phone": _norm_phone_e164_us(to_phone),
         "body": (body or "").strip(),
         "conversation_id": (conversation_id or "").strip(),
+        "message_id": (message_id or "").strip(),
         "ts": ts or _now_iso(),
     }
 
@@ -167,24 +193,14 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
     now_iso = _now_iso()
 
     # Always store inbound markers
+    msg_id = (inbound.get("message_id") or "").strip()
+
     base_patch = {
         "last_sms_inbound_at": now_iso,
         "sms_conversation_id": inbound.get("conversation_id") or (opp.get("sms_conversation_id") or ""),
+        "last_sms_inbound_message_id": msg_id,
     }
 
-    # ✅ Suppression gate: if already opted-out/suppressed, do not send replies.
-    # (STOP handling below still works; if they text again post-opt-out, we simply no-op.)
-    stop_send, stop_reason = should_suppress_all_sends_airtable(opp)
-
-    if stop_send:
-        # Still record inbound markers so we don't reprocess this message
-        save_opp(opp, extra_fields=base_patch)
-        log.info(
-            "SMS inbound suppressed=%s opp=%s (no reply)",
-            stop_reason,
-            opp.get("opportunityId"),
-        )
-        return {"status": "ok", "action": "suppressed_no_reply"}
 
 
     # --- Rule 1: STOP / opt-out ---
@@ -222,6 +238,20 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
             log.exception("SMS opt-out confirmation send failed opp=%s", opp.get("opportunityId"))
 
         return {"status": "ok", "action": "opt_out"}
+
+    # ✅ Suppression gate: if already opted-out/suppressed, do not send replies.
+    # (STOP handling below still works; if they text again post-opt-out, we simply no-op.)
+    stop_send, stop_reason = should_suppress_all_sends_airtable(opp)
+
+    if stop_send:
+        # Still record inbound markers so we don't reprocess this message
+        save_opp(opp, extra_fields=base_patch)
+        log.info(
+            "SMS inbound suppressed=%s opp=%s (no reply)",
+            stop_reason,
+            opp.get("opportunityId"),
+        )
+        return {"status": "ok", "action": "suppressed_no_reply"}
 
     # Guest replied (any non-stop) => mode="convo" and stop SMS nudges
     # (You said you’ll use mode instead of in_conversation)
