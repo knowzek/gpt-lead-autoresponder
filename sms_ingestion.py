@@ -11,6 +11,7 @@ from sms_brain import generate_sms_reply
 
 
 log = logging.getLogger("patti.sms")
+_LOGGED_DIR_ID_ONCE: set[tuple[str, str]] = set()
 
 # --- Normalization / routing ---
 def _norm_phone_e164_us(raw: str) -> str:
@@ -125,6 +126,15 @@ def _extract_inbound(payload: dict, raw_text: str) -> dict:
             "message_id": "",
             "ts": ts or _now_iso(),
         }
+        
+    # ✅ Safety log (direction, message_id) once
+    try:
+        key = ((direction or "").upper(), (message_id or ""))
+        if key not in _LOGGED_DIR_ID_ONCE:
+            _LOGGED_DIR_ID_ONCE.add(key)
+            log.info("SMS inbound debug: direction=%s message_id=%s", key[0], key[1])
+    except Exception:
+        pass
 
     # If body is nested as an object (e.g. {"message":{"body":"..."}})
     if not body and isinstance(payload.get("message"), dict):
