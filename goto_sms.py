@@ -6,6 +6,7 @@ import logging
 
 log = logging.getLogger("patti.goto_sms")
 
+
 GOTO_TOKEN_URL = "https://authentication.logmeininc.com/oauth/token"
 GOTO_SMS_URL   = "https://api.goto.com/messaging/v1/messages"
 
@@ -93,6 +94,21 @@ def _get_access_token() -> str:
 
 
 def send_sms(*, from_number: str, to_number: str, body: str) -> dict:
+    # ✅ Global SMS kill switch (no redeploy needed; flip env var)
+    if (os.getenv("SMS_KILL_SWITCH", "0").strip() == "1"):
+        log.warning(
+            "🛑 SMS_KILL_SWITCH=1 — blocked SMS send from=%s to=%s body=%r",
+            from_number,
+            to_number,
+            (body or "")[:180],
+        )
+        # Return a stub that looks like a normal response
+        return {
+            "blocked": True,
+            "reason": "SMS_KILL_SWITCH",
+            "conversationId": "",
+            "id": "",
+        }
     """
     Send one SMS via GoTo.
     Returns the API response JSON (includes ids you can store in Airtable).
