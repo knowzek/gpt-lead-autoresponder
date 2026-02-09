@@ -23,6 +23,8 @@ from fortellis import (
     find_recent_opportunity_by_email,
     get_recent_opportunities,
     get_opps_by_customer_id,
+    select_vehicle_from_sought,
+    map_vehicle_to_airtable_fields,
 )
 from processNewData import send_first_touch_email
 from fortellis import complete_activity
@@ -38,6 +40,7 @@ from airtable_store import (
     opp_from_record,
     save_opp,
     upsert_lead,
+    patch_by_id,
 )
 
 from prompt.customer_phone_number_extraction import CUSTOMER_PHONE_EXTRACTION_PROMPT
@@ -838,6 +841,38 @@ def process_lead_notification(inbound: dict) -> None:
             return
         opportunity = opp_from_record(rec2)
 
+    # ── Vehicle enrichment from Fortellis soughtVehicles ──────────
+    # `opp` already holds the full Fortellis payload from get_opportunity()
+    # above. Extract vehicle fields and patch Airtable if any are missing.
+    try:
+        rec_id = opportunity.get("_airtable_rec_id")
+        _existing_make  = (opportunity.get("make") or "").strip()
+        _existing_model = (opportunity.get("model") or "").strip()
+        _existing_year  = (opportunity.get("year") or "").strip()
+
+        if rec_id and not (_existing_make and _existing_model and _existing_year):
+            sought = opp.get("soughtVehicles") or []
+            vehicle = select_vehicle_from_sought(sought)
+            veh_fields = map_vehicle_to_airtable_fields(vehicle)
+
+            # Only write fields that are currently empty
+            patch_veh = {}
+            for k in ("year", "make", "model", "trim", "vin", "stockNumber"):
+                if not (opportunity.get(k) or "").strip() and (veh_fields.get(k) or "").strip():
+                    patch_veh[k] = veh_fields[k]
+
+            if patch_veh:
+                patch_by_id(rec_id, patch_veh)
+                # Keep in-memory opportunity consistent
+                opportunity.update(patch_veh)
+                log.info("Vehicle enriched opp=%s fields=%s", opp_id, patch_veh)
+            else:
+                log.info("Vehicle enrichment: no new fields to write opp=%s", opp_id)
+        else:
+            log.info("Vehicle enrichment: skipped (already populated or no rec_id) opp=%s", opp_id)
+    except Exception as e:
+        log.warning("Vehicle enrichment failed opp=%s: %s", opp_id, e)
+
     # Seed message into thread for GPT context
     msg_body = customer_comment or body_text[:1500]
 
@@ -1101,26 +1136,15 @@ def process_lead_notification(inbound: dict) -> None:
             return
         # otherwise: continue to normal first-touch
 
-    # Vehicle string (best-effort)
+    # Vehicle string (Airtable fields are canonical source)
     vehicle_str = "one of our vehicles"
-    sought = fresh_opp.get("soughtVehicles") or opportunity.get("soughtVehicles") or []
-    if isinstance(sought, list) and sought:
-        primary = None
-        for v in sought:
-            if isinstance(v, dict) and v.get("isPrimary"):
-                primary = v
-                break
-        if not primary and isinstance(sought[0], dict):
-            primary = sought[0]
-
-        if primary:
-            make  = str(primary.get("make") or "").strip()
-            model = str(primary.get("model") or "").strip()
-            year  = str(primary.get("yearFrom") or primary.get("year") or "").strip()
-            trim  = str(primary.get("trim") or "").strip()
-            tmp = f"{year} {make} {model} {trim}".strip()
-            if tmp:
-                vehicle_str = tmp
+    make  = (opportunity.get("make") or "").strip()
+    model = (opportunity.get("model") or "").strip()
+    year  = (opportunity.get("year") or "").strip()
+    trim  = (opportunity.get("trim") or "").strip()
+    tmp = f"{year} {make} {model} {trim}".strip()
+    if tmp:
+        vehicle_str = tmp
 
     # Source label for the email copy
     source_label = (inbound.get("source") or "internet lead").strip()

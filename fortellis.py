@@ -1413,6 +1413,86 @@ def get_opportunity(opportunity_id, token, dealer_key):
     resp.raise_for_status()
     return resp.json()
 
+
+# ── Vehicle enrichment (Fortellis → Airtable) ───────────────────────
+
+def select_vehicle_from_sought(sought_vehicles: list) -> dict | None:
+    """
+    Deterministic vehicle selection from Fortellis soughtVehicles list.
+
+    Rules (applied in order):
+      1. Select the first vehicle with a non-empty vin.
+      2. If no VIN exists, select the first vehicle in the list.
+      3. If no vehicles exist, return None (leave Airtable fields blank).
+    """
+    if not sought_vehicles or not isinstance(sought_vehicles, list):
+        return None
+
+    # Rule 1: first vehicle with a non-empty VIN
+    for v in sought_vehicles:
+        if not isinstance(v, dict):
+            continue
+        vin = (str(v.get("vin") or "")).strip()
+        if vin:
+            return v
+
+    # Rule 2: first vehicle in the list (regardless of VIN)
+    first = sought_vehicles[0] if sought_vehicles else None
+    if isinstance(first, dict):
+        return first
+
+    return None
+
+
+def map_vehicle_to_airtable_fields(vehicle: dict | None) -> dict:
+    """
+    Map a single Fortellis soughtVehicle dict to canonical Airtable field names.
+
+    Returns a dict with keys: year, make, model, trim, vin, stockNumber.
+    All values are strings (empty string if missing).
+    """
+    if not vehicle or not isinstance(vehicle, dict):
+        return {
+            "year": "",
+            "make": "",
+            "model": "",
+            "trim": "",
+            "vin": "",
+            "stockNumber": "",
+        }
+
+    year_from = str(vehicle.get("yearFrom") or "").strip()
+    year_to = str(vehicle.get("yearTo") or "").strip()
+    year = year_from or year_to
+
+    return {
+        "year": year,
+        "make": str(vehicle.get("make") or "").strip(),
+        "model": str(vehicle.get("model") or "").strip(),
+        "trim": str(vehicle.get("trim") or "").strip(),
+        "vin": str(vehicle.get("vin") or "").strip(),
+        "stockNumber": str(vehicle.get("stockNumber") or "").strip(),
+    }
+
+
+def fetch_and_select_vehicle(opp_id: str, token: str, subscription_id: str) -> dict:
+    """
+    Call Fortellis Opportunity API, extract soughtVehicles, apply selection
+    logic, and return mapped Airtable fields.
+
+    Returns a dict with keys: Year, Make, Model, Trim, Vin, stockNumber.
+    All values are strings (empty string if the data is not available).
+    Never raises — returns blank fields on any failure.
+    """
+    try:
+        opp_data = get_opportunity(opp_id, token, subscription_id)
+        sought = (opp_data or {}).get("soughtVehicles") or []
+        selected = select_vehicle_from_sought(sought)
+        return map_vehicle_to_airtable_fields(selected)
+    except Exception as e:
+        log.warning("fetch_and_select_vehicle failed opp=%s: %s", opp_id, e)
+        return map_vehicle_to_airtable_fields(None)
+
 import requests
 
 def get_vehicle_inventory_xml(username: str, password: str, enterprise_code: str, company_number: str) -> str:
