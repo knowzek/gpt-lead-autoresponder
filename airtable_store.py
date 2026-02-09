@@ -290,6 +290,10 @@ def should_suppress_all_sends_airtable(opp: dict, *, now_utc: datetime | None = 
     if opp.get("opted_out") is True or opp.get("Unsubscribed") is True:
         return True, "opted_out/unsubscribed"
 
+    # ✅ SMS-specific opt-out flags (Airtable truth)
+    if opp.get("sms_opted_out") is True or opp.get("SMS Opted Out") is True:
+        return True, "sms_opted_out"
+
     if opp.get("is_active") is False or opp.get("isActive") is False:
         return True, "inactive"
 
