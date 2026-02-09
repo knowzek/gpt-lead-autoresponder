@@ -916,19 +916,23 @@ def process_lead_notification(inbound: dict) -> None:
                             f"Or, would you prefer a quick call instead? Opt-out reply STOP"
                         )
 
-                        resp = send_sms(from_number=from_number, to_number=to_number, body=msg)
+                        stop_send, reason = should_suppress_all_sends_airtable(opportunity)
+                        if stop_send:
+                            log.info("SMS first-touch suppressed=%s opp=%s (skip SMS only)", reason, opp_id)
+                        else:
+                            resp = send_sms(from_number=from_number, to_number=to_number, body=msg)
 
-                        # Persist SMS metadata (best-effort — field names based on what you added)
-                        extra_sms = {
-                            "last_sms_sent_at": _dt.now(_tz.utc).isoformat(),
-                            "sms_conversation_id": resp.get("conversationId") or resp.get("conversation_id") or resp.get("id") or "",
-                            "sms_nudge_count": 0,
-                            # Set due for SMS cadence (simple: 24h; you can later align to your exact day schedule)
-                            "sms_followup_due_at": (_dt.now(_tz.utc) + timedelta(hours=24)).replace(microsecond=0).isoformat(),
-                        }
-                        save_opp(opportunity, extra_fields=extra_sms)
+                            # Persist SMS metadata (best-effort)
+                            extra_sms = {
+                                "last_sms_sent_at": _dt.now(_tz.utc).isoformat(),
+                                "sms_conversation_id": resp.get("conversationId") or resp.get("conversation_id") or resp.get("id") or "",
+                                "sms_nudge_count": 0,
+                                "sms_followup_due_at": (_dt.now(_tz.utc) + timedelta(hours=24)).replace(microsecond=0).isoformat(),
+                            }
+                            save_opp(opportunity, extra_fields=extra_sms)
 
-                        log.info("SMS first-touch sent opp=%s to=%s (test=%s)", opp_id, to_number, _sms_test_enabled())
+                            log.info("SMS first-touch sent opp=%s to=%s (test=%s)", opp_id, to_number, _sms_test_enabled())
+
     except Exception as e:
         log.exception("SMS first-touch failed opp=%s err=%s", opp_id, e)
 
