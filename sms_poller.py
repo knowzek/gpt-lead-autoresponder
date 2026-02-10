@@ -291,3 +291,17 @@ def poll_once():
 
         except Exception:
             log.exception("SMS poll: reply send failed opp=%s", opp.get("opportunityId"))
+
+if __name__ == "__main__":
+    import os
+    import logging
+
+    logging.basicConfig(
+        level=getattr(logging, os.getenv("APP_LOG_LEVEL", "INFO").upper(), logging.INFO),
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+
+    log = logging.getLogger("patti.sms_poller")
+    log.info("sms_poller starting")
+    poll_once()
+    log.info("sms_poller done")
