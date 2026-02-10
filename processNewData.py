@@ -3971,18 +3971,18 @@ def send_thread_reply_now(
         log.info("Determined intent action: %s", intent_action)
 
         if intent_action == "CLARIFY_TIME":
-            prompt = _getClarifyTimePrompts()
+            gen_prompt = _getClarifyTimePrompts()
         elif intent_action == "DIG_PREFS":
-            prompt = _getDigPrefsPrompts()
+            gen_prompt = _getDigPrefsPrompts()
         elif intent_action == "HANDLE_MULTI":
-            prompt = _getMultiOptionPrompts()
+            gen_prompt = _getMultiOptionPrompts()
         elif intent_action == "RESCHEDULE":
-            prompt = _getClarifyTimePrompts()  # Treat as clarify for now
+            gen_prompt = _getClarifyTimePrompts()  # Treat as clarify for now
         else:
         # You are replying to an ACTIVE email thread (not a first welcome message).
         # Context:
         # - The guest originally inquired about: {vehicle_str}
-            prompt = f"""
+            gen_prompt = f"""
         
         Hard rules:
         - If the guest proposes a visit time (including casual phrasing like "tomorrow around 4"), CONFIRM it.
@@ -4015,7 +4015,7 @@ def send_thread_reply_now(
         - Begin with exactly `Hi {customer_name},`
         - The guest originally inquired about: {vehicle_str}
         
-        {prompt}
+        {gen_prompt}
         
         messages between Patti and the customer (python list of dicts):
         {messages}

@@ -812,40 +812,58 @@ def extract_appt_time(text: str, tz: str = "America/Los_Angeles") -> dict:
     if not (text or "").strip():
         return {"iso": "", "confidence": 0, "window": "", "classification": "NO_INTENT", "reason": "Empty text"}
 
+    # Construct the system prompt with even more explicit instructions & stricter language about correct date math.
     system = {
         "role": "system",
         "content": (
-            "Analyze the text for appointment scheduling intent.\n"
+            "You are an expert intent extractor for appointment scheduling, returning structured JSON strictly. "
+            "Your primary job is to find the correct scheduling intent in customer text, and to resolve all dates and times accurately in the specified timezone.\n"
+            "\n"
+            "Day-of-week handling:\n"
+            "- If the user mentions a day of the week (e.g. 'Saturday'), you MUST return the next calendar occurrence of that day AFTER the provided 'Now Local ISO' below, never the same day if it's already past for that time. Always compute the date forward.\n"
+            "- Example: If 'Now Local ISO' is a Wednesday and the user says 'Saturday at 11:30 AM', you must output the next Saturday after today at 11:30am, not today.\n"
+            "\n"
             "Classifications:\n"
-            "- EXACT_TIME: Specific date AND specific time provided (e.g. 'Wednesday at 4pm').\n"
-            "- VAGUE_DATE: Specific date provided, but time is missing or ambiguous (e.g. 'Tomorrow', 'Next Tuesday').\n"
-            "- VAGUE_WINDOW: Date provided with vague time window (e.g. 'Wednesday morning', 'After work').\n"
-            "- OPEN_ENDED: Intent to schedule, but no date/time proposed (e.g. 'When can I come in?', 'What are your hours?').\n"
-            "- MULTI_OPTION: User provided multiple distinct options (e.g. 'Tuesday at 3 or Thursday at 5').\n"
-            "- RESCHEDULE: Explicit intent to change an existing appointment.\n"
-            "- NO_INTENT: No scheduling signal found.\n\n"
+            "- EXACT_TIME: Specific date AND specific time found (e.g. 'Wednesday at 4pm', '7/19 at 2pm').\n"
+            "- VAGUE_DATE: Date or day provided but time is missing/unclear/ignored (e.g. 'Next Tuesday', 'this Friday').\n"
+            "- VAGUE_WINDOW: Broad time window only (e.g. 'Wednesday morning', 'After work').\n"
+            "- OPEN_ENDED: Scheduling intent, but no time/date proposed.\n"
+            "- MULTI_OPTION: Multiple valid scheduling times (e.g. 'Tuesday at 3 or Thursday at 5').\n"
+            "- RESCHEDULE: User explicitly asks to change/move an existing appointment.\n"
+            "- NO_INTENT: No scheduling/suggested time found.\n"
+            "\n"
             "Rules:\n"
-            "- If EXACT_TIME: Set 'iso' to the ISO8601 datetime with timezone. Confidence > 0.9.\n"
-            "- If VAGUE_DATE/VAGUE_WINDOW: Set 'iso' to the date at 10:00am (placeholder). Confidence < 0.6.\n"
-            "- If MULTI_OPTION: Leave 'iso' empty. Classification takes precedence.\n"
-            "- Always respect the provided timezone for relative dates (Today/Tomorrow/Next/Coming/After).\n\n"
-            "Return JSON only:\n"
+            "- Always return ISO8601 strings adjusted for the correct timezone (given in Timezone below).\n"
+            "- If EXACT_TIME: 'iso' = exact datetime, high confidence (> 0.9).\n"
+            "- If VAGUE_DATE/VAGUE_WINDOW: 'iso' = that day at 10:00am (placeholder), lower confidence (<0.6).\n"
+            "- If MULTI_OPTION: leave 'iso' blank.\n"
+            "- Never produce a date in the past, always pick the next valid date/time after Now Local ISO.\n"
+            "\n"
+            "Some examples, assuming Now Local ISO: 2026-02-09T22:33:06.454383-08:00 (which is Monday):\n"
+            "- 'Saturday at 11:30 AM': iso = 2026-02-14T11:30:00-08:00 (the next Saturday)\n"
+            "- 'Wednesday': iso = 2026-02-11T10:00:00-08:00 (the next Wednesday)\n"
+            "- 'Tomorrow': iso = 2026-02-10T10:00:00-08:00\n"
+            "- '16th': iso = 2026-02-16T10:00:00-08:00\n"
+            "- If no date or time is provided, NO_INTENT.\n"
+            "\n"
+            "Return a JSON object only, e.g.:\n"
             "{\n"
-            "  \"classification\": \"...\",\n"
-            "  \"iso\": \"...\",\n"
-            "  \"confidence\": 0.0,\n"
-            "  \"window\": \"exact|morning|afternoon|evening\",\n"
-            "  \"reason\": \"...\"\n"
-            "}"
+            "  \"classification\": \"EXACT_TIME\",\n"
+            "  \"iso\": \"2026-02-14T11:30:00-08:00\",\n"
+            "  \"confidence\": 0.98,\n"
+            "  \"window\": \"exact\",\n"
+            "  \"reason\": \"User said 'Saturday at 11:30 AM'; resolved per timezone and next occurrence.\"\n"
+            "}\n"
         )
     }
-    
-    # now_local = datetime.now().astimezone()  # used so model has 'today' concept implicitly
-    now_local = datetime.now(ZoneInfo(tz)) # GPT now gets the correct “today”.
+
+    now_local = datetime.now(ZoneInfo(tz))
     user = {
         "role": "user",
-        "content": f"Timezone: {tz}\nNow Local ISO: {now_local.isoformat()}\nText: {text}"
+        "content": f"Timezone: {tz}\nNow Local ISO: {now_local.isoformat()}\nUser Message: {text.strip()}"
     }
+    print('➡ gpt.py:863 user:', user)
+    print('➡ gpt.py:866 system:', system)
     model_used, resp = chat_complete_with_fallback(
         [system, user],
         want_json=True,
