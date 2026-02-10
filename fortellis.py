@@ -354,7 +354,7 @@ def find_recent_opportunity_by_email(
     shopper_email: str,
     subscription_id: str,
     token: str,
-    since_minutes: int = 60 * 24 * 14,  # 14 days
+    since_minutes: int = 60 * 24 * 6,  # 6 days
     page_size: int = 100,
     max_pages: int = 20,
 ):
