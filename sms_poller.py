@@ -138,6 +138,7 @@ def poll_once():
         # Dedupe: only act once per inbound message id
         last_seen = (opp.get("last_sms_inbound_message_id") or "").strip()
         if last_seen == msg_id:
+            log.info("SMS poll: skipping already-processed msg_id=%s", msg_id)
             continue
 
         # Record inbound + switch mode
@@ -293,15 +294,17 @@ def poll_once():
             log.exception("SMS poll: reply send failed opp=%s", opp.get("opportunityId"))
 
 if __name__ == "__main__":
-    import os
-    import logging
-
+    import os, logging, traceback
     logging.basicConfig(
         level=getattr(logging, os.getenv("APP_LOG_LEVEL", "INFO").upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
-
     log = logging.getLogger("patti.sms_poller")
-    log.info("sms_poller starting")
-    poll_once()
-    log.info("sms_poller done")
+    try:
+        log.info("sms_poller starting (service=%s)", os.getenv("RENDER_SERVICE_NAME"))
+        poll_once()
+        log.info("sms_poller finished")
+    except Exception:
+        log.error("sms_poller crashed:\n%s", traceback.format_exc())
+        raise
+
