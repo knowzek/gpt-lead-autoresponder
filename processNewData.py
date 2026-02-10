@@ -29,8 +29,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 import uuid
 from airtable_store import (
-    find_by_opp_id, query_view, acquire_lock, release_lock,
-    opp_from_record, save_opp, find_by_customer_email, patch_by_id,
+    find_by_opp_id, query_view, acquire_lock, release_lock, should_suppress_all_sends_airtable, opp_from_record, save_opp, find_by_customer_email, patch_by_id,
 )
 from patti_mailer import _bump_ai_send_metrics_in_airtable
 
