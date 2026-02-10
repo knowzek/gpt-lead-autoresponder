@@ -7,12 +7,10 @@ from datetime import datetime as _dt, timezone as _tz
 from datetime import timedelta
 import json
 from typing import Optional
-from airtable_store import mark_customer_reply, mark_unsubscribed
+from airtable_store import mark_customer_reply, mark_unsubscribed, should_suppress_all_sends_airtable, find_by_opp_id, find_by_customer_email, opp_from_record, save_opp, upsert_lead, patch_by_id
 from kbb_ico import _is_optout_text as _kbb_is_optout_text, _is_decline as _kbb_is_decline
 
 from datetime import datetime, timezone, timedelta
-from airtable_store import save_opp
-
 
 from rooftops import get_rooftop_info
 from fortellis import (
@@ -34,14 +32,7 @@ from patti_common import EMAIL_RE, PHONE_RE
 from patti_common import extract_customer_comment_from_provider
 
 from kbb_ico import _top_reply_only
-from airtable_store import (
-    find_by_opp_id,
-    find_by_customer_email,
-    opp_from_record,
-    save_opp,
-    upsert_lead,
-    patch_by_id,
-)
+
 
 from prompt.customer_phone_number_extraction import CUSTOMER_PHONE_EXTRACTION_PROMPT
 from pydantic import BaseModel
