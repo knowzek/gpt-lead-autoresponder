@@ -277,7 +277,7 @@ def _find_best_active_opp_for_email(*, shopper_email: str, token: str, subscript
 
         page = 1
         max_pages = 20
-        since_minutes = 60 * 24 * 14  # 14 days
+        since_minutes = 60 * 24 * 6  # 6 days
         page_size = 100
 
         while page <= max_pages:
