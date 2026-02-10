@@ -901,70 +901,6 @@ def process_lead_notification(inbound: dict) -> None:
     rooftop_name   = rt.get("name") or rt.get("rooftop_name") or "Rooftop"
     rooftop_sender = rt.get("sender") or rt.get("patti_email") or os.getenv("TEST_FROM") or ""
 
-    # --- STEP 1: First SMS on new lead (General Leads only) ---
-    try:
-        # Only send SMS if first-touch SMS has NOT been sent yet
-        already_sms = bool((opportunity.get("first_sms_sent_at") or "").strip())
-        
-        if not already_sms:
-            from goto_sms import send_sms
-
-            from_number = _norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", "+17145977229"))
-            if not from_number:
-                log.warning("SMS: missing PATTI_SMS_NUMBER; skipping opp=%s", opp_id)
-            else:
-                guest_phone_raw = (opportunity.get("customer_phone") or "").strip()
-                guest_phone = _norm_phone_e164_us(guest_phone_raw)
-
-                if not guest_phone:
-                    log.warning("SMS: no Airtable customer_phone (raw=%r); skipping opp=%s", guest_phone_raw, opp_id)
-                else:
-                    # SMS_TEST reroute
-                    to_number = guest_phone
-                    if _sms_test_enabled():
-                        test_to = _sms_test_to()
-                        if not test_to:
-                            log.warning("SMS_TEST=1 but SMS_TEST_TO invalid; skipping opp=%s", opp_id)
-                            to_number = ""
-                        else:
-                            to_number = test_to
-
-                    if to_number:
-                        # Impel-style first text (shorter than email, still crisp)
-                        rooftop_display = rooftop_name or "Patterson Autos"
-
-                        vehicle_phrase = vehicle_str if (vehicle_str and vehicle_str != "one of our vehicles") else "your vehicle inquiry"
-                        call_line = f"If you’d rather talk first, we can call {phone}." if phone else ""
-
-                        msg = (
-                            f"Hi {first_name or 'there'}, this is Patti with {rooftop_display}. "
-                            f"Thanks for reaching out about {vehicle_phrase}. "
-                            f"I'm happy to confirm it’s currently available. "
-                            f"If you’d like to come by to see it in person or for a test drive, just let me know a day and time and I’ll set it up. "
-                            f"Or, would you prefer a quick call instead? Opt-out reply STOP"
-                        )
-
-                        stop_send, reason = should_suppress_all_sends_airtable(opportunity)
-                        if stop_send:
-                            log.info("SMS first-touch suppressed=%s opp=%s (skip SMS only)", reason, opp_id)
-                        else:
-                            resp = send_sms(from_number=from_number, to_number=to_number, body=msg)
-
-                            # Persist SMS metadata (best-effort)
-                            extra_sms = {
-                                "last_sms_sent_at": _dt.now(_tz.utc).isoformat(),
-                                "first_sms_sent_at": _dt.now(_tz.utc).isoformat(),
-                                "sms_conversation_id": resp.get("conversationId") or resp.get("conversation_id") or resp.get("id") or "",
-                                "sms_nudge_count": 0,
-                                "sms_followup_due_at": (_dt.now(_tz.utc) + timedelta(hours=24)).replace(microsecond=0).isoformat(),
-                            }
-                            save_opp(opportunity, extra_fields=extra_sms)
-
-                            log.info("SMS first-touch sent opp=%s to=%s (test=%s)", opp_id, to_number, _sms_test_enabled())
-
-    except Exception as e:
-        log.exception("SMS first-touch failed opp=%s err=%s", opp_id, e)
-
     # Customer name (prefer Airtable-hydrated first/last, then Fortellis, else "there")
     cust = fresh_opp.get("customer") or opportunity.get("customer") or {}
     afn = (opportunity.get("customer_first_name") or (cust.get("firstName") or "")).strip()
@@ -1169,6 +1105,71 @@ def process_lead_notification(inbound: dict) -> None:
         (opportunity.get("Assigned Sales Rep") if isinstance(opportunity, dict) else None),
         opp_id,
     )
+
+    # --- STEP 1: First SMS on new lead (General Leads only) ---
+    try:
+        # Only send SMS if first-touch SMS has NOT been sent yet
+        already_sms = bool((opportunity.get("first_sms_sent_at") or "").strip())
+        
+        if not already_sms:
+            from goto_sms import send_sms
+
+            from_number = _norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", "+17145977229"))
+            if not from_number:
+                log.warning("SMS: missing PATTI_SMS_NUMBER; skipping opp=%s", opp_id)
+            else:
+                guest_phone_raw = (opportunity.get("customer_phone") or "").strip()
+                guest_phone = _norm_phone_e164_us(guest_phone_raw)
+
+                if not guest_phone:
+                    log.warning("SMS: no Airtable customer_phone (raw=%r); skipping opp=%s", guest_phone_raw, opp_id)
+                else:
+                    # SMS_TEST reroute
+                    to_number = guest_phone
+                    if _sms_test_enabled():
+                        test_to = _sms_test_to()
+                        if not test_to:
+                            log.warning("SMS_TEST=1 but SMS_TEST_TO invalid; skipping opp=%s", opp_id)
+                            to_number = ""
+                        else:
+                            to_number = test_to
+
+                    if to_number:
+                        # Impel-style first text (shorter than email, still crisp)
+                        rooftop_display = rooftop_name or "Patterson Autos"
+
+                        vehicle_phrase = vehicle_str if (vehicle_str and vehicle_str != "one of our vehicles") else "your vehicle inquiry"
+                        call_line = f"If you’d rather talk first, we can call {phone}." if phone else ""
+
+                        msg = (
+                            f"Hi {first_name or 'there'}, this is Patti with {rooftop_display}. "
+                            f"Thanks for reaching out about {vehicle_phrase}. "
+                            f"I'm happy to confirm it’s currently available. "
+                            f"If you’d like to come by to see it in person or for a test drive, just let me know a day and time and I’ll set it up. "
+                            f"Or, would you prefer a quick call instead? Opt-out reply STOP"
+                        )
+
+                        stop_send, reason = should_suppress_all_sends_airtable(opportunity)
+                        if stop_send:
+                            log.info("SMS first-touch suppressed=%s opp=%s (skip SMS only)", reason, opp_id)
+                        else:
+                            resp = send_sms(from_number=from_number, to_number=to_number, body=msg)
+
+                            # Persist SMS metadata (best-effort)
+                            extra_sms = {
+                                "last_sms_sent_at": _dt.now(_tz.utc).isoformat(),
+                                "first_sms_sent_at": _dt.now(_tz.utc).isoformat(),
+                                "sms_conversation_id": resp.get("conversationId") or resp.get("conversation_id") or resp.get("id") or "",
+                                "sms_nudge_count": 0,
+                                "sms_followup_due_at": (_dt.now(_tz.utc) + timedelta(hours=24)).replace(microsecond=0).isoformat(),
+                            }
+                            save_opp(opportunity, extra_fields=extra_sms)
+
+                            log.info("SMS first-touch sent opp=%s to=%s (test=%s)", opp_id, to_number, _sms_test_enabled())
+
+    except Exception as e:
+        log.exception("SMS first-touch failed opp=%s err=%s", opp_id, e)
+
 
     sent_ok = send_first_touch_email(
         opportunity=opportunity,
