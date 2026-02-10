@@ -812,65 +812,51 @@ def extract_appt_time(text: str, tz: str = "America/Los_Angeles") -> dict:
     if not (text or "").strip():
         return {"iso": "", "confidence": 0, "window": "", "classification": "NO_INTENT", "reason": "Empty text"}
 
-    # Define office hours – customize as needed for your business or for weekdays/weekends
-    OFFICE_HOURS_STR = "9:00 AM to 6:00 PM"
-
-    # Future: expand to per-day office hours, for now assume same for all days
-
-    # Explicit, friendly GPT system prompt that will soft-suggest/restrict time when user asks for outside office hours,
-    # providing an explicit (soft) message and suggesting available appointment windows for that day.
     system = {
         "role": "system",
         "content": (
             "You are an expert intent extractor for appointment scheduling. Return valid, structured JSON ONLY as described below.\n"
             "\n"
-            "Your job is to extract the user's scheduling intent, resolve possible dates and times, and respond helpfully."
-            " If the user requests an appointment for a day/time OUTSIDE normal office hours, you must NOT set that time."
-            " Instead, identify that their requested time is not available, and in the JSON 'reason' field, provide a warm, clear message letting them know our office hours for that day, and kindly invite them to choose a time within those hours, for example between 9:00 AM and 6:00 PM. Do NOT auto-select a new time in the ISO field.\n"
+            "Your job is to extract the user's scheduling intent, resolve possible dates and times, and return the correct answer. STRICTLY adhere to date and time math instructions below!"
             "\n"
-            "Examples:\n"
-            "- If user says 'Tomorrow at 10pm', return classification 'EXACT_TIME', iso as an empty string, and in the 'reason' say: \"We're sorry, but we are closed at 10:00 PM. Our hours are 9:00 AM to 6:00 PM. Please suggest a time during those hours for your appointment.\"\n"
-            "- If user says 'After work', and this would map to a time later than 6:00 PM, also respond in the same way with a gentle suggestion.\n"
-            "- If user asks for a time within office hours, proceed as normal.\n"
-            "- NEVER automatically move the time request; just prompt for an available time if needed.\n"
+            "Date & time interpretation instructions:\n"
+            "- 'Tomorrow' MUST be the calendar day AFTER the date/time in the provided 'Now Local ISO'. Example: if Now Local ISO is 2026-02-10T04:43:37-08:00 (Tuesday), then 'tomorrow at 9 AM' means 2026-02-11T09:00:00-08:00 (Wednesday at 9 AM), never 2026-02-10. DO NOT confuse 'tomorrow' with 'today'.\n"
+            "- 'Today at [TIME]' is only valid if the requested time is after Now Local ISO. If the time has passed, interpret as the next valid day per the logic above.\n"
+            "- For days of week and words like 'Saturday', ALWAYS return the *next* occurrence AFTER Now Local ISO (never the current day if it has already occurred or the time has passed).\n"
             "\n"
-            "Day-of-week handling:\n"
-            "- If the user mentions a day of the week (e.g. 'Saturday'), you MUST return the next calendar occurrence of that day AFTER the provided 'Now Local ISO', never the same day if it's already past. Always compute the date forward.\n"
+            "Your job is also to verify and restrict to OFFICE HOURS: If the user requests a time OUTSIDE normal office hours, you must NOT set that time. Instead, set ISO to \"\", and in the JSON 'reason', provide a message explaining our hours for that day and ask user to reschedule inside hours (9:00 AM to 6:00 PM).\n"
+            "\n"
+            "ALWAYS reason in absolute NEXT calendar dates relative to Now Local ISO! Be especially careful with 'tomorrow', 'next', and day-of-week logic.\n"
+            "\n"
+            "Some worked examples (Now Local ISO: 2026-02-10T04:43:37-08:00, a *Tuesday*):\n"
+            "- 'Can we meet tomorrow at 9 AM?': iso = 2026-02-11T09:00:00-08:00, classification = EXACT_TIME\n"
+            "- 'Can we meet today at 9am?': iso = \"\", reason: \"That time has already passed today. Please choose a future time during our office hours.\"\n"
+            "- 'Can we meet Saturday at 11:30 AM?': iso = 2026-02-14T11:30:00-08:00\n"
+            "- 'Tomorrow at 10pm': iso = \"\", reason: \"We're sorry, but we are closed at 10:00 PM. Our hours are 9:00 AM to 6:00 PM. Please let us know if another time during these hours works for you.\"\n"
+            "- 'Wednesday morning': iso = 2026-02-11T10:00:00-08:00 (the next Wednesday, if today is before Wednesday or if time has not yet passed)\n"
             "\n"
             "Classifications:\n"
-            "- EXACT_TIME: Specific date AND specific time found (e.g. 'Wednesday at 4pm', '7/19 at 2pm').\n"
-            "- VAGUE_DATE: Date or day provided but time is missing/unclear/ignored (e.g. 'Next Tuesday', 'this Friday').\n"
-            "- VAGUE_WINDOW: Broad time window only (e.g. 'Wednesday morning', 'After work').\n"
+            "- EXACT_TIME: Specific date AND specific time found.\n"
+            "- VAGUE_DATE: Date provided, time is missing/unclear.\n"
+            "- VAGUE_WINDOW: Broad time window only.\n"
             "- OPEN_ENDED: Scheduling intent, but no time/date proposed.\n"
-            "- MULTI_OPTION: Multiple valid scheduling times (e.g. 'Tuesday at 3 or Thursday at 5').\n"
-            "- RESCHEDULE: User explicitly asks to change/move an existing appointment.\n"
+            "- MULTI_OPTION: Multiple valid scheduling times.\n"
+            "- RESCHEDULE: User explicitly asks to change/move existing appointment.\n"
             "- NO_INTENT: No scheduling/suggested time found.\n"
             "\n"
             "Rules:\n"
             "- Always return ISO8601 strings adjusted for the correct timezone (given in Timezone below).\n"
-            "- If the user requests a time outside business hours, set 'iso' to blank and provide a kind, informative reason, including our available office hours.\n"
-            "- If EXACT_TIME: 'iso' = exact datetime, high confidence (> 0.9).\n"
-            "- If VAGUE_DATE/VAGUE_WINDOW: 'iso' = that day at 10:00am (placeholder), lower confidence (<0.6), UNLESS the window is outside office hours: then set 'iso' blank and explain in reason.\n"
+            "- Do not create appointments in the past; always return the next valid date/time after Now Local ISO.\n"
+            "- If the user requests a time outside business hours, set 'iso' to blank and explain in 'reason'.\n"
             "- If MULTI_OPTION: leave 'iso' blank.\n"
-            "- Never produce a date in the past, always pick the next valid date/time after Now Local ISO.\n"
-            "- If you must decline a requested time, always say \"Our hours are 9:00 AM to 6:00 PM. Please choose a time within those hours.\" or similar.\n"
             "\n"
-            "Some examples, assuming Now Local ISO: 2026-02-09T22:33:06.454383-08:00 (Monday):\n"
-            "- 'Saturday at 11:30 AM': iso = 2026-02-14T11:30:00-08:00\n"
-            "- 'Tomorrow at 10pm': iso = \"\", reason: \"We're sorry, but we are closed at 10:00 PM. Our hours are 9:00 AM to 6:00 PM. Please let us know if another time during these hours works for you.\"\n"
-            "- 'After 7pm': iso = \"\", reason: \"We are not open after 6:00 PM. Our hours are 9:00 AM to 6:00 PM. Please suggest a time between these hours.\"\n"
-            "- 'Wednesday morning': iso = 2026-02-11T10:00:00-08:00\n"
-            "- 'Wednesday evening': iso = \"\", reason: \"Evenings are after hours. Please select a time between 9:00 AM and 6:00 PM.\"\n"
-            "- '16th': iso = 2026-02-16T10:00:00-08:00\n"
-            "- If no date or time is provided, NO_INTENT.\n"
-            "\n"
-            "Return JSON only, e.g.:\n"
+            "Return JSON only.\n"
             "{\n"
-            "  \"classification\": \"EXACT_TIME\",\n"
-            "  \"iso\": \"2026-02-14T11:30:00-08:00\",\n"
-            "  \"confidence\": 0.98,\n"
-            "  \"window\": \"exact\",\n"
-            "  \"reason\": \"User said 'Saturday at 11:30 AM'; resolved per timezone and next occurrence.\"\n"
+            "  \"classification\": \"...\",\n"
+            "  \"iso\": \"...\",\n"
+            "  \"confidence\": 0.0,\n"
+            "  \"window\": \"...\",\n"
+            "  \"reason\": \"...\"\n"
             "}\n"
         )
     }
@@ -878,7 +864,7 @@ def extract_appt_time(text: str, tz: str = "America/Los_Angeles") -> dict:
     now_local = datetime.now(ZoneInfo(tz))
     user = {
         "role": "user",
-        "content": f"Timezone: {tz}\nNow Local ISO: {now_local.isoformat()}\nOffice hours: {OFFICE_HOURS_STR}\nUser Message: {text.strip()}"
+        "content": f"Timezone: {tz}\nNow Local ISO: {now_local.isoformat()}\nUser Message: {text.strip()}"
     }
     print('➡ gpt.py:863 user:', user)
     print('➡ gpt.py:866 system:', system)
