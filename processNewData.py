@@ -30,7 +30,7 @@ from zoneinfo import ZoneInfo
 import uuid
 from airtable_store import (
     find_by_opp_id, query_view, acquire_lock, release_lock,
-    opp_from_record, save_opp, find_by_customer_email
+    opp_from_record, save_opp, find_by_customer_email, patch_by_id,
 )
 from patti_mailer import _bump_ai_send_metrics_in_airtable
 
@@ -44,6 +44,8 @@ from fortellis import (
     send_opportunity_email_activity,
     schedule_appointment_with_notify,
     set_opportunity_substatus,
+    select_vehicle_from_sought,
+    map_vehicle_to_airtable_fields,
 )
 
 from patti_common import _SCHED_ANY_RE, enforce_standard_schedule_sentence, EMAIL_RE, get_next_template_day
@@ -675,13 +677,16 @@ def get_walkaround_video_url(vehicle_model: str) -> str | None:
     return None
 
 
-def _extract_vehicle_info(opportunity: dict) -> dict:
+def _extract_vehicle_info(opportunity: dict, *, token: str = "", subscription_id: str = "") -> dict:
     """
     Extract vehicle year, make, model from Airtable-hydrated fields on the opportunity.
     Returns dict with keys: year, make, model.
     Returns None if model cannot be determined (caller should skip Day 3).
 
-    Airtable fields (Year, Make, Model) are the canonical source.
+    Airtable fields (year, make, model) are the canonical source.
+    Falls back to Fortellis soughtVehicles if Airtable fields are empty
+    and token/subscription_id are provided. On a successful fallback the
+    Airtable record is backfilled so subsequent calls don't need the API.
     """
     opp_id = opportunity.get("opportunityId") or opportunity.get("id") or "unknown"
 
@@ -691,9 +696,38 @@ def _extract_vehicle_info(opportunity: dict) -> dict:
 
     log.info("DAY3 VEHICLE DEBUG: opp=%s year=%r make=%r model=%r (from Airtable fields)", opp_id, year, make, model)
 
-    # If still no model, return None to signal skip
+    # ---- Fortellis fallback when Airtable fields are empty ----
+    if not model and token and subscription_id:
+        log.info("DAY3 VEHICLE DEBUG: opp=%s Airtable empty, attempting Fortellis fallback", opp_id)
+        try:
+            opp_data = get_opportunity(opp_id, token, subscription_id)
+            sought = (opp_data or {}).get("soughtVehicles") or []
+            selected = select_vehicle_from_sought(sought)
+            vf = map_vehicle_to_airtable_fields(selected)
+
+            year = vf.get("year", "")
+            make = vf.get("make", "")
+            model = vf.get("model", "")
+
+            log.info("DAY3 VEHICLE DEBUG: opp=%s Fortellis fallback year=%r make=%r model=%r",
+                     opp_id, year, make, model)
+
+            # Backfill Airtable so we never need this fallback again
+            if model:
+                rec_id = opportunity.get("_airtable_rec_id") or ""
+                if rec_id:
+                    try:
+                        patch_by_id(rec_id, vf)
+                        log.info("DAY3 VEHICLE DEBUG: opp=%s backfilled Airtable rec=%s", opp_id, rec_id)
+                    except Exception as e:
+                        log.warning("DAY3 VEHICLE backfill failed opp=%s: %s", opp_id, e)
+                # Update the in-memory opportunity so the rest of the flow sees it
+                opportunity.update(vf)
+        except Exception as e:
+            log.warning("DAY3 VEHICLE Fortellis fallback failed opp=%s: %s", opp_id, e)
+
     if not model:
-        log.info("DAY3 VEHICLE DEBUG: opp=%s NO MODEL FOUND in Airtable - skipping Day 3", opp_id)
+        log.info("DAY3 VEHICLE DEBUG: opp=%s NO MODEL FOUND in Airtable or Fortellis - skipping Day 3", opp_id)
         return None
 
     return {
@@ -859,7 +893,7 @@ def maybe_send_tk_day3_walkaround(
         return False
 
     # Extract vehicle info - use fallback if none found
-    vehicle_info = _extract_vehicle_info(opportunity)
+    vehicle_info = _extract_vehicle_info(opportunity, token=token, subscription_id=subscription_id)
     if not vehicle_info:
         log.info("TK Day3 Walkaround: no vehicle model found for opp=%s", opportunityId)
         return False
