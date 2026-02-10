@@ -454,6 +454,33 @@ def classify_inbound_email(email_text: str, *, provider_template: bool = False) 
 
     t_lower = t_short.lower()
 
+    # ✅ SAFE AUTO-REPLY OVERRIDE:
+    # Common lead intents like scheduling/availability should NOT require human review.
+    # We can auto-reply using hedged language ("I can confirm/check availability").
+    SAFE_INTENT_RE = re.compile(
+        r"\b("
+        r"available|availability|still available|still there|in stock|"
+        r"test drive|drive it|"
+        r"appointment|schedule|set up a time|book|"
+        r"what times|what time|times are available|"
+        r"does that work|that works|works for me|yes that works|"
+        r"tomorrow|today|tonight|this week|this weekend|"
+        r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+        r"\b\d{1,2}(:\d{2})?\s?(am|pm)\b"
+        r")\b",
+        re.IGNORECASE
+    )
+
+    # If it's basically a normal lead reply/intent, treat as safe to auto-reply.
+    # We'll enforce safe wording in the response generator (hedged language).
+    if SAFE_INTENT_RE.search(t_short):
+        return {
+            "classification": "AUTO_REPLY_SAFE",
+            "confidence": 0.88,
+            "reason": "Common lead intent (availability/scheduling). Auto-reply is safe using hedged language (offer to check/confirm availability and propose times)."
+        }
+
+
     if provider_template:
         # Extract only the customer-written part from the provider template
         comment = extract_customer_comment_from_provider(t_short)  # you already have this helper
