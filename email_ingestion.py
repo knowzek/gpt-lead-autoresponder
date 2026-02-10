@@ -903,8 +903,10 @@ def process_lead_notification(inbound: dict) -> None:
 
     # --- STEP 1: First SMS on new lead (General Leads only) ---
     try:
-        # Only send SMS on first-time bootstrap (new record)
-        if is_new_record:
+        # Only send SMS if first-touch SMS has NOT been sent yet
+        already_sms = bool((opportunity.get("first_sms_sent_at") or "").strip())
+        
+        if not already_sms:
             from goto_sms import send_sms
 
             from_number = _norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", "+17145977229"))
@@ -951,6 +953,7 @@ def process_lead_notification(inbound: dict) -> None:
                             # Persist SMS metadata (best-effort)
                             extra_sms = {
                                 "last_sms_sent_at": _dt.now(_tz.utc).isoformat(),
+                                "first_sms_sent_at": _dt.now(_tz.utc).isoformat(),
                                 "sms_conversation_id": resp.get("conversationId") or resp.get("conversation_id") or resp.get("id") or "",
                                 "sms_nudge_count": 0,
                                 "sms_followup_due_at": (_dt.now(_tz.utc) + timedelta(hours=24)).replace(microsecond=0).isoformat(),
@@ -1191,23 +1194,21 @@ def process_lead_notification(inbound: dict) -> None:
     )
 
     # right after successful first-touch email send (sent_ok=True)
-    when_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    next_iso = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
-
-    # keep in-memory consistent too (optional but nice)
-    opportunity["first_email_sent_at"] = when_iso
-    opportunity["followUP_date"] = next_iso
-
-    save_opp(
-        opportunity,
-        extra_fields={
+    if sent_ok:
+        when_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        next_iso = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    
+        opportunity["first_email_sent_at"] = when_iso
+        opportunity["followUP_date"] = next_iso
+    
+        save_opp(opportunity, extra_fields={
             "first_email_sent_at": when_iso,
             "follow_up_at": next_iso,
             "mode": "cadence",
-        },
-    )
+        })
+    else:
+        log.info("First-touch email not sent (sent_ok=False); not stamping first_email_sent_at opp=%s", opp_id)
 
-    log.info("Lead notification first-touch sent_ok=%s opp=%s shopper=%s", sent_ok, opp_id, shopper_email)
     return
 
 
