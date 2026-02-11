@@ -16,7 +16,6 @@ from airtable_store import (
 )
 from sms_brain import generate_sms_reply
 
-
 log = logging.getLogger("patti.sms.poller")
 
 def _now_iso():
@@ -34,6 +33,36 @@ def _norm_phone_e164_us(raw: str) -> str:
     if raw.startswith("+") and len(digits) >= 10:
         return "+" + digits
     return ""
+
+def _now_utc_z() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+def log_sms_note_to_crm(*, token: str, subscription_id: str, opp_id: str, direction: str, from_num: str, to_num: str, text: str):
+    """
+    Logs an SMS message to the CRM as a Note activity (type 37).
+    direction: "INBOUND" | "OUTBOUND"
+    """
+    preview = (text or "").strip()
+    if len(preview) > 1800:
+        preview = preview[:1800] + "…"
+
+    comments = (
+        f"[SMS {direction}]\n"
+        f"From: {from_num}\n"
+        f"To: {to_num}\n"
+        f"Message:\n{preview}"
+    )
+
+    # activityType can be int 37 or label "Note"
+    schedule_activity(
+        token,
+        subscription_id,
+        opp_id,
+        due_dt_iso_utc=_now_utc_z(),
+        activity_name="Note",
+        activity_type=37,   # Note
+        comments=comments,
+    )
 
 def _sms_test_enabled() -> bool:
     return (os.getenv("SMS_TEST", "0").strip() == "1")
@@ -100,6 +129,17 @@ def poll_once():
             # thread is oldest -> newest; last element is most recent
             last_inbound = (thread[-1].get("content") or "").strip()
 
+        token = get_token(opp["subscription_id"])
+
+        log_sms_note_to_crm(
+            token=token,
+            subscription_id=opp["subscription_id"],
+            opp_id=opp["opportunityId"],
+            direction="INBOUND",
+            from_num=author,
+            to_num=owner,
+            text=last_inbound,
+        )
 
         # ✅ Hard gate: only reply if the guest is STILL the last message in the thread
         # This prevents double-replies when another process/user already responded.
@@ -252,6 +292,16 @@ def poll_once():
             # 1) Send the SMS reply first
             send_sms(from_number=owner, to_number=to_number, body=reply_text)
             log.info("SMS poll: replied to=%s (test=%s)", to_number, _sms_test_enabled())
+            log_sms_note_to_crm(
+                token=token,
+                subscription_id=opp["_subscription_id"],
+                opp_id=opp["opportunityId"],
+                direction="OUTBOUND",
+                from_num=owner,
+                to_num=to_number,
+                text=reply_text,
+            )
+
 
             # 2) Always update “sent” metrics (fail-open)
             now_iso = _now_iso()
