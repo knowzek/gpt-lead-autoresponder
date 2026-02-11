@@ -92,6 +92,15 @@ def poll_once():
             log.exception("SMS poll: failed to fetch thread messages owner=%s contact=%s", owner, author)
             thread = []
 
+        # ✅ inbound SMS text: some GoTo lastMessage bodies come through blank
+        last_inbound = (body or "").strip()
+        log.info("SMS poll: last_inbound_len=%d last_inbound_preview=%r", len(last_inbound or ""), (last_inbound or "")[:80])
+
+        if not last_inbound and thread:
+            # thread is oldest -> newest; last element is most recent
+            last_inbound = (thread[-1].get("content") or "").strip()
+
+
         # ✅ Hard gate: only reply if the guest is STILL the last message in the thread
         # This prevents double-replies when another process/user already responded.
         if items2:
@@ -154,8 +163,6 @@ def poll_once():
                  opp.get("opportunityId"), author, body[:120])
 
         # Build GPT reply
-        # inbound SMS text
-        last_inbound = body or ""
 
         log.info(
             "SMS poll: thread context turns=%d (most recent=%r)",
@@ -275,6 +282,16 @@ def poll_once():
                 try:
                     subscription_id = opp.get("subscription_id") or opp.get("dealer_key")
                     token = get_token(subscription_id)
+
+                    log.warning(
+                      "SMS_HR_DEBUG opp=%s rooftop=%r sub=%r salesperson_name=%r salesperson_email=%r keys_has_rep_email=%s",
+                      opp.get("opportunityId"),
+                      opp.get("rooftop_name"),
+                      opp.get("_subscription_id"),
+                      opp.get("salesperson_name"),
+                      opp.get("Assigned Sales Rep Email") or opp.get("salesperson_email") or opp.get("salespersonEmail"),
+                      any(k in opp for k in ("Assigned Sales Rep Email", "salesperson_email", "salespersonEmail"))
+                    )
 
                     handoff_to_human(
                         opportunity=opp,
