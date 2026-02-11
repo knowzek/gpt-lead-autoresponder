@@ -35,12 +35,12 @@ class Message(BaseModel):
     channel: Literal['sms', 'email'] = Field(..., description="Channel through which the message came in / was sent.")
     timestamp: str = Field(..., description="Timestamp of the message sent/received.")
     from_: Optional[str] = Field(default="patti@pattersonautos.com", alias="from")
-    to: str = Field(...)
-    subject: Optional[str] = Field(description="Only in case when the channel is email.")
-    body_text: Optional[str] = Field(..., description="Text body of the message sent or received (clean html tags in case of email).")
-    body_html: Optional[str] = Field(..., description="Email body html (only valid for the case of email).")
-    provider: Optional[str] = Field(..., description="Providers of the lead.")
+    to: Optional[str] = Field(default="")
+    subject: Optional[str] = Field(default="", description="Only in case when the channel is email.")
+    body_text: Optional[str] = Field(default="", description="Text body of the message sent or received (clean html tags in case of email).")
+    body_html: Optional[str] = Field(default="", description="Email body html (only valid for the case of email).")
+    provider: Optional[str] = Field(default="", description="Providers of the lead.")
     opp_id: str = Field(..., description="Opportunity id received from the inbound payload, indexed for debugging.")
     delivery_status: Literal['sent', 'received', 'failed', 'unknown'] = Field(...)
-    rooftop_name: str
-    rooftop_sender: str
+    rooftop_name: Optional[str] = ""
+    rooftop_sender: Optional[str] = ""

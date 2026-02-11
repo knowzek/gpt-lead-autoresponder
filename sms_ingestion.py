@@ -7,7 +7,10 @@ from datetime import datetime as _dt, timezone as _tz
 
 from airtable_store import find_by_customer_phone, opp_from_record, save_opp, should_suppress_all_sends_airtable
 from goto_sms import send_sms, list_messages
+from patti_mailer import _generate_message_id, _normalize_message_id
 from sms_brain import generate_sms_reply
+from models.airtable_model import Message
+from airtable_store import log_message, _get_conversation_record_id_by_opportunity_id
 
 
 log = logging.getLogger("patti.sms")
@@ -62,6 +65,20 @@ def _find_first_str(payload, keys):
             return v.strip()
     return ""
 
+def _find_first_key(payload, keys: list):
+    """Return the first matching key in payload (case-insensitive)."""
+    if not isinstance(payload, dict):
+        return ""
+
+    payload_keys = list(payload.keys())
+
+    for candidate in keys:
+        for actual in payload_keys:
+            if actual.casefold() == candidate.casefold():
+                return actual
+
+    return ""
+
 def _walk_find(payload, predicate):
     """Depth-first search through dict/list for a value that matches predicate."""
     seen = set()
@@ -99,7 +116,7 @@ def _extract_inbound(payload: dict, raw_text: str) -> dict:
     body = _find_first_str(payload, ["body", "text", "message", "content"])
     from_phone = _find_first_str(payload, ["fromPhoneNumber", "from", "sender", "source", "contactPhoneNumber"])
     to_phone = _find_first_str(payload, ["toPhoneNumber", "to", "ownerPhoneNumber", "destination"])
-    conversation_id = _find_first_str(payload, ["conversationId", "conversation_id", "threadId", "thread_id", "chatId", "id"])
+    conversation_id = _find_first_str(payload, ["conversationId", "conversation_id", "threadId", "thread_id", "chatId", "id"]) # Alias -> messsage_id
     ts = _find_first_str(payload, ["timestamp", "time", "createdAt", "created_at"])
 
     # ✅ Message id (prefer nested lastMessage.id, then lastMessageId)
@@ -139,6 +156,14 @@ def _extract_inbound(payload: dict, raw_text: str) -> dict:
     # If body is nested as an object (e.g. {"message":{"body":"..."}})
     if not body and isinstance(payload.get("message"), dict):
         body = _find_first_str(payload["message"], ["body", "text", "content"])
+
+    # If from phone number resides in a list wihin contactPhoneNumbers
+    from_phone_key = _find_first_key(payload, ["fromPhoneNumber", "from", "sender", "source", "contactPhoneNumber"])
+
+    if not from_phone and from_phone_key:
+        value = payload.get(from_phone_key)
+        if isinstance(value, list) and value:
+            from_phone = value[0] or ""
 
     # If phones are nested as objects
     if not from_phone and isinstance(payload.get("message"), dict):
@@ -183,6 +208,7 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
     inbound = _extract_inbound(payload_json, raw_text)
     from_phone = inbound["from_phone"]
     body = inbound["body"]
+    to_number = inbound.get("to_phone", "")
 
     if not from_phone or not body:
         # Return ok so GoTo doesn't retry forever; we’ll map schema after seeing logs
@@ -199,8 +225,43 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
     opp = opp_from_record(rec)
     opp.setdefault("patti", {})
 
+    source = opp.get("source", "")
+    opp_id = opp.get("opportunityId", "")
+    message_id = inbound.get("conversation_id", "")
+    conversation_record_id = _get_conversation_record_id_by_opportunity_id(opp_id)
+
     patti_mode = (opp.get("patti") or {}).get("mode") or ""
     now_iso = _now_iso()
+
+    resolved_message_id = (
+        _normalize_message_id(message_id) if message_id else _generate_message_id(opp_id, now_iso, "", from_phone, body)
+    )
+
+    try:
+        airtable_log = Message(
+            message_id=resolved_message_id,
+            conversation=conversation_record_id,
+            direction="inbound",
+            channel="sms",
+            timestamp=now_iso,
+            from_=from_phone,
+            to=to_number,
+            subject="",
+            body_text=body,
+            body_html="",
+            provider=source,
+            opp_id=opp_id,
+            delivery_status='received',
+            rooftop_name="",
+            rooftop_sender=""
+        )
+        message_log_status = log_message(airtable_log)
+        if message_log_status:
+            log.info("Inbound sms logged successfully.")
+        else:
+            log.error("Failed to log inbound sms.")
+    except Exception as e:
+        log.error(f"Error during inbound message logging (process_inbound_sms): {e}.")
 
     # Always store inbound markers
     msg_id = (inbound.get("message_id") or "").strip()
@@ -243,7 +304,8 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
                 to_number = test_to
 
         try:
-            send_sms(from_number=_patti_from_number(), to_number=to_number, body=reply_text)
+
+            send_sms(from_number=_patti_from_number(), to_number=to_number, body=reply_text, opp_id=opp_id, source=source)
         except Exception:
             log.exception("SMS opt-out confirmation send failed opp=%s", opp.get("opportunityId"))
 
@@ -301,7 +363,7 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
                 to_number = test_to
 
         try:
-            send_sms(from_number=_patti_from_number(), to_number=to_number, body=reply_text)
+            send_sms(from_number=_patti_from_number(), to_number=to_number, body=reply_text, opp_id=opp_id, source=source)
         except Exception:
             log.exception("SMS pricing handoff reply failed opp=%s", opp.get("opportunityId"))
 
@@ -310,7 +372,7 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
 
     # --- Default: immediate simple convo reply (NO footer once guest has replied) ---
     save_opp(opp, extra_fields=base_patch)
-    
+
     # Impel-style GPT reply (single question, no opt-out footer once guest replies)
     vehicle = (opp.get("vehicle") or opp.get("Vehicle") or "").strip() or "the vehicle you asked about"
 
@@ -353,7 +415,6 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
     )
 
     reply_text = (decision.get("reply") or "Thanks — what day/time works best for you to connect?").strip()
-    
 
     to_number = from_phone
     if _sms_test_enabled():
@@ -362,7 +423,7 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
             to_number = test_to
 
     try:
-        send_sms(from_number=_patti_from_number(), to_number=to_number, body=reply_text)
+        send_sms(from_number=_patti_from_number(), to_number=to_number, body=reply_text, opp_id=opp_id, source=source)
     except Exception:
         log.exception("SMS convo reply failed opp=%s", opp.get("opportunityId"))
 

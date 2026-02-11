@@ -5,13 +5,19 @@ from datetime import datetime, timezone
 from datetime import timedelta
 from gpt import extract_appt_time
 from fortellis import get_token, schedule_activity, get_opportunity, add_opportunity_comment
+from models.airtable_model import Message
+from patti_mailer import _generate_message_id, _normalize_message_id
 from patti_triage import handoff_to_human, notify_staff_patti_scheduled_appt
 from airtable_store import list_records_by_view, patch_by_id
+from datetime import datetime as _dt
+from datetime import timezone as _tz
 from goto_sms import list_conversations, list_messages, send_sms
 from airtable_store import (
     find_by_customer_phone_loose,
     opp_from_record,
     save_opp,
+    _get_conversation_record_id_by_opportunity_id,
+    log_message,
     should_suppress_all_sends_airtable,
 )
 from sms_brain import generate_sms_reply
@@ -19,6 +25,7 @@ from templates import build_mazda_loyalty_sms
 
 
 log = logging.getLogger("patti.sms.poller")
+
 
 def _now_iso():
     return datetime.now(timezone.utc).isoformat()
@@ -64,10 +71,12 @@ def log_sms_note_to_crm(*, token: str, subscription_id: str, opp_id: str, direct
 
 
 def _sms_test_enabled() -> bool:
-    return (os.getenv("SMS_TEST", "0").strip() == "1")
+    return os.getenv("SMS_TEST", "0").strip() == "1"
+
 
 def _sms_test_to() -> str:
     return _norm_phone_e164_us(os.getenv("SMS_TEST_TO", "").strip())
+
 
 def _patti_number() -> str:
     return _norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", "+17145977229").strip())
@@ -111,6 +120,7 @@ def send_sms_cadence_once():
                 "next_sms_at": (datetime.now(timezone.utc) + timedelta(days=3)).isoformat(),
                 "sms_status": "ready"
             })
+
 
 
 def poll_once():
@@ -171,19 +181,21 @@ def poll_once():
             items2 = raw.get("items") or []
             # Oldest -> newest
             items2 = sorted(items2, key=lambda m: m.get("timestamp") or "")
-        
+
             for m in items2[-12:]:
                 txt = (m.get("body") or "").strip()
                 if not txt:
                     continue
-        
+
                 author_num = (m.get("authorPhoneNumber") or "").strip()
                 role = "assistant" if author_num == owner else "user"
-        
-                thread.append({
-                    "role": role,
-                    "content": txt[:800],
-                })
+
+                thread.append(
+                    {
+                        "role": role,
+                        "content": txt[:800],
+                    }
+                )
         except Exception:
             log.exception("SMS poll: failed to fetch thread messages owner=%s contact=%s", owner, author)
             thread = []
@@ -260,6 +272,10 @@ def poll_once():
             continue
         
         # ✅ Dedupe: only act once per inbound message id
+        source = opp.get("source", "")
+        opp_id = opp.get("opportunityId", "")
+
+        # Dedupe: only act once per inbound message id
         last_seen = (opp.get("last_sms_inbound_message_id") or "").strip()
         if last_seen == msg_id:
             log.info("SMS poll: skipping already-processed msg_id=%s", msg_id)
@@ -291,6 +307,37 @@ def poll_once():
         except Exception:
             log.exception("SMS poll: failed to log inbound SMS to CRM opp=%s", opp.get("opportunityId"))
 
+        conversation_record_id = _get_conversation_record_id_by_opportunity_id(opp_id) or ""
+        timestamp = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
+        resolved_message_id = (
+            _normalize_message_id(msg_id) if msg_id else _generate_message_id(opp_id, timestamp, "", author, body)
+        )
+
+        try:
+            airtable_log = Message(
+                message_id=resolved_message_id,
+                conversation=conversation_record_id,
+                direction="inbound",
+                channel="sms",
+                timestamp=timestamp,
+                from_=author,
+                to=owner,
+                subject="",
+                body_text=body,
+                body_html="",
+                provider=source,
+                opp_id=opp_id,
+                delivery_status="received",
+                rooftop_name="",
+                rooftop_sender="",
+            )
+            message_log_status = log_message(airtable_log)
+            if message_log_status:
+                log.info("Inbound sms logged successfully.")
+            else:
+                log.error("Failed to log inbound sms.")
+        except Exception as e:
+            log.error(f"Error during inbound message logging (process_inbound_sms): {e}.")
 
         # Record inbound + switch mode
         patti["mode"] = "convo"
@@ -301,8 +348,7 @@ def poll_once():
         }
         save_opp(opp, extra_fields=extra)
 
-        log.info("SMS poll: new inbound msg opp=%s author=%s body=%r",
-                 opp.get("opportunityId"), author, body[:120])
+        log.info("SMS poll: new inbound msg opp=%s author=%s body=%r", opp.get("opportunityId"), author, body[:120])
 
         # Build GPT reply
 
@@ -311,7 +357,7 @@ def poll_once():
             len(thread),
             (thread[-1]["content"][:80] if thread else None),
         )
-        
+
         # opp is already canonicalized by opp_from_record()
         decision = generate_sms_reply(
             rooftop_name=opp["rooftop_name"],
@@ -320,17 +366,17 @@ def poll_once():
             salesperson=opp["salesperson_name"],
             vehicle=opp.get("vehicle") or "",
             last_inbound=last_inbound,
-            thread_snippet=thread,          # ✅ pass real history
+            thread_snippet=thread,  # ✅ pass real history
             include_optout_footer=False,
         )
 
         needs_handoff = bool(decision.get("needs_handoff"))
         handoff_reason = (decision.get("handoff_reason") or "other").strip().lower()
-        
+
         if needs_handoff:
             name = (opp.get("customer_first_name") or "").strip()
             prefix = f"Thanks, {name}. " if name else "Thanks. "
-        
+
             if handoff_reason == "pricing":
                 decision["reply"] = prefix + "I’ll have the team follow up with pricing details shortly."
             elif handoff_reason == "phone_call":
@@ -340,19 +386,18 @@ def poll_once():
             else:
                 decision["reply"] = prefix + "I’m looping in a team member to help, and they’ll follow up shortly."
 
-
         # --- Appointment detect + schedule (authoritative actions happen here, not in GPT text) ---
         appt = extract_appt_time(last_inbound, tz="America/Los_Angeles")
         appt_iso = (appt.get("iso") or "").strip()
         appt_conf = float(appt.get("confidence") or 0)
-        
+
         if appt_iso and appt_conf >= 0.80:
             try:
                 # Convert local ISO w/ offset -> UTC Z for Fortellis
                 dt_local = datetime.fromisoformat(appt_iso)
                 dt_utc = dt_local.astimezone(timezone.utc)
                 due_utc = dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
-        
+
                 # Get CRM token + schedule activity
                 dealer_key = opp.get("subscription_id") or opp.get("dealer_key")
                 if not dealer_key:
@@ -418,7 +463,11 @@ def poll_once():
             except Exception:
                 log.exception("SMS poll: failed to schedule appointment opp=%s appt_iso=%r", opp.get("opportunityId"), appt_iso)
 
-        
+            except Exception:
+                log.exception(
+                    "SMS poll: failed to schedule appointment opp=%s appt_iso=%r", opp.get("opportunityId"), appt_iso
+                )
+
         # --- Send SMS reply + persist metrics + optional handoff escalation ---
         reply_text = (decision.get("reply") or "").strip()
         if not reply_text:
@@ -430,7 +479,13 @@ def poll_once():
 
         try:
             # 1) Send the SMS reply first
-            send_sms(from_number=owner, to_number=to_number, body=reply_text)
+            send_sms(
+                from_number=owner,
+                to_number=to_number,
+                body=reply_text,
+                source=source,
+                opp_id=opp.get("opportunityId", ""),
+            )
             log.info("SMS poll: replied to=%s (test=%s)", to_number, _sms_test_enabled())
             
             # ✅ Log outbound SMS to CRM
@@ -464,11 +519,14 @@ def poll_once():
             # 3) If handoff, flag Airtable + notify salesperson/GMs (fail-open)
             if needs_handoff:
                 try:
-                    save_opp(opp, extra_fields={
-                        "Needs Human Review": True,
-                        "Human Review Reason": f"SMS handoff: {handoff_reason}",
-                        # "Human Review At": now_iso,  # only if this Airtable field exists
-                    })
+                    save_opp(
+                        opp,
+                        extra_fields={
+                            "Needs Human Review": True,
+                            "Human Review Reason": f"SMS handoff: {handoff_reason}",
+                            # "Human Review At": now_iso,  # only if this Airtable field exists
+                        },
+                    )
                 except Exception:
                     log.exception("SMS poll: failed to set Needs Human Review fields opp=%s", opp.get("opportunityId"))
 

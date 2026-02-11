@@ -5,7 +5,7 @@ import requests
 import hashlib
 import logging
 
-from models.airtable_upsert_model import Message
+from models.airtable_model import Message
 
 log = logging.getLogger("patti.airtable")
 
@@ -1261,12 +1261,17 @@ def log_message(message_data: Message) -> bool:
     try:
         url = return_table_url(MESSAGES_TABLE_NAME)
         fields = message_data.model_dump(mode="json", exclude_none=True, by_alias=True)
+        
+        if "body_html" in fields and fields["body_html"]:
+            fields["body_html"] = fields["body_html"][:2000]
+
         payload = {"records": [{"fields": fields}], "typecast": True}
         data = _request("POST", url, json=payload)
         recs = data.get("records", [])
+        return bool(recs)
     except Exception as e:
         log.error(f"Something went wrong while logging message: {e}")
-    return bool(recs) if recs else False
+        return False
 
 
 def upsert_conversation(conversation_id: str, fields: dict) -> dict:

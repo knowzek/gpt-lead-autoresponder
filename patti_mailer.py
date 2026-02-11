@@ -2,6 +2,7 @@ import os
 import logging
 from datetime import datetime, timezone
 import hashlib
+import re
 
 from outlook_email import send_email_via_outlook
 from fortellis import send_opportunity_email_activity, complete_send_email_activity
@@ -15,7 +16,7 @@ from airtable_store import (
     mark_ai_email_sent,
 )
 
-from models.airtable_upsert_model import Message
+from models.airtable_model import Message
 from airtable_store import _get_conversation_record_id_by_opportunity_id
 from bs4 import BeautifulSoup
 
@@ -30,7 +31,8 @@ def _clean_body_html_to_body_text(body_html: str) -> str:
 
 
 def _normalize_message_id(message_id: str):
-    resolved_message_id = f"<message-{message_id.strip().lower()}>"
+    """Normalizes message id to format `<message-iazag2kdvtvqbe6hcoqdu@internal>`"""
+    resolved_message_id = f"<message-{message_id.strip().lower()}@internal>"
     return resolved_message_id
 
 
@@ -40,15 +42,23 @@ def _generate_message_id(
     subject: str | None = None,
     to_addr: str | None = None,
     body_html: str | None = None,
-):
-    opp_id = opp_id or ""
-    timestamp = timestamp or ""
-    subject = subject or ""
-    to_addr = to_addr or ""
-    body_html = body_html or ""
+) -> str:
+    
+
+    opp_id = (opp_id or "").strip()
+    timestamp = (timestamp or "").strip()
+    subject = (subject or "").strip()
+    to_addr = (to_addr or "").strip().lower()
+
+    body_html = (body_html or "").strip()
+
+    body_html = re.sub(r"\s+", " ", body_html)
+
+    body_html = body_html[:5000]
 
     raw = f"{opp_id}|{timestamp}|{subject}|{to_addr}|{body_html}"
     digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
     return f"<message-{digest[:32]}@internal>"
 
 
@@ -221,19 +231,19 @@ def send_patti_email(
                 channel="email",
                 timestamp=timestamp,
                 from_="patti@pattersonautos.com",
-                to=to_addr.strip(),
-                subject=subject.strip(),
+                to=to_addr,
+                subject=subject,
                 body_text=clean_body_text,
-                body_html=body_html.strip(),
+                body_html=body_html,
                 provider=source,
                 opp_id=opp_id,
                 delivery_status=delivery_status,
-                rooftop_name=rooftop_name.strip(),
-                rooftop_sender=rooftop_sender.strip(),
+                rooftop_name=rooftop_name,
+                rooftop_sender=rooftop_sender,
             )
             message_log_status = log_message(airtable_log)
             if message_log_status:
-                log.error("Outbound message logged successfully.")
+                log.info("Outbound message logged successfully.")
             else:
                 log.error("Outbound message logging failed.")
 
@@ -253,10 +263,10 @@ def send_patti_email(
         sent_ok = True
     except Exception as e:
         log.warning("Outlook send failed opp=%s: %s", opp_id, e)
-        return False
+        sent_ok = False
 
     # Log the outbound to CRM as a COMPLETED ACTIVITY
-    if token and subscription_id:
+    if sent_ok and token and subscription_id:
         try:
             complete_send_email_activity(
                 token=token,
@@ -286,21 +296,21 @@ def send_patti_email(
             channel="email",
             timestamp=timestamp,
             from_="patti@pattersonautos.com",
-            to=to_addr.strip(),
-            subject=subject.strip(),
+            to=to_addr,
+            subject=subject,
             body_text=clean_body_text,
-            body_html=body_html.strip(),
+            body_html=body_html,
             provider=source,
             opp_id=opp_id,
             delivery_status=delivery_status,
-            rooftop_name=rooftop_name.strip(),
-            rooftop_sender=rooftop_sender.strip(),
+            rooftop_name=rooftop_name,
+            rooftop_sender=rooftop_sender,
         )
         message_log_status = log_message(airtable_log)
         if message_log_status:
-            log.error("Outbound message logged successfully.")
+            log.info("Outbound message logged successfully.")
         else:
             log.error("Outbound message logging failed.")
     except Exception as e:
-        log.error(f"Error during Messages data model construction (send_patti_email): {e}")
+        log.error(f"Error during outbound message logging (send_patti_email): {e}")
     return sent_ok
