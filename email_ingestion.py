@@ -940,12 +940,13 @@ def process_lead_notification(inbound: dict) -> None:
               If you’d like to come in, just reply with a day and time that works for you and we’ll coordinate it.
             </p>
             
-            <p><strong>Here’s what you can expect from us:</strong></p>
-            
+            <p><strong>Here’s why so many guests choose us:</strong></p>
+
             <ul>
-              <li><strong>Clear, straightforward help:</strong> We’ll walk you through options and timing without any pressure.</li>
-              <li><strong>Great selection:</strong> We can check availability and suggest similar vehicles if an exact match isn’t on the ground.</li>
-              <li><strong>Support after the sale:</strong> Our service team is here long-term for maintenance and warranty needs.</li>
+              <li><strong>No addendums or dealer markups</strong></li>
+              <li><strong>Orange County Top Workplace for 20 years running</strong></li>
+              <li><strong>Community driven</strong></li>
+              <li><strong>Master technicians and experienced staff</strong></li>
             </ul>
             
             <p>Best,<br/>Patti<br/>{rooftop_name}</p>
@@ -1068,12 +1069,13 @@ def process_lead_notification(inbound: dict) -> None:
               go over your estimated range, and discuss next steps.
             </p>
 
-            <p><strong>Here’s what you can expect from us:</strong></p>
+            <p><strong>Here’s why so many guests choose us:</strong></p>
 
             <ul>
-              <li><strong>Transparent evaluation:</strong> We use current market data and real-time demand to determine value.</li>
-              <li><strong>Fast process:</strong> In many cases we can finalize numbers the same day.</li>
-              <li><strong>No obligation:</strong> You can sell your vehicle outright or apply the value toward your next purchase.</li>
+              <li><strong>No addendums or dealer markups</strong></li>
+              <li><strong>Orange County Top Workplace for 20 years running</strong></li>
+              <li><strong>Community driven</strong></li>
+              <li><strong>Master technicians and experienced staff</strong></li>
             </ul>
 
             <p>
