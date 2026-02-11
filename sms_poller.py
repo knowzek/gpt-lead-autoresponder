@@ -99,6 +99,7 @@ def poll_once():
 
         # Pull last N messages in this thread so GPT can interpret short replies like "No thanks"
         thread = []
+        items2 = []
         try:
             raw = list_messages(owner_phone_e164=owner, contact_phone_e164=author, limit=12)
             items2 = raw.get("items") or []
@@ -129,18 +130,6 @@ def poll_once():
             # thread is oldest -> newest; last element is most recent
             last_inbound = (thread[-1].get("content") or "").strip()
 
-        token = get_token(opp["subscription_id"])
-
-        log_sms_note_to_crm(
-            token=token,
-            subscription_id=opp["subscription_id"],
-            opp_id=opp["opportunityId"],
-            direction="INBOUND",
-            from_num=author,
-            to_num=owner,
-            text=last_inbound,
-        )
-
         # ✅ Hard gate: only reply if the guest is STILL the last message in the thread
         # This prevents double-replies when another process/user already responded.
         if items2:
@@ -164,14 +153,13 @@ def poll_once():
         if not rec:
             log.info("SMS poll: no lead match for author=%s body=%r", author, body[:80])
             continue
-
+        
         opp = opp_from_record(rec)
         patti = opp.setdefault("patti", {})
-
-        # ✅ Hard suppression gate (STOP/opt-out/suppressed/etc.)
+        
+        # ✅ Hard suppression gate
         stop, reason = should_suppress_all_sends_airtable(opp)
         if stop:
-            # Still record inbound id so we don't spin on it forever
             extra = {
                 "last_sms_inbound_message_id": msg_id,
                 "last_sms_inbound_at": last.get("timestamp") or _now_iso(),
@@ -182,13 +170,28 @@ def poll_once():
                 log.exception("SMS poll: failed to save inbound markers while suppressed opp=%s", opp.get("opportunityId"))
             log.info("SMS poll: suppressed=%s opp=%s (no reply)", reason, opp.get("opportunityId"))
             continue
-
-
-        # Dedupe: only act once per inbound message id
+        
+        # ✅ Dedupe: only act once per inbound message id
         last_seen = (opp.get("last_sms_inbound_message_id") or "").strip()
         if last_seen == msg_id:
             log.info("SMS poll: skipping already-processed msg_id=%s", msg_id)
             continue
+        
+        # ✅ NOW we know this inbound is new — log it to CRM once
+        try:
+            token = get_token(opp["subscription_id"])
+            log_sms_note_to_crm(
+                token=token,
+                subscription_id=opp["subscription_id"],
+                opp_id=opp["opportunityId"],
+                direction="INBOUND",
+                from_num=author,
+                to_num=owner,
+                text=last_inbound,
+            )
+        except Exception:
+            log.exception("SMS poll: failed to log inbound SMS to CRM opp=%s", opp.get("opportunityId"))
+
 
         # Record inbound + switch mode
         patti["mode"] = "convo"
@@ -292,17 +295,23 @@ def poll_once():
             # 1) Send the SMS reply first
             send_sms(from_number=owner, to_number=to_number, body=reply_text)
             log.info("SMS poll: replied to=%s (test=%s)", to_number, _sms_test_enabled())
-            log_sms_note_to_crm(
-                token=token,
-                subscription_id=opp["_subscription_id"],
-                opp_id=opp["opportunityId"],
-                direction="OUTBOUND",
-                from_num=owner,
-                to_num=to_number,
-                text=reply_text,
-            )
+            
+            # ✅ Log outbound SMS to CRM
+            try:
+                token = get_token(opp["subscription_id"])
+                log_sms_note_to_crm(
+                    token=token,
+                    subscription_id=opp["subscription_id"],
+                    opp_id=opp["opportunityId"],
+                    direction="OUTBOUND",
+                    from_num=owner,
+                    to_num=to_number,
+                    text=reply_text,
+                )
+            except Exception:
+                log.exception("SMS poll: failed to log outbound SMS to CRM opp=%s", opp.get("opportunityId"))
 
-
+            
             # 2) Always update “sent” metrics (fail-open)
             now_iso = _now_iso()
             next_due = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
@@ -337,7 +346,7 @@ def poll_once():
                       "SMS_HR_DEBUG opp=%s rooftop=%r sub=%r salesperson_name=%r salesperson_email=%r keys_has_rep_email=%s",
                       opp.get("opportunityId"),
                       opp.get("rooftop_name"),
-                      opp.get("_subscription_id"),
+                      opp.get("subscription_id"),
                       opp.get("salesperson_name"),
                       opp.get("Assigned Sales Rep Email") or opp.get("salesperson_email") or opp.get("salespersonEmail"),
                       any(k in opp for k in ("Assigned Sales Rep Email", "salesperson_email", "salespersonEmail"))
