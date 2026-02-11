@@ -678,6 +678,7 @@ def process_lead_notification(inbound: dict) -> None:
     # ✅ PA routes Pre-Qual leads explicitly
     lead_type = (inbound.get("lead_type") or "").strip().lower()
     is_prequal = (lead_type == "pre_qual")
+    is_value_trade = (lead_type == "value_your_trade")
 
     if not customer_comment and provider_template:
         customer_comment = extract_customer_comment_from_provider(body_text)
@@ -1028,6 +1029,140 @@ def process_lead_notification(inbound: dict) -> None:
             )
         except Exception as e:
             log.exception("Pre-Qual handoff_to_human failed opp=%s err=%s", opp_id, e)
+
+        return
+
+    # -----------------------------
+    # VALUE YOUR TRADE FAST PATH:
+    # - send ONE email + ONE sms
+    # - immediately handoff to human
+    # - stop cadence
+    # - idempotent via mode check
+    # -----------------------------
+    if is_value_trade:
+
+        # Idempotency protection
+        if (opportunity.get("mode") or "").lower() == "handoff":
+            log.info("Value-Your-Trade already handed off opp=%s — skipping resend", opp_id)
+            return
+
+        to_email = (test_recipient or shopper_email) if safe_mode else shopper_email
+
+        # --- Email ---
+        try:
+            from patti_mailer import send_patti_email
+
+            subject_trade = "Thanks — we received your trade valuation request"
+
+            body_html_trade = f"""
+            <p>Hi {customer_name},</p>
+
+            <p>
+              Thanks for contacting <strong>{rooftop_name}</strong>.
+              We received your trade-in request and the details on your vehicle.
+            </p>
+
+            <p>
+              Our team is reviewing your information and market data now.
+              A specialist will reach out shortly to confirm condition details,
+              go over your estimated range, and discuss next steps.
+            </p>
+
+            <p><strong>Here’s what you can expect from us:</strong></p>
+
+            <ul>
+              <li><strong>Transparent evaluation:</strong> We use current market data and real-time demand to determine value.</li>
+              <li><strong>Fast process:</strong> In many cases we can finalize numbers the same day.</li>
+              <li><strong>No obligation:</strong> You can sell your vehicle outright or apply the value toward your next purchase.</li>
+            </ul>
+
+            <p>
+              If you'd like to come in for a quick appraisal, just reply with a day and time that works for you and we’ll coordinate it.
+            </p>
+
+            <p>Best,<br/>Patti<br/>{rooftop_name}</p>
+            """
+
+            send_patti_email(
+                token=tok,
+                subscription_id=subscription_id,
+                opp_id=opp_id,
+                rooftop_name=rooftop_name,
+                rooftop_sender=rooftop_sender,
+                to_addr=to_email,
+                subject=subject_trade,
+                body_html=body_html_trade,
+            )
+
+        except Exception as e:
+            log.exception("Value-Your-Trade email send failed opp=%s err=%s", opp_id, e)
+
+        # --- SMS ---
+        try:
+            from goto_sms import send_sms
+
+            from_number = _norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", ""))
+            guest_phone_raw = (opportunity.get("customer_phone") or "").strip()
+            guest_phone = _norm_phone_e164_us(guest_phone_raw)
+
+            if from_number and guest_phone:
+
+                to_number = guest_phone
+                if _sms_test_enabled():
+                    test_to = _sms_test_to()
+                    to_number = test_to if test_to else ""
+
+                if to_number:
+                    sms_msg = (
+                        f"Hi {first_name or 'there'}, this is Patti with {rooftop_name}. "
+                        f"We received your trade-in request and our team is reviewing the details now. "
+                        f"Someone will reach out shortly. Reply with a good time if you'd like to stop in for an appraisal. "
+                        f"Opt-out reply STOP"
+                    )
+
+                    send_sms(from_number=from_number, to_number=to_number, body=sms_msg)
+
+                    save_opp(
+                        opportunity,
+                        extra_fields={
+                            "last_sms_sent_at": _dt.now(_tz.utc).isoformat(),
+                        },
+                    )
+
+        except Exception as e:
+            log.exception("Value-Your-Trade SMS send failed opp=%s err=%s", opp_id, e)
+
+        # Stop cadence + mark handoff
+        try:
+            save_opp(
+                opportunity,
+                extra_fields={
+                    "mode": "handoff",
+                    "follow_up_at": None,
+                },
+            )
+        except Exception as e:
+            log.exception("Value-Your-Trade save_opp failed opp=%s err=%s", opp_id, e)
+
+        # Human handoff notification
+        try:
+            handoff_to_human(
+                opportunity=opportunity,
+                fresh_opp=fresh_opp,
+                token=tok,
+                subscription_id=subscription_id,
+                rooftop_name=rooftop_name,
+                inbound_subject=subject,
+                inbound_text=(customer_comment or body_text or "")[:1800],
+                inbound_ts=ts,
+                triage={
+                    "classification": "HUMAN_REVIEW_REQUIRED",
+                    "confidence": 1.0,
+                    "reason": "Value-Your-Trade lead — auto first-touch then immediate handoff",
+                },
+            )
+        except Exception as e:
+            log.exception("Value-Your-Trade handoff failed opp=%s err=%s", opp_id, e)
 
         return
 
