@@ -675,6 +675,10 @@ def process_lead_notification(inbound: dict) -> None:
         or bool(_PROVIDER_TEMPLATE_HINT_RE.search(body_text or ""))
     )
 
+    # ✅ PA routes Pre-Qual leads explicitly
+    lead_type = (inbound.get("lead_type") or "").strip().lower()
+    is_prequal = (lead_type == "pre_qual")
+
     if not customer_comment and provider_template:
         customer_comment = extract_customer_comment_from_provider(body_text)
 
@@ -900,6 +904,133 @@ def process_lead_notification(inbound: dict) -> None:
     rt = get_rooftop_info(subscription_id) or {}
     rooftop_name   = rt.get("name") or rt.get("rooftop_name") or "Rooftop"
     rooftop_sender = rt.get("sender") or rt.get("patti_email") or os.getenv("TEST_FROM") or ""
+
+    # -----------------------------
+    # PRE-QUAL FAST PATH:
+    # - send ONE email + ONE sms
+    # - immediately handoff to human
+    # - stop cadence (mode=handoff, follow_up_at=None)
+    # - idempotent via mode check (no JSON blob fields)
+    # -----------------------------
+    if is_prequal:
+        # ✅ idempotency: if already handed off, never resend
+        if (opportunity.get("mode") or "").lower() == "handoff":
+            log.info("Pre-Qual already handed off opp=%s — skipping resend", opp_id)
+            return
+
+        # Respect SAFE_MODE email reroute if you have it wired
+        to_email = (test_recipient or shopper_email) if safe_mode else shopper_email
+
+        # --- Email (single touch) ---
+        try:
+            from patti_mailer import send_patti_email
+
+            subject_prequal = "Thanks — we received your pre-qualification request"
+
+            body_html_prequal = f"""
+            <p>Hi {customer_name},</p>
+            
+            <p>
+              Thanks for contacting <strong>{rooftop_name}</strong>. We received your pre-qualification request and our team is reviewing it now.
+            </p>
+            
+            <p>
+              A team member will reach out shortly to confirm next steps, answer any questions, and go over available options.
+              If you’d like to come in, just reply with a day and time that works for you and we’ll coordinate it.
+            </p>
+            
+            <p><strong>Here’s what you can expect from us:</strong></p>
+            
+            <ul>
+              <li><strong>Clear, straightforward help:</strong> We’ll walk you through options and timing without any pressure.</li>
+              <li><strong>Great selection:</strong> We can check availability and suggest similar vehicles if an exact match isn’t on the ground.</li>
+              <li><strong>Support after the sale:</strong> Our service team is here long-term for maintenance and warranty needs.</li>
+            </ul>
+            
+            <p>Best,<br/>Patti<br/>{rooftop_name}</p>
+            """
+
+
+            send_patti_email(
+                token=tok,
+                subscription_id=subscription_id,
+                opp_id=opp_id,
+                rooftop_name=rooftop_name,
+                rooftop_sender=rooftop_sender,
+                to_addr=to_email,
+                subject=subject_prequal,
+                body_html=body_html_prequal,
+            )
+        except Exception as e:
+            log.exception("Pre-Qual email send failed opp=%s err=%s", opp_id, e)
+
+        # --- SMS (single touch) ---
+        try:
+            from goto_sms import send_sms
+
+            from_number = _norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", ""))
+            guest_phone_raw = (opportunity.get("customer_phone") or "").strip()
+            guest_phone = _norm_phone_e164_us(guest_phone_raw)
+
+            if from_number and guest_phone:
+                # SMS test reroute if enabled in your env
+                to_number = guest_phone
+                if _sms_test_enabled():
+                    test_to = _sms_test_to()
+                    to_number = test_to if test_to else ""
+
+                if to_number:
+                    sms_msg = (
+                        f"Hi {first_name or 'there'}, this is Patti with {rooftop_name}. "
+                        f"Thanks — we received your pre-qualification request and our team is reviewing it now. "
+                        f"Someone will reach out shortly. Reply with a good day/time if you’d like to come in. "
+                        f"Opt-out reply STOP"
+                    )
+                    send_sms(from_number=from_number, to_number=to_number, body=sms_msg)
+
+                    save_opp(
+                        opportunity,
+                        extra_fields={
+                            "last_sms_sent_at": _dt.now(_tz.utc).isoformat(),
+                        },
+                    )
+        except Exception as e:
+            log.exception("Pre-Qual SMS send failed opp=%s err=%s", opp_id, e)
+
+        # Stop cadence + mark handed off (this is the idempotency flag)
+        try:
+            save_opp(
+                opportunity,
+                extra_fields={
+                    "mode": "handoff",
+                    "follow_up_at": None,
+                },
+            )
+        except Exception as e:
+            log.exception("Pre-Qual save_opp handoff fields failed opp=%s err=%s", opp_id, e)
+
+        # Human handoff notification/logging
+        try:
+            handoff_to_human(
+                opportunity=opportunity,
+                fresh_opp=fresh_opp,
+                token=tok,
+                subscription_id=subscription_id,
+                rooftop_name=rooftop_name,
+                inbound_subject=subject,
+                inbound_text=(customer_comment or body_text or "")[:1800],
+                inbound_ts=ts,
+                triage={
+                    "classification": "HUMAN_REVIEW_REQUIRED",
+                    "confidence": 1.0,
+                    "reason": "Pre-Qual lead — auto first-touch then immediate handoff",
+                },
+            )
+        except Exception as e:
+            log.exception("Pre-Qual handoff_to_human failed opp=%s err=%s", opp_id, e)
+
+        return
+
 
     # Customer name (prefer Airtable-hydrated first/last, then Fortellis, else "there")
     cust = fresh_opp.get("customer") or opportunity.get("customer") or {}
