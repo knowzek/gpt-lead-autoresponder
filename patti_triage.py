@@ -267,17 +267,28 @@ def resolve_salesperson_contact(opportunity: dict, fresh_opp: Optional[dict]) ->
     name, email = _primary_salesperson(st)
     return {"name": name or "Sales Team", "email": email or ""}
 
-def resolve_primary_sales_email(fresh_opp: dict) -> str | None:
-    st = (fresh_opp or {}).get("salesTeam") or []
+def resolve_primary_sales_email(
+    fresh_opp: dict | None = None,
+    opportunity: dict | None = None,
+) -> str | None:
+
+    # ✅ Prefer Fortellis shape
+    st = (fresh_opp or {}).get("salesTeam")
+
+    # ✅ Fallback to Airtable-hydrated opp
+    if not st:
+        st = (opportunity or {}).get("salesTeam")
+
     if not isinstance(st, list) or not st:
         return None
 
-    # Prefer primary salesperson/BDC
+    # Prefer primary
     primary = None
     for p in st:
-        if isinstance(p, dict) and p.get("isPrimary"):
+        if isinstance(p, dict) and str(p.get("isPrimary")).lower() in ("true", "1", "yes"):
             primary = p
             break
+
     if not primary:
         primary = st[0] if isinstance(st[0], dict) else None
 
@@ -289,6 +300,7 @@ def resolve_primary_sales_email(fresh_opp: dict) -> str | None:
         return None
 
     return SALESTEAM_ID_TO_EMAIL.get(sid)
+
 
 # -----------------------
 # Fast triage rules
@@ -603,7 +615,10 @@ def handoff_to_human(
     salesperson_name = sp.get("name") or "Sales Team"
     
     # ✅ Use your Fortellis-ID→email mapping (the same one you use to route the email)
-    resolved_sales_email = resolve_primary_sales_email(fresh_opp) or ""
+    resolved_sales_email = (
+        resolve_primary_sales_email(fresh_opp=fresh_opp, opportunity=opportunity)
+        or ""
+    )
     salesperson_email = resolved_sales_email  # for the body
 
 
