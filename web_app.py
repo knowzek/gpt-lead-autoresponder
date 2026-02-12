@@ -1,6 +1,7 @@
 # web_app.py
 import logging
 import json
+import re
 from datetime import datetime as _dt
 from flask import Flask, request, jsonify
 import os
@@ -13,37 +14,37 @@ log = logging.getLogger("patti.web")
 app = Flask(__name__)
 
 
+KBB_RULES = [
+    # strong phrases (safe anywhere)
+    ("kelley_blue_book", re.compile(r"(?i)kelley\s+blue\s+book")),
+    ("instant_cash_offer", re.compile(r"(?i)instant\s+cash\s+offer")),
+    ("offer_alert", re.compile(r"(?i)\boffer\s+alert\b")),
+
+    # if you insist on "kbb", require word boundaries
+    ("kbb_word", re.compile(r"(?i)\bkbb\b")),
+]
+
 def _looks_like_kbb(inbound: dict) -> bool:
-    subj = (inbound.get("subject") or "").lower()
-    frm = (inbound.get("from") or "").lower()
-    body = ((inbound.get("body_text") or "") + " " + (inbound.get("body_html") or "")).lower()
+    subj = (inbound.get("subject") or "")
+    frm  = (inbound.get("from") or "")
+    # ⚠️ Do NOT scan full HTML. If you must, strip URLs first (see Fix #2).
+    body_text = (inbound.get("body_text") or "")
 
-    kbb_keywords = [
-        "kbb", "kelley blue book", "instant cash offer"
-    ]
+    haystacks = {
+        "subject": subj,
+        "from": frm,
+        "body_text": body_text,
+    }
 
-    def _snip(haystack: str, needle: str, span: int = 60) -> str:
-        i = haystack.find(needle)
-        if i < 0:
-            return ""
-        start = max(0, i - span)
-        end = min(len(haystack), i + len(needle) + span)
-        return haystack[start:end].replace("\n", "\\n").replace("\r", "\\r")
-
-    for kw in kbb_keywords:
-        if kw in subj:
-            log.warning("🛑 KBB detect hit kw=%r in=subject snip=%r", kw, _snip(subj, kw))
-            return True
-        if kw in frm:
-            log.warning("🛑 KBB detect hit kw=%r in=from snip=%r", kw, _snip(frm, kw))
-            return True
-        if kw in body:
-            log.warning("🛑 KBB detect hit kw=%r in=body snip=%r", kw, _snip(body, kw))
-            return True
+    for name, rx in KBB_RULES:
+        for where, txt in haystacks.items():
+            m = rx.search(txt)
+            if m:
+                snip = txt[max(0, m.start()-60): m.end()+60].replace("\n","\\n").replace("\r","\\r")
+                log.warning("🛑 KBB detect hit rule=%s in=%s snip=%r", name, where, snip)
+                return True
 
     return False
-
-
 
 # -----------------------------
 #   KBB ADF Inbound Endpoint
