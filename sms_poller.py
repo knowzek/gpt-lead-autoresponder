@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone
 from datetime import timedelta
 from gpt import extract_appt_time
-from fortellis import get_token, schedule_activity
+from fortellis import get_token, schedule_activity, get_opportunity, add_opportunity_comment
 from patti_triage import handoff_to_human
 
 from goto_sms import list_conversations, list_messages, send_sms
@@ -37,32 +37,14 @@ def _norm_phone_e164_us(raw: str) -> str:
 def _now_utc_z() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-def log_sms_note_to_crm(*, token: str, subscription_id: str, opp_id: str, direction: str, from_num: str, to_num: str, text: str):
-    """
-    Logs an SMS message to the CRM as a Note activity (type 37).
-    direction: "INBOUND" | "OUTBOUND"
-    """
-    preview = (text or "").strip()
-    if len(preview) > 1800:
-        preview = preview[:1800] + "…"
-
-    comments = (
-        f"[SMS {direction}]\n"
-        f"From: {from_num}\n"
-        f"To: {to_num}\n"
-        f"Message:\n{preview}"
+def log_sms_note_to_crm(*, token: str, subscription_id: str, opp_id: str, direction: str, text: str):
+    # Fortellis comment endpoint is the most reliable “note” mechanism across rooftops.
+    comment = (
+        f"<b>{direction} SMS</b><br/>"
+        f"{(text or '').strip()}"
     )
+    add_opportunity_comment(token, subscription_id, opp_id, comment)
 
-    # activityType can be int 37 or label "Note"
-    schedule_activity(
-        token,
-        subscription_id,
-        opp_id,
-        due_dt_iso_utc=_now_utc_z(),
-        activity_name="Note",
-        activity_type=37,   # Note
-        comments=comments,
-    )
 
 def _sms_test_enabled() -> bool:
     return (os.getenv("SMS_TEST", "0").strip() == "1")
@@ -182,11 +164,9 @@ def poll_once():
             token = get_token(opp["subscription_id"])
             log_sms_note_to_crm(
                 token=token,
-                subscription_id=opp["subscription_id"],
-                opp_id=opp["opportunityId"],
-                direction="INBOUND",
-                from_num=author,
-                to_num=owner,
+                subscription_id=sub_id,
+                opp_id=opp_id,
+                direction="Inbound",
                 text=last_inbound,
             )
         except Exception:
@@ -301,12 +281,10 @@ def poll_once():
                 token = get_token(opp["subscription_id"])
                 log_sms_note_to_crm(
                     token=token,
-                    subscription_id=opp["subscription_id"],
-                    opp_id=opp["opportunityId"],
-                    direction="OUTBOUND",
-                    from_num=owner,
-                    to_num=to_number,
-                    text=reply_text,
+                    subscription_id=sub_id,
+                    opp_id=opp_id,
+                    direction="Inbound",
+                    text=last_inbound,
                 )
             except Exception:
                 log.exception("SMS poll: failed to log outbound SMS to CRM opp=%s", opp.get("opportunityId"))
@@ -351,6 +329,12 @@ def poll_once():
                       opp.get("Assigned Sales Rep Email") or opp.get("salesperson_email") or opp.get("salespersonEmail"),
                       any(k in opp for k in ("Assigned Sales Rep Email", "salesperson_email", "salespersonEmail"))
                     )
+
+                    fresh_opp = None
+                    try:
+                        fresh_opp = get_opportunity(opp_id, token, sub_id)
+                    except Exception:
+                        log.exception("SMS poll: failed to fetch fresh opp from Fortellis opp=%s", opp_id)
 
                     handoff_to_human(
                         opportunity=opp,
