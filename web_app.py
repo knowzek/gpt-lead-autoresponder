@@ -19,8 +19,7 @@ def _looks_like_kbb(inbound: dict) -> bool:
     body = ((inbound.get("body_text") or "") + " " + (inbound.get("body_html") or "")).lower()
 
     kbb_keywords = [
-        "kbb", "kelley blue book", "instant cash offer", "offer alert",
-        "autotrader-tradein", "tradein@",
+        "kbb", "kelley blue book", "instant cash offer", "offer alert"
     ]
 
     def _snip(haystack: str, needle: str, span: int = 60) -> str:
