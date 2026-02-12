@@ -12,27 +12,38 @@ from sms_ingestion import process_inbound_sms
 log = logging.getLogger("patti.web")
 app = Flask(__name__)
 
+
 def _looks_like_kbb(inbound: dict) -> bool:
-    """
-    Conservative KBB detector. If this returns True, we DO NOT want this
-    internet-leads service touching Airtable at all.
-    """
     subj = (inbound.get("subject") or "").lower()
     frm = (inbound.get("from") or "").lower()
     body = ((inbound.get("body_text") or "") + " " + (inbound.get("body_html") or "")).lower()
 
-    # Subject/body keywords commonly found in KBB ICO / offer emails
     kbb_keywords = [
         "kbb", "kelley blue book", "instant cash offer", "offer alert",
         "autotrader-tradein", "tradein@",
     ]
 
-    # If any strong signal hits, treat as KBB.
+    def _snip(haystack: str, needle: str, span: int = 60) -> str:
+        i = haystack.find(needle)
+        if i < 0:
+            return ""
+        start = max(0, i - span)
+        end = min(len(haystack), i + len(needle) + span)
+        return haystack[start:end].replace("\n", "\\n").replace("\r", "\\r")
+
     for kw in kbb_keywords:
-        if kw in subj or kw in frm or kw in body:
+        if kw in subj:
+            log.warning("🛑 KBB detect hit kw=%r in=subject snip=%r", kw, _snip(subj, kw))
+            return True
+        if kw in frm:
+            log.warning("🛑 KBB detect hit kw=%r in=from snip=%r", kw, _snip(frm, kw))
+            return True
+        if kw in body:
+            log.warning("🛑 KBB detect hit kw=%r in=body snip=%r", kw, _snip(body, kw))
             return True
 
     return False
+
 
 
 # -----------------------------
