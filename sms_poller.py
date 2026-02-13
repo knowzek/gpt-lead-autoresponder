@@ -109,8 +109,11 @@ def poll_once():
         log.info("SMS poll: last_inbound_len=%d last_inbound_preview=%r", len(last_inbound or ""), (last_inbound or "")[:80])
 
         if not last_inbound and thread:
-            # thread is oldest -> newest; last element is most recent
-            last_inbound = (thread[-1].get("content") or "").strip()
+            for m in reversed(thread):
+                if m.get("role") == "user":
+                    last_inbound = (m.get("content") or "").strip()
+                    break
+
 
         # ✅ Hard gate: only reply if the guest is STILL the last message in the thread
         # This prevents double-replies when another process/user already responded.
@@ -135,8 +138,15 @@ def poll_once():
         if not rec:
             log.info("SMS poll: no lead match for author=%s body=%r", author, body[:80])
             continue
-        
+
         opp = opp_from_record(rec)
+        subscription_id = (opp.get("subscription_id") or opp.get("dealer_key") or "").strip()
+        opp_id = (opp.get("opportunityId") or opp.get("opportunity_id") or "").strip()
+        
+        if not subscription_id or not opp_id:
+            log.warning("SMS poll: missing subscription_id/opp_id; sub=%r opp_id=%r", subscription_id, opp_id)
+            continue
+
         patti = opp.setdefault("patti", {})
         
         # ✅ Hard suppression gate
@@ -161,14 +171,15 @@ def poll_once():
         
         # ✅ NOW we know this inbound is new — log it to CRM once
         try:
-            token = get_token(opp["subscription_id"])
+            token = get_token(subscription_id)
             log_sms_note_to_crm(
                 token=token,
-                subscription_id=sub_id,
+                subscription_id=subscription_id,
                 opp_id=opp_id,
                 direction="Inbound",
                 text=last_inbound,
             )
+
         except Exception:
             log.exception("SMS poll: failed to log inbound SMS to CRM opp=%s", opp.get("opportunityId"))
 
@@ -278,18 +289,18 @@ def poll_once():
             
             # ✅ Log outbound SMS to CRM
             try:
-                token = get_token(opp["subscription_id"])
-                log_sms_note_to_crm(
-                    token=token,
-                    subscription_id=sub_id,
-                    opp_id=opp_id,
-                    direction="Inbound",
-                    text=last_inbound,
-                )
-            except Exception:
-                log.exception("SMS poll: failed to log outbound SMS to CRM opp=%s", opp.get("opportunityId"))
-
-            
+                try:
+                    token = get_token(subscription_id)
+                    log_sms_note_to_crm(
+                        token=token,
+                        subscription_id=subscription_id,
+                        opp_id=opp_id,
+                        direction="Outbound",
+                        text=reply_text,
+                    )
+                except Exception:
+                    log.exception("SMS poll: failed to log outbound SMS to CRM opp=%s", opp_id)
+                
             # 2) Always update “sent” metrics (fail-open)
             now_iso = _now_iso()
             next_due = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
@@ -332,13 +343,13 @@ def poll_once():
 
                     fresh_opp = None
                     try:
-                        fresh_opp = get_opportunity(opp_id, token, sub_id)
+                        fresh_opp = get_opportunity(opp_id, token, subscription_id)  # matches fortellis.py signature
                     except Exception:
                         log.exception("SMS poll: failed to fetch fresh opp from Fortellis opp=%s", opp_id)
-
+                    
                     handoff_to_human(
                         opportunity=opp,
-                        fresh_opp=None,
+                        fresh_opp=fresh_opp,   # ✅ this is the whole point
                         token=token,
                         subscription_id=subscription_id,
                         rooftop_name=opp.get("rooftop_name") or "",
@@ -347,6 +358,7 @@ def poll_once():
                         inbound_ts=now_iso,
                         triage={"reason": f"SMS handoff: {handoff_reason}", "confidence": 1.0},
                     )
+
                 except Exception:
                     log.exception("SMS poll: failed to trigger handoff_to_human opp=%s", opp.get("opportunityId"))
 
