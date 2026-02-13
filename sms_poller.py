@@ -76,8 +76,34 @@ def poll_once():
             continue
 
         msg_id = last.get("id") or ""
-        body = (last.get("body") or "").strip()
         author = last.get("authorPhoneNumber") or ""
+        
+        body = (last.get("body") or "").strip()
+        media = last.get("media") or []
+        
+        # --- Handle media-only / blank body edge case ---
+        if not body:
+            try:
+                raw = list_messages(owner_phone_e164=owner, contact_phone_e164=author, limit=12)
+                items2 = raw.get("items") or []
+        
+                # oldest → newest
+                items2 = sorted(items2, key=lambda m: m.get("timestamp") or "")
+        
+                # walk newest → oldest looking for last inbound with text
+                for m in reversed(items2):
+                    if (m.get("direction") or "").upper() == "IN":
+                        txt = (m.get("body") or "").strip()
+                        if txt:
+                            body = txt
+                            break
+            except Exception:
+                log.exception("SMS poll: media fallback lookup failed author=%s", author)
+        
+        if not body:
+            log.info("SMS poll: skipping empty inbound (media_only=%s) author=%s", bool(media), author)
+            continue
+
 
         # Pull last N messages in this thread so GPT can interpret short replies like "No thanks"
         thread = []
