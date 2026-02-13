@@ -1433,6 +1433,26 @@ def process_lead_notification(inbound: dict) -> None:
                             }
                             save_opp(opportunity, extra_fields=extra_sms)
 
+                            # after SMS send succeeds
+                            try:
+                                sms_preview = (msg or "").strip().replace("\n", " ")
+                                if len(sms_preview) > 800:
+                                    sms_preview = sms_preview[:800] + "…"
+                            
+                                reroute_note = ""
+                                if _sms_test_enabled() and to_number and to_number != guest_phone:
+                                    reroute_note = f" (SMS_TEST rerouted from {guest_phone} to {to_number})"
+                            
+                                add_opportunity_comment(
+                                    token,
+                                    subscription_id,
+                                    opp_id,
+                                    f"<b>Patti SMS (outbound):</b> to {to_number}{reroute_note}<br/>{sms_preview}"
+                                )
+                                log.info("Logged outbound SMS as CRM comment opp=%s", opp_id)
+                            except Exception as e:
+                                log.warning("Failed to log outbound SMS as CRM comment opp=%s: %s", opp_id, e)
+                            
                             log.info("SMS first-touch sent opp=%s to=%s (test=%s)", opp_id, to_number, _sms_test_enabled())
 
     except Exception as e:
