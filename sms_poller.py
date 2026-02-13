@@ -315,17 +315,16 @@ def poll_once():
             
             # ✅ Log outbound SMS to CRM
             try:
-                try:
-                    token = get_token(subscription_id)
-                    log_sms_note_to_crm(
-                        token=token,
-                        subscription_id=subscription_id,
-                        opp_id=opp_id,
-                        direction="Outbound",
-                        text=reply_text,
-                    )
-                except Exception:
-                    log.exception("SMS poll: failed to log outbound SMS to CRM opp=%s", opp_id)
+                token = get_token(subscription_id)
+                log_sms_note_to_crm(
+                    token=token,
+                    subscription_id=subscription_id,
+                    opp_id=opp_id,
+                    direction="Outbound",
+                    text=reply_text,
+                )
+            except Exception:
+                log.exception("SMS poll: failed to log outbound SMS to CRM opp=%s", opp_id)
                 
             # 2) Always update “sent” metrics (fail-open)
             now_iso = _now_iso()
