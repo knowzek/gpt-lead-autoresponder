@@ -437,6 +437,55 @@ _KBB_SOURCES = {
 def is_tustin_kia_rooftop(rooftop_name: str) -> bool:
     return (rooftop_name or "").strip().lower() == "patterson tustin kia" or (rooftop_name or "").strip().lower() == "tustin kia"
 
+
+# ---------------------------------------------------------------------------
+# Telluride Day-1 override helpers (Tustin Kia only)
+# ---------------------------------------------------------------------------
+
+def is_telluride_lead(opportunity: dict) -> bool:
+    """
+    True when the sought vehicle model is "Telluride".
+    Uses the canonical Airtable `model` field (set by opp_from_record).
+    Case-insensitive, whitespace-trimmed.
+    """
+    model = (opportunity.get("model") or "").strip().lower()
+    return model == "telluride"
+
+
+def get_or_assign_telluride_variant(opportunity: dict) -> str:
+    """
+    Deterministically assign 'option1' or 'option2' per lead.
+    Persisted in opportunity['patti']['telluride_variant'].
+    Uses a SHA-256 hash of the opportunity id so the same lead
+    always gets the same variant (no randomness, fully reproducible).
+    """
+    patti = opportunity.setdefault("patti", {})
+    existing = (patti.get("telluride_variant") or "").strip()
+    if existing in ("option1", "option2"):
+        return existing
+
+    opp_id = (
+        opportunity.get("opportunityId")
+        or opportunity.get("id")
+        or ""
+    )
+    digest = hashlib.sha256(opp_id.encode("utf-8")).hexdigest()
+    variant = "option1" if int(digest, 16) % 2 == 0 else "option2"
+    patti["telluride_variant"] = variant
+    return variant
+
+
+def _load_telluride_day1_html(variant: str) -> str:
+    """
+    Load the Telluride Day 1 HTML template for the given variant.
+    Returns the raw HTML string with {{customer_name}} placeholder intact.
+    """
+    base_dir = Path(__file__).resolve().parent
+    filename = f"day_1_telluride_{variant}.html"
+    tpl_path = base_dir / "templates" / "cadence" / "tustin_kia" / filename
+    return tpl_path.read_text(encoding="utf-8")
+
+
 TK_GM_DAY2_SUBJECT = "From the GM - How can I help?"
 
 def build_tk_gm_day2_html(customer_name: str) -> str:
@@ -3340,15 +3389,43 @@ def send_first_touch_email(
 
     VARIANT_LONG = "A_long"
     VARIANT_SHORT = "B_short"
-    
-    if variant == VARIANT_SHORT:
+
+    # ------------------------------------------------------------------
+    # 🏔️ TELLURIDE DAY-1 OVERRIDE (Tustin Kia only)
+    # If the sought vehicle model is Telluride, send one of two dedicated
+    # HTML templates instead of the GPT-composed or short-variant email.
+    # All downstream tracking (first_email_sent_at, template_day, cadence
+    # scheduling) remains identical — this is a content-only override.
+    # ------------------------------------------------------------------
+    _is_telluride = is_tustin_kia_rooftop(rooftop_name) and is_telluride_lead(opportunity)
+    if _is_telluride:
+        tel_variant = get_or_assign_telluride_variant(opportunity)
+        log.info(
+            "🏔️ Telluride Day-1 override: opp=%s variant=%s",
+            opportunityId, tel_variant,
+        )
+        try:
+            tel_html = _load_telluride_day1_html(tel_variant)
+        except FileNotFoundError:
+            log.error(
+                "Telluride template not found for variant=%s opp=%s — falling back to standard",
+                tel_variant, opportunityId,
+            )
+            _is_telluride = False  # fall through to normal path
+
+    if _is_telluride:
+        cn = (customer_name or "there").strip()
+        body_html = tel_html.replace("{{customer_name}}", cn)
+        subject = f"Your Kia Telluride Inquiry at {rooftop_name}"
+        # skip straight to normalization / send (below)
+    elif variant == VARIANT_SHORT:
         subject = f"Quick question about the {vehicle_str} at {rooftop_name}"
         body_html = (
             f"<p>Hi {customer_name},</p>"
             "<p>Thank you for your internet inquiry. I’d love to set up a time for you to come by and visit our showroom - is there a day and time that works best for you?</p>"
         )
 
-    if variant != VARIANT_SHORT:
+    if not _is_telluride and variant != VARIANT_SHORT:
         # === Compose with GPT ===============================================
         fallback_mode = not inquiry_text or inquiry_text.strip().lower() in ["", "request a quote", "interested", "info", "information", "looking"]
     
@@ -3486,14 +3563,16 @@ def send_first_touch_email(
         body_html = rewrite_sched_cta_for_booked(body_html)
         body_html = _SCHED_ANY_RE.sub("", body_html).strip()
     else:
-        if variant != VARIANT_SHORT:
+        if not _is_telluride and variant != VARIANT_SHORT:
             body_html = append_soft_schedule_sentence(body_html, rooftop_name)
     
     # Strip GPT footer if added
     body_html = _PREFS_RE.sub("", body_html).strip()
     
-    # --- add Patti’s signature/footer (same as KBB) ---
-    body_html = body_html + build_patti_footer(rooftop_name)
+    # --- add Patti's signature/footer (same as KBB) ---
+    # Telluride Day-1 templates are self-contained (include their own signature block)
+    if not _is_telluride:
+        body_html = body_html + build_patti_footer(rooftop_name)
     
     opportunity["body_html"] = body_html
     
