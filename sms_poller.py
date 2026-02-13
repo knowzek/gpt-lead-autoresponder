@@ -287,28 +287,39 @@ def poll_once():
                     comments=f"Patti scheduled via SMS based on customer reply: {last_inbound[:200]}",
                 )
         
-                # ✅ Send appointment notification email (like email flow)
+                # ✅ Send appointment notification email (same as email flow)
                 try:
                     fresh_opp = None
                     try:
-                        fresh_opp = get_opportunity(token, opp["subscription_id"], opp["opportunityId"])
+                        fresh_opp = get_opportunity(
+                            opp["opportunityId"],
+                            token,
+                            dealer_key
+                        )
                     except Exception:
-                        log.exception("SMS poll: failed to fetch fresh opp for appt notify opp=%s", opp.get("opportunityId"))
+                        log.exception(
+                            "SMS poll: failed to fetch fresh opp for appt notify opp=%s",
+                            opp.get("opportunityId"),
+                        )
         
-                    appt_human = dt_local.strftime("%a %-m/%-d %-I:%M %p")  # e.g. Wed 2/18 9:30 AM
+                    appt_human = dt_local.strftime("%a %-m/%-d %-I:%M %p")
         
                     notify_staff_patti_scheduled_appt(
                         opportunity=opp,
                         fresh_opp=fresh_opp,
-                        subscription_id=opp["subscription_id"],
+                        subscription_id=dealer_key,
                         rooftop_name=opp.get("rooftop_name") or opp.get("rooftop") or "",
                         appt_human=appt_human,
                         customer_reply=last_inbound,
                     )
-                except Exception:
-                    log.exception("SMS poll: failed to send appt notify email opp=%s", opp.get("opportunityId"))
         
-                # Best-effort Airtable update (should not block notify)
+                except Exception:
+                    log.exception(
+                        "SMS poll: failed to send appt notify email opp=%s",
+                        opp.get("opportunityId"),
+                    )
+        
+                # ✅ Best-effort Airtable update (should NOT block notify)
                 try:
                     extra_appt = {
                         "AI Set Appointment": True,
@@ -316,7 +327,10 @@ def poll_once():
                     }
                     save_opp(opp, extra_fields=extra_appt)
                 except Exception:
-                    log.exception("SMS poll: failed to save Airtable appt fields opp=%s", opp.get("opportunityId"))
+                    log.exception(
+                        "SMS poll: failed to save Airtable appt fields opp=%s",
+                        opp.get("opportunityId"),
+                    )
 
         
             except Exception:
