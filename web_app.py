@@ -9,6 +9,7 @@ import os
 from email_ingestion import process_inbound_email
 from kbb_adf_ingestion import process_kbb_adf_notification
 from sms_ingestion import process_inbound_sms
+from sms_poller import send_sms_cadence_once
 
 log = logging.getLogger("patti.web")
 app = Flask(__name__)
@@ -225,6 +226,16 @@ def sms_poll():
         return jsonify({"ok": False, "error": "unauthorized"}), 401
 
     poll_once()
+    return jsonify({"ok": True}), 200
+
+
+@app.route("/sms-cadence", methods=["POST"])
+def sms_cadence():
+    key = request.headers.get("X-Admin-Key", "")
+    if key != os.getenv("ADMIN_KEY", ""):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    send_sms_cadence_once()
     return jsonify({"ok": True}), 200
 
 
