@@ -6,7 +6,7 @@ from datetime import timedelta
 from gpt import extract_appt_time
 from fortellis import get_token, schedule_activity, get_opportunity, add_opportunity_comment
 from patti_triage import handoff_to_human, notify_staff_patti_scheduled_appt
-
+from airtable_store import list_records_by_view, patch_by_id
 from goto_sms import list_conversations, list_messages, send_sms
 from airtable_store import (
     find_by_customer_phone_loose,
@@ -54,6 +54,47 @@ def _sms_test_to() -> str:
 
 def _patti_number() -> str:
     return _norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", "+17145977229").strip())
+
+SMS_DUE_VIEW = os.getenv("SMS_DUE_VIEW", "SMS Due")
+
+def send_sms_cadence_once():
+    # Pull queue
+    recs = list_records_by_view(SMS_DUE_VIEW, max_records=50)
+
+    for r in recs:
+        rid = r.get("id")
+        f = (r.get("fields") or {})
+        phone = (f.get("customer_phone") or f.get("phone") or "").strip()
+
+        if not phone:
+            continue
+
+        # Global suppression / opt-out protection (reuse your existing guard)
+        if should_suppress_all_sends_airtable(f):
+            patch_by_id(rid, {
+                "sms_status": "paused",
+                "last_sms_body": "Suppressed by compliance/opt-out rules."
+            })
+            continue
+
+        day = int(f.get("sms_day") or 1)
+
+        # v1: simplest templated nudge by day (fast + predictable)
+        body = build_mazda_loyalty_sms(day=day, fields=f)
+
+        ok = send_sms(to_phone_e164=phone, body=body)
+
+        if ok:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            patch_by_id(rid, {
+                "last_sms_at": now_iso,
+                "last_sms_body": body,
+                "sms_day": day + 1,
+                # You decide spacing; example 3-day cadence:
+                "next_sms_at": (datetime.now(timezone.utc) + timedelta(days=3)).isoformat(),
+                "sms_status": "ready"
+            })
+
 
 def poll_once():
     """
