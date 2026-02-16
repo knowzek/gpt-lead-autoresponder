@@ -15,6 +15,8 @@ from airtable_store import (
     should_suppress_all_sends_airtable,
 )
 from sms_brain import generate_sms_reply
+from templates import build_mazda_loyalty_sms
+
 
 log = logging.getLogger("patti.sms.poller")
 
