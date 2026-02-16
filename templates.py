@@ -4,6 +4,87 @@
 
 from datetime import datetime
 
+def build_mazda_loyalty_email(*, day: int, fields: dict) -> dict:
+    """
+    Deterministic Mazda Loyalty email nudges aligned to SMS cadence days.
+    Returns: {"subject": str, "body_text": str, "body_html": str}
+    """
+
+    first_name = (fields.get("customer_first_name")
+                  or fields.get("first_name")
+                  or "").strip()
+
+    bucket = (fields.get("bucket") or "").lower()
+    if "1,000" in bucket or "2+" in bucket:
+        incentive = "$1,000 Mazda Loyalty Reward"
+    else:
+        incentive = "$500 Mazda Loyalty Reward"
+
+    greet = f"Hi {first_name}," if first_name else "Hi there,"
+
+    # ---- Day templates ----
+    if day == 1:
+        subject = f"Quick question about your {incentive} voucher"
+        body = (
+            f"{greet}\n\n"
+            f"Did you receive your {incentive} voucher for the new CX-5?\n"
+            f"If you send me your 16-digit code, I can confirm eligibility and help you use it.\n\n"
+            f"Reply with the code when you have a moment.\n"
+        )
+
+    elif day == 2:
+        subject = f"Your {incentive} can be stacked with current CX-5 offers"
+        body = (
+            f"{greet}\n\n"
+            f"Just a reminder: your {incentive} can be used on a new CX-5 and is stackable with current specials.\n"
+            f"If you’d like, tell me what color/trim you prefer and I’ll check what’s available.\n"
+        )
+
+    elif day == 3:
+        subject = f"You can gift your {incentive} to a friend or family member"
+        body = (
+            f"{greet}\n\n"
+            f"If you’re not planning to use your {incentive}, you can gift it to a friend or family member.\n"
+            f"Send me their name and best phone number/email and we’ll take care of the rest.\n"
+        )
+
+    elif day == 4:
+        subject = "Want to take a quick look at CX-5 options?"
+        body = (
+            f"{greet}\n\n"
+            f"We’ve had a strong response to the CX-5 loyalty program.\n"
+            f"If you want, I can line up a quick test drive or share a few options that match what you’re looking for.\n"
+            f"Would weekday or weekend be better?\n"
+        )
+
+    elif day == 5:
+        subject = f"Final reminder: don’t miss your {incentive}"
+        body = (
+            f"{greet}\n\n"
+            f"Final reminder — your {incentive} won’t be available forever.\n"
+            f"If you’d like help using it (or gifting it), just reply and I’ll make it easy.\n"
+        )
+
+    else:
+        subject = f"Checking in on your {incentive}"
+        body = (
+            f"{greet}\n\n"
+            f"Just checking in regarding your {incentive}.\n"
+            f"If you’d like help using it or transferring it, reply here and we’ll assist.\n"
+        )
+
+    body_text = body.strip()
+
+    # basic HTML wrapper
+    body_html = "<br>".join([line for line in body_text.split("\n")])
+
+    return {
+        "subject": subject,
+        "body_text": body_text,
+        "body_html": f"<div style='font-family: Arial, sans-serif; font-size: 14px; line-height: 1.5'>{body_html}</div>"
+    }
+
+
 
 def build_mazda_loyalty_sms(*, day: int, fields: dict) -> str:
     """
