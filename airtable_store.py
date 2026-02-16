@@ -50,6 +50,11 @@ def _as_str(v) -> str:
         return " ".join(parts).strip()
     return str(v).strip()
 
+def list_records_by_view(view_name: str, *, max_records: int = 50):
+    params = {"view": view_name, "pageSize": max_records}
+    data = _request("GET", "", params=params)  # "" hits /{table}
+    return (data or {}).get("records") or []
+
 
 def canonicalize_opp(opp: dict, fields: dict) -> dict:
     """
