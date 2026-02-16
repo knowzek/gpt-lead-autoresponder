@@ -23,6 +23,21 @@ log = logging.getLogger("patti.sms.poller")
 def _now_iso():
     return datetime.now(timezone.utc).isoformat()
 
+def mark_sms_convo_on_inbound(*, airtable_record_id: str, inbound_text: str):
+    """
+    On inbound SMS, switch this record into convo mode so cadence nudges stop.
+    Clears next_sms_at so it won't re-queue.
+    """
+    now_iso = _now_iso()
+
+    patch_by_id(airtable_record_id, {
+        "sms_status": "convo",
+        "last_inbound_text": inbound_text,
+        "last_inbound_at": now_iso,
+        "next_sms_at": None,   # Airtable: None clears a date field
+    })
+
+
 def _norm_phone_e164_us(raw: str) -> str:
     raw = (raw or "").strip()
     if not raw:
@@ -230,6 +245,18 @@ def poll_once():
             except Exception:
                 log.exception("SMS poll: failed to save inbound markers while suppressed opp=%s", opp.get("opportunityId"))
             log.info("SMS poll: suppressed=%s opp=%s (no reply)", reason, opp.get("opportunityId"))
+
+            # ✅ Still stop cadence nudges on inbound, even if suppressed
+            try:
+                inbound_ts = last.get("timestamp") or _now_iso()
+                mark_sms_convo_on_inbound(
+                    rec_id=rec.get("id"),
+                    inbound_text=last_inbound,
+                    inbound_ts=inbound_ts,
+                )
+            except Exception:
+                log.exception("SMS poll: suppressed but failed to set sms_status=convo rec_id=%s", rec.get("id"))
+
             continue
         
         # ✅ Dedupe: only act once per inbound message id
@@ -237,6 +264,18 @@ def poll_once():
         if last_seen == msg_id:
             log.info("SMS poll: skipping already-processed msg_id=%s", msg_id)
             continue
+
+        # ✅ Flip Mazda record into convo mode so cadence stops
+        try:
+            inbound_ts = last.get("timestamp") or _now_iso()
+            mark_sms_convo_on_inbound(
+                rec_id=rec.get("id"),
+                inbound_text=last_inbound,
+                inbound_ts=inbound_ts,
+            )
+        except Exception:
+            log.exception("SMS poll: failed to flip sms_status=convo for rec_id=%s", rec.get("id"))
+
         
         # ✅ NOW we know this inbound is new — log it to CRM once
         try:
