@@ -10,12 +10,13 @@ from airtable_store import (
     find_by_opp_id,
     log_message,
     opp_from_record,
+    patch_conversations_by_id,
     save_opp,
     is_opp_suppressed,
     patch_by_id,
     mark_ai_email_sent,
 )
-
+from airtable_store import _normalize_message_id, _generate_message_id
 from models.airtable_model import Message
 from airtable_store import _get_conversation_record_id_by_opportunity_id
 from bs4 import BeautifulSoup
@@ -28,38 +29,6 @@ EMAIL_MODE = os.getenv("EMAIL_MODE", "outlook")  # "crm" or "outlook"
 def _clean_body_html_to_body_text(body_html: str) -> str:
     soup = BeautifulSoup(body_html, "html.parser")
     return soup.get_text(strip=True)
-
-
-def _normalize_message_id(message_id: str):
-    """Normalizes message id to format `<message-iazag2kdvtvqbe6hcoqdu@internal>`"""
-    resolved_message_id = f"<message-{message_id.strip().lower()}@internal>"
-    return resolved_message_id
-
-
-def _generate_message_id(
-    opp_id: str | None = None,
-    timestamp: str | None = None,
-    subject: str | None = None,
-    to_addr: str | None = None,
-    body_html: str | None = None,
-) -> str:
-    
-
-    opp_id = (opp_id or "").strip()
-    timestamp = (timestamp or "").strip()
-    subject = (subject or "").strip()
-    to_addr = (to_addr or "").strip().lower()
-
-    body_html = (body_html or "").strip()
-
-    body_html = re.sub(r"\s+", " ", body_html)
-
-    body_html = body_html[:5000]
-
-    raw = f"{opp_id}|{timestamp}|{subject}|{to_addr}|{body_html}"
-    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
-    return f"<message-{digest[:32]}@internal>"
 
 
 def log_outbound_message():
@@ -95,6 +64,30 @@ def _bump_ai_send_metrics_in_airtable(opp_id: str) -> None:
 
     except Exception as e:
         log.warning("AI metrics update failed (non-blocking) opp=%s err=%s", opp_id, str(e)[:500])
+
+
+def _bump_ai_send_metrics_in_conversations_airtable(opp_id: str) -> None:
+    try:
+        rec = find_by_opp_id(opp_id)
+        if not rec:
+            return
+
+        f = rec.get("fields", {}) or {}
+        current = int(f.get("AI Messages Sent") or 0)
+
+        when_iso = _now_iso_utc()
+
+        patch_conversations_by_id(
+            rec["id"],
+            {
+                "AI Messages Sent": current + 1,
+                "AI First Message Sent At": f.get("AI First Message Sent At") or when_iso,
+                "Last AI Message At": when_iso,
+            },
+        )
+
+    except Exception as e:
+        log.warning("AI metrics for Conversations table update failed (non-blocking) opp=%s err=%s", opp_id, str(e)[:500])
 
 
 def _post_send_airtable_update(
@@ -222,6 +215,9 @@ def send_patti_email(
                 force_mode=force_mode,
                 template_day=template_day,
             )
+
+            _bump_ai_send_metrics_in_conversations_airtable(opp_id)
+
         try:
             delivery_status = "sent" if sent_ok else "failed"
             airtable_log = Message(
@@ -234,7 +230,7 @@ def send_patti_email(
                 to=to_addr,
                 subject=subject,
                 body_text=clean_body_text,
-                body_html=body_html,
+                body_html=body_html[:200],
                 provider=source,
                 opp_id=opp_id,
                 delivery_status=delivery_status,
@@ -245,7 +241,7 @@ def send_patti_email(
             if message_log_status:
                 log.info("Outbound message logged successfully.")
             else:
-                log.error("Outbound message logging failed.")
+                log.error("Outbound message logging failed (send_patti_email) (1).")
 
         except Exception as e:
             log.error(f"Error during Messages data model construction (send_patti_email): {e}")
@@ -287,6 +283,7 @@ def send_patti_email(
             force_mode=force_mode,
             template_day=template_day,
         )
+        _bump_ai_send_metrics_in_conversations_airtable(opp_id)
     try:
         delivery_status = "sent" if sent_ok else "failed"
         airtable_log = Message(
@@ -299,7 +296,7 @@ def send_patti_email(
             to=to_addr,
             subject=subject,
             body_text=clean_body_text,
-            body_html=body_html,
+            body_html=body_html[:200],
             provider=source,
             opp_id=opp_id,
             delivery_status=delivery_status,
@@ -312,5 +309,5 @@ def send_patti_email(
         else:
             log.error("Outbound message logging failed.")
     except Exception as e:
-        log.error(f"Error during outbound message logging (send_patti_email): {e}")
+        log.error(f"Error during outbound message logging (send_patti_email) (2): {e}")
     return sent_ok

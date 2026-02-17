@@ -4,7 +4,7 @@ import os
 import time
 import requests
 import logging
-from patti_mailer import _generate_message_id, _normalize_message_id
+from airtable_store import _generate_message_id, _normalize_message_id
 from airtable_store import log_message, _get_conversation_record_id_by_opportunity_id
 from models.airtable_model import Message
 
@@ -178,7 +178,7 @@ def send_sms(*, from_number: str, to_number: str, body: str) -> dict:
             else log.error("outbound sms logging failed.")
         )
     except Exception as e:
-        log.error(f"Failed to log sms to Messages: {e}")
+        log.error(f"Failed to log sms to Messages (send_sms): {e}")
 
     if r.status_code >= 400:
         raise RuntimeError(f"GoTo send_sms failed {r.status_code}: {r.text[:800]}")

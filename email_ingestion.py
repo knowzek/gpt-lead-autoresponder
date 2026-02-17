@@ -3,8 +3,14 @@ import os
 import re
 import logging
 
-from models.airtable_model import Message
-from patti_mailer import _generate_message_id, _normalize_message_id
+from models.airtable_model import Conversation, Message
+from airtable_store import (
+    _generate_message_id,
+    _get_messages_for_conversation,
+    _normalize_message_id,
+    find_by_conversation_id,
+    upsert_conversation,
+)
 
 log = logging.getLogger("patti.airtable")
 from datetime import datetime as _dt, timezone as _tz
@@ -1036,6 +1042,21 @@ def process_lead_notification(inbound: dict) -> None:
                             "last_sms_sent_at": _dt.now(_tz.utc).isoformat(),
                         },
                     )
+                    try:
+                        now_iso = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
+                        conversation_id = f"conv_{subscription_id}_{opp_id}"
+
+                        convo = Conversation(
+                            conversation_id=conversation_id,
+                            opportunity_id=opp_id,
+                            subscription_id=subscription_id,
+                            last_channel="sms",
+                            last_activity_at=now_iso,
+                            status="open"
+                        )
+                        upsert_conversation(convo)
+                    except Exception as e:
+                        log.error(f"Conversation upsert failed (lead_notification SMS): {e}")
         except Exception as e:
             log.exception("Pre-Qual SMS send failed opp=%s err=%s", opp_id, e)
 
@@ -1676,6 +1697,8 @@ def process_inbound_email(inbound: dict) -> None:
 
     # Start with raw text as a fallback
     body_text = raw_text
+    rec2 = None
+    conversation_record_id = ""
 
     # 1️⃣ Try KBB's HTML reply-stripper first (when we actually have HTML)
     if body_html:
@@ -1776,6 +1799,7 @@ def process_inbound_email(inbound: dict) -> None:
             return
 
     salesperson = "our team"
+    conversation_id = f"conv_{subscription_id}_{opp_id}"
 
     # Now try Airtable
     rec = find_by_opp_id(opp_id)
@@ -1801,6 +1825,19 @@ def process_inbound_email(inbound: dict) -> None:
             opportunity.get("needs_human_review"),
             opportunity.get("human_review_reason") or opportunity.get("patti", {}).get("human_review_reason"),
         )
+        try:
+            if opportunity.get("needs_human_review"):
+                human_review_conversation_update = Conversation(
+                    conversation_id=conversation_id,
+                    needs_human_review=opportunity.get("needs_human_review", False) or False,
+                    needs_human_review_reason=opportunity.get("human_review_reason", "") or "",
+                    last_activity_at=timestamp,
+                    last_channel="email",
+                    status="needs_review",
+                )
+                conversation_record_id = upsert_conversation(human_review_conversation_update)
+        except Exception as e:
+            log.error(f"Something went wrong while update human review in Conversations table (1): {e}")
 
         salesperson = (opportunity.get("Assigned Sales Rep") or "").strip() or salesperson
     else:
@@ -1861,6 +1898,34 @@ def process_inbound_email(inbound: dict) -> None:
                 pass
     except Exception:
         pass
+
+    try:
+        rt = get_rooftop_info(subscription_id) or {}
+
+        lead_record = rec or rec2
+        rec_id = lead_record.get("id", "") if lead_record else ""
+
+        conversation = Conversation(
+            conversation_id=conversation_id,
+            opportunity_id=opp_id,
+            subscription_id=subscription_id,
+            rooftop_name=rt.get("name", ""),
+            lead_source=source,
+            customer_full_name=lead_record.get("fields", {}).get("Customer Full Name", "") or "",
+            customer_email=lead_record.get("fields", {}).get("customer_email", "") or "",
+            customer_phone=lead_record.get("fields", {}).get("customer_phone", "") or "",
+            salesperson_assigned=salesperson,
+            last_channel="email",
+            last_activity_at=ts,
+            last_customer_message=body_text[:300],
+            linked_lead_record=rec_id,
+            customer_last_reply_at=ts,
+            status="open",
+        )
+
+        conversation_record_id = upsert_conversation(conversation)
+    except Exception as e:
+        log.error(f"Something went wrong while upserting inbound Conversations table (2): {e}")
 
     fields = rec.get("fields", {}) if rec else {}
 
@@ -1946,6 +2011,18 @@ def process_inbound_email(inbound: dict) -> None:
         mark_unsubscribed(opportunity, when_iso=ts, reason=body_text[:300])
         opportunity.setdefault("checkedDict", {})["last_msg_by"] = "customer"
 
+        try:
+            opt_out_conversation_update = Conversation(
+                conversation_id=conversation_id,
+                opted_out=True,
+                opt_out_channel="email",
+                opt_out_at=timestamp,
+                status="suppressed",
+            )
+            conversation_record_id = upsert_conversation(opt_out_conversation_update)
+        except Exception as e:
+            log.error(f"Something went wrong during opt out update in the Conversations table (3): {e}")
+
         # ✅ STOP cadence / cron loop
         opportunity["isActive"] = False
         opportunity["followUP_date"] = None
@@ -2027,6 +2104,19 @@ def process_inbound_email(inbound: dict) -> None:
                     triage=triage,
                 )
 
+                try:
+
+                    human_review_conversation_update = Conversation(
+                        conversation_id=conversation_id,
+                        status="needs_review",
+                        needs_human_review=True,
+                        needs_human_review_reason=triage.get("reason", ""),
+                    )
+                    conversation_record_id = upsert_conversation(human_review_conversation_update)
+
+                except Exception as e:
+                    log.error(f"Something went wrong during human review update in Conversations table (4): {e}")
+
                 # extra safety persist
                 try:
                     save_opp(opportunity)
@@ -2049,6 +2139,18 @@ def process_inbound_email(inbound: dict) -> None:
 
                 try:
                     mark_unsubscribed(opportunity, reason=(triage.get("reason") or "Explicit opt-out"))
+
+                    try:
+                        opt_out_conversation_update = Conversation(
+                            conversation_id=conversation_id,
+                            opted_out=True,
+                            opt_out_channel="email",
+                            opt_out_at=timestamp,
+                            status="suppressed"
+                        )
+                        conversation_record_id = upsert_conversation(opt_out_conversation_update)
+                    except Exception as e:
+                        log.error(f"Something went wrong while marking the conversationa as opt out in Conversations table (5): {e}")
                 except Exception as e:
                     log.warning("mark_unsubscribed failed opp=%s: %s", opp_id, e)
 
@@ -2134,17 +2236,27 @@ def process_inbound_email(inbound: dict) -> None:
 
         log.info("Inbound email processed immediately opp=%s action_taken=%s", opp_id, action_taken)
 
+        if action_taken:
+            try:
+
+                outbound_convo_update = Conversation(
+                    conversation_id=conversation_id,
+                    ai_last_reply_at=timestamp,
+                    last_activity_at=timestamp,
+                    last_channel="email",
+                    status="open"
+                )
+
+                conversation_record_id = upsert_conversation(outbound_convo_update)
+            except Exception as e:
+                log.error(f"Something went wrong while upserting ai_last_reply_at to Conversations table (6): {e}")
+
     except Exception as e:
         log.exception("Immediate inbound reply failed opp=%s err=%s", opp_id, e)
 
-    record_id = ""
-
-    try:
-        record_id = _get_conversation_record_id_by_opportunity_id(opp_id) or ""
-    except Exception as e:
-        record_id = ""
-    if not record_id:
+    if not conversation_record_id:
         log.warning(f"No conversation record found for {opp_id}; inbound email will log without conversations link.")
+        conversation_record_id = ""
 
     timestamp = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
     try:
@@ -2160,7 +2272,7 @@ def process_inbound_email(inbound: dict) -> None:
     try:
         airtable_log = Message(
             message_id=safe_message_id,
-            conversation=record_id,
+            conversation=conversation_record_id,
             direction="inbound",
             channel="email",
             timestamp=timestamp,
@@ -2168,7 +2280,7 @@ def process_inbound_email(inbound: dict) -> None:
             to="patti@pattersonautos.com",
             subject=subject,
             body_text=raw_text,
-            body_html=body_html,
+            body_html=body_html[:200],
             provider=source,
             opp_id=opp_id,
             delivery_status="received",
@@ -2182,7 +2294,18 @@ def process_inbound_email(inbound: dict) -> None:
             else log.error("inbound email logging failed.")
         )
     except Exception as e:
-        log.error(f"Failed to log email to Messages: {e}")
+        log.error(f"Failed to log email to Messages (process_inbound_email): {e}")
+
+    try:
+        messages_count_inbound = len(_get_messages_for_conversation(conversation_id, "inbound"))
+        messages_count_outbound = len(_get_messages_for_conversation(conversation_id, "outbound"))
+        message_count_update = Conversation(conversation_id=conversation_id,
+                                            message_count_inbound=messages_count_inbound,
+                                            message_count_outbound=messages_count_outbound,
+                                            message_count_total=messages_count_inbound + messages_count_outbound)
+        upsert_conversation(message_count_update)
+    except Exception as e:
+        log.error(f"Something went wrong while upserting messages count to Conversations table (7): {e}")
 
     log.info("Inbound email queued + processed immediately for opp=%s", opp_id)
     return

@@ -2,6 +2,7 @@ from helpers import rJson, wJson, getFirstActivity, adf_to_dict, getInqueryUsing
 from kbb_ico import process_kbb_ico_lead
 from kbb_ico import _top_reply_only, _is_optout_text as _kbb_is_optout_text, _is_decline as _kbb_is_decline
 from kbb_ico import _patch_address_placeholders, build_patti_footer, _PREFS_RE
+from models.airtable_model import Conversation
 from rooftops import get_rooftop_info
 from constants import *
 from gpt import (
@@ -21,6 +22,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 import uuid
 from airtable_store import (
+    _ensure_conversation,
     find_by_opp_id,
     query_view,
     acquire_lock,
@@ -29,9 +31,10 @@ from airtable_store import (
     opp_from_record,
     save_opp,
     find_by_customer_email,
-    patch_by_id
+    patch_by_id,
+    upsert_conversation
 )
-from patti_mailer import _bump_ai_send_metrics_in_airtable
+from patti_mailer import _bump_ai_send_metrics_in_airtable, _bump_ai_send_metrics_in_conversations_airtable
 
 from fortellis import (
     get_activities,
@@ -701,9 +704,32 @@ def maybe_send_tk_gm_day2_email(
         opportunity["last_template_day_sent"] = 2
 
         try:
+            conversation_id = f"conv_{subscription_id}_{opportunityId}"
+
+            convo_update = Conversation(
+                conversation_id=conversation_id,
+                opportunity_id=opportunityId,
+                subscription_id=subscription_id,
+                last_channel="email",
+                last_activity_at=currDate_iso,
+                ai_last_reply_at=currDate_iso,
+                status="open",
+            )
+
+            upsert_conversation(convo_update)
+        except Exception as e:
+            log.error(f"Conversation upsert failed (tk_gm_day2): {e}")
+
+        try:
             _bump_ai_send_metrics_in_airtable(opportunityId)
         except Exception as e:
             log.warning("AI metrics update failed (non-blocking) opp=%s: %s", opportunityId, e)
+
+        try:
+            _bump_ai_send_metrics_in_conversations_airtable(opportunityId)
+        except Exception as e:
+            log.warning("AI metrics for Conversations table update failed (non-blocking) opp=%s: %s", opportunityId, e)
+
 
     return sent_ok
 
@@ -1039,6 +1065,23 @@ def maybe_send_tk_day3_walkaround(
             )
             sent_ok = True
             log.info("Walkaround Day3: sent ok opp=%s", opportunityId)
+            try:
+                now_iso = currDate_iso
+                conversation_id = f"conv_{subscription_id}_{opportunityId}"
+
+                convo_update = Conversation(
+                    conversation_id=conversation_id,
+                    opportunity_id=opportunityId,
+                    subscription_id=subscription_id,
+                    last_channel="email",
+                    last_activity_at=now_iso,
+                    ai_last_reply_at=now_iso,
+                    status="open",
+                )
+                upsert_conversation(convo_update)
+
+            except Exception as e:
+                log.error(f"Conversation upsert failed (tk_day3_sms) (1): {e}")
         except Exception as e:
             log.warning("TK Day3 Walkaround email send failed opp=%s: %s", opportunityId, e)
             sent_ok = False
@@ -1078,6 +1121,41 @@ def maybe_send_tk_day3_walkaround(
                     log.info("TK Day3 Walkaround SMS sent to %s opp=%s", phone_e164, opportunityId)
         except Exception as e:
             log.warning("TK Day3 Walkaround SMS failed opp=%s: %s", opportunityId, e)
+        if sms_sent:
+            try:
+                now_iso = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
+                conversation_id = f"conv_{subscription_id}_{opportunityId}"
+
+                convo = Conversation(
+                    conversation_id=conversation_id,
+                    opportunity_id=opportunityId,
+                    subscription_id=subscription_id,
+                    last_channel="sms",
+                    last_activity_at=now_iso,
+                    status="open"
+                )
+                upsert_conversation(convo)
+            except Exception as e:
+                log.error(f"Conversation upsert failed (maybe_send_tk_day3_walkaround SMS): {e}")
+
+    if sms_sent:
+        try:
+            now_iso = currDate_iso
+            conversation_id = f"conv_{subscription_id}_{opportunityId}"
+
+            convo_update = Conversation(
+                conversation_id=conversation_id,
+                opportunity_id=opportunityId,
+                subscription_id=subscription_id,
+                last_channel="sms",
+                last_activity_at=now_iso,
+                ai_last_reply_at=now_iso,
+                status="open",
+            )
+            upsert_conversation(convo_update)
+
+        except Exception as e:
+            log.error(f"Conversation upsert failed (tk_day3_sms) (2): {e}")
 
     if sent_ok:
         # Record in thread history
@@ -1319,11 +1397,13 @@ def process_general_lead_convo_reply(
 
     from patti_mailer import send_patti_email
 
+    opportunity_id = opportunity.get("opportunityId") or opportunity.get("id")
+
     source = opportunity.get("source", "")
-    send_patti_email(
+    sent_ok = send_patti_email(
         token=token,
         subscription_id=subscription_id,
-        opp_id=opportunity.get("opportunityId") or opportunity.get("id"),
+        opp_id=opportunity_id,
         rooftop_name=rooftop_name,
         rooftop_sender=rooftop_sender,
         to_addr=to_addr,
@@ -1333,6 +1413,25 @@ def process_general_lead_convo_reply(
         source=source,
         # if your wrapper supports flags, pass safe/test metadata here
     )
+
+    if sent_ok:
+        try:
+            now_iso = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
+            conversation_id = f"conv_{subscription_id}_{opportunity_id}"
+
+            convo_update = Conversation(
+                conversation_id=conversation_id,
+                opportunity_id=opportunity_id,
+                subscription_id=subscription_id,
+                last_channel="email",
+                last_activity_at=now_iso,
+                ai_last_reply_at=now_iso,
+                status="open",
+            )
+            upsert_conversation(convo_update)
+
+        except Exception as e:
+            log.error(f"Conversation upsert failed (process_general_lead_convo_reply): {e}")
 
     return ({"mode": "convo", "last_customer_msg_at": inbound_ts}, "replied_general_convo")
 
@@ -1666,12 +1765,13 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
                     )
 
                 if customer_email:
+                    sent_ok = False
                     try:
                         from patti_mailer import send_patti_email
 
                         source = opportunity.get("source", "")
 
-                        send_patti_email(
+                        sent_ok = send_patti_email(
                             token=token,
                             subscription_id=subscription_id,
                             opp_id=opportunity["opportunityId"],
@@ -1691,6 +1791,24 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
                             opportunity["opportunityId"],
                             e,
                         )
+                    if sent_ok:
+                        try:
+                            opp_id = opportunity["opportunityId"] or opportunity["id"]
+                            now_iso = currDate_iso
+                            conversation_id = f"conv_{subscription_id}_{opp_id}"
+
+                            convo_update = Conversation(
+                                conversation_id=conversation_id,
+                                opportunity_id=opp_id,
+                                subscription_id=subscription_id,
+                                last_channel="email",
+                                last_activity_at=now_iso,
+                                ai_last_reply_at=now_iso,
+                                status="open",
+                            )
+                            upsert_conversation(convo_update)
+                        except Exception as e:
+                            log.error(f"Conversation upsert failed (checkActivities) (1): {e}")
 
                 # persist updated opportunity (messages, followUP_date, etc.)
                 airtable_save(opportunity)
@@ -2834,10 +2952,11 @@ def processHit(hit):
                 actual_to = resolve_customer_email(opportunity, SAFE_MODE=SAFE_MODE, test_recipient=test_recipient)
 
                 if actual_to:
+                    sent_ok = False
                     try:
                         from patti_mailer import send_patti_email
 
-                        send_patti_email(
+                        sent_ok = send_patti_email(
                             token=token,
                             subscription_id=subscription_id,
                             opp_id=opportunity["opportunityId"],
@@ -2852,9 +2971,25 @@ def processHit(hit):
                             timestamp=currDate,
                             source=source,
                         )
-                        sent_ok = True
+
                     except Exception as e:
                         log.warning("Failed to send appt confirmation opp=%s: %s", opportunityId, e)
+                    if sent_ok:
+                        try:
+                            conversation_id = f"conv_{subscription_id}_{opportunityId}"
+                            convo_update = Conversation(
+                                conversation_id=conversation_id,
+                                opportunity_id=opportunityId,
+                                subscription_id=subscription_id,
+                                last_channel="email",
+                                last_activity_at=currDate_iso,
+                                ai_last_reply_at=currDate_iso,
+                                status="open",
+                            )
+                            upsert_conversation(convo_update)
+                        except Exception as e:
+                            log.error(f"Conversation upsert failed (processHit) (1): {e}")
+
                 else:
                     log.warning("No recipient resolved for appt confirmation opp=%s", opportunityId)
 
@@ -3156,8 +3291,9 @@ def processHit(hit):
                 )
 
                 if actual_to:
+                    sent_ok = False
                     try:
-                        send_patti_email(
+                        sent_ok = send_patti_email(
                             token=token,
                             subscription_id=subscription_id,
                             opp_id=opportunityId,
@@ -3173,10 +3309,24 @@ def processHit(hit):
                             timestamp=currDate,
                             source=source,
                         )
-
-                        sent_ok = True
                     except Exception as e:
                         log.warning("Follow-up send failed for opp %s: %s", opportunityId, e)
+
+                    if sent_ok:
+                        try:
+                            conversation_id = f"conv_{subscription_id}_{opportunityId}"
+                            convo_update = Conversation(
+                                conversation_id=conversation_id,
+                                opportunity_id=opportunityId,
+                                subscription_id=subscription_id,
+                                last_channel="email",
+                                last_activity_at=currDate_iso,
+                                ai_last_reply_at=currDate_iso,
+                                status="open",
+                            )
+                            upsert_conversation(convo_update)
+                        except Exception as e:
+                            log.error(f"Conversation upsert failed (processHit) (2): {e}")
                 else:
                     log.warning("No customer email resolved for opp %s; skipping follow-up send", opportunityId)
 
@@ -3720,6 +3870,24 @@ def send_first_touch_email(
             log.warning("Failed to send Patti general lead email for opp %s: %s", opportunityId, e)
             sent_ok = False
 
+        if sent_ok:
+            try:
+                conversation_id = f"conv_{subscription_id}_{opportunityId}"
+                convo_update = Conversation(
+                    conversation_id=conversation_id,
+                    opportunity_id=opportunityId,
+                    subscription_id=subscription_id,
+                    last_channel="email",
+                    last_activity_at=currDate_iso,
+                    ai_last_reply_at=currDate_iso,
+                    status="open",
+                )
+                upsert_conversation(convo_update)
+            except Exception as e:
+                log.error(f"Conversation upsert failed (send_first_touch_email) (1): {e}")
+
+                
+
     elif not actual_to:
         log.warning(
             "No recipient resolved for opp %s (customer_email=%r SAFE_MODE=%r test_recipient=%r)",
@@ -4226,6 +4394,22 @@ def send_thread_reply_now(
                 )
             except Exception as e:
                 log.warning("Thread reply send failed opp %s: %s", opportunityId, e)
+
+            if sent_ok:
+                try:
+                    conversation_id = f"conv_{subscription_id}_{opportunityId}"
+                    convo_update = Conversation(
+                        conversation_id=conversation_id,
+                        opportunity_id=opportunityId,
+                        subscription_id=subscription_id,
+                        last_channel="email",
+                        last_activity_at=currDate_iso,
+                        ai_last_reply_at=currDate_iso,
+                        status="open",
+                    )
+                    upsert_conversation(convo_update)
+                except Exception as e:
+                    log.error(f"Conversation upsert failed (send_thread_reply_now) (1): {e}")
 
     if sent_ok:
         if created_appt_ok and appt_human:

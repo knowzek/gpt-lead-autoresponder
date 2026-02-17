@@ -13,15 +13,21 @@ from datetime import datetime as _dt
 from datetime import timezone as _tz
 from goto_sms import list_conversations, list_messages, send_sms
 from airtable_store import (
+    _ensure_conversation,
+    _get_messages_for_conversation,
     find_by_customer_phone_loose,
     opp_from_record,
     save_opp,
     _get_conversation_record_id_by_opportunity_id,
     log_message,
     should_suppress_all_sends_airtable,
+    upsert_conversation,
 )
 from sms_brain import generate_sms_reply
 from templates import build_mazda_loyalty_sms
+from sms_brain import generate_sms_reply
+from models.airtable_model import Conversation, Message
+from airtable_store import _generate_message_id, _normalize_message_id
 
 
 log = logging.getLogger("patti.sms.poller")
@@ -274,6 +280,10 @@ def poll_once():
         # ✅ Dedupe: only act once per inbound message id
         source = opp.get("source", "")
         opp_id = opp.get("opportunityId", "")
+        subscription_id = opp.get("subscription_id", "")
+
+        conversation_record_id = _ensure_conversation(opp, channel="sms")
+        conversation_id = f"conv_{subscription_id}_{opp_id}"
 
         # Dedupe: only act once per inbound message id
         last_seen = (opp.get("last_sms_inbound_message_id") or "").strip()
@@ -338,6 +348,22 @@ def poll_once():
                 log.error("Failed to log inbound sms.")
         except Exception as e:
             log.error(f"Error during inbound message logging (process_inbound_sms): {e}.")
+            pass
+
+        try:
+            message_update_convo = Conversation(
+                conversation_id=conversation_id,
+                last_channel="sms",
+                last_activity_at=timestamp,
+                last_customer_message=body[:300],
+                customer_last_reply_at=timestamp,
+                status="open",
+            )
+            conversation_record_id = upsert_conversation(message_update_convo)
+        except Exception as e:
+            log.error(
+                f"Something went wrong while upserting message update in poll_once to Conversations table (1): {e}"
+            )
 
         # Record inbound + switch mode
         patti["mode"] = "convo"
@@ -385,6 +411,20 @@ def poll_once():
                 decision["reply"] = prefix + "I’m sorry about that. I’m looping in a manager now so we can help."
             else:
                 decision["reply"] = prefix + "I’m looping in a team member to help, and they’ll follow up shortly."
+            try:
+                handoff_update_convo = Conversation(
+                    conversation_id=conversation_id,
+                    status="needs_review",
+                    needs_human_review=True,
+                    needs_human_review_reason=handoff_reason,
+                    last_activity_at=_dt.now(_tz.utc).replace(microsecond=0).isoformat(),
+                    last_channel="sms",
+                )
+                conversation_record_id = upsert_conversation(handoff_update_convo)
+            except Exception as e:
+                log.error(
+                    f"Something went wrong while upserting message update in poll_once to Conversations table (2): {e}"
+                )
 
         # --- Appointment detect + schedule (authoritative actions happen here, not in GPT text) ---
         appt = extract_appt_time(last_inbound, tz="America/Los_Angeles")
@@ -467,6 +507,17 @@ def poll_once():
                 log.exception(
                     "SMS poll: failed to schedule appointment opp=%s appt_iso=%r", opp.get("opportunityId"), appt_iso
                 )
+            try:
+                activity_update_convo = Conversation(
+                    conversation_id=conversation_id,
+                    last_activity_at=_dt.now(_tz.utc).replace(microsecond=0).isoformat(),
+                    last_channel="sms",
+                )
+                conversation_record_id = upsert_conversation(activity_update_convo)
+            except Exception as e:
+                log.error(
+                    f"Something went wrong while upserting last activity in poll_once to Conversations table (3): {e}"
+                )
 
         # --- Send SMS reply + persist metrics + optional handoff escalation ---
         reply_text = (decision.get("reply") or "").strip()
@@ -501,6 +552,28 @@ def poll_once():
             except Exception:
                 log.exception("SMS poll: failed to log outbound SMS to CRM opp=%s", opp_id)
                 
+
+            inbound_count = len(_get_messages_for_conversation(conversation_id, "inbound"))
+            outbound_count = len(_get_messages_for_conversation(conversation_id, "outbound"))
+
+            try:
+                event_now = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
+                activity_update_convo = Conversation(
+                    conversation_id=conversation_id,
+                    ai_last_reply_at=event_now,
+                    last_activity_at=event_now,
+                    last_channel="sms",
+                    status="open" if not needs_handoff else None,
+                    message_count_inbound=inbound_count,
+                    message_count_outbound=outbound_count,
+                    message_count_total=inbound_count+outbound_count
+                )
+                conversation_record_id = upsert_conversation(activity_update_convo)
+            except Exception as e:
+                log.error(
+                    f"Something went wrong while upserting message activity in poll_once to Conversations table (4): {e}"
+                )
+
             # 2) Always update “sent” metrics (fail-open)
             now_iso = _now_iso()
             next_due = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()

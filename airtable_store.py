@@ -1,11 +1,12 @@
 # airtable_store.py
+from typing import Literal
 import os, json, uuid
 from datetime import datetime, timedelta, timezone
 import requests
 import hashlib
 import logging
 
-from models.airtable_model import Message
+from models.airtable_model import Message, Conversation
 
 log = logging.getLogger("patti.airtable")
 
@@ -703,6 +704,23 @@ def patch_by_id(rec_id: str, fields: dict) -> dict:
     return _request("PATCH", f"{BASE_URL}/{rec_id}", json={"fields": fields})
 
 
+def patch_conversations_by_id(rec_id: str, fields: dict) -> dict:
+    try:
+        hr_keys = [k for k in fields.keys() if ("Human Review" in k) or ("needs_human" in k.lower())]
+        if hr_keys:
+            log.warning(
+                "HR_WRITE patch_by_id rec_id=%s payload=%r",
+                rec_id,
+                {k: fields.get(k) for k in hr_keys},
+            )
+    except Exception:
+        pass
+
+    url = return_table_url(CONVERSATIONS_TABLE_NAME)
+
+    return _request("PATCH", f"{url}/{rec_id}", json={"fields": fields})
+
+
 def query_view(view: str, max_records: int = 200) -> list[dict]:
     out = []
     offset = None
@@ -1225,15 +1243,98 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
 
 ## Conversation // Message table log / upsert operations.
 
+def _normalize_message_id(message_id: str):
+    """
+    Normalize a message identifier into the internal canonical format.
+
+    Args:
+        message_id (str): The raw message identifier to normalize.
+
+    Returns:
+        str: The normalized message ID in the format
+            "<message-<normalized_id>@internal>".
+
+    Notes:
+        - Leading and trailing whitespace is removed.
+        - The identifier is converted to lowercase.
+        - The result is wrapped in the standard internal message ID structure.
+    """
+
+    """Normalizes message id to format `<message-iazag2kdvtvqbe6hcoqdu@internal>`"""
+    resolved_message_id = f"<message-{message_id.strip().lower()}@internal>"
+    return resolved_message_id
+
+
+def _generate_message_id(
+    opp_id: str | None = None,
+    timestamp: str | None = None,
+    subject: str | None = None,
+    to_addr: str | None = None,
+    body_html: str | None = None,
+) -> str:
+    """
+    Generate a deterministic message identifier based on message metadata.
+
+    This function normalizes and combines selected message attributes,
+    computes a SHA-256 hash of the resulting string, and returns a
+    truncated digest formatted as an internal message ID.
+
+    Args:
+        opp_id (str | None, optional): The opportunity identifier associated
+            with the message.
+        timestamp (str | None, optional): The message timestamp.
+        subject (str | None, optional): The message subject line.
+        to_addr (str | None, optional): The recipient email address.
+        body_html (str | None, optional): The HTML body of the message.
+
+    Returns:
+        str: A deterministic message ID string in the format
+            "<message-<hash>@internal>".
+
+    Notes:
+        - All inputs are normalized by stripping whitespace.
+        - Recipient addresses are lowercased for consistency.
+        - HTML body content has consecutive whitespace collapsed and is
+          truncated to 5000 characters before hashing.
+        - The final identifier is derived from the first 32 characters of
+          the SHA-256 hexadecimal digest.
+    """
+
+    opp_id = (opp_id or "").strip()
+    timestamp = (timestamp or "").strip()
+    subject = (subject or "").strip()
+    to_addr = (to_addr or "").strip().lower()
+
+    body_html = (body_html or "").strip()
+
+    body_html = re.sub(r"\s+", " ", body_html)
+
+    body_html = body_html[:5000]
+
+    raw = f"{opp_id}|{timestamp}|{subject}|{to_addr}|{body_html}"
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    return f"<message-{digest[:32]}@internal>"
+
 
 def _get_conversation_record_id_by_opportunity_id(opportunity_id: str) -> str | None:
-    """Gets record_id by filtering the records on the basis of opportunity id
-
-    - Parms:
-        - opportunity_id
-    - Returns:
-        - record_id
     """
+    Retrieve the Airtable record ID for a conversation associated with
+    a specific opportunity ID.
+
+    Args:
+        opportunity_id (str): The unique identifier of the opportunity
+            used to filter conversation records.
+
+    Returns:
+        str | None: The Airtable record ID if a matching conversation
+            is found. Returns None if no matching record exists.
+
+    Notes:
+        - The query limits results to a single record for efficiency.
+        - Filtering is performed at the data source using a formula.
+    """
+
     TABLE_URL = return_table_url(CONVERSATIONS_TABLE_NAME)
     params = {"filterByFormula": f'{{opportunity_id}}="{opportunity_id}"', "pageSize": 1}
     data = _request("GET", TABLE_URL, params=params)
@@ -1241,11 +1342,7 @@ def _get_conversation_record_id_by_opportunity_id(opportunity_id: str) -> str | 
     return recs[0].get("id", "") if recs else None
 
 
-def find_by_conversation_id(conversation_id: str) -> dict | None:
-    params = {"filterByFormula": f'{{conversation_id}}="{conversation_id}"', "pageSize": 1}
-    data = _request("GET", return_table_url(CONVERSATIONS_TABLE_NAME), params=params)
-    recs = data.get("records", [])
-    return recs[0] if recs else None
+# Messages logic #
 
 
 def log_message(message_data: Message) -> bool:
@@ -1261,7 +1358,7 @@ def log_message(message_data: Message) -> bool:
     try:
         url = return_table_url(MESSAGES_TABLE_NAME)
         fields = message_data.model_dump(mode="json", exclude_none=True, by_alias=True)
-        
+
         if "body_html" in fields and fields["body_html"]:
             fields["body_html"] = fields["body_html"][:2000]
 
@@ -1274,6 +1371,150 @@ def log_message(message_data: Message) -> bool:
         return False
 
 
-def upsert_conversation(conversation_id: str, fields: dict) -> dict:
-    conversation_exists = find_by_conversation_id(conversation_id)
-    payload = {}
+# Conversations logic #
+
+
+def _get_messages_for_conversation(conversation_id: str, direction: Literal["inbound", "outbound"]) -> list[dict]:
+    """
+    Retrieve messages associated with a specific conversation, filtered by direction.
+
+    Args:
+        conversation_id (str): The unique identifier of the conversation record.
+        direction (Literal["inbound", "outbound"]): The direction of messages to retrieve.
+            Must be either "inbound" or "outbound".
+
+    Returns:
+        list[dict]: A list of message records matching the given conversation ID
+            and direction. Returns an empty list if no records are found or
+            if an error occurs during the request.
+
+    Notes:
+        - Messages are filtered at the data source using a formula query.
+        - Errors are logged and handled gracefully by returning an empty list.
+    """
+    try:
+        url = return_table_url(MESSAGES_TABLE_NAME)
+
+        formula = f'AND({{Conversation}}="{conversation_id}", ' f'{{direction}}="{direction}")'
+
+        params = {
+            "filterByFormula": formula,
+        }
+
+        data = _request("GET", url=url, params=params)
+        return data.get("records", [])
+
+    except Exception as e:
+        log.error(f"Failed to fetch outbound messages: {e}")
+        return []
+
+
+def _build_fields(conversation_data: Conversation) -> dict:
+    """
+    Build a dictionary of fields from a Conversation model instance.
+
+    Args:
+        conversation_data (Conversation): The conversation object to serialize.
+
+    Returns:
+        dict: A JSON-serializable dictionary representation of the conversation,
+            excluding fields with None values and using field aliases where defined.
+
+    Notes:
+        - Serialization is performed using the model's `model_dump` method.
+        - Fields with None values are omitted.
+        - Field aliases are applied to match external schema requirements.
+    """
+    return conversation_data.model_dump(mode="json", exclude_none=True, by_alias=True)
+
+
+def upsert_conversation(conversation_data: Conversation) -> str:
+    """
+    Create or update a conversation record in Airtable.
+
+    Args:
+        conversation_data (Conversation): The conversation object containing
+            the data to insert or update.
+
+    Returns:
+        str: The Airtable record ID of the upserted conversation if successful.
+            Returns an empty string if the operation fails or no record ID is returned.
+
+    Notes:
+        - The upsert operation merges records based on the "conversation_id" field.
+        - Field values are generated via `_build_fields` and sent with typecasting enabled.
+        - If the Airtable response does not contain records, an error is logged.
+    """
+    try:
+        url = return_table_url(CONVERSATIONS_TABLE_NAME)
+
+        fields = _build_fields(conversation_data)
+
+        payload = {
+            "performUpsert": {
+                "fieldsToMergeOn": ["conversation_id"],
+            },
+            "records": [{"fields": fields}],
+            "typecast": True,
+        }
+
+        data = _request("PATCH", url=url, json=payload)
+        recs = data.get("records", [])
+
+        if recs and isinstance(recs, list):
+            return recs[0].get("id", "")
+
+        log.error("Upsert returned no records for conversation_id=%s", conversation_data.conversation_id)
+        return ""
+
+    except Exception as e:
+        log.exception(
+            "Upsert conversation failed conversation_id=%s error=%s",
+            getattr(conversation_data, "conversation_id", None),
+            e,
+        )
+        return ""
+
+
+def _ensure_conversation(opp: dict, channel="sms") -> str:
+    """
+    Ensure that a conversation record exists for a given opportunity.
+
+    Constructs a conversation identifier using the subscription ID and
+    opportunity ID, extracts relevant customer and assignment details,
+    creates a Conversation instance, and upserts it to persistent storage.
+
+    Args:
+        opp (dict): A dictionary containing opportunity data, including
+            subscription details, customer information, and assignment fields.
+        channel (str, optional): The communication channel associated with
+            the conversation (e.g., "sms"). Defaults to "sms".
+
+    Returns:
+        str: The record ID of the created or updated conversation.
+            Returns an empty string if the upsert operation fails.
+
+    Notes:
+        - The conversation ID is deterministically generated from the
+          subscription ID and opportunity ID.
+        - Missing customer fields are handled gracefully with default values.
+        - If no sales representative is assigned, a default fallback value is used.
+    """
+    subscription_id = opp["subscription_id"]
+    conversation_id = f"conv_{subscription_id}_{opp['opportunityId']}"
+
+    customer = opp.get("customer", {})
+    customer_phone = customer.get("phone", "")
+    customer_full_name = f"{customer.get("firstName", "")} {customer.get("lastName", "")}"
+
+    convo = Conversation(
+        conversation_id=conversation_id,
+        opportunity_id=opp["opportunityId"],
+        subscription_id=subscription_id,
+        customer_phone=customer_phone,
+        customer_full_name=customer_full_name,
+        salesperson_assigned=(opp.get("Assigned Sales Rep") or "our team"),
+        last_channel=channel,
+    )
+
+    return upsert_conversation(convo)
