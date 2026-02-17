@@ -31,13 +31,6 @@ def _clean_body_html_to_body_text(body_html: str) -> str:
     return soup.get_text(strip=True)
 
 
-def log_outbound_message():
-    """
-    Responsible for logging all the out bound messages via the email route.
-    """
-    pass
-
-
 def _now_iso_utc() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
