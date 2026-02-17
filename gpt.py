@@ -913,6 +913,17 @@ def extract_appt_time(text: str, tz: str = "America/Los_Angeles") -> dict:
             '- Advance to next valid calendar day.'
             '- Never schedule in the past.'
             
+            "==============================\n"
+            "CONFIRMATIONS & POLITE CLOSINGS\n"
+            "==============================\n"
+            "If the user sends a message that indicates confirmation or politeness after a scheduling discussion (such as 'Thank you and see you tomorrow', 'thank you', 'see you then', 'see you tomorrow', or similar phrases), or otherwise clearly confirms/acknowledges a scheduled appointment, do NOT ask any additional questions such as requesting a time. Instead:\n"
+            "- classification = NO_INTENT\n"
+            "- iso = \"\"\n"
+            "- window = \"\"\n"
+            "- confidence = 1.0\n"
+            "- reason = \"User confirmed or sent polite closing. Reply with a friendly acknowledgment (e.g., 'You’re welcome, see you at your appointment!').\"\n"
+            "Never prompt the user for more scheduling info or time details after such a confirmation or polite closing.\n\n"
+            
             "================\n"
             "OUTPUT SCHEMA\n"
             "================\n"
