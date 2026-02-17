@@ -166,9 +166,6 @@ def build_mazda_loyalty_email(*, day: int, fields: dict) -> dict:
         "body_text": body_text,
         "body_html": body_html,
     }
-}
-
-
 
 def build_mazda_loyalty_sms(*, day: int, fields: dict) -> str:
     """
