@@ -1081,7 +1081,7 @@ def maybe_send_tk_day3_walkaround(
                 upsert_conversation(convo_update)
 
             except Exception as e:
-                log.error(f"Conversation upsert failed (tk_day3_sms) (1): {e}")
+                log.error(f"Conversation upsert failed (maybe_send_tk_day3_walkaround) (1): {e}")
         except Exception as e:
             log.warning("TK Day3 Walkaround email send failed opp=%s: %s", opportunityId, e)
             sent_ok = False
@@ -1136,7 +1136,7 @@ def maybe_send_tk_day3_walkaround(
                 )
                 upsert_conversation(convo)
             except Exception as e:
-                log.error(f"Conversation upsert failed (maybe_send_tk_day3_walkaround SMS): {e}")
+                log.error(f"Conversation upsert failed (maybe_send_tk_day3_walkaround) (2): {e}")
 
     if sms_sent:
         try:
@@ -1155,7 +1155,7 @@ def maybe_send_tk_day3_walkaround(
             upsert_conversation(convo_update)
 
         except Exception as e:
-            log.error(f"Conversation upsert failed (tk_day3_sms) (2): {e}")
+            log.error(f"Conversation upsert failed (maybe_send_tk_day3_walkaround) (3): {e}")
 
     if sent_ok:
         # Record in thread history

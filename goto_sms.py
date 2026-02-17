@@ -4,8 +4,9 @@ import os
 import time
 import requests
 import logging
-from airtable_store import _generate_message_id, _normalize_message_id
+from airtable_store import _generate_message_id, _normalize_message_id, find_by_customer_phone, opp_from_record
 from airtable_store import log_message, _get_conversation_record_id_by_opportunity_id
+from email_ingestion import _norm_phone_e164_us
 from models.airtable_model import Message
 
 log = logging.getLogger("patti.goto_sms")
@@ -146,6 +147,18 @@ def send_sms(*, from_number: str, to_number: str, body: str) -> dict:
     response_json = r.json() or {}
     response_message_id = response_json.get("id", "")
 
+    opp = {}
+    e164_to_number = None
+    try:
+        e164_to_number = _norm_phone_e164_us(to_number)
+        rec = find_by_customer_phone(e164_to_number)
+        if not rec:
+            log.error(f"Could not fetch record by customer's phone number: {e164_to_number}")
+        if rec:
+            opp = opp_from_record(rec)
+    except Exception as e:
+        log.error(f"Failed to fech opp (send_sms): {e}")
+
     delivery_status = "failed" if r.status_code >= 400 else "sent"
 
     message_id = (
@@ -161,11 +174,11 @@ def send_sms(*, from_number: str, to_number: str, body: str) -> dict:
             channel="sms",
             timestamp=timestamp,
             from_=from_number,
-            to=to_number,
+            to=e164_to_number or to_number,
             subject="",
             body_text=body,
             body_html="",
-            provider=source,
+            provider=opp.get("source", "") or "",
             opp_id=opp_id,
             delivery_status=delivery_status,
             rooftop_name=rooftop_name,
