@@ -77,22 +77,26 @@ def build_mazda_loyalty_email(*, day: int, fields: dict) -> dict:
     body_text = body.strip()
 
     # basic HTML wrapper
-    rooftop_name = (fields.get("rooftop_name") or fields.get("rooftop") or "").strip()
-
-    footer_html = build_patti_footer(rooftop_name=rooftop_name)
+    # --- Build HTML body (simple + reliable) ---
+    # Convert newlines to <br> for email
+    html_main = "<br>".join((body_text or "").split("\n"))
     
+    # Wrap with basic font styling
     body_html = (
         "<div style='font-family:Arial, Helvetica, sans-serif; font-size:14px; line-height:20px; color:#222;'>"
-        f"{body_html_core}"
+        f"{html_main}"
         "</div>"
-        f"{footer_html}"
     )
-
+    
+    # --- Append Patti footer ---
+    rooftop_name = (fields.get("rooftop_name") or fields.get("rooftop") or "").strip()
+    footer_html = build_patti_footer(rooftop_name=rooftop_name)
+    body_html = body_html + footer_html
 
     return {
         "subject": subject,
-        "body_text": body_text,
-        "body_html": f"<div style='font-family: Arial, sans-serif; font-size: 14px; line-height: 1.5'>{body_html}</div>"
+        "body_text": body_text.strip(),
+        "body_html": body_html,
     }
 
 
