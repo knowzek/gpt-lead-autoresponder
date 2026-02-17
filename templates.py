@@ -3,6 +3,7 @@
 # ----------------------------------------
 
 from datetime import datetime
+from patti_common import build_patti_footer
 
 def build_mazda_loyalty_email(*, day: int, fields: dict) -> dict:
     """
@@ -76,7 +77,17 @@ def build_mazda_loyalty_email(*, day: int, fields: dict) -> dict:
     body_text = body.strip()
 
     # basic HTML wrapper
-    body_html = "<br>".join([line for line in body_text.split("\n")])
+    rooftop_name = (fields.get("rooftop_name") or fields.get("rooftop") or "").strip()
+
+    footer_html = build_patti_footer(rooftop_name=rooftop_name)
+    
+    body_html = (
+        "<div style='font-family:Arial, Helvetica, sans-serif; font-size:14px; line-height:20px; color:#222;'>"
+        f"{body_html_core}"
+        "</div>"
+        f"{footer_html}"
+    )
+
 
     return {
         "subject": subject,
