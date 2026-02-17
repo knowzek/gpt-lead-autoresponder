@@ -14,6 +14,43 @@ EMAIL_MODE = os.getenv("EMAIL_MODE", "outlook")  # "crm" or "outlook"
 def _now_iso_utc() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
+import os
+import requests
+import logging
+
+def send_via_sendgrid(*, to_email: str, subject: str, body_html: str, body_text: str | None = None) -> bool:
+    api_key = os.getenv("SENDGRID_API_KEY", "").strip()
+    from_email = os.getenv("SENDGRID_FROM_EMAIL", "").strip()
+    reply_to = os.getenv("SENDGRID_REPLY_TO_EMAIL", "").strip()
+
+    if not api_key or not from_email:
+        raise RuntimeError("Missing SENDGRID_API_KEY or SENDGRID_FROM_EMAIL")
+
+    payload = {
+        "personalizations": [{"to": [{"email": to_email}]}],
+        "from": {"email": from_email},
+        "subject": subject,
+        "content": [{"type": "text/html", "value": body_html}],
+    }
+
+    if reply_to:
+        payload["reply_to"] = {"email": reply_to}
+
+    if body_text:
+        payload["content"].insert(0, {"type": "text/plain", "value": body_text})
+
+    r = requests.post(
+        "https://api.sendgrid.com/v3/mail/send",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json=payload,
+        timeout=20,
+    )
+
+    if r.status_code in (200, 202):
+        return True
+
+    log.error("SendGrid send failed status=%s body=%s", r.status_code, r.text[:800])
+    return False
 
 def _bump_ai_send_metrics_in_airtable(opp_id: str) -> None:
     try:
