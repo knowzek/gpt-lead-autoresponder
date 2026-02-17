@@ -1682,6 +1682,16 @@ def process_inbound_email(inbound: dict) -> None:
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     headers = inbound.get("headers") or {}
 
+    # --- Mazda Loyalty inbound router (SendGrid replies) ---
+    if "[mazda loyalty]" in (subject or "").lower():
+        try:
+            from mazda_loyalty import handle_mazda_loyalty_inbound_email
+            handle_mazda_loyalty_inbound_email(inbound=inbound, subject=subject, body_text=body_text)
+        except Exception:
+            log.exception("Mazda Loyalty inbound handler failed")
+        return
+
+
     log.info(
         "DEBUG resolve_subscription from process_inbound_email function - the kbb flow?: inbound.subscription_id=%r inbound.subscriptionId=%r inbound.source=%r inbound.to=%r headers_keys=%s headers=%r",
         inbound.get("subscription_id"),
