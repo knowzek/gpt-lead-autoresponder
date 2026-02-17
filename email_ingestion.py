@@ -1682,14 +1682,28 @@ def process_inbound_email(inbound: dict) -> None:
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     headers = inbound.get("headers") or {}
 
-    # --- Mazda Loyalty inbound router (SendGrid replies) ---
+    # Mazda Loyalty: inbound reply from SendGrid
     if "[mazda loyalty]" in (subject or "").lower():
-        try:
-            from mazda_loyalty import handle_mazda_loyalty_inbound_email
-            handle_mazda_loyalty_inbound_email(inbound=inbound, subject=subject, body_text=body_text)
-        except Exception:
-            log.exception("Mazda Loyalty inbound handler failed")
+        sender_email = _extract_email(sender_raw).strip().lower()
+        rec = find_by_customer_email(sender_email)
+    
+        if rec:
+            rec_id = rec.get("id")
+            inbound_ts = inbound.get("timestamp") or _now_iso()
+    
+            # ✅ Stop BOTH cadences on any email engagement
+            patch_by_id(rec_id, {
+                "email_status": "convo",
+                "next_email_at": None,
+                "sms_status": "convo",
+                "next_sms_at": None,
+                "last_inbound_text": (body_text or "")[:2000],
+                "last_inbound_at": inbound_ts,
+            })
+    
+        # IMPORTANT: return so this does NOT go through Fortellis opp logic
         return
+
 
 
     log.info(
