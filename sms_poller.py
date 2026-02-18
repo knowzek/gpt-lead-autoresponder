@@ -189,16 +189,23 @@ def send_sms_cadence_once():
         f = (r.get("fields") or {})
         phone = (f.get("customer_phone") or f.get("phone") or "").strip()
 
+        log.info("SMS cadence candidate rid=%s phone=%r sms_status=%r email_status=%r next_sms_at=%r sms_day=%r",
+         rid, phone, f.get("sms_status"), f.get("email_status"), f.get("next_sms_at"), f.get("sms_day"))
+
+
         if not phone:
             continue
 
         # Global suppression / opt-out protection (reuse your existing guard)
-        if should_suppress_all_sends_airtable(f):
+        stop, reason = should_suppress_all_sends_airtable(f)
+        if stop:
             patch_by_id(rid, {
                 "sms_status": "paused",
-                "last_sms_body": "Suppressed by compliance/opt-out rules."
+                "last_sms_body": f"Suppressed: {reason}",
             })
+            log.info("SMS cadence suppressed rid=%s reason=%r", rid, reason)
             continue
+
 
         day = int(f.get("sms_day") or 1)
 
