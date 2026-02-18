@@ -204,7 +204,7 @@ def sms_inbound():
         payload_json = request.get_json(silent=True) or {}
         log.info("📥 Incoming SMS webhook")
 
-        from mazda_sms_webhook import handle_mazda_loyalty_inbound_sms_webhook
+        from sms_poller import handle_mazda_loyalty_inbound_sms_webhook
         out = handle_mazda_loyalty_inbound_sms_webhook(payload_json=payload_json)
 
         return jsonify(out), 200
