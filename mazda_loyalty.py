@@ -5,6 +5,10 @@ from datetime import datetime, timezone
 from patti_common import EMAIL_RE
 from email_ingestion import _extract_email  # re-use your helper (or copy it)
 from patti_mailer import send_via_sendgrid  # the SendGrid Mail Send API helper we discussed
+from mazda_loyalty_brain import generate_mazda_loyalty_email_reply
+from patti_mailer import send_via_sendgrid
+from airtable_store import find_by_customer_email, patch_by_id
+
 
 # IMPORTANT: these should point to the Mazda Loyalty Airtable base/table
 from airtable_store import (
@@ -41,29 +45,37 @@ def handle_mazda_loyalty_inbound_email(*, inbound: dict, subject: str, body_text
         "last_inbound_text": (body_text or "")[:2000],
     })
 
-    # Optional: send a simple acknowledgment via SendGrid (deliverability stays good)
-    # (If you want Patti to do a full GPT reply later, keep this minimal or skip it.)
-    reply_to = os.getenv("SENDGRID_REPLY_TO_EMAIL", "").strip()
-    from_email = os.getenv("SENDGRID_FROM_EMAIL", "").strip()
-
-    if not from_email:
-        log.info("Mazda Loyalty: SENDGRID_FROM_EMAIL not set; skipping auto-reply")
-        return
-
-    # Very safe, short reply
-    ack_subject = subject if subject else "[Mazda Loyalty] Thanks — we got your reply"
-    ack_html = (
-        "<p>Thanks — I got your message.</p>"
-        "<p>If you can reply with your 16-digit voucher code (or tell me whether you want to use it or gift it), "
-        "I can take the next step for you.</p>"
-        "<p>— Patti</p>"
+    first_name = (rec.get("fields", {}).get("first_name") or "").strip()
+    bucket = (rec.get("fields", {}).get("bucket") or "").strip()
+    rooftop_name = (rec.get("fields", {}).get("rooftop_name") or "").strip()
+    
+    decision = generate_mazda_loyalty_email_reply(
+        first_name=first_name,
+        bucket=bucket,
+        rooftop_name=rooftop_name,
+        last_inbound=body_text,
     )
-    ack_text = "Thanks — I got your message. Reply with your 16-digit voucher code (or tell me if you want to use it or gift it) and I’ll take the next step. — Patti"
-
-    # Send reply to the customer
+    
+    # send reply back to customer via SendGrid
     send_via_sendgrid(
         to_email=sender_email,
-        subject=ack_subject,
-        body_html=ack_html,
-        body_text=ack_text,
+        subject=f"Re: {subject}" if subject else "[Mazda Loyalty] Re: Your voucher",
+        body_html=decision["reply_html"],
+        body_text=decision["reply_text"],
     )
+    
+    # log + flags for your Airtable “Needs Reply” view (optional but recommended)
+    patch = {
+        "last_outbound_email_at": ts,
+        "last_outbound_email_subject": f"Re: {subject}" if subject else "[Mazda Loyalty] Re: Your voucher",
+        "last_outbound_email_body": (decision["reply_text"] or "")[:5000],
+    }
+    
+    if decision.get("needs_handoff"):
+        patch.update({
+            "Needs Reply": True,  # only if this field exists
+            "Human Review Reason": f"Mazda Loyalty handoff: {decision.get('handoff_reason')}",
+        })
+    
+    patch_by_id(rec_id, patch)
+
