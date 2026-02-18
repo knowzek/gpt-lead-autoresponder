@@ -198,23 +198,21 @@ def email_inbound():
 def sms_inbound():
     """
     Webhook endpoint called by GoTo for inbound SMS.
-    For now: log raw payload, apply simple rules, reply immediately.
+    Mazda service: route directly to Mazda Loyalty handler (Airtable + GPT + handoff).
     """
     try:
         payload_json = request.get_json(silent=True) or {}
-        raw_text = ""
-        try:
-            raw_text = (request.data or b"").decode("utf-8", errors="ignore")
-        except Exception:
-            raw_text = ""
-
         log.info("📥 Incoming SMS webhook")
-        out = process_inbound_sms(payload_json, raw_text=raw_text)
+
+        from mazda_sms_webhook import handle_mazda_loyalty_inbound_sms_webhook
+        out = handle_mazda_loyalty_inbound_sms_webhook(payload_json=payload_json)
+
         return jsonify(out), 200
 
     except Exception as e:
         log.exception("SMS ingestion failed: %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 from sms_poller import poll_once
 
