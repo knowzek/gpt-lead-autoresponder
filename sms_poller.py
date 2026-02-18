@@ -212,7 +212,13 @@ def send_sms_cadence_once():
         # v1: simplest templated nudge by day (fast + predictable)
         body = build_mazda_loyalty_sms(day=day, fields=f)
 
-        ok = send_sms(to_phone_e164=phone, body=body)
+        owner = _patti_number()   # same helper used in poll_once()
+
+        ok = send_sms(
+            from_number=owner,
+            to_number=phone,
+            body=body
+        )
 
         if ok:
             now_iso = datetime.now(timezone.utc).isoformat()
