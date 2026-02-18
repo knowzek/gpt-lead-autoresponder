@@ -16,12 +16,118 @@ from airtable_store import (
 )
 from sms_brain import generate_sms_reply
 from templates import build_mazda_loyalty_sms
+from outlook_email import send_email_via_outlook
+from mazda_loyalty_sms_brain import generate_mazda_loyalty_sms_reply
 
 
 log = logging.getLogger("patti.sms.poller")
 
+import re
+
+_TIME_RE = re.compile(r"\b(\d{1,2})(:\d{2})?\s?(am|pm)?\b", re.IGNORECASE)
+_DOW_RE  = re.compile(r"\b(mon(day)?|tue(sday)?|wed(nesday)?|thu(rsday)?|fri(day)?|sat(urday)?|sun(day)?)\b", re.IGNORECASE)
+
+def _looks_like_appt_intent(text: str) -> bool:
+    """
+    Best-effort detection that the guest is trying to schedule / book / confirm a time.
+    Used to force human handoff + ask one narrowing question.
+    """
+    t = (text or "").lower().strip()
+    if not t:
+        return False
+
+    # Strong intent phrases
+    if any(k in t for k in (
+        "appointment", "appt", "schedule", "book", "set up a time",
+        "test drive", "testdrive", "come in", "come by", "stop by",
+        "available", "availability", "what times", "what time works",
+        "can i come", "could i come", "when can i", "works for you",
+        "today", "tomorrow", "this weekend"
+    )):
+        return True
+
+    # Day-of-week mention
+    if _DOW_RE.search(t):
+        return True
+
+    # Time mention (e.g., 11:30, 3pm, 12, 7:15pm)
+    if _TIME_RE.search(t):
+        return True
+
+    return False
+
+
 def _now_iso():
     return datetime.now(timezone.utc).isoformat()
+
+def _parse_cc_env() -> list[str]:
+    raw_cc = (os.getenv("HUMAN_REVIEW_CC") or "").strip()
+    if not raw_cc:
+        return []
+    parts = raw_cc.replace(",", ";").split(";")
+    return [p.strip() for p in parts if p.strip()]
+
+def _send_mazda_sms_handoff_email(
+    *,
+    to_addr: str,
+    cc_addrs: list[str],
+    rooftop_name: str,
+    customer_name: str,
+    customer_email: str,
+    customer_phone: str,
+    bucket: str,
+    inbound_text: str,
+    reason: str,
+    now_iso: str,
+):
+    subj = f"[Patti] Mazda Loyalty SMS handoff - {rooftop_name} - {customer_name}"
+    html = f"""
+    <p><b>Mazda Loyalty SMS handoff — please take over.</b></p>
+
+    <p><b>Rooftop:</b> {rooftop_name}<br>
+    <b>Bucket:</b> {bucket or "unknown"}</p>
+
+    <p><b>Customer:</b> {customer_name}<br>
+    <b>Email:</b> {customer_email or "unknown"}<br>
+    <b>Phone:</b> {customer_phone or "unknown"}</p>
+
+    <p><b>Reason:</b> {reason}</p>
+
+    <p><b>Latest customer text:</b><br>
+    <pre style="white-space:pre-wrap;font-family:Arial,Helvetica,sans-serif;">{(inbound_text or "")[:2000]}</pre></p>
+
+    <p style="color:#666;font-size:12px;">
+      Logged by Patti • Mazda Loyalty • {now_iso}
+    </p>
+    """.strip()
+
+    safe_mode = (os.getenv("PATTI_SAFE_MODE", "0").strip() == "1") or (os.getenv("SAFE_MODE", "0").strip() == "1")
+    if safe_mode:
+        test_to = (os.getenv("TEST_TO") or "").strip() or (os.getenv("INTERNET_TEST_EMAIL") or "").strip() or (os.getenv("HUMAN_REVIEW_FALLBACK_TO") or "").strip()
+        if not test_to:
+            raise RuntimeError("SAFE_MODE enabled but TEST_TO/INTERNET_TEST_EMAIL/HUMAN_REVIEW_FALLBACK_TO not set")
+        subj = f"[SAFE MODE] {subj}"
+        html = (
+            f"<div style='padding:10px;border:2px solid #cc0000;margin-bottom:12px;'>"
+            f"<b>SAFE MODE:</b> rerouted to <b>{test_to}</b>.<br/>"
+            f"<b>Original To:</b> {to_addr}<br/>"
+            f"<b>Original CC:</b> {', '.join(cc_addrs) if cc_addrs else '(none)'}"
+            f"</div>"
+            + html
+        )
+        to_addr = test_to
+        cc_addrs = []
+
+    send_email_via_outlook(
+        to_addr=to_addr,
+        subject=subj[:180],
+        html_body=html,
+        opp_id="mazda-loyalty",  # Mazda has no Fortellis opp id
+        cc_addrs=cc_addrs,
+        timeout=20,
+        enforce_compliance=False,
+    )
+
 
 def mark_sms_convo_on_inbound(*, airtable_record_id: str, inbound_text: str):
     """
@@ -227,9 +333,118 @@ def poll_once():
         subscription_id = (opp.get("subscription_id") or opp.get("dealer_key") or "").strip()
         opp_id = (opp.get("opportunityId") or opp.get("opportunity_id") or "").strip()
         
+        # -----------------------------
+        # Mazda Loyalty SMS path (no Fortellis opp_id)
+        # -----------------------------
         if not subscription_id or not opp_id:
-            log.warning("SMS poll: missing subscription_id/opp_id; sub=%r opp_id=%r", subscription_id, opp_id)
+            fields = rec.get("fields") or {}
+            program = (fields.get("program") or "").strip().lower()
+            bucket = (fields.get("bucket") or "").strip()
+            rooftop_name = (fields.get("rooftop_name") or fields.get("rooftop") or "").strip()
+            first_name = (fields.get("first_name") or fields.get("customer_first_name") or "").strip()
+        
+            # Heuristic: treat as Mazda Loyalty if bucket exists or program says so
+            is_mazda = ("mazda" in program) or bool(bucket)
+        
+            if not is_mazda:
+                log.warning("SMS poll: missing subscription_id/opp_id and not Mazda; sub=%r opp_id=%r", subscription_id, opp_id)
+                continue
+        
+            # Stop Mazda SMS cadence on engagement + store inbound markers
+            try:
+                save_opp(opp, extra_fields={
+                    "sms_status": "convo",
+                    "next_sms_at": None,
+                    "last_sms_inbound_message_id": msg_id,
+                    "last_sms_inbound_at": last.get("timestamp") or _now_iso(),
+                    "last_inbound_text": (last_inbound or "")[:2000],
+                })
+            except Exception:
+                log.exception("Mazda SMS: failed to patch convo status rec=%s", rec.get("id"))
+        
+            # Build Mazda SMS reply via GPT
+            decision = generate_mazda_loyalty_sms_reply(
+                first_name=first_name,
+                bucket=bucket,
+                rooftop_name=rooftop_name,
+                last_inbound=last_inbound,
+                thread_snippet=thread,
+            )
+        
+            # Deterministic appointment intent => force handoff + single narrowing question
+            wants_appt = _looks_like_appt_intent(last_inbound)
+            if wants_appt:
+                decision["needs_handoff"] = True
+                decision["handoff_reason"] = "appointment"
+                prefix = f"{first_name}, " if first_name else ""
+                # single question that narrows time
+                decision["reply"] = f"{prefix}thanks — I’m looping in a team member to lock in a time. What day works best, and about what time?"
+        
+            reply_text = (decision.get("reply") or "").strip()
+            if not reply_text:
+                reply_text = "Thanks — if you have your 16-digit voucher code, text it here and I’ll verify it."
+        
+            # Send SMS
+            to_number = author
+            if _sms_test_enabled() and _sms_test_to():
+                to_number = _sms_test_to()
+        
+            try:
+                send_sms(from_number=owner, to_number=to_number, body=reply_text)
+                log.info("Mazda SMS: replied to=%s (test=%s)", to_number, _sms_test_enabled())
+            except Exception:
+                log.exception("Mazda SMS: failed sending reply rec=%s", rec.get("id"))
+        
+            # Metrics + outbound markers (fail-open)
+            try:
+                save_opp(opp, extra_fields={
+                    "last_sms_sent_at": _now_iso(),
+                    "sms_nudge_count": int(opp.get("sms_nudge_count") or 0) + 1,
+                    "AI Texts Sent": int(opp.get("AI Texts Sent") or 0) + 1,
+                })
+            except Exception:
+                log.exception("Mazda SMS: failed saving sent metrics rec=%s", rec.get("id"))
+        
+            # Human handoff notification (salesperson_email + CC managers)
+            if decision.get("needs_handoff"):
+                try:
+                    salesperson_email = (fields.get("salesperson_email") or "").strip()
+                    if not salesperson_email:
+                        salesperson_email = (os.getenv("HUMAN_REVIEW_FALLBACK_TO") or "").strip() or "knowzek@gmail.com"
+        
+                    cc_addrs = _parse_cc_env()
+                    customer_email = (fields.get("email") or fields.get("customer_email") or "").strip()
+                    customer_phone = (fields.get("customer_phone") or fields.get("phone") or opp.get("customer_phone") or "").strip() or author
+                    customer_name = first_name or "Customer"
+                    reason = f"Mazda Loyalty SMS handoff: {decision.get('handoff_reason') or 'other'}"
+        
+                    # Flag Airtable fields (if present)
+                    try:
+                        save_opp(opp, extra_fields={
+                            "Needs Reply": True,
+                            "Human Review Reason": reason,
+                        })
+                    except Exception:
+                        pass
+        
+                    _send_mazda_sms_handoff_email(
+                        to_addr=salesperson_email,
+                        cc_addrs=cc_addrs,
+                        rooftop_name=rooftop_name or "Mazda",
+                        customer_name=customer_name,
+                        customer_email=customer_email or "unknown",
+                        customer_phone=customer_phone or "unknown",
+                        bucket=bucket,
+                        inbound_text=last_inbound,
+                        reason=reason,
+                        now_iso=_now_iso(),
+                    )
+                except Exception:
+                    log.exception("Mazda SMS: failed handoff notify rec=%s", rec.get("id"))
+        
+            # ✅ Mazda path handled; skip Fortellis branch
             continue
+
 
         patti = opp.setdefault("patti", {})
         
