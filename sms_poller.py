@@ -559,6 +559,16 @@ def poll_once():
             first_name = (fields.get("first_name") or "").strip()  # <-- ONLY Mazda table name
             phone = (fields.get("phone") or fields.get("customer_phone") or "").strip() or author
 
+            # 🔎 DEBUG: confirm which Airtable record we matched
+            log.warning(
+                "MAZDA_MATCH rec_id=%s first_name=%r bucket=%r customer_phone=%r inbound_author=%r",
+                rec_id,
+                first_name,
+                (fields.get("bucket") or ""),
+                (fields.get("customer_phone") or ""),
+                author,
+            )
+
             # --- Mazda durable dedupe (see section B) ---
             last_seen = (fields.get("last_sms_inbound_message_id") or "").strip()
             if last_seen and msg_id and last_seen == msg_id:
