@@ -175,6 +175,11 @@ def handle_mazda_loyalty_inbound_email(*, inbound: dict, subject: str, body_text
         rooftop_name=rooftop_name,
         last_inbound=body_text,
     )
+    
+    if (decision.get("handoff_reason") or "").strip().lower() in ("voucher_lookup", "voucher", "voucher code", "voucher_code"):
+        decision["needs_handoff"] = True
+        decision["handoff_reason"] = "voucher_lookup"
+
 
     # If appointment intent, force handoff regardless of model output
     if wants_appt:
