@@ -158,18 +158,20 @@ def generate_mazda_loyalty_email_reply(
 
     code = _extract_voucher_code(inbound)
     if code:
-        # Don’t ask more than one question; confirm next step.
+        # ✅ Voucher lookup requires a human (Patti cannot verify)
         txt = (
             f"{'Hi ' + first_name + ',' if first_name else 'Hi there,'}\n\n"
-            f"Thanks — I got your voucher code. I’ll verify it and make sure it’s applied correctly toward a new CX-5.\n\n"
-            "If you already know which CX-5 trim/color you prefer, tell me and I’ll pull matching options."
+            "Thanks — I got your voucher code.\n"
+            "I’m looping in a team member now to confirm eligibility and make sure everything is set up correctly.\n\n"
+            "Are you planning to use it for yourself, or gift it to someone?"
         ).strip()
         return {
             "reply_text": txt,
             "reply_html": _as_html(txt),
-            "needs_handoff": False,
-            "handoff_reason": "other",
+            "needs_handoff": True,
+            "handoff_reason": "voucher_lookup",
         }
+
 
     # ---- GPT for everything else ----
     if not _oai:
