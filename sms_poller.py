@@ -383,6 +383,12 @@ def poll_once():
                 last_inbound=last_inbound,
                 thread_snippet=thread,
             )
+
+            # ✅ Voucher code / voucher lookup MUST handoff to human
+            if (decision.get("handoff_reason") or "").strip().lower() in ("voucher_lookup", "voucher", "voucher code", "voucher_code"):
+                decision["needs_handoff"] = True
+                decision["handoff_reason"] = "voucher_lookup"
+
         
             # Deterministic appointment intent => force handoff + single narrowing question
             wants_appt = _looks_like_appt_intent(last_inbound)
