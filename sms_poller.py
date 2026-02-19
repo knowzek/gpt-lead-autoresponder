@@ -3,6 +3,8 @@ import os
 import re
 import logging
 from datetime import datetime, timezone, timedelta
+from datetime import datetime as _dt, timezone as _tz
+
 
 from gpt import extract_appt_time
 from fortellis import get_token, schedule_activity, get_opportunity, add_opportunity_comment
