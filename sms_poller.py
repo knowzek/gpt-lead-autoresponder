@@ -19,10 +19,6 @@ from templates import build_mazda_loyalty_sms
 from outlook_email import send_email_via_outlook
 from mazda_loyalty_sms_brain import generate_mazda_loyalty_sms_reply
 
-log = logging.getLogger("patti.mazda.sms.webhook")
-
-
-
 log = logging.getLogger("patti.sms.poller")
 
 import re
@@ -33,14 +29,20 @@ _DOW_RE  = re.compile(r"\b(mon(day)?|tue(sday)?|wed(nesday)?|thu(rsday)?|fri(day
 VOUCHER_RE = re.compile(r"\b(\d{16})\b")
 APPT_RE = re.compile(r"\b(appointment|appt|test drive|come in|schedule|book|available|availability|what time|tomorrow|today|this (week|weekend)|weekday|saturday|sunday)\b", re.I)
 
-def _now_iso():
-    return datetime.now(timezone.utc).isoformat()
+import re
 
-def _looks_like_appt_intent(text: str) -> bool:
+_VOUCHERISH_RE = re.compile(r"(?<!\d)(\d{12,20})(?!\d)")  # catches 12–20 digit codes
+
+def _extract_voucherish_code(text: str) -> str:
     t = (text or "").strip()
     if not t:
-        return False
-    return bool(APPT_RE.search(t))
+        return ""
+    m = _VOUCHERISH_RE.search(t.replace(" ", ""))
+    return m.group(1) if m else ""
+
+
+def _now_iso():
+    return datetime.now(timezone.utc).isoformat()
 
 def _extract_voucher_code(text: str) -> str | None:
     m = VOUCHER_RE.search(text or "")
@@ -193,22 +195,40 @@ def handle_mazda_loyalty_inbound_sms_webhook(*, payload_json: dict) -> dict:
     except Exception:
         log.exception("Mazda SMS webhook: failed saving outbound markers rec=%s", rec_id)
 
+    log.warning(
+        "MAZDA_DECISION rec_id=%s needs_handoff=%s reason=%r reply_preview=%r",
+        rec_id,
+        bool(decision.get("needs_handoff")),
+        (decision.get("handoff_reason") or ""),
+        (decision.get("reply") or "")[:90],
+    )
+
     # Human handoff email + Airtable flags
     if decision.get("needs_handoff"):
         reason = (decision.get("handoff_reason") or "other").strip().lower()
-
+        msg = f"Mazda Loyalty SMS handoff: {reason}"
+    
+        # Try Mazda schema A
         try:
             patch_by_id(rec_id, {
                 "Needs Reply": True,
-                "Human Review Reason": f"Mazda Loyalty SMS handoff: {reason}",
+                "Human Review Reason": msg,
             })
+            log.warning("MAZDA_AIRTABLE_FLAGGED rec_id=%s schema=A", rec_id)
         except Exception:
-            log.exception("Mazda SMS webhook: failed setting Needs Reply fields rec=%s", rec_id)
+            log.exception("Mazda SMS: failed flag schema A rec=%s", rec_id)
+    
+            # Try Mazda schema B
+            try:
+                patch_by_id(rec_id, {
+                    "Needs Human Review": True,
+                    "Human Review Reason": msg,
+                })
+                log.warning("MAZDA_AIRTABLE_FLAGGED rec_id=%s schema=B", rec_id)
+            except Exception:
+                log.exception("Mazda SMS: failed flag schema B rec=%s", rec_id)
 
         try:
-            # You already have this helper in sms_poller.py (you pasted the signature)
-            from sms_poller import _send_mazda_sms_handoff_email
-
             to_addr = (fields.get("salesperson_email") or "").strip() or (os.getenv("HUMAN_REVIEW_FALLBACK_TO") or "").strip()
             if not to_addr:
                 to_addr = "knowzek@gmail.com"
@@ -259,17 +279,6 @@ def _looks_like_appt_intent(text: str) -> bool:
         return True
 
     return False
-
-
-def _now_iso():
-    return datetime.now(timezone.utc).isoformat()
-
-def _parse_cc_env() -> list[str]:
-    raw_cc = (os.getenv("HUMAN_REVIEW_CC") or "").strip()
-    if not raw_cc:
-        return []
-    parts = raw_cc.replace(",", ";").split(";")
-    return [p.strip() for p in parts if p.strip()]
 
 def _send_mazda_sms_handoff_email(
     *,
@@ -595,11 +604,26 @@ def poll_once():
                 thread_snippet=thread,
             )
 
-            # ✅ Force voucher handoff if brain indicates it (or you normalize reason)
-            reason_norm = (decision.get("handoff_reason") or "").strip().lower()
-            if reason_norm in ("voucher_lookup", "voucher", "voucher_code", "voucher code"):
+            # --- Force voucher lookup => human handoff ---
+            code = _extract_voucherish_code(last_inbound)
+            
+            log.warning(
+                "MAZDA_VOUCHER_CHECK rec_id=%s inbound=%r code=%r",
+                rec_id,
+                (last_inbound or "")[:80],
+                code,
+            )
+            
+            if code:
                 decision["needs_handoff"] = True
                 decision["handoff_reason"] = "voucher_lookup"
+            
+                prefix = f"{first_name}, " if first_name else ""
+                decision["reply"] = (
+                    f"{prefix}thank you — I got your voucher code. "
+                    "I’m looping in a team member now to confirm eligibility and make sure everything is set up correctly."
+                )
+
 
             # Appointment intent still overrides
             wants_appt = _looks_like_appt_intent(last_inbound)
@@ -632,6 +656,14 @@ def poll_once():
             except Exception:
                 log.exception("Mazda SMS: failed saving outbound markers rec=%s", rec_id)
 
+            log.warning(
+                "MAZDA_DECISION rec_id=%s needs_handoff=%s reason=%r reply_preview=%r",
+                rec_id,
+                bool(decision.get("needs_handoff")),
+                (decision.get("handoff_reason") or ""),
+                (decision.get("reply") or "")[:90],
+            )
+
             # ✅ If handoff required, do Airtable flags + email notify
             if decision.get("needs_handoff"):
                 try:
@@ -650,6 +682,11 @@ def poll_once():
                     customer_phone = phone or author
                     customer_name = first_name or "Customer"
 
+                    log.warning(
+                        "MAZDA_HANDOFF_EMAIL about to send rec_id=%s to=%r cc=%r",
+                        rec_id, salesperson_email, cc_addrs
+                    )
+
                     _send_mazda_sms_handoff_email(
                         to_addr=salesperson_email,
                         cc_addrs=cc_addrs,
@@ -662,6 +699,9 @@ def poll_once():
                         reason=f"Mazda Loyalty SMS handoff: {reason}",
                         now_iso=_now_iso(),
                     )
+                    
+                    log.warning("MAZDA_HANDOFF_EMAIL sent rec_id=%s", rec_id)
+
                 except Exception:
                     log.exception("Mazda SMS: failed handoff notify rec=%s", rec_id)
 
@@ -769,7 +809,12 @@ def poll_once():
                         })
                     except Exception:
                         pass
-        
+                        
+                    log.warning(
+                        "MAZDA_HANDOFF_EMAIL about to send rec_id=%s to=%r cc=%r",
+                        rec_id, salesperson_email, cc_addrs
+                    )
+
                     _send_mazda_sms_handoff_email(
                         to_addr=salesperson_email,
                         cc_addrs=cc_addrs,
@@ -782,6 +827,8 @@ def poll_once():
                         reason=reason,
                         now_iso=_now_iso(),
                     )
+                    log.warning("MAZDA_HANDOFF_EMAIL sent rec_id=%s", rec_id)
+
                 except Exception:
                     log.exception("Mazda SMS: failed handoff notify rec=%s", rec.get("id"))
         
