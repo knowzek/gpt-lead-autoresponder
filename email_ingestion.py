@@ -1747,6 +1747,47 @@ def process_inbound_email(inbound: dict) -> None:
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     headers = inbound.get("headers") or {}
 
+    # -----------------------------------------
+    # Mazda Loyalty inbound router (SendGrid replies)
+    # IMPORTANT: Must happen BEFORE Fortellis subscription resolution
+    # -----------------------------------------
+    subj_l = (subject or "").lower()
+
+    if "mazda loyalty" in subj_l or "[mazda loyalty]" in subj_l:
+        try:
+            from mazda_loyalty import handle_mazda_loyalty_inbound_email
+            log.info("Mazda Loyalty router: handling inbound sender=%s subj=%r", sender_raw, (subject or "")[:140])
+            handle_mazda_loyalty_inbound_email(inbound=inbound, subject=subject, body_text=body_text)
+            log.info("Mazda Loyalty router: done sender=%s", sender_raw)
+        except Exception:
+            log.exception("Mazda Loyalty inbound handler failed")
+        return
+
+
+    # Mazda Loyalty: inbound reply from SendGrid
+    if "[mazda loyalty]" in (subject or "").lower():
+        sender_email = _extract_email(sender_raw).strip().lower()
+        rec = find_by_customer_email(sender_email)
+    
+        if rec:
+            rec_id = rec.get("id")
+            inbound_ts = inbound.get("timestamp") or _now_iso()
+    
+            # ✅ Stop BOTH cadences on any email engagement
+            patch_by_id(rec_id, {
+                "email_status": "convo",
+                "next_email_at": None,
+                "sms_status": "convo",
+                "next_sms_at": None,
+                "last_inbound_text": (body_text or "")[:2000],
+                "last_inbound_at": inbound_ts,
+            })
+    
+        # IMPORTANT: return so this does NOT go through Fortellis opp logic
+        return
+
+
+
     log.info(
         "DEBUG resolve_subscription from process_inbound_email function - the kbb flow?: inbound.subscription_id=%r inbound.subscriptionId=%r inbound.source=%r inbound.to=%r headers_keys=%s headers=%r",
         inbound.get("subscription_id"),

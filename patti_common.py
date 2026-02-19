@@ -397,4 +397,69 @@ def rewrite_sched_cta_for_booked(body_html: str) -> str:
     )
     return body_html
 
+def build_patti_footer(rooftop_name: str) -> str:
+    rt = (ROOFTOP_INFO.get(rooftop_name) or {})
+
+    img_url      = rt.get("signature_img") or "https://prod.tvmimageservice.com/images/GetLibraryImage?fileNameOrId=664005&Width=0&Height=0&logo=y"
+    patti_email  = rt.get("patti_email")   or "patti@pattersonautos.com"
+    dealer_site  = (rt.get("website") or "https://www.pattersonautos.com").rstrip("/")
+    dealer_addr  = rt.get("address")       or ""
+    logo_alt     = f"Patti | {rooftop_name}"
+
+    clean_site = dealer_site.replace("https://", "").replace("http://", "")
+
+    return f"""
+<table width="650" border="0" cellspacing="0" cellpadding="0" style="margin-top:18px;border-collapse:collapse;">
+  <tr>
+    <td style="padding:14px 16px;border:1px solid #e2e2e2;border-radius:4px;background-color:#fafafa;">
+      <table width="100%" border="0" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+        <tr>
+          <!-- LEFT: logo -->
+          <td width="260" valign="top" align="left" style="padding-right:20px;">
+            <img src="{img_url}"
+                 alt="{logo_alt}"
+                 width="240"
+                 border="0"
+                 style="display:block;height:auto;max-width:240px;">
+          </td>
+
+          <!-- RIGHT: Patti + contact details -->
+          <td valign="top" align="left"
+              style="font-family:Arial, Helvetica, sans-serif;color:#222222;vertical-align:top;">
+
+            <!-- Patti block -->
+            <div style="font-size:14px;line-height:18px;margin-bottom:8px;">
+              <strong>Patti</strong><br>
+              Virtual Assistant | {rooftop_name}
+            </div>
+
+            <!-- Contact -->
+            <div style="font-size:13px;line-height:20px;margin-bottom:8px;">
+              <div>
+                <strong>Email:</strong>
+                <a href="mailto:{patti_email}" style="color:#0066cc;text-decoration:none;">
+                  {patti_email}
+                </a>
+              </div>
+              <div>
+                <strong>Website:</strong>
+                <a href="{dealer_site}" style="color:#0066cc;text-decoration:none;">
+                  {clean_site}
+                </a>
+              </div>
+            </div>
+
+            <!-- Address -->
+            <div style="font-size:13px;line-height:20px;color:#333333;">
+              <div>{rooftop_name}</div>
+              <div>{dealer_addr}</div>
+            </div>
+
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+    """.strip()
 

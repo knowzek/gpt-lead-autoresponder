@@ -60,7 +60,7 @@ def _as_str(v) -> str:
 
 def list_records_by_view(view_name: str, *, max_records: int = 50):
     params = {"view": view_name, "pageSize": max_records}
-    data = _request("GET", "", params=params)  # "" hits /{table}
+    data = _request("GET", BASE_URL, params=params)
     return (data or {}).get("records") or []
 
 
