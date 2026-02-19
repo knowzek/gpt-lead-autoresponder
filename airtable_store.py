@@ -63,6 +63,20 @@ def list_records_by_view(view_name: str, *, max_records: int = 50):
     data = _request("GET", BASE_URL, params=params)
     return (data or {}).get("records") or []
 
+def find_by_conversation_id(conversation_id: str):
+    """
+    Returns Airtable Conversation record (or None) by conversation_id.
+    """
+    cid = (conversation_id or "").strip()
+    if not cid:
+        return None
+
+    # assumes you already have a Conversations table configured and a helper like _airtable_list()
+    formula = f"{{conversation_id}} = '{cid}'"
+    rows = list_records(table="Conversations", formula=formula, max_records=1)  # adapt to your existing helper
+    return rows[0] if rows else None
+
+
 
 def canonicalize_opp(opp: dict, fields: dict) -> dict:
     """
