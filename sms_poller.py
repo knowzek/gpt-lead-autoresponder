@@ -362,18 +362,13 @@ def _send_mazda_sms_handoff_email(
     )
 
 
-def mark_sms_convo_on_inbound(*, airtable_record_id: str, inbound_text: str):
-    """
-    On inbound SMS, switch this record into convo mode so cadence nudges stop.
-    Clears next_sms_at so it won't re-queue.
-    """
-    now_iso = _now_iso()
-
-    patch_by_id(airtable_record_id, {
+def mark_sms_convo_on_inbound(*, rec_id: str, inbound_text: str, inbound_ts: str | None = None):
+    now_iso = inbound_ts or _now_iso()
+    patch_by_id(rec_id, {
         "sms_status": "convo",
         "last_inbound_text": inbound_text,
         "last_inbound_at": now_iso,
-        "next_sms_at": None,   # Airtable: None clears a date field
+        "next_sms_at": None,
     })
 
 
@@ -734,132 +729,6 @@ def poll_once():
 
         subscription_id = (opp.get("subscription_id") or opp.get("dealer_key") or "").strip()
         opp_id = (opp.get("opportunityId") or opp.get("opportunity_id") or "").strip()
-        
-        # -----------------------------
-        # Mazda Loyalty SMS path (no Fortellis opp_id)
-        # -----------------------------
-        if not subscription_id or not opp_id:
-            fields = rec.get("fields") or {}
-            program = (fields.get("program") or "").strip().lower()
-            bucket = (fields.get("bucket") or "").strip()
-            rooftop_name = (fields.get("rooftop_name") or fields.get("rooftop") or "").strip()
-            first_name = (fields.get("first_name") or fields.get("customer_first_name") or "").strip()
-        
-            # Heuristic: treat as Mazda Loyalty if bucket exists or program says so
-            is_mazda = ("mazda" in program) or bool(bucket)
-        
-            if not is_mazda:
-                log.warning("SMS poll: missing subscription_id/opp_id and not Mazda; sub=%r opp_id=%r", subscription_id, opp_id)
-                continue
-        
-            # Stop Mazda SMS cadence on engagement + store inbound markers
-            try:
-                save_opp(opp, extra_fields={
-                    "sms_status": "convo",
-                    "next_sms_at": None,
-                    "last_sms_inbound_message_id": msg_id,
-                    "last_sms_inbound_at": last.get("timestamp") or _now_iso(),
-                    "last_inbound_text": (last_inbound or "")[:2000],
-                })
-            except Exception:
-                log.exception("Mazda SMS: failed to patch convo status rec=%s", rec.get("id"))
-        
-            # Build Mazda SMS reply via GPT
-            decision = generate_mazda_loyalty_sms_reply(
-                first_name=first_name,
-                bucket=bucket,
-                rooftop_name=rooftop_name,
-                last_inbound=last_inbound,
-                thread_snippet=thread,
-            )
-
-            # ✅ Voucher code / voucher lookup MUST handoff to human
-            if (decision.get("handoff_reason") or "").strip().lower() in ("voucher_lookup", "voucher", "voucher code", "voucher_code"):
-                decision["needs_handoff"] = True
-                decision["handoff_reason"] = "voucher_lookup"
-
-        
-            # Deterministic appointment intent => force handoff + single narrowing question
-            wants_appt = _looks_like_appt_intent(last_inbound)
-            if wants_appt:
-                decision["needs_handoff"] = True
-                decision["handoff_reason"] = "appointment"
-                prefix = f"{first_name}, " if first_name else ""
-                # single question that narrows time
-                decision["reply"] = f"{prefix}thanks — I’m looping in a team member to lock in a time. What day works best, and about what time?"
-        
-            reply_text = (decision.get("reply") or "").strip()
-            if not reply_text:
-                reply_text = "Thanks — if you have your 16-digit voucher code, text it here and I’ll verify it."
-        
-            # Send SMS
-            to_number = author
-            if _sms_test_enabled() and _sms_test_to():
-                to_number = _sms_test_to()
-        
-            try:
-                send_sms(from_number=owner, to_number=to_number, body=reply_text)
-                log.info("Mazda SMS: replied to=%s (test=%s)", to_number, _sms_test_enabled())
-            except Exception:
-                log.exception("Mazda SMS: failed sending reply rec=%s", rec.get("id"))
-        
-            # Metrics + outbound markers (fail-open)
-            try:
-                save_opp(opp, extra_fields={
-                    "last_sms_sent_at": _now_iso(),
-                    "sms_nudge_count": int(opp.get("sms_nudge_count") or 0) + 1,
-                    "AI Texts Sent": int(opp.get("AI Texts Sent") or 0) + 1,
-                })
-            except Exception:
-                log.exception("Mazda SMS: failed saving sent metrics rec=%s", rec.get("id"))
-        
-            # Human handoff notification (salesperson_email + CC managers)
-            if decision.get("needs_handoff"):
-                try:
-                    salesperson_email = (fields.get("salesperson_email") or "").strip()
-                    if not salesperson_email:
-                        salesperson_email = (os.getenv("HUMAN_REVIEW_FALLBACK_TO") or "").strip() or "knowzek@gmail.com"
-        
-                    cc_addrs = _parse_cc_env()
-                    customer_email = (fields.get("email") or fields.get("customer_email") or "").strip()
-                    customer_phone = (fields.get("customer_phone") or fields.get("phone") or opp.get("customer_phone") or "").strip() or author
-                    customer_name = first_name or "Customer"
-                    reason = f"Mazda Loyalty SMS handoff: {decision.get('handoff_reason') or 'other'}"
-        
-                    # Flag Airtable fields (if present)
-                    try:
-                        save_opp(opp, extra_fields={
-                            "Needs Reply": True,
-                            "Human Review Reason": reason,
-                        })
-                    except Exception:
-                        pass
-                        
-                    log.warning(
-                        "MAZDA_HANDOFF_EMAIL about to send rec_id=%s to=%r cc=%r",
-                        rec_id, salesperson_email, cc_addrs
-                    )
-
-                    _send_mazda_sms_handoff_email(
-                        to_addr=salesperson_email,
-                        cc_addrs=cc_addrs,
-                        rooftop_name=rooftop_name or "Mazda",
-                        customer_name=customer_name,
-                        customer_email=customer_email or "unknown",
-                        customer_phone=customer_phone or "unknown",
-                        bucket=bucket,
-                        inbound_text=last_inbound,
-                        reason=reason,
-                        now_iso=_now_iso(),
-                    )
-                    log.warning("MAZDA_HANDOFF_EMAIL sent rec_id=%s", rec_id)
-
-                except Exception:
-                    log.exception("Mazda SMS: failed handoff notify rec=%s", rec.get("id"))
-        
-            # ✅ Mazda path handled; skip Fortellis branch
-            continue
-
 
         patti = opp.setdefault("patti", {})
         
@@ -929,7 +798,6 @@ def poll_once():
         except Exception:
             log.exception("SMS poll: failed to log inbound SMS to CRM opp=%s", opp.get("opportunityId"))
 
-        conversation_record_id = _get_conversation_record_id_by_opportunity_id(opp_id) or ""
         timestamp = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
         resolved_message_id = (
             _normalize_message_id(msg_id) if msg_id else _generate_message_id(opp_id, timestamp, "", author, body)
@@ -1115,10 +983,6 @@ def poll_once():
             except Exception:
                 log.exception("SMS poll: failed to schedule appointment opp=%s appt_iso=%r", opp.get("opportunityId"), appt_iso)
 
-            except Exception:
-                log.exception(
-                    "SMS poll: failed to schedule appointment opp=%s appt_iso=%r", opp.get("opportunityId"), appt_iso
-                )
             try:
                 activity_update_convo = Conversation(
                     conversation_id=conversation_id,
@@ -1146,8 +1010,6 @@ def poll_once():
                 from_number=owner,
                 to_number=to_number,
                 body=reply_text,
-                source=source,
-                opp_id=opp.get("opportunityId", ""),
             )
             log.info("SMS poll: replied to=%s (test=%s)", to_number, _sms_test_enabled())
             
