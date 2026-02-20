@@ -8,4 +8,6 @@ imapclient
 elasticsearch==9.1.1
 Flask>=2.3
 gunicorn>=21.2
-
+bs4
+pydantic_settings==2.12.0
+email-validator>=2.0.0

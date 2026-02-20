@@ -227,22 +227,15 @@ def _first_phone(cust: dict) -> str:
     return ""
 
 def _vehicle_str(opportunity: dict, fresh_opp: Optional[dict]) -> str:
-    sought = (fresh_opp or {}).get("soughtVehicles") or opportunity.get("soughtVehicles") or []
-    if isinstance(sought, list) and sought:
-        primary = None
-        for v in sought:
-            if isinstance(v, dict) and v.get("isPrimary"):
-                primary = v
-                break
-        if not primary and isinstance(sought[0], dict):
-            primary = sought[0]
-        if primary:
-            year = str(primary.get("yearFrom") or primary.get("year") or "").strip()
-            make = str(primary.get("make") or "").strip()
-            model = str(primary.get("model") or "").strip()
-            trim = str(primary.get("trim") or "").strip()
-            return f"{year} {make} {model} {trim}".strip()
-    return ""
+    """
+    Build vehicle display string from Airtable-hydrated fields (canonical source).
+    Falls back to empty string if no vehicle data is available.
+    """
+    year  = (opportunity.get("year") or "").strip()
+    make  = (opportunity.get("make") or "").strip()
+    model = (opportunity.get("model") or "").strip()
+    trim  = (opportunity.get("trim") or "").strip()
+    return f"{year} {make} {model} {trim}".strip()
 
 def _primary_salesperson(sales_team: Any) -> Tuple[str, str]:
     """
@@ -274,17 +267,28 @@ def resolve_salesperson_contact(opportunity: dict, fresh_opp: Optional[dict]) ->
     name, email = _primary_salesperson(st)
     return {"name": name or "Sales Team", "email": email or ""}
 
-def resolve_primary_sales_email(fresh_opp: dict) -> str | None:
-    st = (fresh_opp or {}).get("salesTeam") or []
+def resolve_primary_sales_email(
+    fresh_opp: dict | None = None,
+    opportunity: dict | None = None,
+) -> str | None:
+
+    # ✅ Prefer Fortellis shape
+    st = (fresh_opp or {}).get("salesTeam")
+
+    # ✅ Fallback to Airtable-hydrated opp
+    if not st:
+        st = (opportunity or {}).get("salesTeam")
+
     if not isinstance(st, list) or not st:
         return None
 
-    # Prefer primary salesperson/BDC
+    # Prefer primary
     primary = None
     for p in st:
-        if isinstance(p, dict) and p.get("isPrimary"):
+        if isinstance(p, dict) and str(p.get("isPrimary")).lower() in ("true", "1", "yes"):
             primary = p
             break
+
     if not primary:
         primary = st[0] if isinstance(st[0], dict) else None
 
@@ -296,6 +300,7 @@ def resolve_primary_sales_email(fresh_opp: dict) -> str | None:
         return None
 
     return SALESTEAM_ID_TO_EMAIL.get(sid)
+
 
 # -----------------------
 # Fast triage rules
@@ -461,6 +466,33 @@ def classify_inbound_email(email_text: str, *, provider_template: bool = False) 
 
     t_lower = t_short.lower()
 
+    # ✅ SAFE AUTO-REPLY OVERRIDE:
+    # Common lead intents like scheduling/availability should NOT require human review.
+    # We can auto-reply using hedged language ("I can confirm/check availability").
+    SAFE_INTENT_RE = re.compile(
+        r"\b("
+        r"available|availability|still available|still there|in stock|"
+        r"test drive|drive it|"
+        r"appointment|schedule|set up a time|book|"
+        r"what times|what time|times are available|"
+        r"does that work|that works|works for me|yes that works|"
+        r"tomorrow|today|tonight|this week|this weekend|"
+        r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+        r"\b\d{1,2}(:\d{2})?\s?(am|pm)\b"
+        r")\b",
+        re.IGNORECASE
+    )
+
+    # If it's basically a normal lead reply/intent, treat as safe to auto-reply.
+    # We'll enforce safe wording in the response generator (hedged language).
+    if SAFE_INTENT_RE.search(t_short):
+        return {
+            "classification": "AUTO_REPLY_SAFE",
+            "confidence": 0.88,
+            "reason": "Common lead intent (availability/scheduling). Auto-reply is safe using hedged language (offer to check/confirm availability and propose times)."
+        }
+
+
     if provider_template:
         # Extract only the customer-written part from the provider template
         comment = extract_customer_comment_from_provider(t_short)  # you already have this helper
@@ -583,7 +615,10 @@ def handoff_to_human(
     salesperson_name = sp.get("name") or "Sales Team"
     
     # ✅ Use your Fortellis-ID→email mapping (the same one you use to route the email)
-    resolved_sales_email = resolve_primary_sales_email(fresh_opp) or ""
+    resolved_sales_email = (
+        resolve_primary_sales_email(fresh_opp=fresh_opp, opportunity=opportunity)
+        or ""
+    )
     salesperson_email = resolved_sales_email  # for the body
 
 

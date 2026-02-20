@@ -268,11 +268,12 @@ for subscription_id in SUB_MAP.values():   # iterate real Subscription-Ids
             "source": op.get("source"),
             "upType": op.get("upType"),           # <-- keep for later logs/debug
             # carry common fields you already read later:
-            "soughtVehicles": op.get("soughtVehicles"),
             "salesTeam": op.get("salesTeam"),
             "customer": op.get("customer"),
             "tradeIns": op.get("tradeIns"),
             "createdBy": op.get("createdBy"),
+            # NOTE: soughtVehicles intentionally NOT stored here.
+            # Vehicle data is written to Airtable fields at ingestion time.
         })
     
     eligible_count = len(items)
@@ -315,10 +316,10 @@ if USE_EMAIL_MODE:
         "salesTeam": [{"firstName": "Pavan", "lastName": "Singh"}],
         "source": lead.get("source", "Email"),
         "subSource": "",
-        "soughtVehicles": [lead.get("vehicle", {})],
         "customer": {"id": "email"},
         "tradeIns": [],
         "createdBy": "Patti Assistant",
+        # Vehicle data populated from Airtable fields at ingestion
     }
     inquiry_text = lead.get("notes", "")
 else:
@@ -527,13 +528,20 @@ dealership = (
 
 contact_info = CONTACT_INFO_MAP.get(dealership, CONTACT_INFO_MAP["Patterson Auto Group"])
 
-# === Vehicle & SRP link =============================================
-vehicle = (opportunity.get("soughtVehicles") or [{}])[0]
-make  = vehicle.get("make", "")
-model = vehicle.get("model", "")
-year  = vehicle.get("yearFrom", "")
-trim  = vehicle.get("trim", "")
-stock = vehicle.get("stockNumber", "")
+# === Vehicle & SRP link (Airtable fields are canonical) ==============
+# At this stage in main.py the opportunity dict comes from Fortellis directly,
+# so we extract vehicle data from soughtVehicles for the initial processing
+# but will be migrated to Airtable fields after ingestion.
+# For main.py (legacy first-run path), read from Fortellis opp directly.
+from fortellis import select_vehicle_from_sought, map_vehicle_to_airtable_fields
+_sought = opportunity.get("soughtVehicles") or []
+_selected = select_vehicle_from_sought(_sought)
+_vf = map_vehicle_to_airtable_fields(_selected)
+make  = _vf["make"]
+model = _vf["model"]
+year  = _vf["year"]
+trim  = _vf["trim"]
+stock = _vf["stockNumber"]
 
 vehicle_str = f"{year} {make} {model} {trim}".strip() or "one of our vehicles"
 base_url = DEALERSHIP_URL_MAP.get(dealership)

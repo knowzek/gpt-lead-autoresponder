@@ -19,10 +19,62 @@ from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
 
+VEHICLE_Q_TOKENS = (
+    "what vehicle", "which vehicle", "what car", "which car",
+    "what did i inquire", "what am i looking", "what was i looking",
+)
+
+HANDOFF_REASONS = {
+    "pricing",
+    "phone_call",
+    "angry",
+    "complaint",
+    "missing_vehicle",
+    "schedule_issue",
+    "other",
+}
+
+def _handoff(reply: str, reason: str):
+    r = reason if reason in HANDOFF_REASONS else "other"
+    return {
+        "reply": reply,
+        "intent": "handoff",
+        "needs_handoff": True,
+        "handoff_reason": r,
+        "include_optout_footer": False,
+    }
+
+def _is_vehicle_question(t: str) -> bool:
+    tl = (t or "").lower()
+    return any(x in tl for x in VEHICLE_Q_TOKENS)
+
+def _vehicle_missing(vehicle: str) -> bool:
+    v = (vehicle or "").strip().lower()
+    return (not v) or (v == "the vehicle you asked about") or (v == "the car you asked about")
+
+
 log = logging.getLogger("patti.sms_brain")
 
 OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY") or "").strip()
 SMS_MODEL = (os.getenv("SMS_OPENAI_MODEL") or os.getenv("OPENAI_MODEL") or "gpt-4o-mini").strip()
+
+STORE_HOURS = (os.getenv("STORE_HOURS_TEXT") or """Friday 9 AM–7 PM
+Saturday 9 AM–8 PM
+Sunday 10 AM–6 PM
+Monday 9 AM–7 PM
+Tuesday 9 AM–7 PM
+Wednesday 9 AM–7 PM
+Thursday 9 AM–7 PM""").strip()
+
+WHY_BUYS = [
+    "No addendums or dealer markups",
+    "Orange County Top Workplace for 20 years running",
+    "Community driven",
+    "Master technicians and experienced staff",
+]
+
+WHY_BUY_TEXT = " • ".join(WHY_BUYS)
+
 
 _oai = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
@@ -47,6 +99,8 @@ Hard rules:
 - If you asked a question and the customer answered it, acknowledge it and ask the next single best question OR tell them what happens next.
 - If they say "no thanks" after you offered an appointment/call, treat it as declining that option and continue helping.
 - Keep replies under ~320 characters unless asked a complex question.
+- If you do not have a specific fact (vehicle, name, availability), say you’ll check and offer to pass along to their assigned salesteam. Do NOT guess.
+- If asked something like "why buy from you", use ONLY the provided "Why buy from us" bullets. Pick 1–2 max and keep it conversational. Do NOT invent awards, policies, pricing claims, or guarantees not listed.
 
 Output format:
 Return ONLY valid JSON with keys:
@@ -54,7 +108,7 @@ Return ONLY valid JSON with keys:
   "reply": string,
   "intent": "reply"|"handoff"|"opt_out"|"close",
   "needs_handoff": boolean,
-  "handoff_reason": ""|"pricing"|"policy"|"other",
+  "handoff_reason": ""|"pricing"|"phone_call"|"angry"|"complaint"|"missing_vehicle"|"schedule_issue"|"other",
   "include_optout_footer": boolean
 }
 """
@@ -79,6 +133,28 @@ def _safe_json_loads(s: str) -> Dict[str, Any]:
         return json.loads(s)
     except Exception:
         return {}
+
+def _extract_first_json_object(text: str) -> Dict[str, Any]:
+    text = (text or "").strip()
+    if not text:
+        return {}
+    # Fast path
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+
+    # Try to grab the first {...} block
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        snippet = text[start:end+1]
+        try:
+            return json.loads(snippet)
+        except Exception:
+            return {}
+    return {}
+
 
 
 def build_user_prompt(
@@ -120,8 +196,11 @@ def build_user_prompt(
         f"- Customer first name: {customer_first_name}\n"
         f"- Customer phone: {customer_phone}\n"
         f"- Assigned rep (human): {salesperson}\n"
+        f"- Store hours:\n{STORE_HOURS}\n"
+        f"- Why buy from us (use when asked 'why buy from you/us/Tustin'): {WHY_BUY_TEXT}\n"
         f"- Vehicle: {vehicle}\n"
         f"- include_optout_footer: {include_optout_footer}\n"
+        f"{recent}\n"
         f"\n"
         f"Customer inbound SMS:\n{last_inbound}\n"
         f"\n"
@@ -142,7 +221,7 @@ def generate_sms_reply(
 ) -> Dict[str, Any]:
     if not _oai:
         return {
-            "reply": "Thanks — what day/time works best for you to come in?",
+            "reply": "Thanks, what day/time works best for you to come in?",
             "intent": "reply",
             "needs_handoff": False,
             "handoff_reason": "",
@@ -170,13 +249,33 @@ def generate_sms_reply(
         # Pricing/OTD → always handoff; never let the model decide this
         log.info("sms_brain GATE=pricing inbound=%r", inbound[:120])
 
-        return {
-            "reply": "Totally — our team is checking the out-the-door numbers now. Are you paying cash or financing?",
-            "intent": "handoff",
-            "needs_handoff": True,
-            "handoff_reason": "pricing",
-            "include_optout_footer": False,
-        }
+        return _handoff(
+            "I’ll have the team follow up with pricing details shortly.",
+            "pricing",
+        )
+
+    if _is_vehicle_question(last_inbound) and _vehicle_missing(vehicle):
+      return _handoff(
+        "Let me confirm and a team member will follow up shortly.",
+        "missing_vehicle",
+    )
+
+    PHONE_TOKENS = ("call me", "phone call", "give me a call", "can you call", "call back", "ring me")
+    ANGRY_TOKENS = ("angry", "upset", "mad", "frustrated", "annoyed", "ridiculous", "terrible", "worst")
+    
+    if _contains_any(inbound, PHONE_TOKENS):
+        log.info("sms_brain GATE=phone_call inbound=%r", inbound[:120])
+        return _handoff(
+            "Absolutely — I’ll have someone give you a quick call shortly.",
+            "phone_call",
+        )
+    
+    if _contains_any(inbound, ANGRY_TOKENS):
+        log.info("sms_brain GATE=angry inbound=%r", inbound[:120])
+        return _handoff(
+            "I’m sorry about that. I’m looping in a manager now so we can help.",
+            "angry",
+        )
 
     user_prompt = build_user_prompt(
         rooftop_name=rooftop_name,
@@ -206,17 +305,37 @@ def generate_sms_reply(
     # Then add the final instruction as the last user message
     messages.append({"role": "user", "content": user_prompt})
 
+    data = {}
+
     try:
-        resp = _oai.chat.completions.create(
-            model=SMS_MODEL,
-            temperature=0.3,
-            messages=messages,
-        )
+        try:
+            # Preferred: force JSON-only output if supported
+            resp = _oai.chat.completions.create(
+                model=SMS_MODEL,
+                temperature=0.3,
+                messages=messages,
+                response_format={"type": "json_object"},
+            )
+        except TypeError:
+            # Older SDK/runtime: response_format not supported
+            resp = _oai.chat.completions.create(
+                model=SMS_MODEL,
+                temperature=0.3,
+                messages=messages,
+            )
+    
         content = (resp.choices[0].message.content or "").strip()
-        data = _safe_json_loads(content)
+        data = _extract_first_json_object(content)
+
+        if data.get("needs_handoff") and not data.get("handoff_reason"):
+            data["handoff_reason"] = "other"
+            if not data.get("handoff_reason"):
+                data["handoff_reason"] = "other"
+    
     except Exception as e:
         log.warning("sms_brain OpenAI call failed: %r", e)
         data = {}
+
 
     reply = (data.get("reply") or "").strip()
     intent = (data.get("intent") or "reply").strip()

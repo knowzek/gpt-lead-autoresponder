@@ -1,6 +1,7 @@
 # web_app.py
 import logging
 import json
+import re
 from datetime import datetime as _dt
 from flask import Flask, request, jsonify
 import os
@@ -8,32 +9,43 @@ import os
 from email_ingestion import process_inbound_email
 from kbb_adf_ingestion import process_kbb_adf_notification
 from sms_ingestion import process_inbound_sms
+from sms_poller import send_sms_cadence_once
 
 log = logging.getLogger("patti.web")
 app = Flask(__name__)
 
+
+KBB_RULES = [
+    # strong phrases (safe anywhere)
+    ("kelley_blue_book", re.compile(r"(?i)kelley\s+blue\s+book")),
+    ("instant_cash_offer", re.compile(r"(?i)instant\s+cash\s+offer")),
+    ("offer_alert", re.compile(r"(?i)\boffer\s+alert\b")),
+
+    # if you insist on "kbb", require word boundaries
+    ("kbb_word", re.compile(r"(?i)\bkbb\b")),
+]
+
 def _looks_like_kbb(inbound: dict) -> bool:
-    """
-    Conservative KBB detector. If this returns True, we DO NOT want this
-    internet-leads service touching Airtable at all.
-    """
-    subj = (inbound.get("subject") or "").lower()
-    frm = (inbound.get("from") or "").lower()
-    body = ((inbound.get("body_text") or "") + " " + (inbound.get("body_html") or "")).lower()
+    subj = (inbound.get("subject") or "")
+    frm  = (inbound.get("from") or "")
+    # ⚠️ Do NOT scan full HTML. If you must, strip URLs first (see Fix #2).
+    body_text = (inbound.get("body_text") or "")
 
-    # Subject/body keywords commonly found in KBB ICO / offer emails
-    kbb_keywords = [
-        "kbb", "kelley blue book", "instant cash offer", "offer alert",
-        "autotrader-tradein", "tradein@",
-    ]
+    haystacks = {
+        "subject": subj,
+        "from": frm,
+        "body_text": body_text,
+    }
 
-    # If any strong signal hits, treat as KBB.
-    for kw in kbb_keywords:
-        if kw in subj or kw in frm or kw in body:
-            return True
+    for name, rx in KBB_RULES:
+        for where, txt in haystacks.items():
+            m = rx.search(txt)
+            if m:
+                snip = txt[max(0, m.start()-60): m.end()+60].replace("\n","\\n").replace("\r","\\r")
+                log.warning("🛑 KBB detect hit rule=%s in=%s snip=%r", name, where, snip)
+                return True
 
     return False
-
 
 # -----------------------------
 #   KBB ADF Inbound Endpoint
@@ -186,23 +198,21 @@ def email_inbound():
 def sms_inbound():
     """
     Webhook endpoint called by GoTo for inbound SMS.
-    For now: log raw payload, apply simple rules, reply immediately.
+    Mazda service: route directly to Mazda Loyalty handler (Airtable + GPT + handoff).
     """
     try:
         payload_json = request.get_json(silent=True) or {}
-        raw_text = ""
-        try:
-            raw_text = (request.data or b"").decode("utf-8", errors="ignore")
-        except Exception:
-            raw_text = ""
-
         log.info("📥 Incoming SMS webhook")
-        out = process_inbound_sms(payload_json, raw_text=raw_text)
+
+        from sms_poller import handle_mazda_loyalty_inbound_sms_webhook
+        out = handle_mazda_loyalty_inbound_sms_webhook(payload_json=payload_json)
+
         return jsonify(out), 200
 
     except Exception as e:
         log.exception("SMS ingestion failed: %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 from sms_poller import poll_once
 
@@ -214,6 +224,16 @@ def sms_poll():
         return jsonify({"ok": False, "error": "unauthorized"}), 401
 
     poll_once()
+    return jsonify({"ok": True}), 200
+
+
+@app.route("/sms-cadence", methods=["POST"])
+def sms_cadence():
+    key = request.headers.get("X-Admin-Key", "")
+    if key != os.getenv("ADMIN_KEY", ""):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    send_sms_cadence_once()
     return jsonify({"ok": True}), 200
 
 

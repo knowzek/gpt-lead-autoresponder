@@ -410,14 +410,13 @@ def seed_state(firstName, lastName, email, phone, make, model, year, source, not
         "_subscription_id": os.environ.get("TEST_SUB_ID", "bb4a4f18-1693-4450-a08e-40d8df30c139"),
         "source": source or "Website",
         "upType": "Internet",
-        "soughtVehicles": [{
-            "isPrimary": True,
-            "isNew": True,
-            "yearFrom": int(year or 2025),
-            "yearTo": int(year or 2025),
-            "make": make or "Mazda",
-            "model": model or "CX-5"
-        }],
+        # Vehicle data stored in Airtable fields (canonical)
+        "year": str(year or 2025),
+        "make": make or "Mazda",
+        "model": model or "CX-5",
+        "trim": "",
+        "vin": "",
+        "stockNumber": "",
         "salesTeam": [{
             "firstName": "Veronica",
             "lastName": "Paco",
