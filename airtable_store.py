@@ -680,11 +680,57 @@ def _safe_json_loads(s: str | None):
         return {}
 
 
+# airtable_store.py
+import time
+import random
+import requests
+
 def _request(method: str, url: str, **kwargs):
-    r = requests.request(method, url, headers=HEADERS, timeout=30, **kwargs)
-    if r.status_code >= 400:
-        raise RuntimeError(f"Airtable {method} failed {r.status_code}: {r.text[:800]}")
-    return r.json()
+    """
+    Airtable wrapper with retry/backoff for transient errors.
+    Retries on: 429, 500, 502, 503, 504 + network timeouts.
+    """
+    max_attempts = int(os.getenv("AIRTABLE_RETRY_MAX", "4"))
+    base_sleep = float(os.getenv("AIRTABLE_RETRY_BASE_SLEEP", "0.6"))
+
+    last_err = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            r = requests.request(method, url, headers=HEADERS, timeout=30, **kwargs)
+
+            # Success
+            if 200 <= r.status_code < 300:
+                return r.json()
+
+            # Retryable
+            if r.status_code in (429, 500, 502, 503, 504):
+                # Airtable sometimes sends Retry-After (esp 429)
+                retry_after = r.headers.get("Retry-After")
+                if retry_after:
+                    sleep_s = float(retry_after)
+                else:
+                    # exponential backoff + jitter
+                    sleep_s = base_sleep * (2 ** (attempt - 1)) + random.uniform(0, 0.25)
+
+                last_err = RuntimeError(f"Airtable {method} failed {r.status_code}: {r.text[:800]}")
+                if attempt < max_attempts:
+                    time.sleep(sleep_s)
+                    continue
+                raise last_err
+
+            # Non-retryable 4xx etc
+            raise RuntimeError(f"Airtable {method} failed {r.status_code}: {r.text[:800]}")
+
+        except (requests.Timeout, requests.ConnectionError) as e:
+            last_err = e
+            if attempt < max_attempts:
+                sleep_s = base_sleep * (2 ** (attempt - 1)) + random.uniform(0, 0.25)
+                time.sleep(sleep_s)
+                continue
+            raise
+
+    # should never hit
+    raise last_err or RuntimeError("Airtable request failed (unknown)")
 
 
 def find_by_opp_id(opp_id: str) -> dict | None:
