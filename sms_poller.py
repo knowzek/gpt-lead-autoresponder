@@ -572,7 +572,12 @@ def poll_once():
 
 
         # Find the lead by author phone (customer)
-        rec = find_by_customer_phone_loose(author)
+        try:
+            rec = find_by_customer_phone_loose(author)
+        except Exception as e:
+            log.warning("SMS poll: Airtable lookup failed (will skip this convo) author=%s err=%r", author, e)
+            continue
+        
         if not rec:
             log.info("SMS poll: no lead match for author=%s body=%r", author, body[:80])
             continue
