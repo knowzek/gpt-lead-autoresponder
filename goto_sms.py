@@ -8,6 +8,7 @@ from airtable_store import _generate_message_id, _normalize_message_id, find_by_
 from airtable_store import log_message, _get_conversation_record_id_by_opportunity_id
 from email_ingestion import _norm_phone_e164_us
 from models.airtable_model import Message
+from rooftops import get_rooftop_info
 
 log = logging.getLogger("patti.goto_sms")
 
@@ -101,6 +102,10 @@ def _get_access_token() -> str:
 
 
 def send_sms(*, from_number: str, to_number: str, body: str) -> dict:
+    """
+    Send one SMS via GoTo.
+    Returns the API response JSON (includes ids you can store in Airtable).
+    """
     # ✅ Global SMS kill switch (no redeploy needed; flip env var)
     if (os.getenv("SMS_KILL_SWITCH", "0").strip() == "1"):
         log.warning(
@@ -116,13 +121,13 @@ def send_sms(*, from_number: str, to_number: str, body: str) -> dict:
             "conversationId": "",
             "id": "",
         }
-    """
-    Send one SMS via GoTo.
-    Returns the API response JSON (includes ids you can store in Airtable).
-    """
+    
     access_token = _get_access_token()
-    rooftop_name = rooftop_name or ""
-    rooftop_sender = rooftop_sender or ""
+    rooftop_name = ""
+    rooftop_sender = ""
+    rec = None
+    opp_id = ""
+    record_id = ""
 
     payload = {
         "ownerPhoneNumber": from_number,
@@ -137,10 +142,6 @@ def send_sms(*, from_number: str, to_number: str, body: str) -> dict:
     }
 
     timestamp = datetime.now(timezone.utc).isoformat()
-    opp_id = opp_id or ""
-    record_id = _get_conversation_record_id_by_opportunity_id(opp_id) or ""
-    if not record_id:
-        raise RuntimeError(f"Conversation does exists with opp_id: {opp_id}")
 
     r = requests.post(GOTO_SMS_URL, json=payload, headers=headers, timeout=30)
 
@@ -158,6 +159,16 @@ def send_sms(*, from_number: str, to_number: str, body: str) -> dict:
             opp = opp_from_record(rec)
     except Exception as e:
         log.error(f"Failed to fech opp (send_sms): {e}")
+
+    if rec:
+        opp_id = rec.get("opp_id", "")
+        record_id = _get_conversation_record_id_by_opportunity_id(opp_id) or ""
+        if not record_id:
+            raise RuntimeError(f"Conversation does exists with opp_id: {opp_id}")
+        subscription_id = rec.get("subscription_id", "")
+        rooftop_info = get_rooftop_info(subscription_id) or {}
+        rooftop_name = rooftop_info.get("name", "")
+        rooftop_sender = rooftop_info.get("sender", "")
 
     delivery_status = "failed" if r.status_code >= 400 else "sent"
 
