@@ -743,12 +743,12 @@ def maybe_send_tk_gm_day2_email(
 # YouTube watch URLs should use format: https://www.youtube.com/watch?v={11-char-video-id}
 KIA_WALKAROUND_VIDEOS = {
     "sportage": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",
-    "telluride": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",  # Use Sportage video as fallback
+    "telluride": "https://www.youtube.com/watch?v=fuVn118my30&list=PLnF2qTRxEjYenwcxt3rzMAxi68wnbOZkL&index=1&pp=iAQB",  # Use Sportage video as fallback
     "sorento": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",  # Use Sportage video as fallback
     "soul": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",  # Use Sportage video as fallback
-    "forte": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",  # Use Sportage video as fallback
-    "k5": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",  # Use Sportage video as fallback
-    "niro": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",  # Use Sportage video as fallback
+    "k4": "https://www.youtube.com/watch?v=ktN9oosjsa4&list=PLnF2qTRxEjYenwcxt3rzMAxi68wnbOZkL&index=5&pp=iAQB0gcJCaIKAYcqIYzv",  # Use Sportage video as fallback
+    "k5": "https://www.youtube.com/watch?v=MD0j4xM79cM&list=PLnF2qTRxEjYenwcxt3rzMAxi68wnbOZkL&index=3&pp=iAQB",  # Use Sportage video as fallback
+    "niro": "https://www.youtube.com/watch?v=MsxhwRQRICc&list=PLnF2qTRxEjYenwcxt3rzMAxi68wnbOZkL&index=4&pp=iAQB0gcJCaIKAYcqIYzv",  # Use Sportage video as fallback
     "niro ev": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",  # Use Sportage video as fallback
     "stinger": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",  # Use Sportage video as fallback
     "carnival": "https://www.youtube.com/watch?v=HT0gcR7s8Ck",  # Use Sportage video as fallback
@@ -2202,6 +2202,40 @@ def processHit(hit):
     flags = _kbb_flags_from(opportunity, fresh_opp)
     log.info("KBB detect → %s", flags)
     is_kbb = _is_exact_kbb_ico_flags(flags, opportunity)
+
+    # ------------------------------------------------------------------
+    # Vehicle + Rooftop enrichment (backfill Airtable if columns are empty)
+    # Runs once early so every downstream path has correct data.
+    # ------------------------------------------------------------------
+    try:
+        rec_id = opportunity.get("_airtable_rec_id")
+        _ex_make  = (opportunity.get("make") or "").strip()
+        _ex_model = (opportunity.get("model") or "").strip()
+        _ex_year  = (opportunity.get("year") or "").strip()
+
+        enrich_patch = {}
+
+        # 1) Vehicle fields from Fortellis soughtVehicles
+        if rec_id and not (_ex_make and _ex_model and _ex_year) and not OFFLINE_MODE:
+            sought = (fresh_opp or {}).get("soughtVehicles") or []
+            vehicle_sel = select_vehicle_from_sought(sought)
+            veh_fields = map_vehicle_to_airtable_fields(vehicle_sel)
+
+            for k in ("year", "make", "model", "trim", "vin", "stockNumber"):
+                if not (opportunity.get(k) or "").strip() and (veh_fields.get(k) or "").strip():
+                    enrich_patch[k] = veh_fields[k]
+                    opportunity[k] = veh_fields[k]
+
+        # 2) Rooftop name (always ensure it's stored)
+        if rec_id and not (fields.get("rooftop_name") or "").strip():
+            enrich_patch["rooftop_name"] = rooftop_name
+
+        if enrich_patch and rec_id and not OFFLINE_MODE:
+            from airtable_store import patch_by_id as _patch
+            _patch(rec_id, enrich_patch)
+            log.info("Enrichment backfill opp=%s fields=%s", opportunityId, list(enrich_patch.keys()))
+    except Exception as e:
+        log.warning("Enrichment backfill failed opp=%s: %s", opportunityId, e)
 
     # Ensure is_kbb is always defined before use
     if is_kbb and not RUN_KBB:
@@ -3924,17 +3958,22 @@ def send_first_touch_email(
 
         # ✅ Only persist fields NOT already handled by mark_ai_email_sent() inside send_patti_email
         if not OFFLINE_MODE:
-            airtable_save(
-                opportunity,
-                extra_fields={
+            first_touch_extra = {
                     "ab_variant": variant,
                     "first_email_sent_at": opportunity["first_email_sent_at"],
                     "mode": "cadence",
                     "last_template_day_sent": 1,
                     "follow_up_at": next_due,
                     "followUP_count": 0,
-                },
-            )
+                    "rooftop_name": rooftop_name,
+            }
+            # Include vehicle fields if populated (ensures Airtable columns are filled)
+            for _vk in ("year", "make", "model", "trim", "vin", "stockNumber"):
+                _vv = (opportunity.get(_vk) or "").strip()
+                if _vv:
+                    first_touch_extra[_vk] = _vv
+
+            airtable_save(opportunity, extra_fields=first_touch_extra)
 
     else:
         log.warning(
