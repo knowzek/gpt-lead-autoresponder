@@ -1800,6 +1800,29 @@ def process_inbound_email(inbound: dict) -> None:
 
     # 🚫 Skip internal Patterson emails (Patti gets CC'd on vendor/internal threads)
     sender_email = _extract_email(sender_raw).strip().lower()
+    original_sender_email = sender_email  # preserve before any provider→customer swap
+
+    # ------------------------------------------------------------------
+    # Detect provider / notification senders (NOT real customer replies).
+    # When the inbound email comes from a lead-provider like Cars.com or
+    # CarFax, we must NOT flip mode→"convo" / clear follow_up_at, because
+    # this is a lead notification, not a customer reply.
+    # ------------------------------------------------------------------
+    _PROVIDER_DOMAINS = ("carfax.com", "cars.com", "cargurus.com", "autotrader.com", "kbb.com")
+    is_provider_notification = (
+        any(d in original_sender_email for d in _PROVIDER_DOMAINS)
+        or "noreply" in original_sender_email
+        or "no-reply" in original_sender_email
+        or "donotreply" in original_sender_email
+        or "do-not-reply" in original_sender_email
+        or "notification" in original_sender_email
+    )
+    if is_provider_notification:
+        log.info(
+            "Provider/notification sender detected: sender=%r — will NOT flip mode to convo",
+            original_sender_email,
+        )
+
     if sender_email.endswith("@pattersonautos.com"):
         log.info(
             "Skipping inbound email opp-match (internal sender): sender=%r subject=%r to=%r",
@@ -1998,21 +2021,29 @@ def process_inbound_email(inbound: dict) -> None:
     opportunity.setdefault("messages", []).append(msg_dict)
 
     # ✅ PATCH 2A: Mark engagement (customer replied)
-    mark_customer_reply(opportunity, when_iso=ts)
+    # Only flip mode→convo when it's an actual customer reply,
+    # NOT when the sender is a provider/notification service.
+    if not is_provider_notification:
+        mark_customer_reply(opportunity, when_iso=ts)
 
-    # ✅ Ensure cadence is paused immediately for ANY customer reply
-    try:
-        save_opp(
-            opportunity,
-            extra_fields={
-                "mode": "convo",
-                "follow_up_at": None,
-                "Customer Replied": True,
-                "Last Customer Reply At": ts,
-            },
+        # ✅ Ensure cadence is paused immediately for ANY customer reply
+        try:
+            save_opp(
+                opportunity,
+                extra_fields={
+                    "mode": "convo",
+                    "follow_up_at": None,
+                    "Customer Replied": True,
+                    "Last Customer Reply At": ts,
+                },
+            )
+        except Exception:
+            pass
+    else:
+        log.info(
+            "Skipping mark_customer_reply + mode=convo (provider notification) opp=%s sender=%r",
+            opp_id, original_sender_email,
         )
-    except Exception:
-        pass
 
     # 2B: log inbound email to CRM as a COMPLETED "Read Email" activity (type 20)
     subscription_id = opportunity.get("_subscription_id") or inbound.get("subscription_id")
@@ -2086,30 +2117,37 @@ def process_inbound_email(inbound: dict) -> None:
         return
 
     # 3) Mark inbound + set convo signals (Airtable brain)
+    # Only flip mode→convo for real customer replies, NOT provider notifications.
     now_iso = ts
     opportunity.setdefault("checkedDict", {})["last_msg_by"] = "customer"
 
-    if is_kbb:
-        st = opportunity.setdefault("_kbb_state", {})
-        st["mode"] = "convo"
-        st["last_customer_msg_at"] = now_iso
+    if not is_provider_notification:
+        if is_kbb:
+            st = opportunity.setdefault("_kbb_state", {})
+            st["mode"] = "convo"
+            st["last_customer_msg_at"] = now_iso
+        else:
+            st = opportunity.setdefault("_internet_state", {})
+            st["mode"] = "convo"
+            st["last_customer_msg_at"] = now_iso
+
+        # 🚫 DO NOT set opportunity["followUP_date"] here
+
+        # 4) Persist to Airtable — explicitly pause cadence
+        save_opp(
+            opportunity,
+            extra_fields={
+                "mode": "convo",
+                "follow_up_at": None,
+                "Customer Replied": True,
+                "Last Customer Reply At": now_iso,
+            },
+        )
     else:
-        st = opportunity.setdefault("_internet_state", {})
-        st["mode"] = "convo"
-        st["last_customer_msg_at"] = now_iso
-
-    # 🚫 DO NOT set opportunity["followUP_date"] here
-
-    # 4) Persist to Airtable — explicitly pause cadence
-    save_opp(
-        opportunity,
-        extra_fields={
-            "mode": "convo",
-            "follow_up_at": None,
-            "Customer Replied": True,
-            "Last Customer Reply At": now_iso,
-        },
-    )
+        log.info(
+            "Skipping convo-mode flip (section 3+4) for provider notification opp=%s sender=%r",
+            opp_id, original_sender_email,
+        )
 
     # 4.5) TRIAGE (classify BEFORE any immediate reply)
     try:
