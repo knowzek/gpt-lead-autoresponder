@@ -2226,10 +2226,6 @@ def processHit(hit):
                     enrich_patch[k] = veh_fields[k]
                     opportunity[k] = veh_fields[k]
 
-        # 2) Rooftop name (always ensure it's stored)
-        if rec_id and not (fields.get("rooftop_name") or "").strip():
-            enrich_patch["rooftop_name"] = rooftop_name
-
         if enrich_patch and rec_id and not OFFLINE_MODE:
             from airtable_store import patch_by_id as _patch
             _patch(rec_id, enrich_patch)
@@ -3965,7 +3961,6 @@ def send_first_touch_email(
                     "last_template_day_sent": 1,
                     "follow_up_at": next_due,
                     "followUP_count": 0,
-                    "rooftop_name": rooftop_name,
             }
             # Include vehicle fields if populated (ensures Airtable columns are filled)
             for _vk in ("year", "make", "model", "trim", "vin", "stockNumber"):
