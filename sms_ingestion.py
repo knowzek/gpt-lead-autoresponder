@@ -254,7 +254,7 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
     subscription_id = opp.get("subscription_id", "")
     conversation_id = f"conv_{subscription_id}_{opp_id}"
 
-    conversation_record_id = _ensure_conversation(opp=opp, channel="sms")
+    conversation_record_id = _ensure_conversation(opp=opp, channel="sms", linked_lead_record_id=rec.get("id", ""))
 
     patti_mode = (opp.get("patti") or {}).get("mode") or ""
     now_iso = _now_iso()

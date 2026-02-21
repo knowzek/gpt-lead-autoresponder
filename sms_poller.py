@@ -770,7 +770,7 @@ def poll_once():
         opp_id = opp.get("opportunityId", "")
         subscription_id = opp.get("subscription_id", "")
 
-        conversation_record_id = _ensure_conversation(opp, channel="sms")
+        conversation_record_id = _ensure_conversation(opp, channel="sms", linked_lead_record_id=rec.get("id", ""))
         conversation_id = f"conv_{subscription_id}_{opp_id}"
 
         # Dedupe: only act once per inbound message id

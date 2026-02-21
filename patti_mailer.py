@@ -7,6 +7,7 @@ import re
 from outlook_email import send_email_via_outlook
 from fortellis import send_opportunity_email_activity, complete_send_email_activity
 from airtable_store import (
+    _ensure_conversation,
     find_by_opp_id,
     log_message,
     opp_from_record,
@@ -15,9 +16,10 @@ from airtable_store import (
     is_opp_suppressed,
     patch_by_id,
     mark_ai_email_sent,
+    upsert_conversation,
 )
 from airtable_store import _normalize_message_id, _generate_message_id
-from models.airtable_model import Message
+from models.airtable_model import Conversation, Message
 from airtable_store import _get_conversation_record_id_by_opportunity_id
 from bs4 import BeautifulSoup
 
@@ -214,6 +216,26 @@ def send_patti_email(
         else _generate_message_id(opp_id, timestamp, subject, to_addr, body_html)
     )
     conversation_record_id = _get_conversation_record_id_by_opportunity_id(opportunity_id=opp_id)
+    if not conversation_record_id:
+        rec = find_by_opp_id(opp_id=opp_id)
+        if isinstance(rec, dict):
+            opp = opp_from_record(rec=rec)
+            conversation_record_id = _ensure_conversation(opp=opp, channel="email", linked_lead_record_id=rec.get("id", ""))
+        else:
+            try:
+                conversation_bootstrap = Conversation(
+                    conversation_id=f"conv_{subscription_id}_{opp_id}",
+                    subscription_id=subscription_id,
+                    opportunity_id=opp_id,
+                    last_channel="email",
+                    last_activity_at=_now_iso_utc(),
+                    rooftop_name=rooftop_name
+                )
+                conversation_record_id = upsert_conversation(conversation_bootstrap)
+            except Exception as e:
+                log.error(f"Conversation upsert failed (send_patti_email) (1): {e}")
+                conversation_record_id = ""
+
     clean_body_text = _clean_body_html_to_body_text(body_html=body_html)
 
     # --- CRM path ---
