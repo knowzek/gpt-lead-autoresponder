@@ -101,11 +101,15 @@ def _get_access_token() -> str:
     return token
 
 
-def send_sms(*, from_number: str, to_number: str, body: str) -> dict:
-    """
-    Send one SMS via GoTo.
-    Returns the API response JSON (includes ids you can store in Airtable).
-    """
+def send_sms(
+    *,
+    from_number: str,
+    to_number: str,
+    body: str,
+    opp_id: str = "",
+    rooftop_name: str = "",
+    rooftop_sender: str = "",
+) -> dict:
     # ✅ Global SMS kill switch (no redeploy needed; flip env var)
     if (os.getenv("SMS_KILL_SWITCH", "0").strip() == "1"):
         log.warning(
@@ -114,20 +118,22 @@ def send_sms(*, from_number: str, to_number: str, body: str) -> dict:
             to_number,
             (body or "")[:180],
         )
-        # Return a stub that looks like a normal response
         return {
             "blocked": True,
             "reason": "SMS_KILL_SWITCH",
             "conversationId": "",
             "id": "",
         }
-    
+
+    """
+    Send one SMS via GoTo.
+    Returns the API response JSON (includes ids you can store in Airtable).
+    """
     access_token = _get_access_token()
-    rooftop_name = ""
-    rooftop_sender = ""
-    rec = None
-    opp_id = ""
-    record_id = ""
+
+    rooftop_name = (rooftop_name or "").strip()
+    rooftop_sender = (rooftop_sender or "").strip()
+    opp_id = (opp_id or "").strip()
 
     payload = {
         "ownerPhoneNumber": from_number,
@@ -143,22 +149,29 @@ def send_sms(*, from_number: str, to_number: str, body: str) -> dict:
 
     timestamp = datetime.now(timezone.utc).isoformat()
 
-    r = requests.post(GOTO_SMS_URL, json=payload, headers=headers, timeout=30)
-
-    response_json = r.json() or {}
-    response_message_id = response_json.get("id", "")
-
+    # Try to infer opp + rooftop fields if not provided
     opp = {}
     e164_to_number = None
     try:
         e164_to_number = _norm_phone_e164_us(to_number)
-        rec = find_by_customer_phone(e164_to_number)
-        if not rec:
-            log.error(f"Could not fetch record by customer's phone number: {e164_to_number}")
+        rec = find_by_customer_phone(e164_to_number) if e164_to_number else None
         if rec:
-            opp = opp_from_record(rec)
+            opp = opp_from_record(rec) or {}
+            if not opp_id:
+                opp_id = (opp.get("opportunityId") or opp.get("id") or "").strip()
+            if not rooftop_name:
+                rooftop_name = (opp.get("rooftop_name") or "").strip()
+            if not rooftop_sender:
+                rooftop_sender = (opp.get("rooftop_sender") or "").strip()
+        else:
+            log.warning("send_sms: no Airtable record found for to_number=%r (e164=%r)", to_number, e164_to_number)
     except Exception as e:
-        log.error(f"Failed to fech opp (send_sms): {e}")
+        log.error(f"Failed to fetch opp (send_sms): {e}")
+
+    # Send SMS (do this even if we can't log it)
+    r = requests.post(GOTO_SMS_URL, json=payload, headers=headers, timeout=30)
+    response_json = r.json() or {}
+    response_message_id = response_json.get("id", "")
 
     if rec:
         opp_id = rec.get("opp_id", "")
@@ -172,37 +185,46 @@ def send_sms(*, from_number: str, to_number: str, body: str) -> dict:
 
     delivery_status = "failed" if r.status_code >= 400 else "sent"
 
-    message_id = (
-        _generate_message_id(opp_id=opp_id, timestamp=timestamp, to_addr=to_number, body_html=body)
-        if r.status_code >= 400
-        else _normalize_message_id(response_message_id)
-    )
-    try:
-        airtable_log = Message(
-            message_id=message_id,
-            conversation=record_id,
-            direction="outbound",
-            channel="sms",
-            timestamp=timestamp,
-            from_=from_number,
-            to=e164_to_number or to_number,
-            subject="",
-            body_text=body,
-            body_html="",
-            provider=opp.get("source", "") or "",
-            opp_id=opp_id,
-            delivery_status=delivery_status,
-            rooftop_name=rooftop_name,
-            rooftop_sender=rooftop_sender,
+    # Log to Airtable only if we can resolve conversation record_id
+    record_id = ""
+    if opp_id:
+        try:
+            record_id = _get_conversation_record_id_by_opportunity_id(opp_id) or ""
+        except Exception as e:
+            log.error(f"send_sms: failed to resolve conversation record_id for opp_id={opp_id}: {e}")
+
+    if record_id:
+        message_id = (
+            _generate_message_id(opp_id=opp_id, timestamp=timestamp, to_addr=to_number, body_html=body)
+            if r.status_code >= 400
+            else _normalize_message_id(response_message_id)
         )
-        message_log_status = log_message(airtable_log)
-        (
-            log.info("outbound sms logged successfully to airtables")
-            if message_log_status
-            else log.error("outbound sms logging failed.")
-        )
-    except Exception as e:
-        log.error(f"Failed to log sms to Messages (send_sms): {e}")
+        try:
+            airtable_log = Message(
+                message_id=message_id,
+                conversation=record_id,
+                direction="outbound",
+                channel="sms",
+                timestamp=timestamp,
+                from_=from_number,
+                to=e164_to_number or to_number,
+                subject="",
+                body_text=body,
+                body_html="",
+                provider=opp.get("source", "") or "",
+                opp_id=opp_id,
+                delivery_status=delivery_status,
+                rooftop_name=rooftop_name,
+                rooftop_sender=rooftop_sender,
+            )
+            message_log_status = log_message(airtable_log)
+            log.info("outbound sms logged successfully to airtable") if message_log_status else log.error(
+                "outbound sms logging failed."
+            )
+        except Exception as e:
+            log.error(f"Failed to log sms to Messages (send_sms): {e}")
+    else:
+        log.info("send_sms: skipping Airtable Messages log (missing record_id). opp_id=%r to=%r", opp_id, to_number)
 
     if r.status_code >= 400:
         raise RuntimeError(f"GoTo send_sms failed {r.status_code}: {r.text[:800]}")
