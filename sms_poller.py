@@ -54,6 +54,8 @@ APPT_RE = re.compile(
 
 _STOP_RE = re.compile(r"(?i)\b(stop|unsubscribe|cancel|end|quit)\b")
 
+_MAZDA_STOP_RE = re.compile(r"(?i)\b(stop|unsubscribe|end|quit|do not contact|dont contact)\b")
+
 _VOUCHERISH_RE = re.compile(r"(?<!\d)(\d{12,20})(?!\d)")  # catches 12–20 digit codes
 
 
@@ -637,6 +639,59 @@ def poll_once():
             if last_seen and msg_id and last_seen == msg_id:
                 log.info("Mazda SMS: skipping already-processed inbound msg_id=%s rec=%s", msg_id, rec_id)
                 continue
+
+            # --- Mazda STOP / opt-out: stamp DNC + stop all cadence ---
+            if _MAZDA_STOP_RE.search(last_inbound or ""):
+                ts = last.get("timestamp") or _now_iso()
+
+                # Mark Do Not Contact (Mazda table field)
+                try:
+                    patch_by_id(rec_id, {
+                        "do_not_contact": True,        # ✅ the field you asked for
+                        "sms_status": "opt_out",       # optional, if the field allows this
+                        "next_sms_at": None,
+                        "email_status": "opt_out",     # optional, if you want email stopped too
+                        "next_email_at": None,         # optional, if field exists
+                        "last_sms_inbound_message_id": msg_id,
+                        "last_sms_inbound_at": ts,
+                        "last_inbound_text": (last_inbound or "")[:2000],
+                    })
+                except Exception:
+                    # If some of these optional fields don't exist, fall back to ONLY stamping DNC + stopping SMS
+                    try:
+                        patch_by_id(rec_id, {
+                            "do_not_contact": True,
+                            "next_sms_at": None,
+                            "last_sms_inbound_message_id": msg_id,
+                            "last_sms_inbound_at": ts,
+                            "last_inbound_text": (last_inbound or "")[:2000],
+                        })
+                    except Exception:
+                        log.exception("Mazda SMS: failed to stamp do_not_contact rec=%s", rec_id)
+
+                # Reply with opt-out confirmation (keep it simple + compliant)
+                reply_text = "Understood — we’ll stop reaching out. If you need anything in the future, just reply here."
+
+                to_number = author
+                if _sms_test_enabled() and _sms_test_to():
+                    to_number = _sms_test_to()
+
+                try:
+                    send_sms(from_number=owner, to_number=to_number, body=reply_text)
+                    log.info("Mazda SMS: opt-out reply sent to=%s (test=%s)", to_number, _sms_test_enabled())
+                except Exception:
+                    log.exception("Mazda SMS: failed sending opt-out reply rec=%s", rec_id)
+
+                # Save outbound markers (best effort)
+                try:
+                    patch_by_id(rec_id, {
+                        "last_sms_at": _now_iso(),
+                        "last_sms_body": reply_text[:2000],
+                    })
+                except Exception:
+                    pass
+
+                continue  # ✅ do not fall through to normal Mazda reply logic
 
             # ✅ Stop Mazda SMS cadence on engagement + store inbound markers (Mazda fields only)
             try:
