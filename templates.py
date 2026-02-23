@@ -199,7 +199,7 @@ def build_mazda_loyalty_sms(*, day: int, fields: dict) -> str:
 
     if day == 1:
         return (
-            f"{name_prefix}quick question — did you receive your {incentive_text} "
+            f"{name_prefix}this is Patti from Patterson Autos. Quick question - did you receive your {incentive_text} "
             f"voucher for the new CX-5? If you have your 16-digit code handy, "
             f"I can confirm eligibility for you."
         )
@@ -213,7 +213,7 @@ def build_mazda_loyalty_sms(*, day: int, fields: dict) -> str:
 
     if day == 3:
         return (
-            f"{name_prefix}also — if you're not planning to use your "
+            f"{name_prefix}also - if you're not planning to use your "
             f"{incentive_text}, you can gift it to a friend or family member. "
             f"Just send me their name and number and I’ll take care of it."
         )
@@ -226,7 +226,7 @@ def build_mazda_loyalty_sms(*, day: int, fields: dict) -> str:
 
     if day == 5:
         return (
-            f"{name_prefix}final reminder — your {incentive_text} won’t be available forever. "
+            f"{name_prefix}final reminder - your {incentive_text} won’t be available forever. "
             f"Let me know if you'd like to use it or gift it before it expires."
         )
 
