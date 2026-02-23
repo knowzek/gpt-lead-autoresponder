@@ -52,6 +52,8 @@ APPT_RE = re.compile(
     re.I
 )
 
+_STOP_RE = re.compile(r"(?i)\b(stop|unsubscribe|cancel|end|quit)\b")
+
 _VOUCHERISH_RE = re.compile(r"(?<!\d)(\d{12,20})(?!\d)")  # catches 12–20 digit codes
 
 
@@ -419,13 +421,28 @@ def send_sms_cadence_once():
     for r in recs:
         rid = r.get("id")
         f = (r.get("fields") or {})
-        phone = (f.get("customer_phone") or f.get("phone") or "").strip()
 
-        log.info("SMS cadence candidate rid=%s phone=%r sms_status=%r email_status=%r next_sms_at=%r sms_day=%r",
-         rid, phone, f.get("sms_status"), f.get("email_status"), f.get("next_sms_at"), f.get("sms_day"))
+        # Raw phone from Airtable
+        phone_raw = (f.get("customer_phone") or f.get("phone") or "").strip()
 
+        # ✅ Normalize to E.164 (+1XXXXXXXXXX). If invalid, this returns ""
+        phone = _norm_phone_e164_us(phone_raw)
 
+        log.info(
+            "SMS cadence candidate rid=%s phone_raw=%r phone=%r sms_status=%r email_status=%r next_sms_at=%r sms_day=%r",
+            rid, phone_raw, phone, f.get("sms_status"), f.get("email_status"), f.get("next_sms_at"), f.get("sms_day")
+        )
+
+        # ✅ If missing/invalid phone, pause so it doesn't keep retrying every cron run
         if not phone:
+            try:
+                patch_by_id(rid, {
+                    "sms_status": "paused",
+                    "next_sms_at": None,
+                    "last_sms_body": f"Skipped: invalid phone (raw={phone_raw!r})",
+                })
+            except Exception:
+                log.exception("SMS cadence: failed to pause invalid phone rid=%s raw=%r", rid, phone_raw)
             continue
 
         # Global suppression / opt-out protection (reuse your existing guard)
@@ -433,11 +450,11 @@ def send_sms_cadence_once():
         if stop:
             patch_by_id(rid, {
                 "sms_status": "paused",
+                "next_sms_at": None,
                 "last_sms_body": f"Suppressed: {reason}",
             })
             log.info("SMS cadence suppressed rid=%s reason=%r", rid, reason)
             continue
-
 
         day = int(f.get("sms_day") or 1)
 
@@ -446,11 +463,23 @@ def send_sms_cadence_once():
 
         owner = _patti_number()   # same helper used in poll_once()
 
-        ok = send_sms(
-            from_number=owner,
-            to_number=phone,
-            body=body
-        )
+        # ✅ Per-record try/except so one bad send doesn't kill the entire cron run
+        try:
+            ok = send_sms(
+                from_number=owner,
+                to_number=phone,   # ✅ normalized
+                body=body
+            )
+        except Exception as e:
+            log.exception("SMS cadence: send_sms failed rid=%s phone=%r err=%r", rid, phone, e)
+            try:
+                patch_by_id(rid, {
+                    "sms_status": "paused",
+                    "last_sms_body": f"Send failed: {str(e)[:300]}",
+                })
+            except Exception:
+                log.exception("SMS cadence: failed to mark send failure rid=%s", rid)
+            continue
 
         if ok:
             now_iso = datetime.now(timezone.utc).isoformat()
@@ -462,8 +491,6 @@ def send_sms_cadence_once():
                 "next_sms_at": (datetime.now(timezone.utc) + timedelta(days=3)).isoformat(),
                 "sms_status": "ready"
             })
-
-
 
 def poll_once():
     """
@@ -738,6 +765,39 @@ def poll_once():
         opp_id = (opp.get("opportunityId") or opp.get("opportunity_id") or "").strip()
 
         patti = opp.setdefault("patti", {})
+
+        # --- STOP / opt-out: stamp Airtable fields that suppress cadence ---
+        if _STOP_RE.search(last_inbound or ""):
+            inbound_ts = last.get("timestamp") or _now_iso()
+
+            # Persist the opt-out + stop any future nudges
+            try:
+                save_opp(opp, extra_fields={
+                    "sms_opted_out": True,
+                    "sms_opted_out_at": inbound_ts,
+                    "sms_opt_out_reason": "STOP",
+                    "sms_followup_due_at": None,
+                    "follow_up_at": None,  # if your email cadence uses this, kill it too
+                    "mode": "opt_out",
+                    "last_sms_inbound_message_id": msg_id,
+                    "last_sms_inbound_at": inbound_ts,
+                })
+            except Exception:
+                log.exception("SMS poll: failed to stamp STOP opt-out opp=%s rec=%s", opp_id, rec.get("id"))
+
+            # Best-effort: still mark convo / clear next_sms_at if those fields exist
+            try:
+                mark_sms_convo_on_inbound(
+                    rec_id=rec.get("id"),
+                    inbound_text=last_inbound,
+                    inbound_ts=inbound_ts,
+                )
+            except Exception:
+                # Don’t let schema mismatch break STOP
+                pass
+
+            log.info("SMS poll: STOP handled (opt-out stamped) opp=%s author=%s", opp.get("opportunityId"), author)
+            continue
         
         # ✅ Hard suppression gate
         stop, reason = should_suppress_all_sends_airtable(opp)
