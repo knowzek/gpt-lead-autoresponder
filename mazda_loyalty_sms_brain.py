@@ -94,6 +94,22 @@ def _safe_json(s: str) -> Dict[str, Any]:
                 return {}
         return {}
 
+RECENT_PURCHASE_TOKENS = [
+    "already purchased",
+    "already bought",
+    "just bought",
+    "recent purchase",
+    "purchased last week",
+    "purchased yesterday",
+    "already signed",
+    "already took delivery",
+    "already completed",
+]
+
+def _looks_like_recent_purchase(text: str) -> bool:
+    t = (text or "").lower()
+    return any(k in t for k in RECENT_PURCHASE_TOKENS)
+
 def generate_mazda_loyalty_sms_reply(
     *,
     first_name: str,
@@ -129,6 +145,18 @@ def generate_mazda_loyalty_sms_reply(
             ),
             "needs_handoff": False,
             "handoff_reason": "other",
+        }
+
+    # ---- Recent purchase / retroactive question ----
+    if _looks_like_recent_purchase(inbound):
+        prefix = f"{first}, " if first else ""
+        return {
+            "reply": (
+                f"{prefix}the Mazda Loyalty reward must be applied at the time of purchase. "
+                "If your purchase has already been completed, I’ll loop in a team member to review your situation and see what options may be available."
+            ),
+            "needs_handoff": True,
+            "handoff_reason": "retroactive_purchase",
         }
 
     # Voucher code present
