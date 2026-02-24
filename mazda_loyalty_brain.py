@@ -138,21 +138,37 @@ def _as_html(text: str) -> str:
         parts.append(f"<p style='margin:0 0 12px 0;'>{c.replace(chr(10), '<br>')}</p>")
     return "".join(parts)
 
-RECENT_PURCHASE_TOKENS = [
-    "already purchased",
-    "already bought",
-    "just bought",
-    "recent purchase",
-    "purchased last week",
-    "purchased yesterday",
-    "already signed",
-    "already took delivery",
-    "already completed",
-]
+import re
+
+_PURCHASE_VERBS_RE = re.compile(
+    r"\b(purchased|bought|leased|lease(d)?|picked up|took delivery|delivered|closed|signed)\b",
+    re.I
+)
+
+_TIME_HINT_RE = re.compile(
+    r"\b(this month|last month|this week|last week|today|yesterday|recently|just|already|earlier|few days ago)\b",
+    re.I
+)
+
+_MODEL_YEAR_CONTEXT_RE = re.compile(
+    r"\b(20\d{2})\b",  # model years like 2025 / 2026
+    re.I
+)
 
 def _looks_like_recent_purchase(text: str) -> bool:
-    t = (text or "").lower()
-    return any(k in t for k in RECENT_PURCHASE_TOKENS)
+    t = (text or "").strip()
+    if not t:
+        return False
+
+    # Strong “purchase already happened” indicator
+    if _PURCHASE_VERBS_RE.search(t) and (_TIME_HINT_RE.search(t) or "we purchased" in t.lower()):
+        return True
+
+    # Often they mention model year + purchase verb without explicit time
+    if _PURCHASE_VERBS_RE.search(t) and _MODEL_YEAR_CONTEXT_RE.search(t):
+        return True
+
+    return False
 
 def generate_mazda_loyalty_email_reply(
     *,
