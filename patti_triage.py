@@ -74,6 +74,7 @@ def notify_staff_patti_scheduled_appt(
     rooftop_name: str,
     appt_human: str,
     customer_reply: str,
+    subject: str,
 ) -> None:
     """
     Email salesperson + CC managers when Patti schedules an appointment in the CRM.
@@ -122,7 +123,7 @@ def notify_staff_patti_scheduled_appt(
         cc_addrs = []
 
         # make it obvious
-        subj = f"[SAFE MODE] {subj}"
+        subj = f"[SAFE MODE] {subject}"
 
         # optional: show original recipients in body for debugging
         html = (

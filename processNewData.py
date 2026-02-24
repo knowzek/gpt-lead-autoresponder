@@ -1,5 +1,14 @@
-from helpers import rJson, wJson, getFirstActivity, adf_to_dict, getInqueryUsingAdf, get_names_in_dir, sortActivities
-from kbb_ico import process_kbb_ico_lead
+import sys
+from helpers import (
+    rJson,
+    wJson,
+    getFirstActivity,
+    adf_to_dict,
+    getInqueryUsingAdf,
+    get_names_in_dir,
+    sortActivities
+)
+from kbb_ico import process_kbb_ico_lead 
 from kbb_ico import _top_reply_only, _is_optout_text as _kbb_is_optout_text, _is_decline as _kbb_is_decline
 from kbb_ico import _patch_address_placeholders, build_patti_footer, _PREFS_RE
 from models.airtable_model import Conversation
@@ -32,7 +41,9 @@ from airtable_store import (
     save_opp,
     find_by_customer_email,
     patch_by_id,
-    upsert_conversation
+    upsert_conversation,
+    _get_messages_for_conversation,
+    _find_conversation_by_conversation_id
 )
 from patti_mailer import _bump_ai_send_metrics_in_airtable, _bump_ai_send_metrics_in_conversations_airtable
 
@@ -1449,7 +1460,8 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
 
     alreadyProcessedActivities = opportunity.get("alreadyProcessedActivities", {})
     currDate_iso = (currDate.astimezone(_tz.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
-
+    opp_id = opportunity.get("opportunityId") or opportunity.get("id")
+    
     # Ensure checkedDict is always a dict on the opportunity
     checkedDict = opportunity.get("checkedDict") or {}
     if not isinstance(checkedDict, dict):
@@ -1465,6 +1477,8 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
         token = None
     else:
         token = get_token(subscription_id)
+
+    fresh_opp = get_opportunity(opp_id, token, subscription_id)
 
     for act in activities:
         activityId = act.get("activityId")
@@ -3999,6 +4013,16 @@ def send_thread_reply_now(
     currDate = _dt.now(_tz.utc)
     currDate_iso = currDate.strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    log.info("[SEND_THREAD_REPLY_NOW] opportunity: %r", opportunity)
+    log.info("[SEND_THREAD_REPLY_NOW] fresh_opp keys: %r", fresh_opp)
+    log.info("[SEND_THREAD_REPLY_NOW] token?: %r", token)
+    log.info("[SEND_THREAD_REPLY_NOW] subscription_id: %r", subscription_id)
+    log.info("[SEND_THREAD_REPLY_NOW] trigger: %r", trigger)
+    log.info("[SEND_THREAD_REPLY_NOW] SAFE_MODE: %r", SAFE_MODE)
+    log.info("[SEND_THREAD_REPLY_NOW] test_recipient: %r", test_recipient)
+    log.info("[SEND_THREAD_REPLY_NOW] inbound_ts: %r", inbound_ts)
+    log.info("[SEND_THREAD_REPLY_NOW] inbound_subject: %r", inbound_subject)
+
     opportunityId = opportunity.get("opportunityId") or opportunity.get("id")
     checkedDict = opportunity.get("checkedDict", {}) or {}
 
@@ -4112,6 +4136,32 @@ def send_thread_reply_now(
     except Exception as e:
         log.warning("Triage gate failed (continuing without triage) opp=%s: %s", opportunityId, e)
 
+    conversation_id = f"conv_{subscription_id}_{opportunityId}"
+    print('➡ processNewData.py:4140 conversation_id:', conversation_id)
+    conv_id = _find_conversation_by_conversation_id(conversation_id=conversation_id)
+    print('➡ processNewData.py:4142 conv_id:', conv_id)
+    messages_for_conversations = _get_messages_for_conversation(conversation_id=conv_id, direction="inbound")
+    print('➡ processNewData.py:4144 messages_for_conversations:', messages_for_conversations)
+    print('➡ processNewData.py:4145 messages:', messages)
+    
+    previous_conversion = []
+    for conv in messages_for_conversations:
+        fields = conv.get('fields', {})
+        body_text = fields.get('body_text', '')
+        print('➡ processNewData.py:4058 body_text:', body_text)
+        timestamp = fields.get('timestamp', '')
+        subject = fields.get('subject', '')
+        previous_conversion.append({
+            'msgFrom': 'customer', 
+            'subject': subject, 
+            'body': body_text, 
+            'date': str(timestamp)
+        })
+
+    if previous_conversion:
+        messages = previous_conversion + (messages or [])
+    print('➡ processNewData.py:4163 messages:', messages)
+    
     # --- Step 2: try to auto-schedule an appointment from this reply (WEBHOOK PATH) ---
     created_appt_ok = False
     appt_human = None
@@ -4138,12 +4188,26 @@ def send_thread_reply_now(
             
             log.info("Customer body for appt extraction: %r", customer_body)
             if (not already_scheduled) and customer_body:
+                
                 proposed = extract_appt_time(customer_body, tz="America/Los_Angeles")
+                
                 intent_action = classify_scheduling_intent(proposed)
+                
                 appt_iso = (proposed.get("iso") or "").strip()
+                
                 conf = float(proposed.get("confidence") or 0.0)
-                log.info("Extracted proposed appointment: %r", proposed)
+                
+                proposed['intent'] = intent_action
+                
+                # messages.append(proposed)
 
+                log.info("\n==========\n Extracted proposed appointment: %r \n==========\n", proposed)
+                
+                # TEMPORARY: sys.exit(0) is for debugging/testing purposes only. 
+                # MAKE SURE TO REMOVE THIS LINE BEFORE PUSHING TO SERVER! 
+                # This will abort execution to help diagnose appointment extraction logic.
+                # sys.exit(0)
+                
             # ----
             # try:
             #     # # Skip if we already know about a future appointment
@@ -4233,7 +4297,7 @@ def send_thread_reply_now(
             #         e,
             #     )
             # ----
-            if appt_iso and conf >= 0.60:
+            if appt_iso and conf >= 0.60 and intent_action == "SCHEDULE":
                 # appt_iso is expected to be parseable by fromisoformat when Z->+00:00
                 dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
 
@@ -4254,6 +4318,7 @@ def send_thread_reply_now(
                     rooftop_name=rooftop_name,
                     appt_human=appt_human,
                     customer_reply=customer_body,
+                    subject=inbound_subject
                 )
 
                 created_appt_ok = True
@@ -4279,7 +4344,8 @@ def send_thread_reply_now(
             )
 
     skip_gpt = bool(created_appt_ok and appt_human)
-
+    log.info(f"skip_gpt: {skip_gpt}")
+    
     # --- Step 3: choose the right reply (short confirmation vs normal reply) ---
     skip_footer = False
     response = {}  # <--- IMPORTANT: always defined
@@ -4311,35 +4377,31 @@ def send_thread_reply_now(
         elif intent_action == "RESCHEDULE":
             gen_prompt = _getClarifyTimePrompts()  # Treat as clarify for now
         else:
-        # You are replying to an ACTIVE email thread (not a first welcome message).
-        # Context:
-        # - The guest originally inquired about: {vehicle_str}
-            gen_prompt = f"""
+            # You are replying to an ACTIVE email thread (not a first welcome message).
+            # Context:
+            # - The guest originally inquired about: {vehicle_str}
+            gen_prompt = """
+                Hard rules:
+                - If the guest proposes a visit time (including casual phrasing like "tomorrow around 4"), CONFIRM it.
+                - Do NOT ask "what day/time works best?" after they already proposed a time.
+                - Do NOT mention store hours unless (a) the guest asks, or (b) the proposed time is outside store hours.
+                - Never invent store hours. Use only the store hours provided below.
+                - Always include the address in the confirmation sentence.
+                
+                'Store hours (local time):\n'
+                'Thursday 9 AM-7 PM\n'
+                'Friday 9 AM-7 PM\n'
+                'Saturday 9 AM-8 PM\n'
+                'Sunday 10 AM-6 PM\n'
+                'Monday 9 AM-7 PM\n'
+                'Tuesday 9 AM-7 PM\n'
+                'Wednesday 9 AM-7 PM\n'
+                
+                Address: 28 B Auto Center Dr, Tustin, CA 92782
+                
+                Return ONLY valid JSON with keys: subject, body.
+            """.strip()
         
-        Hard rules:
-        - If the guest proposes a visit time (including casual phrasing like "tomorrow around 4"), CONFIRM it.
-        - Do NOT ask "what day/time works best?" after they already proposed a time.
-        - Do NOT mention store hours unless (a) the guest asks, or (b) the proposed time is outside store hours.
-        - Never invent store hours. Use only the store hours provided below.
-        - Always include the address in the confirmation sentence.
-        
-        'Store hours (local time):\n'
-        'Thursday 9 AM-7 PM\n'
-        'Friday 9 AM-7 PM\n'
-        'Saturday 9 AM-8 PM\n'
-        'Sunday 10 AM-6 PM\n'
-        'Monday 9 AM-7 PM\n'
-        'Tuesday 9 AM-7 PM\n'
-        'Wednesday 9 AM-7 PM\n'
-        
-        Address: 28 B Auto Center Dr, Tustin, CA 92782
-        
-        Return ONLY valid JSON with keys: subject, body.
-        """.strip()
-        
-        # messages between Patti and the customer (python list of dicts):
-        # {messages}
-
         prompt = f"""
         You are replying to an ACTIVE email thread (not a first welcome message).
         
@@ -4355,9 +4417,15 @@ def send_thread_reply_now(
         
         log.info("[SEND_THREAD_REPLY] Using prompt:\n%s", prompt)
         response = run_gpt(prompt, customer_name, rooftop_name, prevMessages=True)
-        subject = response["subject"]
+        
+        for k, v in response.items():
+            log.info("[SEND_THREAD_REPLY] GPT response: %r = %r", k, v)
+            
+        subject   = response["subject"]
         body_html = response["body"]
-
+    
+    # sys.exit(0)
+    
     body_html = normalize_patti_body(body_html)
     body_html = _patch_address_placeholders(body_html, rooftop_name)
 

@@ -1422,6 +1422,30 @@ def _get_messages_for_conversation(conversation_id: str, direction: Literal["inb
         log.error(f"Failed to fetch outbound messages: {e}")
         return []
 
+def _find_conversation_by_conversation_id(conversation_id: str) -> str | None:
+    """
+    Retrieve the Airtable record ID for a conversation given its conversation_id.
+
+    Args:
+        conversation_id (str): The unique identifier of the conversation (not the Airtable record ID).
+
+    Returns:
+        str | None: The Airtable record ID of the found conversation, or None if no match is found.
+
+    Notes:
+        - Only the first matching record is returned for efficiency.
+        - Filtering is performed via Airtable's formula query.
+    """
+    try:
+        url = return_table_url(CONVERSATIONS_TABLE_NAME)
+        params = {"filterByFormula": f'{{conversation_id}}="{conversation_id}"', "pageSize": 1}
+        data = _request("GET", url, params=params)
+        recs = data.get("records", [])
+        return recs[0].get("id", "") if recs else None
+    except Exception as e:
+        log.error(f"Failed to find conversation by conversation_id: {e}")
+        return None
+
 
 def _build_fields(conversation_data: Conversation) -> dict:
     """
