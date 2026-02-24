@@ -4187,9 +4187,10 @@ def send_thread_reply_now(
             conf = 0.0
             
             log.info("Customer body for appt extraction: %r", customer_body)
-            if (not already_scheduled) and customer_body:
+            new_customer_body = f"Here customer message and previous converstaion there {str(previous_conversion)}  {customer_body}"
+            if (not already_scheduled) and new_customer_body:
                 
-                proposed = extract_appt_time(customer_body, tz="America/Los_Angeles")
+                proposed = extract_appt_time(new_customer_body, tz="America/Los_Angeles")
                 
                 intent_action = classify_scheduling_intent(proposed)
                 
