@@ -33,6 +33,32 @@ PRICING_TOKENS = (
     "trade", "trade-in", "trade in", "value my trade", "down payment", "down"
 )
 
+# “I can’t find / didn’t receive my code” intent
+CODE_NOT_FOUND_TOKENS = [
+    "didn't receive", "didnt receive", "did not receive", "never received",
+    "didn't get", "didnt get", "did not get", "never got",
+    "can't find", "cant find", "cannot find", "can't locate", "cant locate",
+    "can't see", "cant see", "missing", "lost",
+    "where is my code", "where's my code", "wheres my code",
+    "no code", "not received", "haven't received", "havent received",
+    "can't find my voucher", "cant find my voucher",
+    "can't find my code", "cant find my code",
+    "didn't get my voucher", "didnt get my voucher",
+]
+
+def _looks_like_code_not_found(text: str) -> bool:
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+
+    if _contains_any(t, CODE_NOT_FOUND_TOKENS):
+        return True
+
+    # Extra light heuristic: mentions "code/voucher" + a negative
+    if ("code" in t or "voucher" in t) and any(x in t for x in ("can't", "cant", "didn't", "didnt", "not", "never", "missing", "lost")):
+        return True
+
+    return False
 # 16-digit voucher code (allow spaces/dashes)
 VOUCHER_RE = re.compile(r"\b(\d[ -]?){15}\d\b")
 
@@ -61,6 +87,7 @@ Program guardrails:
 - If they want to transfer/gift it, confirm that you can help and ask for recipient name + best contact.
 - If they show buying intent, move to next step: inventory list or test drive.
 - Never quote pricing, OTD, payments, APR, lease terms, or trade values. Escalate those to a human.
+- If the customer says they didn’t receive or can’t find their voucher code, tell them the code should have been emailed from Mazda (mazdaemail@dealers-mazdausa.com) and to search Inbox, Spam, Promotions, and All Mail/Archive.
 
 Output format:
 Return ONLY valid JSON:
@@ -154,6 +181,23 @@ def generate_mazda_loyalty_email_reply(
             "reply_html": _as_html(txt),
             "needs_handoff": True,
             "handoff_reason": "pricing",
+        }
+
+    # ---- “can't find / didn't receive my code” ----
+    if _looks_like_code_not_found(inbound):
+        txt = (
+            f"{'Hi ' + first_name + ',' if first_name else 'Hi there,'}\n\n"
+            "No problem — the loyalty voucher code is typically emailed directly from Mazda.\n\n"
+            "Please search your inbox for an email from:\n"
+            "mazdaemail@dealers-mazdausa.com\n\n"
+            "Also check Spam, Promotions, and All Mail/Archive (it can land there).\n\n"
+            "If you still can’t find it after searching those folders, tell me and I’ll loop in a team member to help you get it sorted."
+        ).strip()
+        return {
+            "reply_text": txt,
+            "reply_html": _as_html(txt),
+            "needs_handoff": False,   # keep it informational unless you want to escalate immediately
+            "handoff_reason": "other",
         }
 
     code = _extract_voucher_code(inbound)

@@ -27,6 +27,33 @@ PRICING_TOKENS = (
     "trade", "trade-in", "trade in", "value my trade", "down payment", "down"
 )
 
+# “I can’t find / didn’t receive my code” intent
+CODE_NOT_FOUND_TOKENS = [
+    "didn't receive", "didnt receive", "did not receive", "never received",
+    "didn't get", "didnt get", "did not get", "never got",
+    "can't find", "cant find", "cannot find", "can't locate", "cant locate",
+    "can't see", "cant see", "missing", "lost",
+    "where is my code", "where's my code", "wheres my code",
+    "no code", "not received", "haven't received", "havent received",
+    "can't find my voucher", "cant find my voucher",
+    "can't find my code", "cant find my code",
+    "didn't get my voucher", "didnt get my voucher",
+]
+
+def _looks_like_code_not_found(text: str) -> bool:
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+
+    if _contains_any(t, CODE_NOT_FOUND_TOKENS):
+        return True
+
+    # Extra light heuristic: mentions "code/voucher" + a negative
+    if ("code" in t or "voucher" in t) and any(x in t for x in ("can't", "cant", "didn't", "didnt", "not", "never", "missing", "lost")):
+        return True
+
+    return False
+
 VOUCHER_RE = re.compile(r"\b(\d[ -]?){15}\d\b")
 
 SYSTEM = """You are Patti, a virtual assistant for a Mazda dealership.
@@ -89,6 +116,19 @@ def generate_mazda_loyalty_sms_reply(
             "reply": f"{prefix}thanks — I’m looping in a team member to help with that so you get accurate details. What day/time were you hoping for?",
             "needs_handoff": True,
             "handoff_reason": "pricing",
+        }
+
+    # “can't find / didn't receive my code”
+    if _looks_like_code_not_found(inbound):
+        prefix = f"{first}, " if first else ""
+        return {
+            "reply": (
+                f"{prefix}no worries — the loyalty voucher code is usually emailed from Mazda at "
+                "mazdaemail@dealers-mazdausa.com. Please check your Inbox + Spam + Promotions + All Mail/Archive. "
+                "If you still can’t find it after searching, tell me and I’ll loop in a team member to help."
+            ),
+            "needs_handoff": False,
+            "handoff_reason": "other",
         }
 
     # Voucher code present

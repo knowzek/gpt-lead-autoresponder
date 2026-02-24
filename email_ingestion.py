@@ -1030,7 +1030,7 @@ def process_lead_notification(inbound: dict) -> None:
                 if to_number:
                     sms_msg = (
                         f"Hi {first_name or 'there'}, this is Patti with {rooftop_name}. "
-                        f"Thanks — we received your pre-qualification request and our team is reviewing it now. "
+                        f"We received your pre-qualification request and our team is reviewing it now. "
                         f"Someone will reach out shortly. Reply with a good day/time if you’d like to come in. "
                         f"Opt-out reply STOP"
                     )
