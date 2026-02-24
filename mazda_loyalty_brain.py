@@ -201,12 +201,14 @@ def generate_mazda_loyalty_email_reply(
         
     # ---- Recent purchase / retroactive question ----
     if _looks_like_recent_purchase(inbound):
-        prefix = f"{first}, " if first else ""
+        txt = (
+            f"{'Hi ' + first_name + ',' if first_name else 'Hi there,'}\n\n"
+            "The Mazda Loyalty reward must be applied at the time of purchase. "
+            "If your purchase has already been completed, I’ll loop in a team member to review your situation and see what options may be available."
+        )
         return {
-            "reply": (
-                f"{prefix}the Mazda Loyalty reward must be applied at the time of purchase. "
-                "If your purchase has already been completed, I’ll loop in a team member to review your situation and see what options may be available."
-            ),
+            "reply_text": txt,
+            "reply_html": _as_html(txt),
             "needs_handoff": True,
             "handoff_reason": "retroactive_purchase",
         }
