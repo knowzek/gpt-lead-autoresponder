@@ -138,6 +138,22 @@ def _as_html(text: str) -> str:
         parts.append(f"<p style='margin:0 0 12px 0;'>{c.replace(chr(10), '<br>')}</p>")
     return "".join(parts)
 
+RECENT_PURCHASE_TOKENS = [
+    "already purchased",
+    "already bought",
+    "just bought",
+    "recent purchase",
+    "purchased last week",
+    "purchased yesterday",
+    "already signed",
+    "already took delivery",
+    "already completed",
+]
+
+def _looks_like_recent_purchase(text: str) -> bool:
+    t = (text or "").lower()
+    return any(k in t for k in RECENT_PURCHASE_TOKENS)
+
 def generate_mazda_loyalty_email_reply(
     *,
     first_name: str,
@@ -181,6 +197,18 @@ def generate_mazda_loyalty_email_reply(
             "reply_html": _as_html(txt),
             "needs_handoff": True,
             "handoff_reason": "pricing",
+        }
+        
+    # ---- Recent purchase / retroactive question ----
+    if _looks_like_recent_purchase(inbound):
+        prefix = f"{first}, " if first else ""
+        return {
+            "reply": (
+                f"{prefix}the Mazda Loyalty reward must be applied at the time of purchase. "
+                "If your purchase has already been completed, I’ll loop in a team member to review your situation and see what options may be available."
+            ),
+            "needs_handoff": True,
+            "handoff_reason": "retroactive_purchase",
         }
 
     # ---- “can't find / didn't receive my code” ----
