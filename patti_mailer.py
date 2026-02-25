@@ -235,6 +235,7 @@ def send_patti_email(
             except Exception as e:
                 log.error(f"Conversation upsert failed (send_patti_email) (1): {e}")
                 conversation_record_id = ""
+                log.warning(f"conversation_record_id for opp_id: {opp_id} could not be determined")
 
     clean_body_text = _clean_body_html_to_body_text(body_html=body_html)
 
