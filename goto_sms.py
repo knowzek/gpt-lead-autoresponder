@@ -173,16 +173,6 @@ def send_sms(
     response_json = r.json() or {}
     response_message_id = response_json.get("id", "")
 
-    if rec:
-        opp_id = rec.get("opp_id", "")
-        record_id = _get_conversation_record_id_by_opportunity_id(opp_id) or ""
-        if not record_id:
-            raise RuntimeError(f"Conversation does exists with opp_id: {opp_id}")
-        subscription_id = rec.get("subscription_id", "")
-        rooftop_info = get_rooftop_info(subscription_id) or {}
-        rooftop_name = rooftop_info.get("name", "")
-        rooftop_sender = rooftop_info.get("sender", "")
-
     delivery_status = "failed" if r.status_code >= 400 else "sent"
 
     # Log to Airtable only if we can resolve conversation record_id
