@@ -1422,6 +1422,8 @@ def log_message(message_data: Message) -> bool:
         if "body_html" in fields and fields["body_html"]:
             fields["body_html"] = fields["body_html"][:2000]
 
+        fields["from"] = message_data.from_
+
         payload = {"records": [{"fields": fields}], "typecast": True}
         data = _request("POST", url, json=payload)
         recs = data.get("records", [])
@@ -1583,3 +1585,75 @@ def _ensure_conversation(opp: dict, channel="sms", linked_lead_record_id: str | 
     )
 
     return upsert_conversation(convo)
+
+def _fetch_customer_details(opp_id: str | None = None, rec: dict | None = None):
+    """
+    Retrieve customer details associated with an opportunity.
+
+    This function extracts customer-related fields from an Airtable
+    opportunity record. If a record dictionary (`rec`) is provided,
+    it will be used directly. Otherwise, the function will perform a
+    lookup using `find_by_opp_id(opp_id)`.
+
+    Args:
+        opp_id (str | None, optional): The unique opportunity identifier used to locate
+            the Airtable record when `rec` is not provided.
+        rec (dict | None, optional): A pre-fetched Airtable record in
+            standard API format:
+                {
+                    "id": "recXXXX",
+                    "createdTime": "...",
+                    "fields": { ... }
+                }
+            If supplied, no additional lookup is performed.
+
+    Returns:
+        dict: A dictionary with the following keys:
+            - customer_full_name (str): Concatenated first and last name
+              (trimmed). Empty string if unavailable.
+            - customer_email (str): Customer email address, if present.
+            - customer_phone (str): Customer phone number, if present.
+            - linked_lead_record (str): Airtable record ID of the opportunity.
+            - salesperson_assigned (str | list): Value of the
+              "Assigned Sales Rep" field as returned by Airtable.
+
+        If no valid record is found, all values default to empty strings.
+
+    Behavior:
+        - Reads customer fields from the record's "fields" dictionary.
+        - Retrieves the Airtable record ID from the top-level "id" field.
+        - Fails safely by returning a default empty structure rather
+          than raising exceptions when a record is missing.
+    """
+    if not rec:
+        rec = find_by_opp_id(opp_id=opp_id)
+
+
+    if isinstance(rec, dict):
+        fields = rec.get("fields", {}) or {}
+
+        customer_first_name = fields.get("Customer First Name", "")
+        customer_last_name = fields.get("Customer Last Name", "")
+
+        customer_full_name = f"{customer_first_name} {customer_last_name}".strip()
+        customer_email = fields.get("customer_email", "")
+        customer_phone = fields.get("customer_phone", "")
+        linked_lead_record = rec.get("id", "")
+        salesperson_assigned = fields.get("Assigned Sales Rep", "")
+        customer_details = {
+            "customer_full_name": customer_full_name,
+            "customer_email": customer_email,
+            "customer_phone": customer_phone,
+            "linked_lead_record": linked_lead_record,
+            "salesperson_assigned": salesperson_assigned
+        }
+    else:
+        customer_details = {
+        "customer_full_name": "",
+        "customer_email": "",
+        "customer_phone": "",
+        "linked_lead_record": "",
+        "salesperson_assigned": ""
+    }
+
+    return customer_details
