@@ -1536,7 +1536,7 @@ def upsert_conversation(conversation_data: Conversation) -> str:
         return ""
 
 
-def _ensure_conversation(opp: dict, channel="sms") -> str:
+def _ensure_conversation(opp: dict, channel="sms", linked_lead_record_id: str | None = None) -> str:
     """
     Ensure that a conversation record exists for a given opportunity.
 
@@ -1549,6 +1549,10 @@ def _ensure_conversation(opp: dict, channel="sms") -> str:
             subscription details, customer information, and assignment fields.
         channel (str, optional): The communication channel associated with
             the conversation (e.g., "sms"). Defaults to "sms".
+        linked_lead_record_id (str | None, optional):
+            The Airtable Lead record ID to associate with this conversation.
+            If provided, it will be stored in the conversation’s
+            linked_lead_record field. If None, no explicit linkage is applied.
 
     Returns:
         str: The record ID of the created or updated conversation.
@@ -1575,6 +1579,7 @@ def _ensure_conversation(opp: dict, channel="sms") -> str:
         customer_full_name=customer_full_name,
         salesperson_assigned=(opp.get("Assigned Sales Rep") or "our team"),
         last_channel=channel,
+        linked_lead_record=linked_lead_record_id if linked_lead_record_id else None
     )
 
     return upsert_conversation(convo)

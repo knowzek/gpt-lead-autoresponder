@@ -8,6 +8,7 @@ from airtable_store import _generate_message_id, _normalize_message_id, find_by_
 from airtable_store import log_message, _get_conversation_record_id_by_opportunity_id
 from email_ingestion import _norm_phone_e164_us
 from models.airtable_model import Message
+from rooftops import get_rooftop_info
 
 log = logging.getLogger("patti.goto_sms")
 
