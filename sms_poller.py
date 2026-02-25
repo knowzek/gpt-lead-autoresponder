@@ -20,6 +20,7 @@ from outlook_email import send_email_via_outlook
 from models.airtable_model import Conversation, Message
 
 from airtable_store import (
+    _fetch_customer_details,
     find_by_customer_phone_loose,
     opp_from_record,
     save_opp,
@@ -819,6 +820,8 @@ def poll_once():
         subscription_id = (opp.get("subscription_id") or opp.get("dealer_key") or "").strip()
         opp_id = (opp.get("opportunityId") or opp.get("opportunity_id") or "").strip()
 
+        customer_details = _fetch_customer_details(opp_id=opp_id) or {}
+
         patti = opp.setdefault("patti", {})
 
         # --- STOP / opt-out: stamp Airtable fields that suppress cadence ---
@@ -960,6 +963,11 @@ def poll_once():
                 last_customer_message=body[:300],
                 customer_last_reply_at=timestamp,
                 status="open",
+                customer_full_name=customer_details.get("customer_full_name", ""),
+                customer_email=customer_details.get("customer_email", ""),
+                customer_phone=customer_details.get("customer_phone", ""),
+                salesperson_assigned=customer_details.get("salesperson_assigned", ""),
+                linked_lead_record=customer_details.get("linked_lead_record", "")
             )
             conversation_record_id = upsert_conversation(message_update_convo)
         except Exception as e:

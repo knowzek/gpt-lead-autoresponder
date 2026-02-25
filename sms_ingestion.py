@@ -8,6 +8,7 @@ from datetime import datetime as _dt, timezone as _tz
 
 from airtable_store import (
     _ensure_conversation,
+    _fetch_customer_details,
     _get_messages_for_conversation,
     find_by_customer_phone,
     opp_from_record,
@@ -251,6 +252,8 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
     opp_id = opp.get("opportunityId", "")
     message_id = inbound.get("conversation_id", "")
 
+    customer_details = _fetch_customer_details(opp_id=opp_id) or {}
+
     subscription_id = opp.get("subscription_id", "")
     conversation_id = f"conv_{subscription_id}_{opp_id}"
 
@@ -297,6 +300,11 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
                 last_customer_message=body[:300],
                 customer_last_reply_at=now_iso,
                 status="open",
+                customer_full_name=customer_details.get("customer_full_name", ""),
+                customer_email=customer_details.get("customer_email", ""),
+                customer_phone=customer_details.get("customer_phone", ""),
+                salesperson_assigned=customer_details.get("salesperson_assigned", ""),
+                linked_lead_record=customer_details.get("linked_lead_record", "")
             )
             conversation_record_id = upsert_conversation(inbound_sms_upsert)
         except Exception as e:

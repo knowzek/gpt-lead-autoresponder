@@ -5,6 +5,7 @@ import logging
 
 from models.airtable_model import Conversation, Message
 from airtable_store import (
+    _fetch_customer_details,
     _generate_message_id,
     _get_messages_for_conversation,
     _normalize_message_id,
@@ -793,6 +794,9 @@ def process_lead_notification(inbound: dict) -> None:
         token=tok,
         subscription_id=subscription_id,
     )
+
+    customer_details = _fetch_customer_details(opp_id=opp_id) or {}
+
     if not opp_id:
         log.warning("No active opp found for shopper=%s subj=%r", shopper_email, subject[:120])
         return
@@ -1052,7 +1056,12 @@ def process_lead_notification(inbound: dict) -> None:
                             subscription_id=subscription_id,
                             last_channel="sms",
                             last_activity_at=now_iso,
-                            status="open"
+                            status="open",
+                            customer_full_name=customer_details.get("customer_full_name", ""),
+                            customer_email=customer_details.get("customer_email", ""),
+                            customer_phone=customer_details.get("customer_phone", ),
+                            salesperson_assigned=customer_details.get("salesperson_assigned", ""),
+                            linked_lead_record=customer_details.get("linked_lead_record", "")
                         )
                         upsert_conversation(convo)
                     except Exception as e:
@@ -1881,6 +1890,7 @@ def process_inbound_email(inbound: dict) -> None:
         pass
 
     if rec:
+        customer_details = _fetch_customer_details(rec=rec) or {}
         opportunity = opp_from_record(rec)
         log.info(
             "HR_TRACE step=after_opp_from_record opp=%s rec_id=%s opp.needs_human_review=%r opp.hr_reason=%r",
@@ -1898,6 +1908,11 @@ def process_inbound_email(inbound: dict) -> None:
                     last_activity_at=timestamp,
                     last_channel="email",
                     status="needs_review",
+                    customer_full_name=customer_details.get("customer_full_name", ""),
+                    customer_email=customer_details.get("customer_email", ""),
+                    customer_phone=customer_details.get("customer_phone", ""),
+                    salesperson_assigned=customer_details.get("salesperson_assigned", ""),
+                    linked_lead_record=customer_details.get("linked_lead_record", "")
                 )
                 conversation_record_id = upsert_conversation(human_review_conversation_update)
         except Exception as e:
