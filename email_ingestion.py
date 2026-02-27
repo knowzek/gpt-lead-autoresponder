@@ -18,8 +18,23 @@ from datetime import datetime as _dt, timezone as _tz
 from datetime import timedelta
 import json
 from typing import Optional
-from airtable_store import mark_customer_reply, mark_unsubscribed, should_suppress_all_sends_airtable, find_by_opp_id, find_by_customer_email, opp_from_record, save_opp, upsert_lead, patch_by_id, _get_conversation_record_id_by_opportunity_id, log_message
-from kbb_ico import _is_optout_text as _kbb_is_optout_text, _is_decline as _kbb_is_decline
+from airtable_store import (
+    mark_customer_reply,
+    mark_unsubscribed,
+    should_suppress_all_sends_airtable,
+    find_by_opp_id,
+    find_by_customer_email,
+    opp_from_record,
+    save_opp,
+    upsert_lead,
+    patch_by_id,
+    _get_conversation_record_id_by_opportunity_id,
+    log_message,
+)
+from kbb_ico import (
+    _is_optout_text as _kbb_is_optout_text,
+    _is_decline as _kbb_is_decline,
+)
 
 from datetime import datetime, timezone, timedelta
 
@@ -101,7 +116,9 @@ def _sms_test_to() -> str:
 # For now we only want this running on your single test opp
 TEST_OPP_ID = "050a81e9-78d4-f011-814f-00505690ec8c"
 
-DEFAULT_SUBSCRIPTION_ID = os.getenv("DEFAULT_SUBSCRIPTION_ID")  # set this to Tustin Kia's subscription id
+DEFAULT_SUBSCRIPTION_ID = os.getenv(
+    "DEFAULT_SUBSCRIPTION_ID"
+)  # set this to Tustin Kia's subscription id
 
 _HTML_NBSP_RE = re.compile(r"(?i)&nbsp;|&#160;")
 _LEADING_HTML_SPACE_RE = re.compile(r"(?i)^(?:&nbsp;|\u00a0|\s)+")
@@ -219,13 +236,17 @@ def _resolve_subscription_id(inbound: dict, headers: dict | None) -> str | None:
 def extract_phone_from_text(body_text: str) -> str | None:
     t = body_text or ""
     # Apollo: Telephone<TAB>2069993915
-    m = re.search(r"(?im)^\s*(telephone|phone)\s*(?:[:\t ]+)\s*([0-9\-\(\)\.\s\+]{7,})\s*$", t)
+    m = re.search(
+        r"(?im)^\s*(telephone|phone)\s*(?:[:\t ]+)\s*([0-9\-\(\)\.\s\+]{7,})\s*$", t
+    )
     if m:
         return re.sub(r"\s+", " ", m.group(2)).strip()
     return None
 
 
-def _find_best_active_opp_for_email(*, shopper_email: str, token: str, subscription_id: str) -> str | None:
+def _find_best_active_opp_for_email(
+    *, shopper_email: str, token: str, subscription_id: str
+) -> str | None:
     target = (shopper_email or "").strip().lower()
     if not target:
         return None
@@ -236,18 +257,27 @@ def _find_best_active_opp_for_email(*, shopper_email: str, token: str, subscript
     # Path A: customerId -> opps
     # ----------------------------
     try:
-        customers = search_customers_by_email(target, token, subscription_id, page_size=10) or []
+        customers = (
+            search_customers_by_email(target, token, subscription_id, page_size=10)
+            or []
+        )
         for c in customers:
             cid = c.get("id") or c.get("customerId")
             if not cid:
                 continue
 
             try:
-                opps = get_opps_by_customer_id(cid, token, subscription_id, page_size=100) or []
+                opps = (
+                    get_opps_by_customer_id(cid, token, subscription_id, page_size=100)
+                    or []
+                )
             except Exception as e:
                 # Key fix: don't crash reply handling because one endpoint isn't supported.
                 log.warning(
-                    "get_opps_by_customer_id failed (will fallback): sub=%s cid=%s err=%r", subscription_id, cid, e
+                    "get_opps_by_customer_id failed (will fallback): sub=%s cid=%s err=%r",
+                    subscription_id,
+                    cid,
+                    e,
                 )
                 opps = []
 
@@ -260,7 +290,13 @@ def _find_best_active_opp_for_email(*, shopper_email: str, token: str, subscript
                 if not opp_id:
                     continue
 
-                dt_str = o.get("updatedAt") or o.get("updated_at") or o.get("createdAt") or o.get("created_at") or ""
+                dt_str = (
+                    o.get("updatedAt")
+                    or o.get("updated_at")
+                    or o.get("createdAt")
+                    or o.get("created_at")
+                    or ""
+                )
                 candidates.append((str(dt_str), opp_id))
 
         if candidates:
@@ -270,7 +306,10 @@ def _find_best_active_opp_for_email(*, shopper_email: str, token: str, subscript
     except Exception as e:
         # If customer search itself blows up, still try Path B.
         log.warning(
-            "customerId-based opp match failed (will fallback): sub=%s email=%s err=%r", subscription_id, target, e
+            "customerId-based opp match failed (will fallback): sub=%s email=%s err=%r",
+            subscription_id,
+            target,
+            e,
         )
 
     # ----------------------------
@@ -288,7 +327,11 @@ def _find_best_active_opp_for_email(*, shopper_email: str, token: str, subscript
         while page <= max_pages:
             data = (
                 get_recent_opportunities(
-                    token, subscription_id, since_minutes=since_minutes, page=page, page_size=page_size
+                    token,
+                    subscription_id,
+                    since_minutes=since_minutes,
+                    page=page,
+                    page_size=page_size,
                 )
                 or {}
             )
@@ -339,7 +382,12 @@ def _find_best_active_opp_for_email(*, shopper_email: str, token: str, subscript
         return best[1] if best else None
 
     except Exception as e:
-        log.warning("searchDelta fallback opp match failed: sub=%s email=%s err=%r", subscription_id, target, e)
+        log.warning(
+            "searchDelta fallback opp match failed: sub=%s email=%s err=%r",
+            subscription_id,
+            target,
+            e,
+        )
         return None
 
 
@@ -524,7 +572,9 @@ def _extract_carscom_name_email_phone(body_text: str) -> tuple[str, str, str]:
     for ln in scan:
         if EMAIL_RE.search(ln) or PHONE_RE.search(ln):
             continue
-        if re.search(r"(?i)\byou have a new lead\b|\bcars\.com\b|view shopper details", ln):
+        if re.search(
+            r"(?i)\byou have a new lead\b|\bcars\.com\b|view shopper details", ln
+        ):
             continue
         # simple: "First Last" (allow 2-3 tokens)
         toks = ln.split()
@@ -651,7 +701,11 @@ def process_lead_notification(inbound: dict) -> None:
     phone = ""
 
     # ✅ ADF (CarGurus) structured parse first
-    adf_src = raw_html if (raw_html.lstrip().startswith("<?xml") or "<adf" in raw_html.lower()) else body_text
+    adf_src = (
+        raw_html
+        if (raw_html.lstrip().startswith("<?xml") or "<adf" in raw_html.lower())
+        else body_text
+    )
     adf = _extract_adf_fields(adf_src) if _looks_like_adf_xml(adf_src) else {}
 
     first_name = ""
@@ -707,13 +761,18 @@ def process_lead_notification(inbound: dict) -> None:
 
     # ✅ PA routes Pre-Qual leads explicitly
     lead_type = (inbound.get("lead_type") or "").strip().lower()
-    is_prequal = (lead_type == "pre_qual")
-    is_value_trade = (lead_type == "value_your_trade")
+    is_prequal = lead_type == "pre_qual"
+    is_value_trade = lead_type == "value_your_trade"
 
     if not customer_comment and provider_template:
         customer_comment = extract_customer_comment_from_provider(body_text)
 
-    log.info("TRIAGE DEBUG provider_template=%s source=%r sender=%r", provider_template, source, sender)
+    log.info(
+        "TRIAGE DEBUG provider_template=%s source=%r sender=%r",
+        provider_template,
+        source,
+        sender,
+    )
 
     if is_cars:
         log.info(
@@ -738,8 +797,12 @@ def process_lead_notification(inbound: dict) -> None:
         if cl:
             last_name = cl
         if ph:
-            candidate_phone = _extract_phone_number_from_email_body_using_llm(str(body_text))
-            phone = _maybe_set_phone(current_phone=phone, candidate_phone=candidate_phone)
+            candidate_phone = _extract_phone_number_from_email_body_using_llm(
+                str(body_text)
+            )
+            phone = _maybe_set_phone(
+                current_phone=phone, candidate_phone=candidate_phone
+            )
 
         # normalize once after possible assignment
         # phone = _norm_phone_e164_us(phone) # Dont't have to normalize, since the phone extracted using the llm is already in the format +1XXXXXXXXXX
@@ -748,7 +811,9 @@ def process_lead_notification(inbound: dict) -> None:
 
     # If it's ADF and customer phone is blank, do NOT scrape provider numbers from the blob.
     if not phone and not is_adf:
-        candidate_phone = _extract_phone_number_from_email_body_using_llm(str(body_text))
+        candidate_phone = _extract_phone_number_from_email_body_using_llm(
+            str(body_text)
+        )
         phone = _maybe_set_phone(
             current_phone=phone, candidate_phone=candidate_phone
         )  # Act's as a verification step for phone num extraction
@@ -756,7 +821,9 @@ def process_lead_notification(inbound: dict) -> None:
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     headers = inbound.get("headers") or {}
     safe_mode = _safe_mode_from(inbound)
-    test_recipient = (inbound.get("test_email") or os.getenv("TEST_TO")) if safe_mode else None
+    test_recipient = (
+        (inbound.get("test_email") or os.getenv("TEST_TO")) if safe_mode else None
+    )
 
     log.info(
         "DEBUG resolve_subscription: inbound.subscription_id=%r inbound.subscriptionId=%r inbound.source=%r inbound.to=%r headers_keys=%s headers=%r",
@@ -786,7 +853,9 @@ def process_lead_notification(inbound: dict) -> None:
         shopper_email = _extract_shopper_email_from_provider(raw_html)
 
     if not shopper_email:
-        log.warning("No shopper email found in provider lead email. subj=%r", subject[:120])
+        log.warning(
+            "No shopper email found in provider lead email. subj=%r", subject[:120]
+        )
         return
 
     opp_id = _find_best_active_opp_for_email(
@@ -798,7 +867,9 @@ def process_lead_notification(inbound: dict) -> None:
     customer_details = _fetch_customer_details(opp_id=opp_id) or {}
 
     if not opp_id:
-        log.warning("No active opp found for shopper=%s subj=%r", shopper_email, subject[:120])
+        log.warning(
+            "No active opp found for shopper=%s subj=%r", shopper_email, subject[:120]
+        )
         return
 
     # ✅ Guard KBB opps from General Leads
@@ -818,7 +889,9 @@ def process_lead_notification(inbound: dict) -> None:
     is_new_record = not bool(rec)
     if rec:
         opportunity = opp_from_record(rec)
-        salesperson = (opportunity.get("Assigned Sales Rep") or "").strip() or salesperson
+        salesperson = (
+            opportunity.get("Assigned Sales Rep") or ""
+        ).strip() or salesperson
     else:
         opp["_subscription_id"] = subscription_id
         now_iso = ts
@@ -884,15 +957,16 @@ def process_lead_notification(inbound: dict) -> None:
             log.warning("Bootstrap upsert did not produce record opp=%s", opp_id)
             return
         opportunity = opp_from_record(rec2)
+        customer_details = _fetch_customer_details(rec=rec2)
 
     # ── Vehicle enrichment from Fortellis soughtVehicles ──────────
     # `opp` already holds the full Fortellis payload from get_opportunity()
     # above. Extract vehicle fields and patch Airtable if any are missing.
     try:
         rec_id = opportunity.get("_airtable_rec_id")
-        _existing_make  = (opportunity.get("make") or "").strip()
+        _existing_make = (opportunity.get("make") or "").strip()
         _existing_model = (opportunity.get("model") or "").strip()
-        _existing_year  = (opportunity.get("year") or "").strip()
+        _existing_year = (opportunity.get("year") or "").strip()
 
         if rec_id and not (_existing_make and _existing_model and _existing_year):
             sought = opp.get("soughtVehicles") or []
@@ -902,7 +976,10 @@ def process_lead_notification(inbound: dict) -> None:
             # Only write fields that are currently empty
             patch_veh = {}
             for k in ("year", "make", "model", "trim", "vin", "stockNumber"):
-                if not (opportunity.get(k) or "").strip() and (veh_fields.get(k) or "").strip():
+                if (
+                    not (opportunity.get(k) or "").strip()
+                    and (veh_fields.get(k) or "").strip()
+                ):
                     patch_veh[k] = veh_fields[k]
 
             if patch_veh:
@@ -913,7 +990,10 @@ def process_lead_notification(inbound: dict) -> None:
             else:
                 log.info("Vehicle enrichment: no new fields to write opp=%s", opp_id)
         else:
-            log.info("Vehicle enrichment: skipped (already populated or no rec_id) opp=%s", opp_id)
+            log.info(
+                "Vehicle enrichment: skipped (already populated or no rec_id) opp=%s",
+                opp_id,
+            )
     except Exception as e:
         log.warning("Vehicle enrichment failed opp=%s: %s", opp_id, e)
 
@@ -954,7 +1034,9 @@ def process_lead_notification(inbound: dict) -> None:
     # Rooftop / sender
     rt = get_rooftop_info(subscription_id) or {}
     rooftop_name = rt.get("name") or rt.get("rooftop_name") or "Rooftop"
-    rooftop_sender = rt.get("sender") or rt.get("patti_email") or os.getenv("TEST_FROM") or ""
+    rooftop_sender = (
+        rt.get("sender") or rt.get("patti_email") or os.getenv("TEST_FROM") or ""
+    )
 
     # -----------------------------
     # PRE-QUAL FAST PATH:
@@ -1001,7 +1083,6 @@ def process_lead_notification(inbound: dict) -> None:
             
             <p>Best,<br/>Patti<br/>{rooftop_name}</p>
             """
-
 
             send_patti_email(
                 token=tok,
@@ -1057,15 +1138,31 @@ def process_lead_notification(inbound: dict) -> None:
                             last_channel="sms",
                             last_activity_at=now_iso,
                             status="open",
-                            customer_full_name=customer_details.get("customer_full_name", ""),
+                            customer_full_name=customer_details.get(
+                                "customer_full_name", ""
+                            ),
                             customer_email=customer_details.get("customer_email", ""),
-                            customer_phone=customer_details.get("customer_phone", ),
-                            salesperson_assigned=customer_details.get("salesperson_assigned", ""),
-                            linked_lead_record=customer_details.get("linked_lead_record", "")
+                            customer_phone=customer_details.get(
+                                "customer_phone",
+                            ),
+                            salesperson_assigned=customer_details.get(
+                                "salesperson_assigned", ""
+                            ),
+                            linked_lead_record=customer_details.get(
+                                "linked_lead_record", ""
+                            ),
+                        )
+                        log.info(
+                            "FINAL CUSTOMER DEBUG: airtable_email=%r opp_email=%r final_email=%r",
+                            customer_details.get("customer_email"),
+                            opportunity.get("customer_email"),
+                            customer_email,
                         )
                         upsert_conversation(convo)
                     except Exception as e:
-                        log.error(f"Conversation upsert failed (lead_notification SMS): {e}")
+                        log.error(
+                            f"Conversation upsert failed (lead_notification SMS): {e}"
+                        )
         except Exception as e:
             log.exception("Pre-Qual SMS send failed opp=%s err=%s", opp_id, e)
 
@@ -1079,7 +1176,9 @@ def process_lead_notification(inbound: dict) -> None:
                 },
             )
         except Exception as e:
-            log.exception("Pre-Qual save_opp handoff fields failed opp=%s err=%s", opp_id, e)
+            log.exception(
+                "Pre-Qual save_opp handoff fields failed opp=%s err=%s", opp_id, e
+            )
 
         # Human handoff notification/logging
         try:
@@ -1114,7 +1213,9 @@ def process_lead_notification(inbound: dict) -> None:
 
         # Idempotency protection
         if (opportunity.get("mode") or "").lower() == "handoff":
-            log.info("Value-Your-Trade already handed off opp=%s — skipping resend", opp_id)
+            log.info(
+                "Value-Your-Trade already handed off opp=%s — skipping resend", opp_id
+            )
             return
 
         to_email = (test_recipient or shopper_email) if safe_mode else shopper_email
@@ -1238,11 +1339,14 @@ def process_lead_notification(inbound: dict) -> None:
 
         return
 
-
     # Customer name (prefer Airtable-hydrated first/last, then Fortellis, else "there")
     cust = fresh_opp.get("customer") or opportunity.get("customer") or {}
-    afn = (opportunity.get("customer_first_name") or (cust.get("firstName") or "")).strip()
-    aln = (opportunity.get("customer_last_name") or (cust.get("lastName") or "")).strip()
+    afn = (
+        opportunity.get("customer_first_name") or (cust.get("firstName") or "")
+    ).strip()
+    aln = (
+        opportunity.get("customer_last_name") or (cust.get("lastName") or "")
+    ).strip()
     customer_name = afn or "there"
 
     # ✅ For provider lead notifications, always send to the provider-extracted shopper email
@@ -1254,7 +1358,11 @@ def process_lead_notification(inbound: dict) -> None:
     triage_intended_handoff = False
     try:
         if should_triage(is_kbb=False):
-            log.info("lead_notification triage running opp=%s shopper=%s", opp_id, shopper_email)
+            log.info(
+                "lead_notification triage running opp=%s shopper=%s",
+                opp_id,
+                shopper_email,
+            )
 
             triage = None
 
@@ -1263,7 +1371,10 @@ def process_lead_notification(inbound: dict) -> None:
                 triage_text = (customer_comment or "").strip()
 
                 if not triage_text:
-                    triage = {"classification": "AUTO_REPLY_SAFE", "reason": "ADF lead with no customer comments"}
+                    triage = {
+                        "classification": "AUTO_REPLY_SAFE",
+                        "reason": "ADF lead with no customer comments",
+                    }
                 # else: we will run GPT on triage_text below
 
             else:
@@ -1281,7 +1392,9 @@ def process_lead_notification(inbound: dict) -> None:
                 comment = extract_customer_comment_from_provider(triage_text)
 
                 log.info("TRIAGE DEBUG extracted_comment_len=%s", len(comment or ""))
-                log.info("TRIAGE DEBUG extracted_comment_preview=%r", (comment or "")[:220])
+                log.info(
+                    "TRIAGE DEBUG extracted_comment_preview=%r", (comment or "")[:220]
+                )
 
                 triage_text = comment.strip() if comment else ""
 
@@ -1294,9 +1407,14 @@ def process_lead_notification(inbound: dict) -> None:
             # ✅ Only call GPT if triage still unset AND there's real text
             if triage is None:
                 if triage_text.strip():
-                    triage = classify_inbound_email(triage_text, provider_template=provider_template)
+                    triage = classify_inbound_email(
+                        triage_text, provider_template=provider_template
+                    )
                 else:
-                    triage = {"classification": "AUTO_REPLY_SAFE", "reason": "Empty triage text"}
+                    triage = {
+                        "classification": "AUTO_REPLY_SAFE",
+                        "reason": "Empty triage text",
+                    }
 
             classification = (triage.get("classification") or "").strip().upper()
             reason = (triage.get("reason") or "").strip()
@@ -1322,7 +1440,9 @@ def process_lead_notification(inbound: dict) -> None:
             if classification == "HUMAN_REVIEW_REQUIRED":
                 triage_intended_handoff = True
                 opportunity["needs_human_review"] = True
-                opportunity.setdefault("patti", {})["human_review_reason"] = (reason or "Human review required").strip()
+                opportunity.setdefault("patti", {})["human_review_reason"] = (
+                    reason or "Human review required"
+                ).strip()
                 save_opp(opportunity)
 
                 handoff_to_human(
@@ -1343,7 +1463,10 @@ def process_lead_notification(inbound: dict) -> None:
                 return
 
             if classification == "EXPLICIT_OPTOUT":
-                log.info("lead_notification triage EXPLICIT_OPTOUT opp=%s - suppressing + stopping", opp_id)
+                log.info(
+                    "lead_notification triage EXPLICIT_OPTOUT opp=%s - suppressing + stopping",
+                    opp_id,
+                )
 
                 # Mark suppressed/unsubscribed in Airtable + opp_json
                 try:
@@ -1358,7 +1481,8 @@ def process_lead_notification(inbound: dict) -> None:
                         subscription_id,
                         opp_id,
                         _clip(
-                            f"Customer opted out via email reply. Suppressed.\n" f"Msg: {_clip(triage_text, 300)}",
+                            f"Customer opted out via email reply. Suppressed.\n"
+                            f"Msg: {_clip(triage_text, 300)}",
                             1800,
                         ),
                     )
@@ -1405,10 +1529,10 @@ def process_lead_notification(inbound: dict) -> None:
 
     # Vehicle string (Airtable fields are canonical source)
     vehicle_str = "one of our vehicles"
-    make  = (opportunity.get("make") or "").strip()
+    make = (opportunity.get("make") or "").strip()
     model = (opportunity.get("model") or "").strip()
-    year  = (opportunity.get("year") or "").strip()
-    trim  = (opportunity.get("trim") or "").strip()
+    year = (opportunity.get("year") or "").strip()
+    trim = (opportunity.get("trim") or "").strip()
     tmp = f"{year} {make} {model} {trim}".strip()
     if tmp:
         vehicle_str = tmp
@@ -1421,7 +1545,9 @@ def process_lead_notification(inbound: dict) -> None:
     currDate_iso = ts  # keep inbound timestamp as the sent timestamp
 
     # OFFLINE_MODE (however you store it)
-    OFFLINE_MODE = bool(os.getenv("OFFLINE_MODE", "").strip().lower() in ["1", "true", "yes"])
+    OFFLINE_MODE = bool(
+        os.getenv("OFFLINE_MODE", "").strip().lower() in ["1", "true", "yes"]
+    )
 
     # We are NOT auto-scheduling from provider emails
     created_appt_ok = False
@@ -1432,14 +1558,20 @@ def process_lead_notification(inbound: dict) -> None:
     patti = opportunity.get("patti") or {}
     checked = opportunity.get("checkedDict") or {}
 
-    if opportunity.get("needs_human_review") is True or patti.get("human_review_reason"):
+    if opportunity.get("needs_human_review") is True or patti.get(
+        "human_review_reason"
+    ):
         log.warning("Blocking first-touch: human review lock opp=%s", opp_id)
         return
 
     log.info(
         "lead_notification resolved salesperson=%r (airtable=%r) opp=%s",
         salesperson,
-        (opportunity.get("Assigned Sales Rep") if isinstance(opportunity, dict) else None),
+        (
+            opportunity.get("Assigned Sales Rep")
+            if isinstance(opportunity, dict)
+            else None
+        ),
         opp_id,
     )
 
@@ -1447,11 +1579,13 @@ def process_lead_notification(inbound: dict) -> None:
     try:
         # Only send SMS if first-touch SMS has NOT been sent yet
         already_sms = bool((opportunity.get("first_sms_sent_at") or "").strip())
-        
+
         if not already_sms:
             from goto_sms import send_sms
 
-            from_number = _norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", "+17145977229"))
+            from_number = _norm_phone_e164_us(
+                os.getenv("PATTI_SMS_NUMBER", "+17145977229")
+            )
             if not from_number:
                 log.warning("SMS: missing PATTI_SMS_NUMBER; skipping opp=%s", opp_id)
             else:
@@ -1459,14 +1593,21 @@ def process_lead_notification(inbound: dict) -> None:
                 guest_phone = _norm_phone_e164_us(guest_phone_raw)
 
                 if not guest_phone:
-                    log.warning("SMS: no Airtable customer_phone (raw=%r); skipping opp=%s", guest_phone_raw, opp_id)
+                    log.warning(
+                        "SMS: no Airtable customer_phone (raw=%r); skipping opp=%s",
+                        guest_phone_raw,
+                        opp_id,
+                    )
                 else:
                     # SMS_TEST reroute
                     to_number = guest_phone
                     if _sms_test_enabled():
                         test_to = _sms_test_to()
                         if not test_to:
-                            log.warning("SMS_TEST=1 but SMS_TEST_TO invalid; skipping opp=%s", opp_id)
+                            log.warning(
+                                "SMS_TEST=1 but SMS_TEST_TO invalid; skipping opp=%s",
+                                opp_id,
+                            )
                             to_number = ""
                         else:
                             to_number = test_to
@@ -1475,8 +1616,16 @@ def process_lead_notification(inbound: dict) -> None:
                         # Impel-style first text (shorter than email, still crisp)
                         rooftop_display = rooftop_name or "Patterson Autos"
 
-                        vehicle_phrase = vehicle_str if (vehicle_str and vehicle_str != "one of our vehicles") else "your vehicle inquiry"
-                        call_line = f"If you’d rather talk first, we can call {phone}." if phone else ""
+                        vehicle_phrase = (
+                            vehicle_str
+                            if (vehicle_str and vehicle_str != "one of our vehicles")
+                            else "your vehicle inquiry"
+                        )
+                        call_line = (
+                            f"If you’d rather talk first, we can call {phone}."
+                            if phone
+                            else ""
+                        )
 
                         msg = (
                             f"Hi {first_name or 'there'}, this is Patti with {rooftop_display}. "
@@ -1486,19 +1635,34 @@ def process_lead_notification(inbound: dict) -> None:
                             f"Or, would you prefer a quick call instead? Opt-out reply STOP"
                         )
 
-                        stop_send, reason = should_suppress_all_sends_airtable(opportunity)
+                        stop_send, reason = should_suppress_all_sends_airtable(
+                            opportunity
+                        )
                         if stop_send:
-                            log.info("SMS first-touch suppressed=%s opp=%s (skip SMS only)", reason, opp_id)
+                            log.info(
+                                "SMS first-touch suppressed=%s opp=%s (skip SMS only)",
+                                reason,
+                                opp_id,
+                            )
                         else:
-                            resp = send_sms(from_number=from_number, to_number=to_number, body=msg)
+                            resp = send_sms(
+                                from_number=from_number, to_number=to_number, body=msg
+                            )
 
                             # Persist SMS metadata (best-effort)
                             extra_sms = {
                                 "last_sms_sent_at": _dt.now(_tz.utc).isoformat(),
                                 "first_sms_sent_at": _dt.now(_tz.utc).isoformat(),
-                                "sms_conversation_id": resp.get("conversationId") or resp.get("conversation_id") or resp.get("id") or "",
+                                "sms_conversation_id": resp.get("conversationId")
+                                or resp.get("conversation_id")
+                                or resp.get("id")
+                                or "",
                                 "sms_nudge_count": 0,
-                                "sms_followup_due_at": (_dt.now(_tz.utc) + timedelta(hours=24)).replace(microsecond=0).isoformat(),
+                                "sms_followup_due_at": (
+                                    _dt.now(_tz.utc) + timedelta(hours=24)
+                                )
+                                .replace(microsecond=0)
+                                .isoformat(),
                             }
                             save_opp(opportunity, extra_fields=extra_sms)
 
@@ -1507,26 +1671,40 @@ def process_lead_notification(inbound: dict) -> None:
                                 sms_preview = (msg or "").strip().replace("\n", " ")
                                 if len(sms_preview) > 800:
                                     sms_preview = sms_preview[:800] + "…"
-                            
+
                                 reroute_note = ""
-                                if _sms_test_enabled() and to_number and to_number != guest_phone:
+                                if (
+                                    _sms_test_enabled()
+                                    and to_number
+                                    and to_number != guest_phone
+                                ):
                                     reroute_note = f" (SMS_TEST rerouted from {guest_phone} to {to_number})"
-                            
+
                                 add_opportunity_comment(
                                     token,
                                     subscription_id,
                                     opp_id,
-                                    f"<b>Patti SMS (outbound):</b> to {to_number}{reroute_note}<br/>{sms_preview}"
+                                    f"<b>Patti SMS (outbound):</b> to {to_number}{reroute_note}<br/>{sms_preview}",
                                 )
-                                log.info("Logged outbound SMS as CRM comment opp=%s", opp_id)
+                                log.info(
+                                    "Logged outbound SMS as CRM comment opp=%s", opp_id
+                                )
                             except Exception as e:
-                                log.warning("Failed to log outbound SMS as CRM comment opp=%s: %s", opp_id, e)
-                            
-                            log.info("SMS first-touch sent opp=%s to=%s (test=%s)", opp_id, to_number, _sms_test_enabled())
+                                log.warning(
+                                    "Failed to log outbound SMS as CRM comment opp=%s: %s",
+                                    opp_id,
+                                    e,
+                                )
+
+                            log.info(
+                                "SMS first-touch sent opp=%s to=%s (test=%s)",
+                                opp_id,
+                                to_number,
+                                _sms_test_enabled(),
+                            )
 
     except Exception as e:
         log.exception("SMS first-touch failed opp=%s err=%s", opp_id, e)
-
 
     sent_ok = send_first_touch_email(
         opportunity=opportunity,
@@ -1556,17 +1734,23 @@ def process_lead_notification(inbound: dict) -> None:
     if sent_ok:
         when_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         next_iso = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
-    
+
         opportunity["first_email_sent_at"] = when_iso
         opportunity["followUP_date"] = next_iso
-    
-        save_opp(opportunity, extra_fields={
-            "first_email_sent_at": when_iso,
-            "follow_up_at": next_iso,
-            "mode": "cadence",
-        })
+
+        save_opp(
+            opportunity,
+            extra_fields={
+                "first_email_sent_at": when_iso,
+                "follow_up_at": next_iso,
+                "mode": "cadence",
+            },
+        )
     else:
-        log.info("First-touch email not sent (sent_ok=False); not stamping first_email_sent_at opp=%s", opp_id)
+        log.info(
+            "First-touch email not sent (sent_ok=False); not stamping first_email_sent_at opp=%s",
+            opp_id,
+        )
 
     return
 
@@ -1577,7 +1761,9 @@ def _safe_mode_from(inbound: dict) -> bool:
         return True
 
     # Fall back to Render env vars
-    return (os.getenv("PATTI_SAFE_MODE", "0") == "1") or (os.getenv("SAFE_MODE", "0") == "1")
+    return (os.getenv("PATTI_SAFE_MODE", "0") == "1") or (
+        os.getenv("SAFE_MODE", "0") == "1"
+    )
 
 
 def clean_html(html: str) -> str:
@@ -1765,37 +1951,44 @@ def process_inbound_email(inbound: dict) -> None:
     if "mazda loyalty" in subj_l or "[mazda loyalty]" in subj_l:
         try:
             from mazda_loyalty import handle_mazda_loyalty_inbound_email
-            log.info("Mazda Loyalty router: handling inbound sender=%s subj=%r", sender_raw, (subject or "")[:140])
-            handle_mazda_loyalty_inbound_email(inbound=inbound, subject=subject, body_text=body_text)
+
+            log.info(
+                "Mazda Loyalty router: handling inbound sender=%s subj=%r",
+                sender_raw,
+                (subject or "")[:140],
+            )
+            handle_mazda_loyalty_inbound_email(
+                inbound=inbound, subject=subject, body_text=body_text
+            )
             log.info("Mazda Loyalty router: done sender=%s", sender_raw)
         except Exception:
             log.exception("Mazda Loyalty inbound handler failed")
         return
 
-
     # Mazda Loyalty: inbound reply from SendGrid
     if "[mazda loyalty]" in (subject or "").lower():
         sender_email = _extract_email(sender_raw).strip().lower()
         rec = find_by_customer_email(sender_email)
-    
+
         if rec:
             rec_id = rec.get("id")
             inbound_ts = inbound.get("timestamp") or _now_iso()
-    
+
             # ✅ Stop BOTH cadences on any email engagement
-            patch_by_id(rec_id, {
-                "email_status": "convo",
-                "next_email_at": None,
-                "sms_status": "convo",
-                "next_sms_at": None,
-                "last_inbound_text": (body_text or "")[:2000],
-                "last_inbound_at": inbound_ts,
-            })
-    
+            patch_by_id(
+                rec_id,
+                {
+                    "email_status": "convo",
+                    "next_email_at": None,
+                    "sms_status": "convo",
+                    "next_sms_at": None,
+                    "last_inbound_text": (body_text or "")[:2000],
+                    "last_inbound_at": inbound_ts,
+                },
+            )
+
         # IMPORTANT: return so this does NOT go through Fortellis opp logic
         return
-
-
 
     log.info(
         "DEBUG resolve_subscription from process_inbound_email function - the kbb flow?: inbound.subscription_id=%r inbound.subscriptionId=%r inbound.source=%r inbound.to=%r headers_keys=%s headers=%r",
@@ -1817,7 +2010,13 @@ def process_inbound_email(inbound: dict) -> None:
     # CarFax, we must NOT flip mode→"convo" / clear follow_up_at, because
     # this is a lead notification, not a customer reply.
     # ------------------------------------------------------------------
-    _PROVIDER_DOMAINS = ("carfax.com", "cars.com", "cargurus.com", "autotrader.com", "kbb.com")
+    _PROVIDER_DOMAINS = (
+        "carfax.com",
+        "cars.com",
+        "cargurus.com",
+        "autotrader.com",
+        "kbb.com",
+    )
     is_provider_notification = (
         any(d in original_sender_email for d in _PROVIDER_DOMAINS)
         or "noreply" in original_sender_email
@@ -1857,8 +2056,13 @@ def process_inbound_email(inbound: dict) -> None:
         sender_email = _extract_email(sender_raw)
 
         # If sender is a provider/no-reply, pull customer email from the body
-        if any(x in sender_email for x in ["carfax.com", "cars.com"]) or "noreply" in sender_email:
-            maybe_customer = _extract_customer_email_from_lead_body(raw_text or body_text)
+        if (
+            any(x in sender_email for x in ["carfax.com", "cars.com"])
+            or "noreply" in sender_email
+        ):
+            maybe_customer = _extract_customer_email_from_lead_body(
+                raw_text or body_text
+            )
             if maybe_customer:
                 sender_email = maybe_customer
 
@@ -1868,7 +2072,11 @@ def process_inbound_email(inbound: dict) -> None:
             subscription_id=subscription_id,
         )
         if not opp_id:
-            log.warning("No active opp found in Fortellis for sender=%s (sub=%s)", sender_raw, subscription_id)
+            log.warning(
+                "No active opp found in Fortellis for sender=%s (sub=%s)",
+                sender_raw,
+                subscription_id,
+            )
             return
 
     salesperson = "our team"
@@ -1897,28 +2105,45 @@ def process_inbound_email(inbound: dict) -> None:
             opp_id,
             rec.get("id") if rec else None,
             opportunity.get("needs_human_review"),
-            opportunity.get("human_review_reason") or opportunity.get("patti", {}).get("human_review_reason"),
+            opportunity.get("human_review_reason")
+            or opportunity.get("patti", {}).get("human_review_reason"),
         )
         try:
             if opportunity.get("needs_human_review"):
                 human_review_conversation_update = Conversation(
                     conversation_id=conversation_id,
-                    needs_human_review=opportunity.get("needs_human_review", False) or False,
-                    needs_human_review_reason=opportunity.get("human_review_reason", "") or "",
+                    needs_human_review=opportunity.get("needs_human_review", False)
+                    or False,
+                    needs_human_review_reason=opportunity.get("human_review_reason", "")
+                    or "",
                     last_activity_at=timestamp,
                     last_channel="email",
                     status="needs_review",
                     customer_full_name=customer_details.get("customer_full_name", ""),
                     customer_email=customer_details.get("customer_email", ""),
                     customer_phone=customer_details.get("customer_phone", ""),
-                    salesperson_assigned=customer_details.get("salesperson_assigned", ""),
-                    linked_lead_record=customer_details.get("linked_lead_record", "")
+                    salesperson_assigned=customer_details.get(
+                        "salesperson_assigned", ""
+                    ),
+                    linked_lead_record=customer_details.get("linked_lead_record", ""),
                 )
-                conversation_record_id = upsert_conversation(human_review_conversation_update)
+                log.info(
+                    "FINAL CUSTOMER DEBUG: airtable_email=%r opp_email=%r final_email=%r",
+                    customer_details.get("customer_email"),
+                    opportunity.get("customer_email"),
+                    customer_email,
+                )
+                conversation_record_id = upsert_conversation(
+                    human_review_conversation_update
+                )
         except Exception as e:
-            log.error(f"Something went wrong while update human review in Conversations table (1): {e}")
+            log.error(
+                f"Something went wrong while update human review in Conversations table (1): {e}"
+            )
 
-        salesperson = (opportunity.get("Assigned Sales Rep") or "").strip() or salesperson
+        salesperson = (
+            opportunity.get("Assigned Sales Rep") or ""
+        ).strip() or salesperson
     else:
         # Bootstrap from Fortellis by opp_id, then create Airtable lead
         opp = get_opportunity(opp_id, tok, subscription_id)
@@ -1930,7 +2155,11 @@ def process_inbound_email(inbound: dict) -> None:
 
         # 🚫 Guard: do not allow KBB opportunities into General Leads Airtable
         if _is_kbb_opp(opp):
-            log.info("Skipping General Leads bootstrap for KBB opp=%s source=%r", opp_id, opp.get("source"))
+            log.info(
+                "Skipping General Leads bootstrap for KBB opp=%s source=%r",
+                opp_id,
+                opp.get("source"),
+            )
             return
 
         upsert_lead(
@@ -1958,7 +2187,9 @@ def process_inbound_email(inbound: dict) -> None:
     try:
         # NOTE: at this point, `sender_email` may already have been swapped to the real
         # customer email for provider/no-reply cases (carfax/cars.com) earlier in this function.
-        canonical_email = (sender_email or _extract_email(sender_raw) or "").strip().lower()
+        canonical_email = (
+            (sender_email or _extract_email(sender_raw) or "").strip().lower()
+        )
 
         existing = (opportunity.get("customer_email") or "").strip().lower()
         if canonical_email and not existing:
@@ -1973,6 +2204,7 @@ def process_inbound_email(inbound: dict) -> None:
             # Persist to Airtable so future sends resolve cleanly
             try:
                 save_opp(opportunity, extra_fields={"customer_email": canonical_email})
+                rec = find_by_opp_id(opp_id=opp_id)
             except Exception:
                 pass
     except Exception:
@@ -1984,27 +2216,49 @@ def process_inbound_email(inbound: dict) -> None:
         lead_record = rec or rec2
         rec_id = lead_record.get("id", "") if lead_record else ""
 
+        active_record = rec or rec2
+        customer_details = _fetch_customer_details(rec=active_record) or {}
+
+        customer_email = (
+            customer_details.get("customer_email")
+            or opportunity.get("customer_email")
+            or ""
+        )
+
+        customer_phone = (
+            customer_details.get("customer_phone")
+            or opportunity.get("customer_phone")
+            or ""
+        )
+
         conversation = Conversation(
             conversation_id=conversation_id,
             opportunity_id=opp_id,
             subscription_id=subscription_id,
             rooftop_name=rt.get("name", ""),
             lead_source=source,
-            customer_full_name=lead_record.get("fields", {}).get("Customer Full Name", "") or "",
-            customer_email=lead_record.get("fields", {}).get("customer_email", "") or "",
-            customer_phone=lead_record.get("fields", {}).get("customer_phone", "") or "",
-            salesperson_assigned=salesperson,
             last_channel="email",
             last_activity_at=ts,
             last_customer_message=body_text[:300],
-            linked_lead_record=rec_id,
             customer_last_reply_at=ts,
             status="open",
+            customer_full_name=customer_details.get("customer_full_name", ""),
+            customer_email=customer_email,
+            customer_phone=customer_phone,
+            salesperson_assigned=customer_details.get("salesperson_assigned", ""),
+            linked_lead_record=customer_details.get("linked_lead_record", ""),
         )
-
+        log.info(
+            "FINAL CUSTOMER DEBUG: airtable_email=%r opp_email=%r final_email=%r",
+            customer_details.get("customer_email"),
+            opportunity.get("customer_email"),
+            customer_email,
+        )
         conversation_record_id = upsert_conversation(conversation)
     except Exception as e:
-        log.error(f"Something went wrong while upserting inbound Conversations table (2): {e}")
+        log.error(
+            f"Something went wrong while upserting inbound Conversations table (2): {e}"
+        )
 
     fields = rec.get("fields", {}) if rec else {}
 
@@ -2057,11 +2311,14 @@ def process_inbound_email(inbound: dict) -> None:
     else:
         log.info(
             "Skipping mark_customer_reply + mode=convo (provider notification) opp=%s sender=%r",
-            opp_id, original_sender_email,
+            opp_id,
+            original_sender_email,
         )
 
     # 2B: log inbound email to CRM as a COMPLETED "Read Email" activity (type 20)
-    subscription_id = opportunity.get("_subscription_id") or inbound.get("subscription_id")
+    subscription_id = opportunity.get("_subscription_id") or inbound.get(
+        "subscription_id"
+    )
     if subscription_id:
         try:
             from datetime import datetime, timezone
@@ -2075,7 +2332,9 @@ def process_inbound_email(inbound: dict) -> None:
                 if iso_str:
                     try:
                         dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
-                        return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                        return dt.astimezone(timezone.utc).strftime(
+                            "%Y-%m-%dT%H:%M:%SZ"
+                        )
                     except Exception:
                         pass
                 return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -2108,7 +2367,9 @@ def process_inbound_email(inbound: dict) -> None:
             )
             conversation_record_id = upsert_conversation(opt_out_conversation_update)
         except Exception as e:
-            log.error(f"Something went wrong during opt out update in the Conversations table (3): {e}")
+            log.error(
+                f"Something went wrong during opt out update in the Conversations table (3): {e}"
+            )
 
         # ✅ STOP cadence / cron loop
         opportunity["isActive"] = False
@@ -2128,7 +2389,10 @@ def process_inbound_email(inbound: dict) -> None:
     )
 
     if block_auto_reply:
-        log.info("Blocking inbound auto-reply (but reply logged): Needs Human Review opp=%s", opp_id)
+        log.info(
+            "Blocking inbound auto-reply (but reply logged): Needs Human Review opp=%s",
+            opp_id,
+        )
         return
 
     # 3) Mark inbound + set convo signals (Airtable brain)
@@ -2161,7 +2425,8 @@ def process_inbound_email(inbound: dict) -> None:
     else:
         log.info(
             "Skipping convo-mode flip (section 3+4) for provider notification opp=%s sender=%r",
-            opp_id, original_sender_email,
+            opp_id,
+            original_sender_email,
         )
 
     # 4.5) TRIAGE (classify BEFORE any immediate reply)
@@ -2184,7 +2449,9 @@ def process_inbound_email(inbound: dict) -> None:
                     fresh_opp_for_triage = None
 
                 rt = get_rooftop_info(subscription_id) or {}
-                rooftop_name_triage = rt.get("name") or rt.get("rooftop_name") or "Rooftop"
+                rooftop_name_triage = (
+                    rt.get("name") or rt.get("rooftop_name") or "Rooftop"
+                )
 
                 handoff_to_human(
                     opportunity=opportunity,
@@ -2206,10 +2473,14 @@ def process_inbound_email(inbound: dict) -> None:
                         needs_human_review=True,
                         needs_human_review_reason=triage.get("reason", ""),
                     )
-                    conversation_record_id = upsert_conversation(human_review_conversation_update)
+                    conversation_record_id = upsert_conversation(
+                        human_review_conversation_update
+                    )
 
                 except Exception as e:
-                    log.error(f"Something went wrong during human review update in Conversations table (4): {e}")
+                    log.error(
+                        f"Something went wrong during human review update in Conversations table (4): {e}"
+                    )
 
                 # extra safety persist
                 try:
@@ -2229,10 +2500,15 @@ def process_inbound_email(inbound: dict) -> None:
                 return
 
             if cls == "EXPLICIT_OPTOUT":
-                log.info("Triage EXPLICIT_OPTOUT non-KBB opp=%s - suppressing + stopping", opp_id)
+                log.info(
+                    "Triage EXPLICIT_OPTOUT non-KBB opp=%s - suppressing + stopping",
+                    opp_id,
+                )
 
                 try:
-                    mark_unsubscribed(opportunity, reason=(triage.get("reason") or "Explicit opt-out"))
+                    mark_unsubscribed(
+                        opportunity, reason=(triage.get("reason") or "Explicit opt-out")
+                    )
 
                     try:
                         opt_out_conversation_update = Conversation(
@@ -2240,11 +2516,15 @@ def process_inbound_email(inbound: dict) -> None:
                             opted_out=True,
                             opt_out_channel="email",
                             opt_out_at=timestamp,
-                            status="suppressed"
+                            status="suppressed",
                         )
-                        conversation_record_id = upsert_conversation(opt_out_conversation_update)
+                        conversation_record_id = upsert_conversation(
+                            opt_out_conversation_update
+                        )
                     except Exception as e:
-                        log.error(f"Something went wrong while marking the conversationa as opt out in Conversations table (5): {e}")
+                        log.error(
+                            f"Something went wrong while marking the conversationa as opt out in Conversations table (5): {e}"
+                        )
                 except Exception as e:
                     log.warning("mark_unsubscribed failed opp=%s: %s", opp_id, e)
 
@@ -2269,7 +2549,10 @@ def process_inbound_email(inbound: dict) -> None:
 
         subscription_id = opportunity.get("_subscription_id")
         if not subscription_id:
-            log.warning("Inbound email matched opp=%s but missing _subscription_id; cannot reply", opp_id)
+            log.warning(
+                "Inbound email matched opp=%s but missing _subscription_id; cannot reply",
+                opp_id,
+            )
             return
 
         tok = get_token(subscription_id)
@@ -2311,7 +2594,9 @@ def process_inbound_email(inbound: dict) -> None:
             fresh_opp = get_opportunity(opp_id, tok, subscription_id)
 
             safe_mode = _safe_mode_from(inbound)
-            test_recipient = inbound.get("test_email") or os.getenv("INTERNET_TEST_EMAIL")
+            test_recipient = inbound.get("test_email") or os.getenv(
+                "INTERNET_TEST_EMAIL"
+            )
 
             state, action_taken = send_thread_reply_now(
                 opportunity=opportunity,
@@ -2328,7 +2613,11 @@ def process_inbound_email(inbound: dict) -> None:
             if isinstance(state, dict):
                 opportunity["_internet_state"] = state
 
-        log.info("Inbound email processed immediately opp=%s action_taken=%s", opp_id, action_taken)
+        log.info(
+            "Inbound email processed immediately opp=%s action_taken=%s",
+            opp_id,
+            action_taken,
+        )
 
         if action_taken:
             try:
@@ -2338,18 +2627,22 @@ def process_inbound_email(inbound: dict) -> None:
                     ai_last_reply_at=timestamp,
                     last_activity_at=timestamp,
                     last_channel="email",
-                    status="open"
+                    status="open",
                 )
 
                 conversation_record_id = upsert_conversation(outbound_convo_update)
             except Exception as e:
-                log.error(f"Something went wrong while upserting ai_last_reply_at to Conversations table (6): {e}")
+                log.error(
+                    f"Something went wrong while upserting ai_last_reply_at to Conversations table (6): {e}"
+                )
 
     except Exception as e:
         log.exception("Immediate inbound reply failed opp=%s err=%s", opp_id, e)
 
     if not conversation_record_id:
-        log.warning(f"No conversation record found for {opp_id}; inbound email will log without conversations link.")
+        log.warning(
+            f"No conversation record found for {opp_id}; inbound email will log without conversations link."
+        )
         conversation_record_id = ""
 
     timestamp = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
@@ -2360,7 +2653,11 @@ def process_inbound_email(inbound: dict) -> None:
 
     if not safe_message_id:
         safe_message_id = _generate_message_id(
-            opp_id=opp_id, timestamp=timestamp, subject=subject, to_addr="patti@pattersonautos.com", body_html=body_html
+            opp_id=opp_id,
+            timestamp=timestamp,
+            subject=subject,
+            to_addr="patti@pattersonautos.com",
+            body_html=body_html,
         )
 
     try:
@@ -2391,15 +2688,48 @@ def process_inbound_email(inbound: dict) -> None:
         log.error(f"Failed to log email to Messages (process_inbound_email): {e}")
 
     try:
-        messages_count_inbound = len(_get_messages_for_conversation(conversation_id, "inbound"))
-        messages_count_outbound = len(_get_messages_for_conversation(conversation_id, "outbound"))
-        message_count_update = Conversation(conversation_id=conversation_id,
-                                            message_count_inbound=messages_count_inbound,
-                                            message_count_outbound=messages_count_outbound,
-                                            message_count_total=messages_count_inbound + messages_count_outbound)
+        active_record = rec or rec2
+        customer_details = _fetch_customer_details(rec=active_record) or {}
+
+        customer_email = (
+            customer_details.get("customer_email")
+            or opportunity.get("customer_email")
+            or ""
+        )
+        customer_phone = (
+            customer_details.get("customer_phone")
+            or opportunity.get("customer_phone")
+            or ""
+        )
+
+        messages_count_inbound = len(
+            _get_messages_for_conversation(conversation_id, "inbound")
+        )
+        messages_count_outbound = len(
+            _get_messages_for_conversation(conversation_id, "outbound")
+        )
+        message_count_update = Conversation(
+            conversation_id=conversation_id,
+            message_count_inbound=messages_count_inbound,
+            message_count_outbound=messages_count_outbound,
+            message_count_total=messages_count_inbound + messages_count_outbound,
+            customer_full_name=customer_details.get("customer_full_name", ""),
+            customer_email=customer_email,
+            customer_phone=customer_phone,
+            salesperson_assigned=customer_details.get("salesperson_assigned", ""),
+            linked_lead_record=customer_details.get("linked_lead_record", ""),
+        )
+        log.info(
+            "FINAL CUSTOMER DEBUG: airtable_email=%r opp_email=%r final_email=%r",
+            customer_details.get("customer_email"),
+            opportunity.get("customer_email"),
+            customer_email,
+        )
         upsert_conversation(message_count_update)
     except Exception as e:
-        log.error(f"Something went wrong while upserting messages count to Conversations table (7): {e}")
+        log.error(
+            f"Something went wrong while upserting messages count to Conversations table (7): {e}"
+        )
 
     log.info("Inbound email queued + processed immediately for opp=%s", opp_id)
     return
