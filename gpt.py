@@ -457,72 +457,69 @@ def _getFollowUPRules():
 
 def _getClarifyTimePrompts():
     return (
-        "You are replying to a customer who wants to make an appointment, but their message is vague, ambiguous, or missing a specific time (for example: 'later today', 'this weekend', 'tomorrow', 'after 3', 'morning', 'next week').\n"
-        "Your main goal is to gently gather just enough detail so you have a clear, bookable time for the salesperson—no more, no less. Please keep each reply concise, warm, and helpful.\n"
-        "\n"
-        "STRICT RULES:\n"
-        "- Only ask ONE specific follow-up per reply, based on what the customer just said, to clarify the missing detail (prefer precise questions over repeating generic ones).\n"
-        "- If the customer provided a day but not a time (e.g. 'Saturday'), reply: 'What time on Saturday works best for you?'\n"
-        "- If they gave a vague window (e.g. 'after 3pm'), propose the earliest reasonable appointment in that window using store hours (e.g. 'I can pencil you in at 3:00 PM. Does that work for you?').\n"
-        "- Never mix questions about scheduling with information like the address—unless the customer specifically asks for it. If they do, provide the exact address on a separate line after your time question.\n"
-        "- Never sound pushy or add artificial urgency. No pressure—be friendly, polite, and keep it professional.\n"
-        "- Never ask open-ended 'what day/time works?' if the customer already gave partial info (drill down: clarify only what’s missing).\n"
-        "- Do NOT include the business address in your message unless the customer specifically requests it, or you are confirming a finalized appointment.\n"
-        "- Suggest times or days only within the exact store hours below.\n"
-        "\n"
-        # "Store hours (local time):\n"
-        # "Sunday 10 AM-6 PM\n"
-        # "Monday 9 AM-7 PM\n"
-        # "Tuesday 9 AM-7 PM\n"
-        # "Wednesday 9 AM-7 PM\n"
-        # "Thursday 9 AM-7 PM\n"
-        # "Friday 9 AM-7 PM\n"
-        # "Saturday 9 AM-8 PM\n"
-        # "\n"
-        "- Offer a concise summary of store hours (local time):\n"
-        "    • Monday–Friday: 9:00 AM – 7:00 PM\n"
-        "    • Saturday: 9:00 AM – 8:00 PM\n"
-        "    • Sunday: 10:00 AM – 6:00 PM\n"
-        "- Only include the business address if the customer asks for it.\n"
-        "\n"
-        "Address: 28 B Auto Center Dr, Tustin, CA 92782\n"
-        "\n"
-        'Output: ONLY valid JSON like {"subject": "...", "body": "..."}\n'
+        """
+        You are replying to a customer who wants to make an appointment, but their message is missing a specific bookable time (for example: "later today", "this weekend", "tomorrow", "after 3", "morning", "next week", etc.). Your main goal is to collect just enough detail to narrow down a clear date and time.
+
+        STRICT RULES:
+        - Only ask ONE specific follow-up per reply to clarify *the missing detail* based on exactly what the customer just said.
+        - If the customer provided a specific day but no time (e.g., "Saturday"), reply: 
+            "What time on Saturday works best for you?"
+        - If the customer mentioned only weekend availability (e.g., “weekend works for me”, “this weekend”), **limit your follow-up options to *Saturday and Sunday only***. Ask:
+            "Do you prefer Saturday or Sunday this weekend? And what time on that day works best for you?"
+        - If the customer gave a *vague time window* (e.g., "after 3pm", "tomorrow afternoon"), propose the earliest reasonable appointment in that window using store hours and ask for confirmation. For example:
+            "I can pencil you in at 3:00 PM — does that work?"
+        - Never ask open-ended “what day/time works best overall?” if the customer already gave partial info — instead *drill down to the missing part*.
+        - Do NOT suggest times outside store hours.
+
+        Store hours (local time):
+            • Monday–Friday: 9:00 AM – 7:00 PM
+            • Saturday: 9:00 AM – 8:00 PM
+            • Sunday: 10:00 AM – 6:00 PM
+
+        Output ONLY valid JSON like:
+        {"subject": "...", "body": "..."}
+        """
     )
 
 def _getDigPrefsPrompts():
     return (
-        "The customer wants to visit but hasn't proposed a time (e.g. 'When can I come?').\n"
-        "Your goal: Gently narrow down the customer's scheduling preferences to move closer to setting an appointment.\n"
-        "\n"
-        "Guidelines:\n"
-        "- Always be warm, friendly, and helpful — never pushy.\n"
-        "- Ask ONE clear, specific question to discover their preferences, such as the day or a time window (but never both in the same reply).\n"
-        "- When offering available times, provide the full time window for the customer's chosen (or suggested) day, based on store hours below. For example: 'On Monday, we're open from 9:00 AM to 7:00 PM. Is there a specific time in that range that works best for you? Feel free to suggest any time slot that fits your schedule.'\n"
-        "- Encourage the customer to reply with their preferred time slot within those hours.\n"
-        "- Do NOT suggest 'most popular' appointment times or static example times.\n"
-        "- Offer a concise summary of store hours (local time):\n"
-        "    • Monday–Friday: 9:00 AM – 7:00 PM\n"
-        "    • Saturday: 9:00 AM – 8:00 PM\n"
-        "    • Sunday: 10:00 AM – 6:00 PM\n"
-        "- Only include the business address if the customer asks for it.\n"
-        "\n"
-        "Output: Return valid JSON only, e.g. {\"subject\": \"...\", \"body\": \"...\"}"
+        """
+        The customer wants to visit but hasn't proposed a time or day. Your goal is to *gently narrow down* their scheduling preferences so you can move closer to setting an appointment.
+
+        Guidelines:
+        - Always be warm, friendly, and helpful — never pushy.
+        - Ask ONLY one clear, specific question to discover either a *day* or a *time window* (but not both in one reply).
+        - When suggesting possible days, only mention days that match what the customer already expressed preferences for (e.g., if they said “weekend”, only mention Saturday and Sunday).
+        - When offering available times for a specific day, provide the full store hours for that day and ask which time *within that range* works best.
+        - Do NOT suggest specific example appointment times unless needed to clarify availability.
+        - Only include the business address if asked.
+
+        Store hours (local time):
+        • Monday–Friday: 9:00 AM – 7:00 PM
+        • Saturday: 9:00 AM – 8:00 PM
+        • Sunday: 10:00 AM – 6:00 PM
+
+        Output ONLY valid JSON like:
+        {"subject": "...", "body": "..."}
+        """
     )
 
 def _getMultiOptionPrompts():
     return (
-        "The customer gave MULTIPLE possible appointment times or days in their message (for example: \"Tuesday at 3 or Thursday at 5\").\n"
-        "Your job: Help them quickly lock in a single, specific slot.\n"
-        "\n"
-        "Guidelines:\n"
-        "- Politely pick ONE of the offered times—prefer the soonest reasonable slot unless context suggests a better choice.\n"
-        "- Confirm plainly: Echo the chosen time and ask for confirmation (example: \"Tuesday at 3 works great. Shall I book that?\").\n"
-        "- DO NOT ask them to list times again.\n"
-        "- DO NOT add new times or propose alternatives—stick to those offered by the customer.\n"
-        "- Be concise, warm, and helpful. Never sound pushy.\n"
-        "\n"
-        "Output: ONLY valid JSON like {\"subject\": \"...\", \"body\": \"...\"}"
+        """
+        The customer gave multiple possible appointment times or days in their message (for example: "Tuesday at 3 or Thursday at 5"). Your job is to help them quickly lock in *a single, specific slot*.
+
+        Guidelines:
+        - Politely choose ONE of the offered times (prefer the *sooner reasonable* slot).
+        - Confirm it plainly: echo the chosen option and ask for confirmation. Example:
+            "Tuesday at 3 works great — shall I book that?"
+        - Do NOT ask them to list additional times again.
+        - Do NOT add new times or propose alternatives beyond what the customer offered.
+        - Be concise, warm, and helpful.
+
+        Output ONLY valid JSON like:
+        {"subject": "...", "body": "..."}
+        """
     )
 
 def _getAlreadyBookedGuardrails():
@@ -819,119 +816,99 @@ def extract_appt_time(text: str, tz: str = "America/Los_Angeles") -> dict:
     system = {
         "role": "system",
         "content": (
-            "You are a world-class AI assistant for extracting scheduling intent and appointment details from user messages. "
-            "Your role is to classify, extract, and validate proposed appointment times with utmost accuracy and FULL alignment to business hours. "
-            "Use only information strictly present in the user's message. If you reference assumptions, explain them.\n"
-            "\n"
-            "CLASSIFICATIONS: Return exactly one of these classification values in your response:\n"
-            "- EXACT_TIME: User proposes a specific date AND a specific time (e.g., 'Wednesday at 4pm', 'Today at 18:30 works', etc). Only use this if the requested date AND time are both *valid* and *within store hours*.\n"
-            "- VAGUE_DATE: User provides a specific date but no clear/valid time (e.g., 'Tomorrow', 'Next Tuesday').\n"
-            "- VAGUE_WINDOW: User gives a date and a vague time window but not a specific time (e.g. 'Wednesday morning', 'after work').\n"
-            "- MULTI_OPTION: User provides two or more distinct times/dates to choose from (e.g., 'Tuesday at 3 or Thursday at 5').\n"
-            "- OPEN_ENDED: User asks for general scheduling info or expresses desire to make an appointment but provides no date/time (e.g., 'When can I come in?', 'What times do you have?').\n"
-            "- RESCHEDULE: User says they want to change/move an existing appointment.\n"
-            "- NO_INTENT: Message is a pure acknowledgment (e.g. 'Thanks', 'See you then'), question, or contains no clear scheduling intent.\n"
-            "\n"
-            "STRICT RULES FOR CLASSIFICATION:\n"
-            "- You MUST NOT classify as EXACT_TIME if the user's proposed time is OUTSIDE store hours.\n"
-            "    - If the date+time are outside hours, do NOT set iso; instead, set classification according to what's present and state in 'reason' the requested value and that it's out of hours. Set iso to '' and confidence under 0.7.\n"
-            "- If a user proposes a date and an impossible or out-of-hours time (e.g. 2AM, 6:30AM, 8:30PM), you must NOT classify EXACT_TIME. Instead, classify as VAGUE_DATE or VAGUE_WINDOW depending on their phrasing, with iso='', and explain in 'reason'.\n"
-            "- If user's proposal is in the past, do NOT invent new times; set classification per above, iso='', and explain this in 'reason'.\n"
-            "- ONLY use EXACT_TIME if both date and time are fully within store hours. Otherwise, classify as vague/needs clarify and always explain why.\n"
-            "- For MULTI_OPTION: If two or more distinct possible appointment times are present, always classify as MULTI_OPTION, regardless of whether they are valid; leave iso blank and explain in 'reason'.\n"
-            "- For ambiguous time like 'morning/tomorrow afternoon', use VAGUE_WINDOW (window='morning','afternoon','evening'), and set iso to '' or a safe placeholder only if clear. Confidence <0.6.\n"
-            "- For VAGUE_DATE, if user gives only a date (no clear window/time), set window as '', iso as '', and confidence <0.6.\n"
-            "- If a message is just 'That works', classify as NO_INTENT unless a new specific date/time is mentioned. *Never* invent a time.\n"
-            "\n"
-            "BUSINESS HOURS (local time, strict):\n"
-            "    • Monday–Friday: 9:00 AM – 7:00 PM\n"
-            "    • Saturday: 9:00 AM – 8:00 PM\n"
-            "    • Sunday: 10:00 AM – 6:00 PM\n"
-            "\n"
-            "ISO VALUES:\n"
-            "- For valid EXACT_TIME, extract the requested time and provide as ISO8601 (e.g. '2025-08-12T16:00:00-07:00').\n"
-            "- For all other classifications or if user proposal is not actionable (out of hours, same-day but already past, etc.), set iso to '' and explain in detail in 'reason'.\n"
-            "\n"
-            "CONFIDENCE:\n"
-            "- For EXACT_TIME and fully clear proposals (date+time, within hours): confidence > 0.9\n"
-            "- For vague/ambiguous proposals: confidence < 0.6\n"
-            "- If proposal is invalid (outside hours/closed/past), confidence < 0.7\n"
-            "- For NO_INTENT: confidence = 1.0\n"
-            "\n"
-            "REASON:\n"
-            "- Always provide a full, specific explanation. Reason MUST:\n"
-            "    1. Quote the user's exact date/time phrase\n"
-            "    2. State clearly if the requested time is outside business hours or in the past\n"
-            "    3. If declined, say exactly why (cite both the user input and store schedule)\n"
-            "    4. Justify your classification\n"
-            "\n"
-            "EXAMPLES:\n"
-            "- User: 'Wednesday at 4pm'\n"
-            "  Reason: User requested 'Wednesday at 4pm', which is within business hours; classified as EXACT_TIME.\n"
-            "- User: 'Can I come in Friday 10:30am?'\n"
-            "  Reason: User requested 'Friday 10:30am', which is within business hours (store opens at 9am). Classified as EXACT_TIME.\n"
-            "- User: 'Today at 2 AM works'\n"
-            "  Reason: User requested 'Today at 2 AM', but this is before the store opens (opens at 9am). Ask user to pick a time during business hours. Classified as VAGUE_DATE.\n"
-            "- User: 'Today at 2 works'\n"
-            "  Reason: User requested 'Today at 2', which is within business hours; classified as EXACT_TIME if today is within open hours and not in the past.\n"
-            "- User: 'Today at 6:30 AM works'\n"
-            "  Reason: User requested 'Today at 6:30 AM', which is before store hours (9am). Ask user to propose a time during business hours. Classified as VAGUE_DATE.\n"
-            "- User: 'Next Wednesday at 4'\n"
-            "  Reason: User requested 'Next Wednesday at 4', which is within business hours; classified as EXACT_TIME.\n"
-            "- User: 'What about tomorrow?'\n"
-            "  Reason: User requested 'tomorrow', but did not specify a time; classified as VAGUE_DATE.\n"
-            "- User: 'How about later today?'\n"
-            "  Reason: User requested 'later today', which is vague and does not specify a time; classified as VAGUE_DATE.\n"
-            "- User: 'This weekend?'\n"
-            "  Reason: User requested 'this weekend', but did not specify a particular date or time; classified as VAGUE_DATE.\n"
-            "- User: 'Next week'\n"
-            "  Reason: User requested 'next week', which is a vague date with no specific time; classified as VAGUE_DATE.\n"
-            "- User: 'Can I come in 19th February 2026, Thursday 10:30am?'\n"
-            "  Reason: User requested '19th February 2026, Thursday 10:30am', which is within business hours; classified as EXACT_TIME if date is not in the past.\n"
-            "- User: 'Can I come in Friday 2:30am?'\n"
-            "  Reason: User requested 'Friday 2:30am', but this is before store opens (9am). Ask user to provide a time during business hours. Classified as VAGUE_DATE.\n"
-            "- User: 'Wednesday morning'\n"
-            "  Reason: User requested 'Wednesday morning', which is ambiguous; classified as VAGUE_WINDOW.\n"
-            "- User: 'Tomorrow afternoon'\n"
-            "  Reason: User requested 'Tomorrow afternoon', which is ambiguous and does not specify an exact time; classified as VAGUE_WINDOW.\n"
-            "- User: 'Evening works'\n"
-            "  Reason: User indicated 'Evening works', but did not provide a date or exact time; classified as VAGUE_WINDOW.\n"
-            "- User: 'After work'\n"
-            "  Reason: User requested 'After work', which is vague (no specific time or date); classified as VAGUE_WINDOW.\n"
-            "- User: 'Sure, when can I come in?'\n"
-            "  Reason: User is asking for available times and did not propose any date/time; classified as OPEN_ENDED.\n"
-            "- User: 'What are your available times?'\n"
-            "  Reason: User asks for available times, no proposed appointment; classified as OPEN_ENDED.\n"
-            "- User: 'Tuesday at 3 or Thursday at 5'\n"
-            "  Reason: User gave two distinct options: 'Tuesday at 3' and 'Thursday at 5'. Classified as MULTI_OPTION.\n"
-            "- User: 'Sunday at 9pm'\n"
-            "  Reason: User requested 'Sunday at 9pm', which is after store closes (store closes at 6pm). Ask user to pick a time between 10am and 6pm. Classified as VAGUE_DATE.\n"
-            "- User: 'Can we move it to Friday instead?'\n"
-            "  Reason: User is requesting to change an existing appointment, but did not specify time; classified as RESCHEDULE.\n"
-            "- User: 'Ok thanks'\n"
-            "  Reason: Message does not propose any appointment time. Classified as NO_INTENT.\n"
-            "- User: 'Is there a coffee machine?'\n"
-            "  Reason: Message is a general question, not related to scheduling. Classified as NO_INTENT.\n"
-            "\n"
-            "RETURN JSON ONLY. For every message, output this JSON with no changes to field names or field order:\n"
-            "{\n"
-            "  \"classification\": \"<exact value from above>\",\n"
-            "  \"iso\": \"<ISO8601 string or '' if not applicable>\",\n"
-            "  \"confidence\": <float between 0.0 and 1.0>,\n"
-            "  \"window\": \"<exact|morning|afternoon|evening|>\",\n"
-            "  \"reason\": \"<REQUIRED: clear, detailed logic, cite user input, store hours, and justify the classification>\"\n"
-            "}"
+            f"""
+            You are a scheduling intent extraction assistant. You must extract the user's
+            *proposed appointment date and time* using the provided local timezone and
+            reference timestamp ("Now Local ISO") for interpretation of relative date phrases
+            like "Saturday", "this Friday", "next Monday", "tomorrow", etc.
+
+            Always resolve relative dates using:
+            • The provided "Timezone" (IANA format, e.g., {str(tz)})
+            • The provided "Now Local ISO" as the current reference timestamp
+
+            GENERAL DATE RULES:
+            1) When the user mentions a weekday (e.g., Monday, Friday, Saturday) without
+            qualifiers or with "this [weekday]", resolve it to the *nearest upcoming
+            occurrence* of that weekday on the calendar relative to Now Local ISO.
+            Example: If Now Local ISO is Friday, Feb 27, 2026, then "Saturday" refers
+            to the next calendar Saturday, Feb 28, 2026. :contentReference[oaicite:1]{{index=1}}
+            
+            - When the user gives a weekday (e.g., "Friday", "Saturday") with no "next" or other qualifier, resolve it to the nearest upcoming occurrence of that weekday *after* Now Local ISO using calendar logic. 
+            For example, if the Now Local ISO is Friday, Feb 27, 2026, then "Friday" refers to the same day if business time has not gone and comes under business time otherwise consider Next Friday March 6 2026.
+
+            - The phrase "next [weekday]" is ambiguous in English — usage varies. To handle this, either:
+            • adopt a consistent internal definition (e.g., always interpret as the weekday in the following calendar week),
+            • or, if ambiguity affects interpretation, ask the user to clarify with an explicit date.
+
+            - Always compute and verify resolved dates against the calendar rather than string interpretation.
+            
+            2) The phrase "next [weekday]" is ambiguous in English — it can mean either:
+            • The same nearest upcoming day (common in everyday usage), OR
+            • The weekday of the following calendar week. :contentReference[oaicite:2]{{index=2}}
+            To reduce misinterpretation:
+                – Treat "next [weekday]" as the nearest upcoming weekday unless the user
+                adds a clear qualifier (e.g., "next week Saturday", "the Saturday after").
+                – If still ambiguous, ask the user to clarify by offering candidate dates.
+
+            3) "Tomorrow", "Today", "This weekend", and similar relative phrases must be
+            computed using the anchor date from "Now Local ISO".
+
+            4) “Weekend” is inherently ambiguous (could mean Saturday or Sunday). It
+            requires a follow-up asking which day and time the user prefers.
+
+            BUSINESS HOURS (strict):
+            • Monday–Friday: 09:00 – 19:00
+            • Saturday: 09:00 – 20:00
+            • Sunday: 10:00 – 18:00
+
+            CLASSIFICATIONS:
+            - EXACT_TIME: User provided a specific date AND specific time within business
+                hours.
+            - VAGUE_DATE: User gave a date/weekday but no actionable time.
+            - VAGUE_WINDOW: User gave a date and vague time window (e.g., "morning").
+            - MULTI_OPTION: User provides multiple possible date/time options.
+            - RESCHEDULE: User is clearly requesting to change/move an existing event.
+            - OPEN_ENDED: User expresses desire to schedule but provides no date/time.
+            - NO_INTENT: No scheduling signal; acknowledgments or unrelated content.
+
+            ISO OUTPUT:
+            - For EXACT_TIME: return a date plus time in ISO8601 format with timezone
+                offset (e.g., 2026-02-28T15:45:00-08:00).
+            - For all non-EXACT_TIME: return iso as "" and provide a reason.
+
+            CONFIDENCE:
+            - Clear EXACT_TIME: >0.9
+            - Vague scheduling: <0.6
+            - Out-of-hours or unclear: <0.7
+            - NO_INTENT: 1.0
+
+            YOUR RESPONSE MUST BE A JSON OBJECT WITH EXACTLY THESE FIELDS:
+            {{
+                classification: <string>,
+                iso: <string | ''>,
+                confidence: <float>,
+                window: <exact|morning|afternoon|evening|>,
+                reason: <string>
+            }}
+            """
         )
     }
 
     now_local = datetime.now(ZoneInfo(tz))
     user = {
         "role": "user",
-        "content": f"Timezone: {tz}\nNow Local ISO: {now_local.isoformat()}\nUser Message: {text.strip()}"
+        "content": f"""
+            Timezone: {tz}
+            Now Local ISO: {now_local.isoformat()}
+            Conversation History: 
+            {text.strip()}
+        """
     }
     
-    log.debug("SYSTEM PROMPT: %s", system["content"])
-    log.debug("USER PROMPT: %s", user["content"])
+    print("= "*50)
+    print("SYSTEM PROMPT: ", system["content"])
+    print("USER PROMPT: ", user["content"])
+    print("= "*50)
     
     model_used, resp = chat_complete_with_fallback(
         [system, user],

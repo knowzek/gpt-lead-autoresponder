@@ -105,7 +105,35 @@ def notify_staff_patti_scheduled_appt(
         cc_clean.append(e)
     cc_addrs = cc_clean
 
-    # -----------------------
+    # Customer info (prefer Airtable-saved fields)
+    first = (opportunity.get("customer_first_name") or "").strip()
+    last  = (opportunity.get("customer_last_name") or "").strip()
+    customer_name = (f"{first} {last}").strip() or "Customer"
+    customer_email = (opportunity.get("customer_email") or "").strip() or "unknown"
+    customer_phone = (opportunity.get("customer_phone") or "").strip() or "unknown"
+    vehicle = _vehicle_str(opportunity, fresh_opp or {}) or ""
+
+    subj = f"[Patti] Appointment scheduled — {rooftop_name} — {customer_name} — {appt_human}"
+    if vehicle:
+        subj += f" — {vehicle}"
+
+    html = f"""
+    <p><strong>Patti scheduled a sales appointment</strong></p>
+    <p><strong>Store:</strong> {rooftop_name}<br/>
+       <strong>When:</strong> {appt_human}<br/>
+       <strong>Customer:</strong> {customer_name}<br/>
+       <strong>Email:</strong> {customer_email}<br/>
+       <strong>Phone:</strong> {customer_phone}<br/>
+       <strong>Opportunity ID:</strong> {opp_id}<br/>
+       <strong>Vehicle:</strong> {vehicle or "—"}</p>
+
+    <p><strong>Customer reply:</strong><br/>
+    <em>{(customer_reply or "").strip()[:800]}</em></p>
+
+    <p>You can take it from here to confirm details and prep the vehicle.</p>
+    """
+
+  # -----------------------
     # SAFE MODE recipient gate (hard override)
     # -----------------------
     safe_mode = (os.getenv("SAFE_MODE", "0").strip() == "1")
@@ -139,36 +167,7 @@ def notify_staff_patti_scheduled_appt(
             "SAFE_MODE enabled: rerouting APPT notify opp=%s original_to=%r original_cc=%r -> test_to=%r",
             opp_id, original_to, original_cc, test_to
         )
-
-
-    # Customer info (prefer Airtable-saved fields)
-    first = (opportunity.get("customer_first_name") or "").strip()
-    last  = (opportunity.get("customer_last_name") or "").strip()
-    customer_name = (f"{first} {last}").strip() or "Customer"
-    customer_email = (opportunity.get("customer_email") or "").strip() or "unknown"
-    customer_phone = (opportunity.get("customer_phone") or "").strip() or "unknown"
-    vehicle = _vehicle_str(opportunity, fresh_opp or {}) or ""
-
-    subj = f"[Patti] Appointment scheduled — {rooftop_name} — {customer_name} — {appt_human}"
-    if vehicle:
-        subj += f" — {vehicle}"
-
-    html = f"""
-    <p><strong>Patti scheduled a sales appointment</strong></p>
-    <p><strong>Store:</strong> {rooftop_name}<br/>
-       <strong>When:</strong> {appt_human}<br/>
-       <strong>Customer:</strong> {customer_name}<br/>
-       <strong>Email:</strong> {customer_email}<br/>
-       <strong>Phone:</strong> {customer_phone}<br/>
-       <strong>Opportunity ID:</strong> {opp_id}<br/>
-       <strong>Vehicle:</strong> {vehicle or "—"}</p>
-
-    <p><strong>Customer reply:</strong><br/>
-    <em>{(customer_reply or "").strip()[:800]}</em></p>
-
-    <p>You can take it from here to confirm details and prep the vehicle.</p>
-    """
-
+        
     send_email_via_outlook(
         to_addr=to_addr,
         subject=_clip(subj, 180),

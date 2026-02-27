@@ -4145,22 +4145,89 @@ def send_thread_reply_now(
     print('➡ processNewData.py:4145 messages:', messages)
     
     previous_conversion = []
+    previous_conversion_lines = ""
+    conversation_history = ""
     for conv in messages_for_conversations:
+        print("="*50)
         fields = conv.get('fields', {})
-        body_text = fields.get('body_text', '')
-        print('➡ processNewData.py:4058 body_text:', body_text)
+        body_text = fields.get('body_text', '') or fields.get('body_html', '')
         timestamp = fields.get('timestamp', '')
         subject = fields.get('subject', '')
+        print("Subject:", subject)
+        print("Body Text:", body_text)
+        print("Timestamp:", timestamp)
+        print("="*50)
+        
+        # Convert timestamp (if exists) to America/Los_Angeles timezone and ISO8601 string
+        # Store original timestamp in 'date_original' in case needed
+        date_local = ""
+        if timestamp:
+            try:
+                # handle possible ISO, or seconds since epoch, or other formats
+                dt = None
+                if isinstance(timestamp, (int, float)):
+                    # Assume unix timestamp in seconds
+                    dt = _dt.fromtimestamp(timestamp, tz=ZoneInfo("UTC"))
+                elif isinstance(timestamp, str):
+                    # Try ISO parse with and without timezone
+                    import re
+                    ts_clean = timestamp.strip()
+                    # If it's just digits, treat as epoch
+                    if re.fullmatch(r"\d+", ts_clean):
+                        dt = _dt.fromtimestamp(int(ts_clean), tz=ZoneInfo("UTC"))
+                    else:
+                        try:
+                            # Try ISO with/without Z
+                            if ts_clean.endswith("Z"):
+                                dt = _dt.fromisoformat(ts_clean.replace("Z", "+00:00"))
+                            else:
+                                dt = _dt.fromisoformat(ts_clean)
+                            if dt.tzinfo is None:
+                                # treat as UTC if no tzinfo
+                                dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+                        except Exception:
+                            # Try RFC 2822 or fallback
+                            from email.utils import parsedate_to_datetime
+                            dt = parsedate_to_datetime(ts_clean)
+                            if dt.tzinfo is None:
+                                dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+                if dt:
+                    dt_pacific = dt.astimezone(ZoneInfo("America/Los_Angeles"))
+                    date_local = dt_pacific.isoformat()
+            except Exception:
+                date_local = ""  # fallback to empty
+        # Print the local (Pacific) timestamp if available, for debugging
+        
+        print(f"Local time (America/Los_Angeles): {date_local}")
+        
         previous_conversion.append({
             'msgFrom': 'customer', 
             'subject': subject, 
             'body': body_text, 
             'date': str(timestamp)
         })
+        
+        if body_text:
+            previous_conversion_lines += body_text + "\n"
+    
+    # Conversation History:
+    # User (earlier): Let's schedule on Saturday.
+    # Assistant: What time on Saturday works for you?
+    # User (most recent): Saturday around 3:45 PM works for me.
+    
+    # latest/new message as last
+    if customer_body:
+        conversation_history = f"""
+        User (earlier) : 
+        {previous_conversion_lines if previous_conversion_lines else "None"}
 
-    if previous_conversion:
-        messages = previous_conversion + (messages or [])
-    print('➡ processNewData.py:4163 messages:', messages)
+        User (most recent message):
+        {customer_body}
+        """
+    
+    # if previous_conversion:
+    #     messages = previous_conversion + (messages or [])
+    # print('➡ processNewData.py:4163 messages:', messages)
     
     # --- Step 2: try to auto-schedule an appointment from this reply (WEBHOOK PATH) ---
     created_appt_ok = False
@@ -4187,10 +4254,10 @@ def send_thread_reply_now(
             conf = 0.0
             
             log.info("Customer body for appt extraction: %r", customer_body)
-            new_customer_body = f"Here customer message and previous converstaion there {str(previous_conversion)}  {customer_body}"
-            if (not already_scheduled) and new_customer_body:
+            # Build a user prompt that makes message roles/history explicit for OpenAI
+            if (not already_scheduled) and conversation_history:
                 
-                proposed = extract_appt_time(new_customer_body, tz="America/Los_Angeles")
+                proposed = extract_appt_time(conversation_history, tz="America/Los_Angeles")
                 
                 intent_action = classify_scheduling_intent(proposed)
                 
@@ -4353,7 +4420,8 @@ def send_thread_reply_now(
     
     log.info(f"created_appt_ok: {created_appt_ok}")
     log.info(f"Appt human: {appt_human}")
-    if created_appt_ok and appt_human:
+    
+    if created_appt_ok and appt_human and intent_action == "SCHEDULE":
         subject = inbound_subject or f"Re: {vehicle_str}"
         body_html = (
             f"<p>Hi {customer_name},</p>"
@@ -4378,49 +4446,57 @@ def send_thread_reply_now(
         elif intent_action == "RESCHEDULE":
             gen_prompt = _getClarifyTimePrompts()  # Treat as clarify for now
         else:
-            # You are replying to an ACTIVE email thread (not a first welcome message).
-            # Context:
-            # - The guest originally inquired about: {vehicle_str}
             gen_prompt = """
-                Hard rules:
-                - If the guest proposes a visit time (including casual phrasing like "tomorrow around 4"), CONFIRM it.
-                - Do NOT ask "what day/time works best?" after they already proposed a time.
-                - Do NOT mention store hours unless (a) the guest asks, or (b) the proposed time is outside store hours.
-                - Never invent store hours. Use only the store hours provided below.
-                - Always include the address in the confirmation sentence.
-                
-                'Store hours (local time):\n'
-                'Thursday 9 AM-7 PM\n'
-                'Friday 9 AM-7 PM\n'
-                'Saturday 9 AM-8 PM\n'
-                'Sunday 10 AM-6 PM\n'
-                'Monday 9 AM-7 PM\n'
-                'Tuesday 9 AM-7 PM\n'
-                'Wednesday 9 AM-7 PM\n'
-                
+                Please reply to the customer in a warm, professional, and helpful manner.
+
+                Your goal is to gather the missing scheduling information needed to confirm an appointment, or to confirm the proposed appointment if the customer has already provided all necessary details.
+
+                Guidelines:
+                - Ask ONE clear follow-up question related to scheduling details.
+                - Never confirm, schedule, or imply an appointment is set.
+                - Avoid open-ended questions — be as specific as possible.
+                - Do NOT mention store hours unless the customer specifically asks, or the proposed time is outside store hours.
+                - Only include the business address if the customer asks for it.
+
+                Store hours (local time):
+                    • Monday–Friday: 9:00 AM – 7:00 PM
+                    • Saturday: 9:00 AM – 8:00 PM
+                    • Sunday: 10:00 AM – 6:00 PM
+
                 Address: 28 B Auto Center Dr, Tustin, CA 92782
-                
-                Return ONLY valid JSON with keys: subject, body.
+
+                Return only valid JSON with:
+                {"subject": "...", "body": "..."}
             """.strip()
         
-        prompt = f"""
-        You are replying to an ACTIVE email thread (not a first welcome message).
-        
+        # You are replying within an ongoing email thread with the customer (not a first or welcome message).
+        prompt = f""" 
+        You are replying to and ACTIVE email thread (not a first or welcome message).
+
         Context:
         - Begin with exactly `Hi {customer_name},`
         - The guest originally inquired about: {vehicle_str}
         
+        IMPORTANT:
+        - Your ONLY task is to communicate politely and gather any missing or unclear scheduling details from the customer (such as clarifying date, time, or preferences).
+        - NEVER confirm, schedule, or imply that an appointment is set in your response.
+        - Do NOT use language like "You're all set", "Your appointment is scheduled," or anything suggesting confirmation or booking.
+        - Only ask for needed clarifications or provide information strictly based on the customer's request or message context.
+        - Do not proactively offer to schedule and do not attempt to finalize/confirm an appointment.
+
         {gen_prompt}
-        
-        messages between Patti and the customer (python list of dicts):
-        {messages}
+
+        Conversation history:
+        {conversation_history}
         """
         
         log.info("[SEND_THREAD_REPLY] Using prompt:\n%s", prompt)
         response = run_gpt(prompt, customer_name, rooftop_name, prevMessages=True)
         
+        print("= "*50)
         for k, v in response.items():
             log.info("[SEND_THREAD_REPLY] GPT response: %r = %r", k, v)
+        print("= "*50)
             
         subject   = response["subject"]
         body_html = response["body"]
