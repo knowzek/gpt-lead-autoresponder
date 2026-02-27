@@ -3,6 +3,9 @@ import logging
 from datetime import datetime, timezone
 import hashlib
 import re
+import requests
+
+from zoneinfo import ZoneInfo
 
 from outlook_email import send_email_via_outlook
 from fortellis import send_opportunity_email_activity, complete_send_email_activity
@@ -36,9 +39,11 @@ def _clean_body_html_to_body_text(body_html: str) -> str:
 def _now_iso_utc() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
-import os
-import requests
-import logging
+STORE_TZ = os.getenv("STORE_TIMEZONE", "America/Los_Angeles")
+
+def _within_send_window() -> bool:
+    now_local = datetime.now(ZoneInfo(STORE_TZ))
+    return 8 <= now_local.hour < 20
 
 def send_via_sendgrid(*, to_email: str, subject: str, body_html: str, body_text: str | None = None) -> bool:
     api_key = os.getenv("SENDGRID_API_KEY", "").strip()
@@ -188,7 +193,11 @@ def send_patti_email(
     timestamp=None,
     source: str | None = None,
 ):
-
+    
+    if not _within_send_window():
+        log.info("⏰ Outside email send window (8am–8pm local). Skipping send.")
+        return False
+        
     log.info("📬 send_patti_email EMAIL_MODE=%s opp=%s to=%s subject=%s", EMAIL_MODE, opp_id, to_addr, subject)
 
     # ⛔ Compliance kill switch (centralized)
