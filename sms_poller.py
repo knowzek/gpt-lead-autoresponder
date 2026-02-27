@@ -59,7 +59,14 @@ _MAZDA_STOP_RE = re.compile(r"(?i)\b(stop|unsubscribe|end|quit|do not contact|do
 
 _VOUCHERISH_RE = re.compile(r"(?<!\d)(\d{12,20})(?!\d)")  # catches 12–20 digit codes
 
+from zoneinfo import ZoneInfo
 
+STORE_TZ = os.getenv("STORE_TIMEZONE", "America/Los_Angeles")
+
+def _within_send_window() -> bool:
+    now_local = datetime.now(ZoneInfo(STORE_TZ))
+    return 8 <= now_local.hour < 20
+    
 def _extract_voucherish_code(text: str) -> str:
     t = (text or "").strip()
     if not t:
@@ -418,6 +425,9 @@ def _patti_number() -> str:
 SMS_DUE_VIEW = os.getenv("SMS_DUE_VIEW", "SMS Due")
 
 def send_sms_cadence_once():
+    if not _within_send_window():
+        log.info("⏰ Outside SMS send window (8am–8pm local). Skipping run.")
+        return
     # Pull queue
     recs = list_records_by_view(SMS_DUE_VIEW, max_records=50)
 
