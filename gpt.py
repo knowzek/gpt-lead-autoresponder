@@ -905,10 +905,10 @@ def extract_appt_time(text: str, tz: str = "America/Los_Angeles") -> dict:
         """
     }
     
-    print("= "*50)
-    print("SYSTEM PROMPT: ", system["content"])
-    print("USER PROMPT: ", user["content"])
-    print("= "*50)
+    # print("= "*50)
+    # print("SYSTEM PROMPT: ", system["content"])
+    # print("USER PROMPT: ", user["content"])
+    # print("= "*50)
     
     model_used, resp = chat_complete_with_fallback(
         [system, user],
