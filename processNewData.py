@@ -4137,83 +4137,19 @@ def send_thread_reply_now(
         log.warning("Triage gate failed (continuing without triage) opp=%s: %s", opportunityId, e)
 
     conversation_id = f"conv_{subscription_id}_{opportunityId}"
-    # print('➡ processNewData.py:4140 conversation_id:', conversation_id)
     conv_id = _find_conversation_by_conversation_id(conversation_id=conversation_id)
-    # print('➡ processNewData.py:4142 conv_id:', conv_id)
     messages_for_conversations = _get_messages_for_conversation(conversation_id=conv_id, direction="inbound")
-    # print('➡ processNewData.py:4144 messages_for_conversations:', messages_for_conversations)
-    # print('➡ processNewData.py:4145 messages:', messages)
     
-    previous_conversion = []
     previous_conversion_lines = ""
     conversation_history = ""
     for conv in messages_for_conversations:
         # print("="*50)
         fields = conv.get('fields', {})
         body_text = fields.get('body_text', '') or fields.get('body_html', '')
-        timestamp = fields.get('timestamp', '')
         subject = fields.get('subject', '')
-        # print("Subject:", subject)
-        # print("Body Text:", body_text)
-        # print("Timestamp:", timestamp)
-        # print("="*50)
-        
-        # # Convert timestamp (if exists) to America/Los_Angeles timezone and ISO8601 string
-        # # Store original timestamp in 'date_original' in case needed
-        # date_local = ""
-        # if timestamp:
-        #     try:
-        #         # handle possible ISO, or seconds since epoch, or other formats
-        #         dt = None
-        #         if isinstance(timestamp, (int, float)):
-        #             # Assume unix timestamp in seconds
-        #             dt = _dt.fromtimestamp(timestamp, tz=ZoneInfo("UTC"))
-        #         elif isinstance(timestamp, str):
-        #             # Try ISO parse with and without timezone
-        #             import re
-        #             ts_clean = timestamp.strip()
-        #             # If it's just digits, treat as epoch
-        #             if re.fullmatch(r"\d+", ts_clean):
-        #                 dt = _dt.fromtimestamp(int(ts_clean), tz=ZoneInfo("UTC"))
-        #             else:
-        #                 try:
-        #                     # Try ISO with/without Z
-        #                     if ts_clean.endswith("Z"):
-        #                         dt = _dt.fromisoformat(ts_clean.replace("Z", "+00:00"))
-        #                     else:
-        #                         dt = _dt.fromisoformat(ts_clean)
-        #                     if dt.tzinfo is None:
-        #                         # treat as UTC if no tzinfo
-        #                         dt = dt.replace(tzinfo=ZoneInfo("UTC"))
-        #                 except Exception:
-        #                     # Try RFC 2822 or fallback
-        #                     from email.utils import parsedate_to_datetime
-        #                     dt = parsedate_to_datetime(ts_clean)
-        #                     if dt.tzinfo is None:
-        #                         dt = dt.replace(tzinfo=ZoneInfo("UTC"))
-        #         if dt:
-        #             dt_pacific = dt.astimezone(ZoneInfo("America/Los_Angeles"))
-        #             date_local = dt_pacific.isoformat()
-        #     except Exception:
-        #         date_local = ""  # fallback to empty
-        # # Print the local (Pacific) timestamp if available, for debugging
-        
-        # print(f"Local time (America/Los_Angeles): {date_local}")
-        
-        previous_conversion.append({
-            'msgFrom': 'customer', 
-            'subject': subject, 
-            'body': body_text, 
-            'date': str(timestamp)
-        })
         
         if body_text:
             previous_conversion_lines += body_text + "\n"
-    
-    # Conversation History:
-    # User (earlier): Let's schedule on Saturday.
-    # Assistant: What time on Saturday works for you?
-    # User (most recent): Saturday around 3:45 PM works for me.
     
     # latest/new message as last
     if customer_body:
@@ -4225,15 +4161,11 @@ def send_thread_reply_now(
         {customer_body}
         """
     
-    # if previous_conversion:
-    #     messages = previous_conversion + (messages or [])
-    # print('➡ processNewData.py:4163 messages:', messages)
-    
     # --- Step 2: try to auto-schedule an appointment from this reply (WEBHOOK PATH) ---
     created_appt_ok = False
     appt_human = None
     intent_action = None
-    
+    proposed = None
     # NOTE: no SAFE_MODE gating here by request (SAFE_MODE can still create Fortellis appts)
     if (not OFFLINE_MODE) and token and subscription_id and opportunityId:
         try:
@@ -4266,105 +4198,17 @@ def send_thread_reply_now(
                 conf = float(proposed.get("confidence") or 0.0)
                 
                 proposed['intent'] = intent_action
-                
-                # messages.append(proposed)
 
-                # log.info("\n==========\n Extracted proposed appointment: %r \n==========\n", proposed)
+                print("= "*50)
+                log.info("[SEND_THREAD_REPLY_NOW] Extracted proposed appointment: %r", proposed)
+                print("= "*50)
                 
                 # TEMPORARY: sys.exit(0) is for debugging/testing purposes only. 
                 # MAKE SURE TO REMOVE THIS LINE BEFORE PUSHING TO SERVER! 
                 # This will abort execution to help diagnose appointment extraction logic.
+                # log.info("Exiting with code 0")
                 # sys.exit(0)
                 
-            # ----
-            # try:
-            #     # # Skip if we already know about a future appointment
-            #     # patti_meta = opportunity.get("patti") or {}
-            #     # appt_due_utc = patti_meta.get("appt_due_utc")
-            #     # already_scheduled = False
-            #     # if appt_due_utc:
-            #     #     try:
-            #     #         appt_dt = _dt.fromisoformat(str(appt_due_utc).replace("Z", "+00:00"))
-            #     #         if appt_dt > _dt.now(_tz.utc):
-            #     #             already_scheduled = True
-            #     #     except Exception:
-            #     #         pass
-
-            #     appt_iso = ""
-            #     conf = 0.0
-            #     intent_action = "DEFAULT_REPLY"
-            #     override_prompt = None
-
-            #     if not already_scheduled:
-            #         proposed = extract_appt_time(customer_body or "", tz="America/Los_Angeles")
-            #         appt_iso = (proposed.get("iso") or "").strip()
-            #         conf = float(proposed.get("confidence") or 0.0)
-                    
-            #         # Decision logic
-            #         intent_action = classify_scheduling_intent(proposed)
-            #         log.info("Scheduling Intent: %s (iso=%r, conf=%.2f) opp=%s",
-            #                  intent_action, appt_iso, conf, opportunity['opportunityId'])
-
-            #         if intent_action == "SCHEDULE":
-            #             try:
-            #                 dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
-            #                 due_dt_iso_utc = dt_local.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-                            
-            #                 appt_human = fmt_local_human(dt_local)
-                            
-            #                 schedule_appointment_with_notify(
-            #                     token,
-            #                     subscription_id,
-            #                     opportunity['opportunityId'],
-            #                     due_dt_iso_utc=due_dt_iso_utc,
-            #                     activity_name="Sales Appointment",
-            #                     activity_type="Appointment",
-            #                     comments=f"Auto-scheduled from Patti based on customer reply: {customer_body[:200]}",
-            #                     opportunity=opportunity,
-            #                     fresh_opp=fresh_opp if "fresh_opp" in locals() else {},
-            #                     rooftop_name=rooftop_name,
-            #                     appt_human=appt_human,
-            #                     customer_reply=customer_body,
-            #                 )
-                            
-            #                 created_appt_ok = True
-
-            #                 patti_meta["mode"] = "scheduled"
-            #                 patti_meta["appt_due_utc"] = due_dt_iso_utc
-            #                 patti_meta["appt_confirm_email_sent"] = True
-            #                 opportunity["patti"] = patti_meta
-
-            #                 log.info(
-            #                     "✅ Auto-scheduled appointment from reply for %s at %s (conf=%.2f)",
-            #                     opportunity['opportunityId'],
-            #                     appt_human,
-            #                     conf,
-            #                 )
-            #             except Exception as e:
-            #                 log.error(
-            #                     "Failed to auto-schedule appointment from reply for %s (appt_iso=%r): %s",
-            #                     opportunity['opportunityId'],
-            #                     appt_iso,
-            #                     e,
-            #                 )
-                    
-            #         # Handle other non-scheduling intents by setting override prompts
-            #         elif intent_action == "CLARIFY_TIME":
-            #             override_prompt = _getClarifyTimePrompts()
-            #         elif intent_action == "DIG_PREFS":
-            #             override_prompt = _getDigPrefsPrompts()
-            #         elif intent_action == "HANDLE_MULTI":
-            #             override_prompt = _getMultiOptionPrompts()
-            #         elif intent_action == "RESCHEDULE":
-            #             override_prompt = _getClarifyTimePrompts()  # Treat as clarify for now
-
-            # except Exception as e:
-            #     log.warning(
-            #         "Reply-based appointment detection failed for %s: %s",
-            #         opportunity.get('opportunityId'),
-            #         e,
-            #     )
-            # ----
             if appt_iso and conf >= 0.60 and intent_action == "SCHEDULE":
                 # appt_iso is expected to be parseable by fromisoformat when Z->+00:00
                 dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
@@ -4412,14 +4256,18 @@ def send_thread_reply_now(
             )
 
     skip_gpt = bool(created_appt_ok and appt_human)
-    # log.info(f"skip_gpt: {skip_gpt}")
     
     # --- Step 3: choose the right reply (short confirmation vs normal reply) ---
     skip_footer = False
     response = {}  # <--- IMPORTANT: always defined
     
-    # log.info(f"created_appt_ok: {created_appt_ok}")
-    # log.info(f"Appt human: {appt_human}")
+    print("= "*50)
+    log.info("[SEND_THREAD_REPLY_NOW] 🌟 SKIP GPT : %r", skip_gpt)
+    log.info("[SEND_THREAD_REPLY_NOW] 🌟 SKIP FOOTER : %r", skip_footer)
+    log.info("[SEND_THREAD_REPLY_NOW] 🌟 SUBJECT : %r", inbound_subject or f"Re: {vehicle_str}")
+    log.info("[SEND_THREAD_REPLY_NOW] 🌟 INBOUND SUBJECT : %r", inbound_subject)
+    log.info("[SEND_THREAD_REPLY_NOW] 🌟 VEHICLE STR :  %r", vehicle_str)
+    print("= "*50)
     
     if created_appt_ok and appt_human and intent_action == "SCHEDULE":
         subject = inbound_subject or f"Re: {vehicle_str}"
@@ -4430,13 +4278,8 @@ def send_thread_reply_now(
         )
         skip_footer = True
     else:
-        # log.debug(f"override_prompt in webhook reply: {repr(override_prompt)[:200]}")
         # Handle other non-scheduling intents by setting override prompts
         
-        # log.info("Vehicle string: %s", vehicle_str)
-        # log.info("Previous messages: %r", messages)
-        # log.info("Determined intent action: %s", intent_action)
-
         if intent_action == "CLARIFY_TIME":
             gen_prompt = _getClarifyTimePrompts()
         elif intent_action == "DIG_PREFS":
@@ -4451,7 +4294,9 @@ def send_thread_reply_now(
 
                 Your goal is to gather the missing scheduling information needed to confirm an appointment, or to confirm the proposed appointment if the customer has already provided all necessary details.
 
-                Guidelines:
+                [context-block]
+
+                Hard rules::
                 - Ask ONE clear follow-up question related to scheduling details.
                 - Never confirm, schedule, or imply an appointment is set.
                 - Avoid open-ended questions — be as specific as possible.
@@ -4470,37 +4315,69 @@ def send_thread_reply_now(
             """.strip()
         
         # You are replying within an ongoing email thread with the customer (not a first or welcome message).
-        prompt = f""" 
-        You are replying to and ACTIVE email thread (not a first or welcome message).
+        # prompt = f""" 
+        # You are replying to and ACTIVE email thread (not a first or welcome message).
 
+        # Context:
+        # - Begin with exactly `Hi {customer_name},`
+        # - The guest originally inquired about: {vehicle_str}
+        
+        # IMPORTANT:
+        # - Your ONLY task is to communicate politely and gather any missing or unclear scheduling details from the customer (such as clarifying date, time, or preferences).
+        # - NEVER confirm, schedule, or imply that an appointment is set in your response.
+        # - Do NOT use language like "You're all set", "Your appointment is scheduled," or anything suggesting confirmation or booking.
+        # - Only ask for needed clarifications or provide information strictly based on the customer's request or message context.
+        # - Do not proactively offer to schedule and do not attempt to finalize/confirm an appointment.
+
+        # {gen_prompt}
+
+        # Conversation history:
+        # {conversation_history}
+        # """
+        
+        context_block = f"""
         Context:
-        - Begin with exactly `Hi {customer_name},`
-        - The guest originally inquired about: {vehicle_str}
-        
-        IMPORTANT:
-        - Your ONLY task is to communicate politely and gather any missing or unclear scheduling details from the customer (such as clarifying date, time, or preferences).
-        - NEVER confirm, schedule, or imply that an appointment is set in your response.
-        - Do NOT use language like "You're all set", "Your appointment is scheduled," or anything suggesting confirmation or booking.
-        - Only ask for needed clarifications or provide information strictly based on the customer's request or message context.
-        - Do not proactively offer to schedule and do not attempt to finalize/confirm an appointment.
-
-        {gen_prompt}
-
-        Conversation history:
-        {conversation_history}
+            - Begin with exactly `Hi {customer_name},`
+            - The guest originally inquired about: {vehicle_str}
         """
+        gen_prompt = gen_prompt.replace("[context-block]", context_block)
+        reason = proposed.get('reason')
         
-        # log.info("[SEND_THREAD_REPLY] Using prompt:\n%s", prompt)
+        prompt = f"""
+            You are replying to and ACTIVE email thread (not a first or welcome message).
+            
+            GUIDELINES:
+                - {reason}
+            
+            {gen_prompt}
+            
+            messages between Patti and the customer (python list of dicts):
+            {messages}
+            
+            Return ONLY valid JSON with keys: subject, body.
+        """
+        print("- "*50)
+        log.info("[SEND_THREAD_REPLY] Using prompt:\n%s", prompt)
+        print("- "*50)
         response = run_gpt(prompt, customer_name, rooftop_name, prevMessages=True)
         
-        # print("= "*50)
-        # for k, v in response.items():
-        #     log.info("[SEND_THREAD_REPLY] GPT response: %r = %r", k, v)
-        # print("= "*50)
+        print("= "*50)
+        for k, v in response.items():
+            log.info("[SEND_THREAD_REPLY] GPT response: %r = %r", k, v)
+        print("= "*50)
             
         subject   = response["subject"]
         body_html = response["body"]
     
+    print("= "*50)
+    log.info("[SEND_THREAD_REPLY_NOW] 🌟 SKIP GPT : %r", skip_gpt)
+    log.info("[SEND_THREAD_REPLY_NOW] 🌟 SKIP FOOTER : %r", skip_footer)
+    log.info("[SEND_THREAD_REPLY_NOW] 🌟 SUBJECT : %r", subject)
+    log.info("[SEND_THREAD_REPLY_NOW] 🌟 INBOUND SUBJECT : %r", inbound_subject)
+    log.info("[SEND_THREAD_REPLY_NOW] 🌟 VEHICLE STR : %r", vehicle_str)
+    print("= "*50)
+    
+    # log.info("Exiting with code 0")
     # sys.exit(0)
     
     body_html = normalize_patti_body(body_html)

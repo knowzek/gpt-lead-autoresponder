@@ -460,6 +460,8 @@ def _getClarifyTimePrompts():
         """
         You are replying to a customer who wants to make an appointment, but their message is missing a specific bookable time (for example: "later today", "this weekend", "tomorrow", "after 3", "morning", "next week", etc.). Your main goal is to collect just enough detail to narrow down a clear date and time.
 
+        [context-block]
+        
         STRICT RULES:
         - Only ask ONE specific follow-up per reply to clarify *the missing detail* based on exactly what the customer just said.
         - If the customer provided a specific day but no time (e.g., "Saturday"), reply: 
@@ -486,6 +488,8 @@ def _getDigPrefsPrompts():
         """
         The customer wants to visit but hasn't proposed a time or day. Your goal is to *gently narrow down* their scheduling preferences so you can move closer to setting an appointment.
 
+        [context-block]
+
         Guidelines:
         - Always be warm, friendly, and helpful — never pushy.
         - Ask ONLY one clear, specific question to discover either a *day* or a *time window* (but not both in one reply).
@@ -508,6 +512,8 @@ def _getMultiOptionPrompts():
     return (
         """
         The customer gave multiple possible appointment times or days in their message (for example: "Tuesday at 3 or Thursday at 5"). Your job is to help them quickly lock in *a single, specific slot*.
+
+        [context-block]
 
         Guidelines:
         - Politely choose ONE of the offered times (prefer the *sooner reasonable* slot).
@@ -582,8 +588,6 @@ def run_gpt(prompt: str,
     if addr_msg:
         system_msgs.insert(0, addr_msg)   # make sure the address is available to the model
 
-    # log.info("RUN_GPT debug: prevMessages %s", prevMessages)
-    # log.info("RUN_GPT debug: input prompt=%r", prompt)
     if prevMessages:
         messages = system_msgs + [
             {"role": "user", "content": prompt}
@@ -591,9 +595,8 @@ def run_gpt(prompt: str,
 
         import json, re
         dump = json.dumps(messages, ensure_ascii=False)
-        # log.info("RUN_GPT debug: kbb_ctx_in_messages=%s", "$27,000" in dump)
-        # log.info("RUN_GPT debug: messages_preview=%s", dump[:1500])
-
+        log.info("RUN_GPT debug: kbb_ctx_in_messages=%s", "$27,000" in dump)
+        log.info("RUN_GPT debug: messages_preview=%s", dump[:1500])
         
         model_used, resp = chat_complete_with_fallback(messages, want_json=True, temperature=0.6)
         text = _safe_extract_text(resp)
@@ -604,6 +607,8 @@ def run_gpt(prompt: str,
 
         placeholder_re = re.compile(r"(?i)\bthe subject (of|from)\b.*(patti|customer)")
         subj = (dictResult.get("subject") or "").strip()
+        
+        log.info("RUN_GPT debug: subj=%s", subj)
         
         if not subj or placeholder_re.search(subj):
             # Use a strong default, especially for KBB persona
@@ -627,8 +632,8 @@ def run_gpt(prompt: str,
 
     import json, re
     dump = json.dumps(messages, ensure_ascii=False)
-    # log.info("RUN_GPT debug: kbb_ctx_in_messages=%s", "$27,000" in dump)
-    # log.info("RUN_GPT debug: messages_preview=%s", dump[:1500])
+    log.info("RUN_GPT debug: kbb_ctx_in_messages=%s", "$27,000" in dump)
+    log.info("RUN_GPT debug: messages_preview=%s", dump[:1500])
 
     model_used, resp = chat_complete_with_fallback(messages, want_json=True, temperature=0.6)
     text = _safe_extract_text(resp)
@@ -905,10 +910,10 @@ def extract_appt_time(text: str, tz: str = "America/Los_Angeles") -> dict:
         """
     }
     
-    # print("= "*50)
-    # print("SYSTEM PROMPT: ", system["content"])
-    # print("USER PROMPT: ", user["content"])
-    # print("= "*50)
+    print("= "*50)
+    print("SYSTEM PROMPT: ", system["content"])
+    print("USER PROMPT: ", user["content"])
+    print("= "*50)
     
     model_used, resp = chat_complete_with_fallback(
         [system, user],
