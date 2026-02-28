@@ -4013,15 +4013,15 @@ def send_thread_reply_now(
     currDate = _dt.now(_tz.utc)
     currDate_iso = currDate.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    log.info("[SEND_THREAD_REPLY_NOW] opportunity: %r", opportunity)
-    log.info("[SEND_THREAD_REPLY_NOW] fresh_opp keys: %r", fresh_opp)
-    log.info("[SEND_THREAD_REPLY_NOW] token?: %r", token)
-    log.info("[SEND_THREAD_REPLY_NOW] subscription_id: %r", subscription_id)
-    log.info("[SEND_THREAD_REPLY_NOW] trigger: %r", trigger)
-    log.info("[SEND_THREAD_REPLY_NOW] SAFE_MODE: %r", SAFE_MODE)
-    log.info("[SEND_THREAD_REPLY_NOW] test_recipient: %r", test_recipient)
-    log.info("[SEND_THREAD_REPLY_NOW] inbound_ts: %r", inbound_ts)
-    log.info("[SEND_THREAD_REPLY_NOW] inbound_subject: %r", inbound_subject)
+    # log.info("[SEND_THREAD_REPLY_NOW] opportunity: %r", opportunity)
+    # log.info("[SEND_THREAD_REPLY_NOW] fresh_opp keys: %r", fresh_opp)
+    # log.info("[SEND_THREAD_REPLY_NOW] token?: %r", token)
+    # log.info("[SEND_THREAD_REPLY_NOW] subscription_id: %r", subscription_id)
+    # log.info("[SEND_THREAD_REPLY_NOW] trigger: %r", trigger)
+    # log.info("[SEND_THREAD_REPLY_NOW] SAFE_MODE: %r", SAFE_MODE)
+    # log.info("[SEND_THREAD_REPLY_NOW] test_recipient: %r", test_recipient)
+    # log.info("[SEND_THREAD_REPLY_NOW] inbound_ts: %r", inbound_ts)
+    # log.info("[SEND_THREAD_REPLY_NOW] inbound_subject: %r", inbound_subject)
 
     opportunityId = opportunity.get("opportunityId") or opportunity.get("id")
     checkedDict = opportunity.get("checkedDict", {}) or {}
@@ -4137,68 +4137,68 @@ def send_thread_reply_now(
         log.warning("Triage gate failed (continuing without triage) opp=%s: %s", opportunityId, e)
 
     conversation_id = f"conv_{subscription_id}_{opportunityId}"
-    print('➡ processNewData.py:4140 conversation_id:', conversation_id)
+    # print('➡ processNewData.py:4140 conversation_id:', conversation_id)
     conv_id = _find_conversation_by_conversation_id(conversation_id=conversation_id)
-    print('➡ processNewData.py:4142 conv_id:', conv_id)
+    # print('➡ processNewData.py:4142 conv_id:', conv_id)
     messages_for_conversations = _get_messages_for_conversation(conversation_id=conv_id, direction="inbound")
-    print('➡ processNewData.py:4144 messages_for_conversations:', messages_for_conversations)
-    print('➡ processNewData.py:4145 messages:', messages)
+    # print('➡ processNewData.py:4144 messages_for_conversations:', messages_for_conversations)
+    # print('➡ processNewData.py:4145 messages:', messages)
     
     previous_conversion = []
     previous_conversion_lines = ""
     conversation_history = ""
     for conv in messages_for_conversations:
-        print("="*50)
+        # print("="*50)
         fields = conv.get('fields', {})
         body_text = fields.get('body_text', '') or fields.get('body_html', '')
         timestamp = fields.get('timestamp', '')
         subject = fields.get('subject', '')
-        print("Subject:", subject)
-        print("Body Text:", body_text)
-        print("Timestamp:", timestamp)
-        print("="*50)
+        # print("Subject:", subject)
+        # print("Body Text:", body_text)
+        # print("Timestamp:", timestamp)
+        # print("="*50)
         
-        # Convert timestamp (if exists) to America/Los_Angeles timezone and ISO8601 string
-        # Store original timestamp in 'date_original' in case needed
-        date_local = ""
-        if timestamp:
-            try:
-                # handle possible ISO, or seconds since epoch, or other formats
-                dt = None
-                if isinstance(timestamp, (int, float)):
-                    # Assume unix timestamp in seconds
-                    dt = _dt.fromtimestamp(timestamp, tz=ZoneInfo("UTC"))
-                elif isinstance(timestamp, str):
-                    # Try ISO parse with and without timezone
-                    import re
-                    ts_clean = timestamp.strip()
-                    # If it's just digits, treat as epoch
-                    if re.fullmatch(r"\d+", ts_clean):
-                        dt = _dt.fromtimestamp(int(ts_clean), tz=ZoneInfo("UTC"))
-                    else:
-                        try:
-                            # Try ISO with/without Z
-                            if ts_clean.endswith("Z"):
-                                dt = _dt.fromisoformat(ts_clean.replace("Z", "+00:00"))
-                            else:
-                                dt = _dt.fromisoformat(ts_clean)
-                            if dt.tzinfo is None:
-                                # treat as UTC if no tzinfo
-                                dt = dt.replace(tzinfo=ZoneInfo("UTC"))
-                        except Exception:
-                            # Try RFC 2822 or fallback
-                            from email.utils import parsedate_to_datetime
-                            dt = parsedate_to_datetime(ts_clean)
-                            if dt.tzinfo is None:
-                                dt = dt.replace(tzinfo=ZoneInfo("UTC"))
-                if dt:
-                    dt_pacific = dt.astimezone(ZoneInfo("America/Los_Angeles"))
-                    date_local = dt_pacific.isoformat()
-            except Exception:
-                date_local = ""  # fallback to empty
-        # Print the local (Pacific) timestamp if available, for debugging
+        # # Convert timestamp (if exists) to America/Los_Angeles timezone and ISO8601 string
+        # # Store original timestamp in 'date_original' in case needed
+        # date_local = ""
+        # if timestamp:
+        #     try:
+        #         # handle possible ISO, or seconds since epoch, or other formats
+        #         dt = None
+        #         if isinstance(timestamp, (int, float)):
+        #             # Assume unix timestamp in seconds
+        #             dt = _dt.fromtimestamp(timestamp, tz=ZoneInfo("UTC"))
+        #         elif isinstance(timestamp, str):
+        #             # Try ISO parse with and without timezone
+        #             import re
+        #             ts_clean = timestamp.strip()
+        #             # If it's just digits, treat as epoch
+        #             if re.fullmatch(r"\d+", ts_clean):
+        #                 dt = _dt.fromtimestamp(int(ts_clean), tz=ZoneInfo("UTC"))
+        #             else:
+        #                 try:
+        #                     # Try ISO with/without Z
+        #                     if ts_clean.endswith("Z"):
+        #                         dt = _dt.fromisoformat(ts_clean.replace("Z", "+00:00"))
+        #                     else:
+        #                         dt = _dt.fromisoformat(ts_clean)
+        #                     if dt.tzinfo is None:
+        #                         # treat as UTC if no tzinfo
+        #                         dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+        #                 except Exception:
+        #                     # Try RFC 2822 or fallback
+        #                     from email.utils import parsedate_to_datetime
+        #                     dt = parsedate_to_datetime(ts_clean)
+        #                     if dt.tzinfo is None:
+        #                         dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+        #         if dt:
+        #             dt_pacific = dt.astimezone(ZoneInfo("America/Los_Angeles"))
+        #             date_local = dt_pacific.isoformat()
+        #     except Exception:
+        #         date_local = ""  # fallback to empty
+        # # Print the local (Pacific) timestamp if available, for debugging
         
-        print(f"Local time (America/Los_Angeles): {date_local}")
+        # print(f"Local time (America/Los_Angeles): {date_local}")
         
         previous_conversion.append({
             'msgFrom': 'customer', 
@@ -4253,7 +4253,7 @@ def send_thread_reply_now(
             appt_iso = ""
             conf = 0.0
             
-            log.info("Customer body for appt extraction: %r", customer_body)
+            # log.info("Customer body for appt extraction: %r", customer_body)
             # Build a user prompt that makes message roles/history explicit for OpenAI
             if (not already_scheduled) and conversation_history:
                 
@@ -4269,7 +4269,7 @@ def send_thread_reply_now(
                 
                 # messages.append(proposed)
 
-                log.info("\n==========\n Extracted proposed appointment: %r \n==========\n", proposed)
+                # log.info("\n==========\n Extracted proposed appointment: %r \n==========\n", proposed)
                 
                 # TEMPORARY: sys.exit(0) is for debugging/testing purposes only. 
                 # MAKE SURE TO REMOVE THIS LINE BEFORE PUSHING TO SERVER! 
@@ -4412,14 +4412,14 @@ def send_thread_reply_now(
             )
 
     skip_gpt = bool(created_appt_ok and appt_human)
-    log.info(f"skip_gpt: {skip_gpt}")
+    # log.info(f"skip_gpt: {skip_gpt}")
     
     # --- Step 3: choose the right reply (short confirmation vs normal reply) ---
     skip_footer = False
     response = {}  # <--- IMPORTANT: always defined
     
-    log.info(f"created_appt_ok: {created_appt_ok}")
-    log.info(f"Appt human: {appt_human}")
+    # log.info(f"created_appt_ok: {created_appt_ok}")
+    # log.info(f"Appt human: {appt_human}")
     
     if created_appt_ok and appt_human and intent_action == "SCHEDULE":
         subject = inbound_subject or f"Re: {vehicle_str}"
@@ -4433,9 +4433,9 @@ def send_thread_reply_now(
         # log.debug(f"override_prompt in webhook reply: {repr(override_prompt)[:200]}")
         # Handle other non-scheduling intents by setting override prompts
         
-        log.info("Vehicle string: %s", vehicle_str)
-        log.info("Previous messages: %r", messages)
-        log.info("Determined intent action: %s", intent_action)
+        # log.info("Vehicle string: %s", vehicle_str)
+        # log.info("Previous messages: %r", messages)
+        # log.info("Determined intent action: %s", intent_action)
 
         if intent_action == "CLARIFY_TIME":
             gen_prompt = _getClarifyTimePrompts()
@@ -4490,13 +4490,13 @@ def send_thread_reply_now(
         {conversation_history}
         """
         
-        log.info("[SEND_THREAD_REPLY] Using prompt:\n%s", prompt)
+        # log.info("[SEND_THREAD_REPLY] Using prompt:\n%s", prompt)
         response = run_gpt(prompt, customer_name, rooftop_name, prevMessages=True)
         
-        print("= "*50)
-        for k, v in response.items():
-            log.info("[SEND_THREAD_REPLY] GPT response: %r = %r", k, v)
-        print("= "*50)
+        # print("= "*50)
+        # for k, v in response.items():
+        #     log.info("[SEND_THREAD_REPLY] GPT response: %r = %r", k, v)
+        # print("= "*50)
             
         subject   = response["subject"]
         body_html = response["body"]

@@ -582,8 +582,8 @@ def run_gpt(prompt: str,
     if addr_msg:
         system_msgs.insert(0, addr_msg)   # make sure the address is available to the model
 
-    log.info("RUN_GPT debug: prevMessages %s", prevMessages)
-    log.info("RUN_GPT debug: input prompt=%r", prompt)
+    # log.info("RUN_GPT debug: prevMessages %s", prevMessages)
+    # log.info("RUN_GPT debug: input prompt=%r", prompt)
     if prevMessages:
         messages = system_msgs + [
             {"role": "user", "content": prompt}
@@ -591,8 +591,8 @@ def run_gpt(prompt: str,
 
         import json, re
         dump = json.dumps(messages, ensure_ascii=False)
-        log.info("RUN_GPT debug: kbb_ctx_in_messages=%s", "$27,000" in dump)
-        log.info("RUN_GPT debug: messages_preview=%s", dump[:1500])
+        # log.info("RUN_GPT debug: kbb_ctx_in_messages=%s", "$27,000" in dump)
+        # log.info("RUN_GPT debug: messages_preview=%s", dump[:1500])
 
         
         model_used, resp = chat_complete_with_fallback(messages, want_json=True, temperature=0.6)
@@ -627,8 +627,8 @@ def run_gpt(prompt: str,
 
     import json, re
     dump = json.dumps(messages, ensure_ascii=False)
-    log.info("RUN_GPT debug: kbb_ctx_in_messages=%s", "$27,000" in dump)
-    log.info("RUN_GPT debug: messages_preview=%s", dump[:1500])
+    # log.info("RUN_GPT debug: kbb_ctx_in_messages=%s", "$27,000" in dump)
+    # log.info("RUN_GPT debug: messages_preview=%s", dump[:1500])
 
     model_used, resp = chat_complete_with_fallback(messages, want_json=True, temperature=0.6)
     text = _safe_extract_text(resp)
