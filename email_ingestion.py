@@ -2,22 +2,12 @@
 import os
 import re
 import logging
-
-from models.airtable_model import Conversation, Message
-from airtable_store import (
-    _fetch_customer_details,
-    _generate_message_id,
-    _get_messages_for_conversation,
-    _normalize_message_id,
-    find_by_conversation_id,
-    upsert_conversation,
-)
-
-log = logging.getLogger("patti.airtable")
-from datetime import datetime as _dt, timezone as _tz
-from datetime import timedelta
-import json
+from datetime import datetime as _dt, timezone as _tz, timedelta
 from typing import Optional
+
+from pydantic import BaseModel
+from openai import OpenAI
+
 from airtable_store import (
     mark_customer_reply,
     mark_unsubscribed,
@@ -30,39 +20,37 @@ from airtable_store import (
     patch_by_id,
     _get_conversation_record_id_by_opportunity_id,
     log_message,
+    _fetch_customer_details,
+    _generate_message_id,
+    _get_messages_for_conversation,
+    _normalize_message_id,
+    upsert_conversation,
 )
+from models.airtable_model import Conversation, Message
 from kbb_ico import (
     _is_optout_text as _kbb_is_optout_text,
     _is_decline as _kbb_is_decline,
+    _top_reply_only
 )
-
-from datetime import datetime, timezone, timedelta
-
 from rooftops import get_rooftop_info
 from fortellis import (
     get_token,
     add_opportunity_comment,
     get_opportunity,
     search_customers_by_email,
-    find_recent_opportunity_by_email,
     get_recent_opportunities,
     get_opps_by_customer_id,
     select_vehicle_from_sought,
     map_vehicle_to_airtable_fields,
+    complete_read_email_activity
 )
 from processNewData import send_first_touch_email
-from fortellis import complete_activity
-from fortellis import complete_read_email_activity
 from patti_triage import classify_inbound_email, handoff_to_human, should_triage
 from patti_common import EMAIL_RE, PHONE_RE
 from patti_common import extract_customer_comment_from_provider
-
-from kbb_ico import _top_reply_only
-
-
 from prompt.customer_phone_number_extraction import CUSTOMER_PHONE_EXTRACTION_PROMPT
-from pydantic import BaseModel
-from openai import OpenAI
+
+log = logging.getLogger("patti.airtable")
 
 OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY") or "").strip()
 
@@ -1046,6 +1034,15 @@ def process_lead_notification(inbound: dict) -> None:
     # - idempotent via mode check (no JSON blob fields)
     # -----------------------------
     if is_prequal:
+        # Customer name (prefer Airtable-hydrated first/last, then Fortellis, else "there")
+        cust = fresh_opp.get("customer") or opportunity.get("customer") or {}
+        afn = (
+            opportunity.get("customer_first_name") or (cust.get("firstName") or "")
+        ).strip()
+        aln = (
+            opportunity.get("customer_last_name") or (cust.get("lastName") or "")
+        ).strip()
+        customer_name = afn or "there"
         # ✅ idempotency: if already handed off, never resend
         if (opportunity.get("mode") or "").lower() == "handoff":
             log.info("Pre-Qual already handed off opp=%s — skipping resend", opp_id)
@@ -1154,9 +1151,9 @@ def process_lead_notification(inbound: dict) -> None:
                         )
                         log.info(
                             "FINAL CUSTOMER DEBUG: airtable_email=%r opp_email=%r final_email=%r",
-                            customer_details.get("customer_email"),
-                            opportunity.get("customer_email"),
-                            customer_email,
+                            customer_details.get("customer_email", ""),
+                            opportunity.get("customer_email", ""),
+                            shopper_email,
                         )
                         upsert_conversation(convo)
                     except Exception as e:
@@ -1199,6 +1196,48 @@ def process_lead_notification(inbound: dict) -> None:
             )
         except Exception as e:
             log.exception("Pre-Qual handoff_to_human failed opp=%s err=%s", opp_id, e)
+
+        # logging the inbound message
+        try:
+            conversation_record_id = _get_conversation_record_id_by_opportunity_id(
+                opportunity_id=opp_id
+            )
+
+            source_label = (inbound.get("source") or "internet lead").strip()
+
+            timestamp = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
+
+            safe_message_id = _normalize_message_id(
+                message_id=message_id
+            ) or _generate_message_id(
+                opp_id=opp_id or "",
+                timestamp=timestamp or "",
+                subject=subject or "",
+                to_addr=rooftop_sender or "",
+                body_html=body_html or "",
+            )
+
+            prequal_log = Message(
+                message_id=safe_message_id,
+                conversation=conversation_record_id,
+                direction="inbound",
+                channel="email",
+                timestamp=timestamp,
+                from_=inbound.get("from", ""),
+                to=inbound.get("to", ""),
+                subject=subject,
+                body_text=body_text,
+                body_html=body_html[:200],
+                provider=source,
+                opp_id=opp_id,
+                delivery_status="received",
+                rooftop_name=rooftop_name,
+            )
+            log_message(prequal_log)
+        except Exception as e:
+            log.error(
+                f"Failed to log lead notification (process_lead_notification) (1): {e}"
+            )
 
         return
 
@@ -1336,6 +1375,42 @@ def process_lead_notification(inbound: dict) -> None:
             )
         except Exception as e:
             log.exception("Value-Your-Trade handoff failed opp=%s err=%s", opp_id, e)
+
+        try:
+            conversation_record_id = _get_conversation_record_id_by_opportunity_id(
+                opportunity_id=opp_id
+            )
+            timestamp = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
+            safe_message_id = _normalize_message_id(
+                message_id=message_id
+            ) or _generate_message_id(
+                opp_id=opp_id or "",
+                timestamp=timestamp or "",
+                subject=subject or "",
+                to_addr=rooftop_sender or "",
+                body_html=body_html or "",
+            )
+            value_trade_log = Message(
+                message_id=safe_message_id,
+                conversation=conversation_record_id,
+                direction="inbound",
+                channel="email",
+                timestamp=timestamp,
+                from_=inbound.get("from", ""),
+                to=inbound.get("to", ""),
+                subject=subject,
+                body_text=body_text,
+                body_html=body_html[:200],
+                provider=source,
+                opp_id=opp_id,
+                delivery_status="received",
+                rooftop_name=rooftop_name,
+            )
+            log_message(value_trade_log)
+        except Exception as e:
+            log.error(
+                f"Failed to log lead notification (process_lead_notification) (2): {e}"
+            )
 
         return
 
@@ -1732,8 +1807,8 @@ def process_lead_notification(inbound: dict) -> None:
 
     # right after successful first-touch email send (sent_ok=True)
     if sent_ok:
-        when_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        next_iso = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+        when_iso = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        next_iso = (_dt.now(_tz.utc) + timedelta(days=1)).isoformat()
 
         opportunity["first_email_sent_at"] = when_iso
         opportunity["followUP_date"] = next_iso
@@ -1746,6 +1821,42 @@ def process_lead_notification(inbound: dict) -> None:
                 "mode": "cadence",
             },
         )
+
+        try:
+            conversation_record_id = _get_conversation_record_id_by_opportunity_id(
+                opportunity_id=opp_id
+            )
+            timestamp = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
+            safe_message_id = _normalize_message_id(
+                message_id=message_id
+            ) or _generate_message_id(
+                opp_id=opp_id or "",
+                timestamp=timestamp or "",
+                subject=subject or "",
+                to_addr=rooftop_sender or "",
+                body_html=body_html or "",
+            )
+            value_trade_log = Message(
+                message_id=safe_message_id,
+                conversation=conversation_record_id,
+                direction="inbound",
+                channel="email",
+                timestamp=timestamp,
+                from_=inbound.get("from", ""),
+                to=inbound.get("to", ""),
+                subject=subject,
+                body_text=body_text,
+                body_html=body_html[:200],
+                provider=source,
+                opp_id=opp_id,
+                delivery_status="received",
+                rooftop_name=rooftop_name,
+            )
+            log_message(value_trade_log)
+        except Exception as e:
+            log.error(
+                f"Failed to log lead notification (process_lead_notification) (3): {e}"
+            )
     else:
         log.info(
             "First-touch email not sent (sent_ok=False); not stamping first_email_sent_at opp=%s",
@@ -1972,7 +2083,7 @@ def process_inbound_email(inbound: dict) -> None:
 
         if rec:
             rec_id = rec.get("id")
-            inbound_ts = inbound.get("timestamp") or _now_iso()
+            inbound_ts = inbound.get("timestamp") or _dt.now(_tz.utc).replace(microsecond=0).isoformat()
 
             # ✅ Stop BOTH cadences on any email engagement
             patch_by_id(
@@ -2109,6 +2220,7 @@ def process_inbound_email(inbound: dict) -> None:
             or opportunity.get("patti", {}).get("human_review_reason"),
         )
         try:
+            timestamp = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
             if opportunity.get("needs_human_review"):
                 human_review_conversation_update = Conversation(
                     conversation_id=conversation_id,
@@ -2131,7 +2243,9 @@ def process_inbound_email(inbound: dict) -> None:
                     "FINAL CUSTOMER DEBUG: airtable_email=%r opp_email=%r final_email=%r",
                     customer_details.get("customer_email"),
                     opportunity.get("customer_email"),
-                    customer_email,
+                    customer_details.get("customer_email")
+                    or opportunity.get("customer_email")
+                    or "",
                 )
                 conversation_record_id = upsert_conversation(
                     human_review_conversation_update
@@ -2362,7 +2476,7 @@ def process_inbound_email(inbound: dict) -> None:
                 conversation_id=conversation_id,
                 opted_out=True,
                 opt_out_channel="email",
-                opt_out_at=timestamp,
+                opt_out_at=_dt.now(_tz.utc).replace(microsecond=0).isoformat(),
                 status="suppressed",
             )
             conversation_record_id = upsert_conversation(opt_out_conversation_update)
@@ -2370,6 +2484,52 @@ def process_inbound_email(inbound: dict) -> None:
             log.error(
                 f"Something went wrong during opt out update in the Conversations table (3): {e}"
             )
+
+        try:
+            rooftop_name = ""
+            rooftop_sender = ""
+
+            try:
+                rt = get_rooftop_info(subscription_id) or {}
+                rooftop_name = rt.get("name") or rt.get("rooftop_name") or "Rooftop"
+                rooftop_sender = rt.get("sender") or rt.get("patti_email") or None
+            except Exception:
+                rooftop_name = ""
+                rooftop_sender = ""
+
+            timestamp = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
+            conversation_record_id = _get_conversation_record_id_by_opportunity_id(
+                opportunity_id=opp_id
+            )
+            safe_message_id = _normalize_message_id(
+                message_id=message_id
+            ) or _generate_message_id(
+                opp_id=opp_id or "",
+                timestamp=timestamp or "",
+                subject=subject or "",
+                to_addr=rooftop_sender or "",
+                body_html=body_html or "",
+            )
+            optout_log = Message(
+                message_id=safe_message_id,
+                conversation=conversation_record_id or "",
+                direction="inbound",
+                channel="email",
+                timestamp=timestamp,
+                from_=from_address,
+                to="patti@pattersonautos.com",
+                subject=subject,
+                body_text=body_text,
+                body_html=body_html[:200],
+                provider=source,
+                opp_id=opp_id,
+                delivery_status="received",
+                rooftop_name=rooftop_name or "",
+                rooftop_sender=rooftop_sender or "",
+            )
+            log_message(optout_log)
+        except Exception as e:
+            log.error(f"Failed to log inbound message (process_inbound_email) (1): {e}")
 
         # ✅ STOP cadence / cron loop
         opportunity["isActive"] = False
@@ -2624,8 +2784,12 @@ def process_inbound_email(inbound: dict) -> None:
 
                 outbound_convo_update = Conversation(
                     conversation_id=conversation_id,
-                    ai_last_reply_at=timestamp,
-                    last_activity_at=timestamp,
+                    ai_last_reply_at=_dt.now(_tz.utc)
+                    .replace(microsecond=0)
+                    .isoformat(),
+                    last_activity_at=_dt.now(_tz.utc)
+                    .replace(microsecond=0)
+                    .isoformat(),
                     last_channel="email",
                     status="open",
                 )
