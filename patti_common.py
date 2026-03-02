@@ -16,6 +16,16 @@ PHONE_RE = re.compile(
 from datetime import datetime as _dt
 import zoneinfo as _zi
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+import os
+
+STORE_TZ = os.getenv("STORE_TIMEZONE", "America/Los_Angeles")
+
+def within_email_send_window() -> bool:
+    now_local = datetime.now(ZoneInfo(STORE_TZ))
+    return 8 <= now_local.hour < 20
+
 EXIT_KEYWORDS = [
     "not interested", "no longer interested", "bought elsewhere",
     "already purchased", "stop emailing", "unsubscribe",
