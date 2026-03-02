@@ -20,6 +20,7 @@ from outlook_email import send_email_via_outlook
 from models.airtable_model import Conversation, Message
 
 from airtable_store import (
+    _fetch_customer_details,
     find_by_customer_phone_loose,
     opp_from_record,
     save_opp,
@@ -58,7 +59,14 @@ _MAZDA_STOP_RE = re.compile(r"(?i)\b(stop|unsubscribe|end|quit|do not contact|do
 
 _VOUCHERISH_RE = re.compile(r"(?<!\d)(\d{12,20})(?!\d)")  # catches 12–20 digit codes
 
+from zoneinfo import ZoneInfo
 
+STORE_TZ = os.getenv("STORE_TIMEZONE", "America/Los_Angeles")
+
+def _within_send_window() -> bool:
+    now_local = datetime.now(ZoneInfo(STORE_TZ))
+    return 8 <= now_local.hour < 20
+    
 def _extract_voucherish_code(text: str) -> str:
     t = (text or "").strip()
     if not t:
@@ -417,6 +425,9 @@ def _patti_number() -> str:
 SMS_DUE_VIEW = os.getenv("SMS_DUE_VIEW", "SMS Due")
 
 def send_sms_cadence_once():
+    if not _within_send_window():
+        log.info("⏰ Outside SMS send window (8am–8pm local). Skipping run.")
+        return
     # Pull queue
     recs = list_records_by_view(SMS_DUE_VIEW, max_records=50)
 
@@ -819,6 +830,8 @@ def poll_once():
         subscription_id = (opp.get("subscription_id") or opp.get("dealer_key") or "").strip()
         opp_id = (opp.get("opportunityId") or opp.get("opportunity_id") or "").strip()
 
+        customer_details = _fetch_customer_details(opp_id=opp_id) or {}
+
         patti = opp.setdefault("patti", {})
 
         # --- STOP / opt-out: stamp Airtable fields that suppress cadence ---
@@ -885,7 +898,7 @@ def poll_once():
         opp_id = opp.get("opportunityId", "")
         subscription_id = opp.get("subscription_id", "")
 
-        conversation_record_id = _ensure_conversation(opp, channel="sms")
+        conversation_record_id = _ensure_conversation(opp, channel="sms", linked_lead_record_id=rec.get("id", ""))
         conversation_id = f"conv_{subscription_id}_{opp_id}"
 
         # Dedupe: only act once per inbound message id
@@ -960,6 +973,11 @@ def poll_once():
                 last_customer_message=body[:300],
                 customer_last_reply_at=timestamp,
                 status="open",
+                customer_full_name=customer_details.get("customer_full_name", ""),
+                customer_email=customer_details.get("customer_email", ""),
+                customer_phone=customer_details.get("customer_phone", ""),
+                salesperson_assigned=customer_details.get("salesperson_assigned", ""),
+                linked_lead_record=customer_details.get("linked_lead_record", "")
             )
             conversation_record_id = upsert_conversation(message_update_convo)
         except Exception as e:

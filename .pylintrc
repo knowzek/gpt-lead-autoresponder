@@ -1,0 +1,4 @@
+[MASTER]
+
+[MESSAGES CONTROL]
+disable=logging-fstring-interpolation,broad-exception-caught,import-outside-toplevel

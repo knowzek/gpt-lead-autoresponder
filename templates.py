@@ -206,14 +206,14 @@ def build_mazda_loyalty_sms(*, day: int, fields: dict) -> str:
 
     if day == 2:
         return (
-            f"{name_prefix}just a reminder your {incentive_text} can be used "
+            f"{name_prefix}Patti at Patterson Autos again - just a reminder your {incentive_text} can be used "
             f"on a new CX-5 and is stackable with current specials. "
             f"Want me to check available inventory?"
         )
 
     if day == 3:
         return (
-            f"{name_prefix}also - if you're not planning to use your "
+            f"{name_prefix}this is Patti with Patterson Autos again. I just wanted to let you know if you're not planning to use your "
             f"{incentive_text}, you can gift it to a friend or family member. "
             f"Just send me their name and number and I’ll take care of it."
         )

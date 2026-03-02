@@ -94,6 +94,38 @@ def _safe_json(s: str) -> Dict[str, Any]:
                 return {}
         return {}
 
+import re
+
+_PURCHASE_VERBS_RE = re.compile(
+    r"\b(purchased|bought|leased|lease(d)?|picked up|took delivery|delivered|closed|signed)\b",
+    re.I
+)
+
+_TIME_HINT_RE = re.compile(
+    r"\b(this month|last month|this week|last week|today|yesterday|recently|just|already|earlier|few days ago)\b",
+    re.I
+)
+
+_MODEL_YEAR_CONTEXT_RE = re.compile(
+    r"\b(20\d{2})\b",  # model years like 2025 / 2026
+    re.I
+)
+
+def _looks_like_recent_purchase(text: str) -> bool:
+    t = (text or "").strip()
+    if not t:
+        return False
+
+    # Strong “purchase already happened” indicator
+    if _PURCHASE_VERBS_RE.search(t) and (_TIME_HINT_RE.search(t) or "we purchased" in t.lower()):
+        return True
+
+    # Often they mention model year + purchase verb without explicit time
+    if _PURCHASE_VERBS_RE.search(t) and _MODEL_YEAR_CONTEXT_RE.search(t):
+        return True
+
+    return False
+
 def generate_mazda_loyalty_sms_reply(
     *,
     first_name: str,
@@ -129,6 +161,18 @@ def generate_mazda_loyalty_sms_reply(
             ),
             "needs_handoff": False,
             "handoff_reason": "other",
+        }
+
+    # ---- Recent purchase / retroactive question ----
+    if _looks_like_recent_purchase(inbound):
+        prefix = f"{first}, " if first else ""
+        return {
+            "reply": (
+                f"{prefix}the Mazda Loyalty reward must be applied at the time of purchase. "
+                "If your purchase has already been completed, I’ll loop in a team member to review your situation and see what options may be available."
+            ),
+            "needs_handoff": True,
+            "handoff_reason": "retroactive_purchase",
         }
 
     # Voucher code present
