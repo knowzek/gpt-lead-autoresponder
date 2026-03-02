@@ -53,7 +53,14 @@ APPT_RE = re.compile(
     re.I
 )
 
-_STOP_RE = re.compile(r"(?i)\b(stop|unsubscribe|cancel|end|quit)\b")
+_STOP_RE = re.compile(
+    r"""(?ix)
+    ^\s*(stop|unsubscribe|end|quit)\s*$ |
+    \b(stop\s+text(ing)?|stop\s+messages?)\b |
+    \b(do\s*not\s*text|do\s*not\s*contact|dont\s*text|don't\s*text|dont\s*contact|don't\s*contact)\b |
+    \b(remove\s+me|take\s+me\s+off)\b
+    """
+)
 
 _MAZDA_STOP_RE = re.compile(r"(?i)\b(stop|unsubscribe|end|quit|do not contact|dont contact)\b")
 
@@ -882,6 +889,12 @@ def poll_once():
 
         patti = opp.setdefault("patti", {})
 
+        # ✅ Dedupe BEFORE STOP
+        last_seen = (opp.get("last_sms_inbound_message_id") or "").strip()
+        if last_seen and msg_id and last_seen == msg_id:
+            log.info("SMS poll: skipping already-processed msg_id=%s", msg_id)
+            continue
+
         # --- STOP / opt-out: stamp Airtable fields that suppress cadence ---
         if _STOP_RE.search(last_inbound or ""):
             inbound_ts = last.get("timestamp") or _now_iso()
@@ -948,12 +961,6 @@ def poll_once():
 
         conversation_record_id = _ensure_conversation(opp, channel="sms", linked_lead_record_id=rec.get("id", ""))
         conversation_id = f"conv_{subscription_id}_{opp_id}"
-
-        # Dedupe: only act once per inbound message id
-        last_seen = (opp.get("last_sms_inbound_message_id") or "").strip()
-        if last_seen == msg_id:
-            log.info("SMS poll: skipping already-processed msg_id=%s", msg_id)
-            continue
 
         # ✅ Flip Mazda record into convo mode so cadence stops
         try:
