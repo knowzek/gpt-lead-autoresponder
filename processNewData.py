@@ -1,5 +1,14 @@
-from helpers import rJson, wJson, getFirstActivity, adf_to_dict, getInqueryUsingAdf, get_names_in_dir, sortActivities
-from kbb_ico import process_kbb_ico_lead
+import sys
+from helpers import (
+    rJson,
+    wJson,
+    getFirstActivity,
+    adf_to_dict,
+    getInqueryUsingAdf,
+    get_names_in_dir,
+    sortActivities
+)
+from kbb_ico import process_kbb_ico_lead 
 from kbb_ico import _top_reply_only, _is_optout_text as _kbb_is_optout_text, _is_decline as _kbb_is_decline
 from kbb_ico import _patch_address_placeholders, build_patti_footer, _PREFS_RE
 from models.airtable_model import Conversation
@@ -32,7 +41,9 @@ from airtable_store import (
     save_opp,
     find_by_customer_email,
     patch_by_id,
-    upsert_conversation
+    upsert_conversation,
+    _get_messages_for_conversation,
+    _find_conversation_by_conversation_id
 )
 from patti_mailer import _bump_ai_send_metrics_in_airtable, _bump_ai_send_metrics_in_conversations_airtable
 
@@ -1437,6 +1448,7 @@ def process_general_lead_convo_reply(
 
 
 def checkActivities(opportunity, currDate, rooftop_name, activities_override=None):
+    log.info("checkActivities started for opportunity %s", opportunity.get("opportunityId") or opportunity.get("id"))
     if activities_override is not None:
         activities = activities_override
     elif OFFLINE_MODE:
@@ -1448,7 +1460,8 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
 
     alreadyProcessedActivities = opportunity.get("alreadyProcessedActivities", {})
     currDate_iso = (currDate.astimezone(_tz.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
-
+    opp_id = opportunity.get("opportunityId") or opportunity.get("id")
+    
     # Ensure checkedDict is always a dict on the opportunity
     checkedDict = opportunity.get("checkedDict") or {}
     if not isinstance(checkedDict, dict):
@@ -1464,6 +1477,8 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
         token = None
     else:
         token = get_token(subscription_id)
+
+    fresh_opp = get_opportunity(opp_id, token, subscription_id)
 
     for act in activities:
         activityId = act.get("activityId")
@@ -4111,10 +4126,35 @@ def send_thread_reply_now(
     except Exception as e:
         log.warning("Triage gate failed (continuing without triage) opp=%s: %s", opportunityId, e)
 
+    conversation_id = f"conv_{subscription_id}_{opportunityId}"
+    conv_id = _find_conversation_by_conversation_id(conversation_id=conversation_id)
+    messages_for_conversations = _get_messages_for_conversation(conversation_id=conv_id, direction="inbound")
+    
+    previous_conversion_lines = ""
+    conversation_history = ""
+    for conv in messages_for_conversations:
+        fields = conv.get('fields', {})
+        body_text = fields.get('body_text', '') or fields.get('body_html', '')
+        subject = fields.get('subject', '')
+        
+        if body_text:
+            previous_conversion_lines += body_text + "\n"
+    
+    # latest/new message as last
+    if customer_body:
+        conversation_history = f"""
+        User (earlier) : 
+        {previous_conversion_lines if previous_conversion_lines else "None"}
+
+        User (most recent message):
+        {customer_body}
+        """
+    
     # --- Step 2: try to auto-schedule an appointment from this reply (WEBHOOK PATH) ---
     created_appt_ok = False
     appt_human = None
-
+    intent_action = None
+    proposed = None
     # NOTE: no SAFE_MODE gating here by request (SAFE_MODE can still create Fortellis appts)
     if (not OFFLINE_MODE) and token and subscription_id and opportunityId:
         try:
@@ -4133,13 +4173,21 @@ def send_thread_reply_now(
 
             appt_iso = ""
             conf = 0.0
-
-            if (not already_scheduled) and customer_body:
-                proposed = extract_appt_time(customer_body, tz="America/Los_Angeles")
+            
+            # Build a user prompt that makes message roles/history explicit for OpenAI
+            if (not already_scheduled) and conversation_history:
+                
+                proposed = extract_appt_time(conversation_history, tz="America/Los_Angeles")
+                
+                intent_action = classify_scheduling_intent(proposed)
+                
                 appt_iso = (proposed.get("iso") or "").strip()
+                
                 conf = float(proposed.get("confidence") or 0.0)
+                
+                proposed['intent'] = intent_action
 
-            if appt_iso and conf >= 0.60:
+            if appt_iso and conf >= 0.60 and intent_action == "SCHEDULE":
                 # appt_iso is expected to be parseable by fromisoformat when Z->+00:00
                 dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
 
@@ -4160,6 +4208,7 @@ def send_thread_reply_now(
                     rooftop_name=rooftop_name,
                     appt_human=appt_human,
                     customer_reply=customer_body,
+                    subject=inbound_subject
                 )
 
                 created_appt_ok = True
@@ -4185,12 +4234,12 @@ def send_thread_reply_now(
             )
 
     skip_gpt = bool(created_appt_ok and appt_human)
-
+    
     # --- Step 3: choose the right reply (short confirmation vs normal reply) ---
     skip_footer = False
     response = {}  # <--- IMPORTANT: always defined
-
-    if created_appt_ok and appt_human:
+    
+    if created_appt_ok and appt_human and intent_action == "SCHEDULE":
         subject = inbound_subject or f"Re: {vehicle_str}"
         body_html = (
             f"<p>Hi {customer_name},</p>"
@@ -4199,40 +4248,68 @@ def send_thread_reply_now(
         )
         skip_footer = True
     else:
+        # Handle other non-scheduling intents by setting override prompts
+        
+        if intent_action == "CLARIFY_TIME":
+            gen_prompt = _getClarifyTimePrompts()
+        elif intent_action == "DIG_PREFS":
+            gen_prompt = _getDigPrefsPrompts()
+        elif intent_action == "HANDLE_MULTI":
+            gen_prompt = _getMultiOptionPrompts()
+        elif intent_action == "RESCHEDULE":
+            gen_prompt = _getClarifyTimePrompts()  # Treat as clarify for now
+        else:
+            gen_prompt = """
+                Please reply to the customer in a warm, professional, and helpful manner.
+
+                Your goal is to gather the missing scheduling information needed to confirm an appointment, or to confirm the proposed appointment if the customer has already provided all necessary details.
+
+                [context-block]
+
+                Hard rules::
+                - Ask ONE clear follow-up question related to scheduling details.
+                - Never confirm, schedule, or imply an appointment is set.
+                - Avoid open-ended questions — be as specific as possible.
+                - Do NOT mention store hours unless the customer specifically asks, or the proposed time is outside store hours.
+                - Only include the business address if the customer asks for it.
+
+                Store hours (local time):
+                    • Monday–Friday: 9:00 AM – 7:00 PM
+                    • Saturday: 9:00 AM – 8:00 PM
+                    • Sunday: 10:00 AM – 6:00 PM
+
+                Address: 28 B Auto Center Dr, Tustin, CA 92782
+
+                Return only valid JSON with:
+                {"subject": "...", "body": "..."}
+            """.strip()
+        
+        context_block = f"""
+        Context:
+            - Begin with exactly `Hi {customer_name},`
+            - The guest originally inquired about: {vehicle_str}
+        """
+        gen_prompt = gen_prompt.replace("[context-block]", context_block)
+        reason = proposed.get('reason')
+        
         prompt = f"""
-    You are replying to an ACTIVE email thread (not a first welcome message).
-    
-    Context:
-    - The guest originally inquired about: {vehicle_str}
-    
-    Hard rules:
-    - If the guest proposes a visit time (including casual phrasing like "tomorrow around 4"), CONFIRM it.
-    - Do NOT ask "what day/time works best?" after they already proposed a time.
-    - Do NOT mention store hours unless (a) the guest asks, or (b) the proposed time is outside store hours.
-    - Never invent store hours. Use only the store hours provided below.
-    - Always include the address in the confirmation sentence.
-    
-    Store hours (local time):
-    Mon: 9 AM–7 PM
-    Tue: 9 AM–7 PM
-    Wed: 9 AM–7 PM
-    Thu: 9 AM–7 PM
-    Fri: 9 AM–7 PM
-    Sat: 9 AM–8 PM
-    Sun: 10 AM–6 PM
-    
-    Address: 28 B Auto Center Dr, Tustin, CA 92782
-    
-    messages between Patti and the customer (python list of dicts):
-    {messages}
-    
-    Return ONLY valid JSON with keys: subject, body.
-    """.strip()
-
+            You are replying to and ACTIVE email thread (not a first or welcome message).
+            
+            GUIDELINES:
+                - {reason}
+            
+            {gen_prompt}
+            
+            messages between Patti and the customer (python list of dicts):
+            {messages}
+            
+            Return ONLY valid JSON with keys: subject, body.
+        """
         response = run_gpt(prompt, customer_name, rooftop_name, prevMessages=True)
-        subject = response["subject"]
+        
+        subject   = response["subject"]
         body_html = response["body"]
-
+    
     body_html = normalize_patti_body(body_html)
     body_html = _patch_address_placeholders(body_html, rooftop_name)
 

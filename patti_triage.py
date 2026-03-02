@@ -74,6 +74,7 @@ def notify_staff_patti_scheduled_appt(
     rooftop_name: str,
     appt_human: str,
     customer_reply: str,
+    subject: str,
 ) -> None:
     """
     Email salesperson + CC managers when Patti schedules an appointment in the CRM.
@@ -104,42 +105,6 @@ def notify_staff_patti_scheduled_appt(
         cc_clean.append(e)
     cc_addrs = cc_clean
 
-    # -----------------------
-    # SAFE MODE recipient gate (hard override)
-    # -----------------------
-    safe_mode = (os.getenv("SAFE_MODE", "0").strip() == "1")
-
-    if safe_mode:
-        test_to = (os.getenv("TEST_TO") or "").strip()
-        if not test_to:
-            raise RuntimeError("SAFE_MODE is enabled but TEST_TO is not set")
-
-        original_to = to_addr
-        original_cc = list(cc_addrs or [])
-
-        # hard override
-        to_addr = test_to
-        cc_addrs = []
-
-        # make it obvious
-        subj = f"[SAFE MODE] {subj}"
-
-        # optional: show original recipients in body for debugging
-        html = (
-            f"<div style='padding:10px;border:2px solid #cc0000;margin-bottom:12px;'>"
-            f"<b>SAFE MODE:</b> This appointment notify was rerouted to <b>{test_to}</b>.<br/>"
-            f"<b>Original To:</b> {original_to}<br/>"
-            f"<b>Original CC:</b> {', '.join(original_cc) if original_cc else '(none)'}"
-            f"</div>"
-            + html
-        )
-
-        log.warning(
-            "SAFE_MODE enabled: rerouting APPT notify opp=%s original_to=%r original_cc=%r -> test_to=%r",
-            opp_id, original_to, original_cc, test_to
-        )
-
-
     # Customer info (prefer Airtable-saved fields)
     first = (opportunity.get("customer_first_name") or "").strip()
     last  = (opportunity.get("customer_last_name") or "").strip()
@@ -168,6 +133,41 @@ def notify_staff_patti_scheduled_appt(
     <p>You can take it from here to confirm details and prep the vehicle.</p>
     """
 
+  # -----------------------
+    # SAFE MODE recipient gate (hard override)
+    # -----------------------
+    safe_mode = (os.getenv("SAFE_MODE", "0").strip() == "1")
+
+    if safe_mode:
+        test_to = (os.getenv("TEST_TO") or "").strip()
+        if not test_to:
+            raise RuntimeError("SAFE_MODE is enabled but TEST_TO is not set")
+
+        original_to = to_addr
+        original_cc = list(cc_addrs or [])
+
+        # hard override
+        to_addr = test_to
+        cc_addrs = []
+
+        # make it obvious
+        subj = f"[SAFE MODE] {subject}"
+
+        # optional: show original recipients in body for debugging
+        html = (
+            f"<div style='padding:10px;border:2px solid #cc0000;margin-bottom:12px;'>"
+            f"<b>SAFE MODE:</b> This appointment notify was rerouted to <b>{test_to}</b>.<br/>"
+            f"<b>Original To:</b> {original_to}<br/>"
+            f"<b>Original CC:</b> {', '.join(original_cc) if original_cc else '(none)'}"
+            f"</div>"
+            + html
+        )
+
+        log.warning(
+            "SAFE_MODE enabled: rerouting APPT notify opp=%s original_to=%r original_cc=%r -> test_to=%r",
+            opp_id, original_to, original_cc, test_to
+        )
+        
     send_email_via_outlook(
         to_addr=to_addr,
         subject=_clip(subj, 180),

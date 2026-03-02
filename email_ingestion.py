@@ -2050,7 +2050,7 @@ def process_inbound_email(inbound: dict) -> None:
         (body_text or "")[:160],
     )
 
-    ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
+    timestamp = ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     headers = inbound.get("headers") or {}
 
     # -----------------------------------------
@@ -2394,7 +2394,7 @@ def process_inbound_email(inbound: dict) -> None:
     is_kbb = _is_kbb_opp(opportunity)
 
     # 2) Append inbound message into the thread (in-memory)
-    ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
+    timestamp = ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     msg_dict = {
         "msgFrom": "customer",
         "subject": subject,

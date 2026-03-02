@@ -1019,6 +1019,7 @@ def schedule_appointment_with_notify(
     rooftop_name="",
     appt_human="",
     customer_reply="",
+    subject=""
 ):
     """
     Schedule an appointment activity and notify staff ONCE.
@@ -1066,6 +1067,7 @@ def schedule_appointment_with_notify(
             rooftop_name=rooftop_name or "",
             appt_human=appt_human or due_dt_iso_utc,
             customer_reply=customer_reply or "",
+            subject=subject
         )
 
         # mark AFTER successful send attempt
