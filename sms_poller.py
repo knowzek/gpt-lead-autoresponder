@@ -692,11 +692,21 @@ def poll_once():
                 # Mark Do Not Contact (Mazda table field)
                 try:
                     patch_by_id(rec_id, {
-                        "do_not_contact": True,        # ✅ the field you asked for
-                        "sms_status": "opt_out",       # optional, if the field allows this
+                        # ✅ Keep your DNC field
+                        "do_not_contact": True,
+                    
+                        # ✅ Also set suppression checkbox (your requirement #2)
+                        "Suppressed": True,
+                    
+                        # ✅ Canonical statuses (your requirement #1)
+                        "sms_status": "opted_out",
+                        "email_status": "opted_out",
+                    
+                        # ✅ Stop all future nudges
                         "next_sms_at": None,
-                        "email_status": "opt_out",     # optional, if you want email stopped too
-                        "next_email_at": None,         # optional, if field exists
+                        "next_email_at": None,
+                    
+                        # ✅ inbound markers
                         "last_sms_inbound_message_id": msg_id,
                         "last_sms_inbound_at": ts,
                         "last_inbound_text": (last_inbound or "")[:2000],
@@ -706,7 +716,11 @@ def poll_once():
                     try:
                         patch_by_id(rec_id, {
                             "do_not_contact": True,
+                            "Suppressed": True,
+                            "sms_status": "opted_out",
+                            "email_status": "opted_out",
                             "next_sms_at": None,
+                            "next_email_at": None,
                             "last_sms_inbound_message_id": msg_id,
                             "last_sms_inbound_at": ts,
                             "last_inbound_text": (last_inbound or "")[:2000],
