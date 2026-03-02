@@ -3326,6 +3326,12 @@ def processHit(hit):
             # ✅ SEND the follow-up (currently missing)
             sent_ok = False
 
+            from patti_common import within_email_send_window
+
+            if not within_email_send_window():
+                log.info("EMAIL cadence blocked — outside send window")
+                return
+
             if not OFFLINE_MODE:
                 from patti_mailer import send_patti_email  # wrapper: Outlook send + CRM comment
 
@@ -3871,6 +3877,12 @@ def send_first_touch_email(
             customer_email,
             actual_to,
         )
+
+    from patti_common import within_email_send_window
+
+    if not within_email_send_window():
+        log.info("EMAIL cadence blocked — outside send window")
+        return
 
     if actual_to and not OFFLINE_MODE:
         try:
