@@ -9,7 +9,7 @@ from datetime import datetime as _dt, timezone as _tz
 from gpt import extract_appt_time
 from fortellis import get_token, schedule_activity, get_opportunity, add_opportunity_comment
 
-from goto_sms import list_conversations, list_messages, send_sms
+from goto_sms import list_conversations, iter_conversations, list_messages, send_sms
 from sms_brain import generate_sms_reply
 from mazda_loyalty_sms_brain import generate_mazda_loyalty_sms_reply
 from templates import build_mazda_loyalty_sms
@@ -554,11 +554,14 @@ def poll_once():
     """
     owner = _patti_number()
 
-    data = list_conversations(owner_phone_e164=owner)
-    items = data.get("items") or []
-    log.info("SMS poll: got %d conversations", len(items))
-
-    for conv in items:
+    # Pull enough pages to cover big outbound batches (cadence blasts)
+    page_limit = int(os.getenv("GOTO_CONVERSATION_PAGE_LIMIT", "200"))
+    max_pages = int(os.getenv("GOTO_CONVERSATION_MAX_PAGES", "10"))
+    
+    convs = list(iter_conversations(owner_phone_e164=owner, limit=page_limit, max_pages=max_pages))
+    log.info("SMS poll: got %d conversations (paged limit=%d max_pages=%d)", len(convs), page_limit, max_pages)
+    
+    for conv in convs:
         last = conv.get("lastMessage") or {}
         if not last:
             continue
