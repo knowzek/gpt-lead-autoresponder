@@ -4013,16 +4013,6 @@ def send_thread_reply_now(
     currDate = _dt.now(_tz.utc)
     currDate_iso = currDate.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # log.info("[SEND_THREAD_REPLY_NOW] opportunity: %r", opportunity)
-    # log.info("[SEND_THREAD_REPLY_NOW] fresh_opp keys: %r", fresh_opp)
-    # log.info("[SEND_THREAD_REPLY_NOW] token?: %r", token)
-    # log.info("[SEND_THREAD_REPLY_NOW] subscription_id: %r", subscription_id)
-    # log.info("[SEND_THREAD_REPLY_NOW] trigger: %r", trigger)
-    # log.info("[SEND_THREAD_REPLY_NOW] SAFE_MODE: %r", SAFE_MODE)
-    # log.info("[SEND_THREAD_REPLY_NOW] test_recipient: %r", test_recipient)
-    # log.info("[SEND_THREAD_REPLY_NOW] inbound_ts: %r", inbound_ts)
-    # log.info("[SEND_THREAD_REPLY_NOW] inbound_subject: %r", inbound_subject)
-
     opportunityId = opportunity.get("opportunityId") or opportunity.get("id")
     checkedDict = opportunity.get("checkedDict", {}) or {}
 
@@ -4143,7 +4133,6 @@ def send_thread_reply_now(
     previous_conversion_lines = ""
     conversation_history = ""
     for conv in messages_for_conversations:
-        # print("="*50)
         fields = conv.get('fields', {})
         body_text = fields.get('body_text', '') or fields.get('body_html', '')
         subject = fields.get('subject', '')
@@ -4185,7 +4174,6 @@ def send_thread_reply_now(
             appt_iso = ""
             conf = 0.0
             
-            # log.info("Customer body for appt extraction: %r", customer_body)
             # Build a user prompt that makes message roles/history explicit for OpenAI
             if (not already_scheduled) and conversation_history:
                 
@@ -4199,16 +4187,6 @@ def send_thread_reply_now(
                 
                 proposed['intent'] = intent_action
 
-                print("= "*50)
-                log.info("[SEND_THREAD_REPLY_NOW] Extracted proposed appointment: %r", proposed)
-                print("= "*50)
-                
-                # TEMPORARY: sys.exit(0) is for debugging/testing purposes only. 
-                # MAKE SURE TO REMOVE THIS LINE BEFORE PUSHING TO SERVER! 
-                # This will abort execution to help diagnose appointment extraction logic.
-                # log.info("Exiting with code 0")
-                # sys.exit(0)
-                
             if appt_iso and conf >= 0.60 and intent_action == "SCHEDULE":
                 # appt_iso is expected to be parseable by fromisoformat when Z->+00:00
                 dt_local = _dt.fromisoformat(appt_iso.replace("Z", "+00:00"))
@@ -4261,14 +4239,6 @@ def send_thread_reply_now(
     skip_footer = False
     response = {}  # <--- IMPORTANT: always defined
     
-    print("= "*50)
-    log.info("[SEND_THREAD_REPLY_NOW] 🌟 SKIP GPT : %r", skip_gpt)
-    log.info("[SEND_THREAD_REPLY_NOW] 🌟 SKIP FOOTER : %r", skip_footer)
-    log.info("[SEND_THREAD_REPLY_NOW] 🌟 SUBJECT : %r", inbound_subject or f"Re: {vehicle_str}")
-    log.info("[SEND_THREAD_REPLY_NOW] 🌟 INBOUND SUBJECT : %r", inbound_subject)
-    log.info("[SEND_THREAD_REPLY_NOW] 🌟 VEHICLE STR :  %r", vehicle_str)
-    print("= "*50)
-    
     if created_appt_ok and appt_human and intent_action == "SCHEDULE":
         subject = inbound_subject or f"Re: {vehicle_str}"
         body_html = (
@@ -4314,27 +4284,6 @@ def send_thread_reply_now(
                 {"subject": "...", "body": "..."}
             """.strip()
         
-        # You are replying within an ongoing email thread with the customer (not a first or welcome message).
-        # prompt = f""" 
-        # You are replying to and ACTIVE email thread (not a first or welcome message).
-
-        # Context:
-        # - Begin with exactly `Hi {customer_name},`
-        # - The guest originally inquired about: {vehicle_str}
-        
-        # IMPORTANT:
-        # - Your ONLY task is to communicate politely and gather any missing or unclear scheduling details from the customer (such as clarifying date, time, or preferences).
-        # - NEVER confirm, schedule, or imply that an appointment is set in your response.
-        # - Do NOT use language like "You're all set", "Your appointment is scheduled," or anything suggesting confirmation or booking.
-        # - Only ask for needed clarifications or provide information strictly based on the customer's request or message context.
-        # - Do not proactively offer to schedule and do not attempt to finalize/confirm an appointment.
-
-        # {gen_prompt}
-
-        # Conversation history:
-        # {conversation_history}
-        # """
-        
         context_block = f"""
         Context:
             - Begin with exactly `Hi {customer_name},`
@@ -4356,29 +4305,10 @@ def send_thread_reply_now(
             
             Return ONLY valid JSON with keys: subject, body.
         """
-        print("- "*50)
-        log.info("[SEND_THREAD_REPLY] Using prompt:\n%s", prompt)
-        print("- "*50)
         response = run_gpt(prompt, customer_name, rooftop_name, prevMessages=True)
         
-        print("= "*50)
-        for k, v in response.items():
-            log.info("[SEND_THREAD_REPLY] GPT response: %r = %r", k, v)
-        print("= "*50)
-            
         subject   = response["subject"]
         body_html = response["body"]
-    
-    print("= "*50)
-    log.info("[SEND_THREAD_REPLY_NOW] 🌟 SKIP GPT : %r", skip_gpt)
-    log.info("[SEND_THREAD_REPLY_NOW] 🌟 SKIP FOOTER : %r", skip_footer)
-    log.info("[SEND_THREAD_REPLY_NOW] 🌟 SUBJECT : %r", subject)
-    log.info("[SEND_THREAD_REPLY_NOW] 🌟 INBOUND SUBJECT : %r", inbound_subject)
-    log.info("[SEND_THREAD_REPLY_NOW] 🌟 VEHICLE STR : %r", vehicle_str)
-    print("= "*50)
-    
-    # log.info("Exiting with code 0")
-    # sys.exit(0)
     
     body_html = normalize_patti_body(body_html)
     body_html = _patch_address_placeholders(body_html, rooftop_name)

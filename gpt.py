@@ -836,7 +836,7 @@ def extract_appt_time(text: str, tz: str = "America/Los_Angeles") -> dict:
             qualifiers or with "this [weekday]", resolve it to the *nearest upcoming
             occurrence* of that weekday on the calendar relative to Now Local ISO.
             Example: If Now Local ISO is Friday, Feb 27, 2026, then "Saturday" refers
-            to the next calendar Saturday, Feb 28, 2026. :contentReference[oaicite:1]{{index=1}}
+            to the next calendar Saturday, Feb 28, 2026.
             
             - When the user gives a weekday (e.g., "Friday", "Saturday") with no "next" or other qualifier, resolve it to the nearest upcoming occurrence of that weekday *after* Now Local ISO using calendar logic. 
             For example, if the Now Local ISO is Friday, Feb 27, 2026, then "Friday" refers to the same day if business time has not gone and comes under business time otherwise consider Next Friday March 6 2026.
@@ -849,7 +849,7 @@ def extract_appt_time(text: str, tz: str = "America/Los_Angeles") -> dict:
             
             2) The phrase "next [weekday]" is ambiguous in English — it can mean either:
             • The same nearest upcoming day (common in everyday usage), OR
-            • The weekday of the following calendar week. :contentReference[oaicite:2]{{index=2}}
+            • The weekday of the following calendar week.
             To reduce misinterpretation:
                 – Treat "next [weekday]" as the nearest upcoming weekday unless the user
                 adds a clear qualifier (e.g., "next week Saturday", "the Saturday after").
@@ -909,11 +909,6 @@ def extract_appt_time(text: str, tz: str = "America/Los_Angeles") -> dict:
             {text.strip()}
         """
     }
-    
-    print("= "*50)
-    print("SYSTEM PROMPT: ", system["content"])
-    print("USER PROMPT: ", user["content"])
-    print("= "*50)
     
     model_used, resp = chat_complete_with_fallback(
         [system, user],
