@@ -16,6 +16,7 @@ import os
 import json
 import logging
 from typing import Any, Dict, List, Optional
+import re
 
 from openai import OpenAI
 
@@ -113,6 +114,14 @@ Return ONLY valid JSON with keys:
 }
 """
 
+OPTOUT_RE = re.compile(
+    r"""(?ix)
+    ^\s*(stop|unsubscribe|end|quit)\s*$ |
+    \b(stop\s+text(ing)?|stop\s+messages?|do\s*not\s*text|do\s*not\s*contact|remove\s+me)\b
+    """
+)
+
+STOP_RE = re.compile(r"(?i)\b(stop|unsubscribe|end|quit)\b")
 STOP_TOKENS = ("stop", "unsubscribe", "end", "quit")
 PRICING_TOKENS = (
     "otd", "out the door", "out-the-door",
@@ -233,7 +242,7 @@ def generate_sms_reply(
 
     inbound = (last_inbound or "").strip()
 
-    if _contains_any(inbound, STOP_TOKENS):
+    if OPTOUT_RE.search(inbound or ""):
         log.info("sms_brain GATE=stop inbound=%r", inbound[:120])
         return {
             "reply": "You’re all set — we’ll stop texting you. Reply START if you change your mind.",
