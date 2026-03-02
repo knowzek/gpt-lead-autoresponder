@@ -20,6 +20,7 @@ log = logging.getLogger("patti.mazda_loyalty")
 
 _TIME_RE = re.compile(r"\b(\d{1,2})(:\d{2})?\s?(am|pm)?\b", re.IGNORECASE)
 _DOW_RE = re.compile(r"\b(mon(day)?|tue(sday)?|wed(nesday)?|thu(rsday)?|fri(day)?|sat(urday)?|sun(day)?)\b", re.IGNORECASE)
+_MAZDA_STOP_RE = re.compile(r"(?i)\b(stop|unsubscribe|end|quit|do not contact|dont contact)\b")
 
 def _now_iso():
     return datetime.now(timezone.utc).isoformat()
@@ -158,6 +159,31 @@ def handle_mazda_loyalty_inbound_email(*, inbound: dict, subject: str, body_text
 
     rec_id = rec.get("id")
     fields = rec.get("fields") or {}
+
+    # --- Mazda STOP / opt-out: stamp DNC + suppress everything ---
+    if _MAZDA_STOP_RE.search(body_text or ""):
+        try:
+            patch_by_id(rec_id, {
+                "do_not_contact": True,
+                "Suppressed": True,
+                "sms_status": "opted_out",
+                "email_status": "opted_out",
+                "next_sms_at": None,
+                "next_email_at": None,
+                "last_inbound_at": ts,
+                "last_inbound_text": (body_text or "")[:2000],
+            })
+        except Exception:
+            log.exception("Mazda Loyalty: failed to stamp opt-out fields rec_id=%s", rec_id)
+
+        # Reply with opt-out confirmation (keep it simple + compliant)
+        send_via_sendgrid(
+            to_email=sender_email,
+            subject=f"Re: {subject}" if subject else "[Mazda Loyalty] Opt-out confirmed",
+            body_text="Understood, we’ll stop reaching out. If you need anything in the future, just reply here.",
+            body_html="Understood, we’ll stop reaching out. If you need anything in the future, just reply here.",
+        )
+        return
 
     # ✅ STOP both cadences on any engagement
     patch_by_id(rec_id, {
