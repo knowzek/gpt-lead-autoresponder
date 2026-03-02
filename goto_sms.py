@@ -23,14 +23,35 @@ _ACCESS_TOKEN_EXP = 0
 GOTO_API = "https://api.goto.com"
 
 
-def list_conversations(owner_phone_e164: str):
+def list_conversations(owner_phone_e164: str, limit: int = 200, page_marker: str | None = None):
     url = f"{GOTO_API}/messaging/v1/conversations"
     params = {
         "ownerPhoneNumber": owner_phone_e164,
+        "limit": limit,
     }
+    if page_marker:
+        # GoTo returns "nextPageMarker" in the response; request param is "pageMarker"
+        params["pageMarker"] = page_marker
+
     r = requests.get(url, headers=_auth_headers(), params=params, timeout=30)
     r.raise_for_status()
     return r.json()
+
+def iter_conversations(owner_phone_e164: str, limit: int = 200, max_pages: int = 10):
+    """
+    Yields conversations across pages using GoTo nextPageMarker.
+    Safety: capped by max_pages to avoid runaway API calls.
+    """
+    marker = None
+    for _ in range(max_pages):
+        data = list_conversations(owner_phone_e164=owner_phone_e164, limit=limit, page_marker=marker)
+        items = data.get("items") or []
+        for conv in items:
+            yield conv
+
+        marker = data.get("nextPageMarker")
+        if not marker or not items:
+            break
 
 
 def list_messages(owner_phone_e164: str, contact_phone_e164: str, limit: int = 20):
