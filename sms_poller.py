@@ -491,12 +491,16 @@ def send_sms_cadence_once():
         # Global suppression / opt-out protection (reuse your existing guard)
         stop, reason = should_suppress_all_sends_airtable(f)
         if stop:
+            # ✅ Preserve terminal status like opted_out (don’t overwrite to paused)
+            current_status = (f.get("sms_status") or "").strip().lower()
+            new_status = "opted_out" if current_status == "opted_out" else "paused"
+
             patch_by_id(rid, {
-                "sms_status": "paused",
+                "sms_status": new_status,
                 "next_sms_at": None,
                 "last_sms_body": f"Suppressed: {reason}",
             })
-            log.info("SMS cadence suppressed rid=%s reason=%r", rid, reason)
+            log.info("SMS cadence suppressed rid=%s reason=%r (sms_status=%s)", rid, reason, new_status)
             continue
 
         day = int(f.get("sms_day") or 1)
