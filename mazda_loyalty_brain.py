@@ -194,7 +194,7 @@ def generate_mazda_loyalty_email_reply(
 
     # ---- deterministic pre-guards ----
     if _contains_any(inbound, STOP_TOKENS):
-        txt = "Understood — we’ll stop reaching out. If you need anything in the future, just reply here."
+        txt = "Understood, we’ll stop reaching out. If you need anything in the future, just reply here."
         return {
             "reply_text": txt,
             "reply_html": _as_html(txt),
