@@ -112,6 +112,12 @@ def _send_mazda_handoff_email(
         )
         to_addr = test_to
         cc_addrs = []
+        
+    from patti_common import within_email_send_window
+
+    if not within_email_send_window():
+        log.info("Mazda Loyalty email blocked — outside send window")
+        return
 
     send_email_via_outlook(
         to_addr=to_addr,
