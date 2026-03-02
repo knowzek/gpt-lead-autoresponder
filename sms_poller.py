@@ -170,6 +170,36 @@ def handle_mazda_loyalty_inbound_sms_webhook(*, payload_json: dict) -> dict:
     customer_email = (fields.get("customer_email") or fields.get("email") or "").strip()
     phone = (fields.get("customer_phone") or "").strip() or author
 
+    # ✅ STOP / opt-out handling (must run BEFORE setting sms_status="convo")
+    if re.search(r"(?i)\b(stop|unsubscribe|cancel|end|quit)\b", inbound_text or ""):
+        now_iso = _now_iso()
+        try:
+            patch_by_id(rec_id, {
+                # your requested behavior
+                "sms_status": "opted_out",
+                "email_status": "opted_out",
+                "next_email_at": None,
+                "next_sms_at": None,
+                "Suppressed": True,
+
+                # still store inbound markers for audit/history
+                "last_sms_inbound_message_id": msg_id,
+                "last_sms_inbound_at": now_iso,
+                "last_inbound_text": inbound_text[:2000],
+            })
+        except Exception:
+            log.exception("Mazda SMS webhook: failed patching opt-out rec=%s", rec_id)
+
+        # Optional but recommended: confirm opt-out to the customer
+        owner = (os.getenv("PATTI_PHONE_E164") or os.getenv("PATTI_NUMBER") or "").strip()
+        try:
+            send_sms(from_number=owner, to_number=author, body="Got it — you’re opted out and we won’t text you again.")
+            log.info("Mazda SMS webhook: opt-out confirmation sent to=%s", author)
+        except Exception:
+            log.exception("Mazda SMS webhook: failed sending opt-out confirmation rec=%s", rec_id)
+
+        return {"ok": True, "handled": True, "handoff": False, "action": "opt_out"}
+
     # ✅ Stop cadence + store inbound markers (Mazda fields only)
     try:
         patch_by_id(rec_id, {
@@ -681,7 +711,7 @@ def poll_once():
                         log.exception("Mazda SMS: failed to stamp do_not_contact rec=%s", rec_id)
 
                 # Reply with opt-out confirmation (keep it simple + compliant)
-                reply_text = "Understood — we’ll stop reaching out. If you need anything in the future, just reply here."
+                reply_text = "Understood, we’ll stop reaching out. If you need anything in the future, just reply here."
 
                 to_number = author
                 if _sms_test_enabled() and _sms_test_to():
