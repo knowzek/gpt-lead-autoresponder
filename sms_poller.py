@@ -62,7 +62,15 @@ _STOP_RE = re.compile(
     """
 )
 
-_MAZDA_STOP_RE = re.compile(r"(?i)\b(stop|unsubscribe|end|quit|do not contact|dont contact)\b")
+_MAZDA_STOP_RE = re.compile(r"""(?ix)
+    ^\s*(stop|unsubscribe|end|quit)\s*$ |
+    \b(stop\s+text(ing)?|stop\s+messages?)\b |
+    \b(do\s*not\s*text|do\s*not\s*contact|dont\s*text|don't\s*text|dont\s*contact|don't\s*contact)\b |
+    \b(remove\s+me|take\s+me\s+off)\b |
+    \b(not\s+interested)\b |
+    \b(please\s+stop)\b |
+    \b(stop\s+sending)\b
+""")
 
 _VOUCHERISH_RE = re.compile(r"(?<!\d)(\d{12,20})(?!\d)")  # catches 12–20 digit codes
 
