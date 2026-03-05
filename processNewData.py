@@ -82,6 +82,31 @@ load_dotenv()
 
 import random
 
+def _is_trade_in_lead(source: str, subject: str, adf: dict) -> bool:
+    s = (source or "").lower()
+    subj = (subject or "").lower()
+
+    if s == "carfax":
+        return True
+    if "trade-in lead" in subj:
+        return True
+    if adf and adf.get("price") and not adf.get("stockNumber"):
+        return True
+
+    return False
+
+def _is_trade_in_lead_for_subject(source: str, inbound_subject: str, inquiry_text: str | None, vehicle_str: str) -> bool:
+    s = (source or "").lower()
+    subj = (inbound_subject or "").lower()
+    iq = (inquiry_text or "").lower()
+
+    if s == "carfax":
+        return True
+    if "trade-in lead" in subj or "value your trade" in subj:
+        return True
+    if "trade" in iq and not vehicle_str:
+        return True
+    return False
 
 def _normalize_cadence_brain_fields(opportunity: dict) -> None:
     """
@@ -3813,6 +3838,25 @@ def send_first_touch_email(
         response = run_gpt(prompt, customer_name, rooftop_name)
         subject = response["subject"]
         body_html = response["body"]
+        
+    # ------------------------------------------------------------------
+    # ✅ SUBJECT OVERRIDE FOR TRADE-IN LEADS (ex: CARFAX)
+    # ------------------------------------------------------------------
+    if not _is_telluride:
+        inbound_subject = opportunity.get("inbound_subject") or ""
+    
+        if _is_trade_in_lead_for_subject(source, inbound_subject, inquiry_text, vehicle_str):
+            y = (opportunity.get("year") or "").strip()
+            mk = (opportunity.get("make") or "").strip()
+            md = (opportunity.get("model") or "").strip()
+            tr = (opportunity.get("trim") or "").strip()
+    
+            trade_vehicle = " ".join([y, mk, md, tr]).strip()
+    
+            if trade_vehicle:
+                subject = f"Quick question about your {trade_vehicle}"
+            else:
+                subject = "Quick question about your trade-in value"
 
     # --- Normalize Patti body ---
     body_html = normalize_patti_body(body_html)
