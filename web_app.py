@@ -135,100 +135,96 @@ def lead_notification_inbound():
     This endpoint will classify vendor/lead_source and:
       - call process_lead_notification() if it’s a recognized lead
       - otherwise return handled=false (ignored)
+
+    IMPORTANT:
+    - Always respond fast (<= 1-2s) so Power Automate never times out.
+    - Do heavy imports + processing inside the worker thread.
     """
+    payload = request.get_json(force=True, silent=True) or {}
+
+    inbound = {
+        "subscription_id": (payload.get("subscription_id") or payload.get("subscriptionId") or "").strip(),
+        "rooftop_code": (payload.get("rooftop_code") or payload.get("rooftopCode") or "").strip(),
+        "source": (payload.get("source") or "").strip(),
+
+        "timestamp": payload.get("timestamp"),
+        "from": payload.get("from"),
+        "to": payload.get("to"),
+        "cc": payload.get("cc"),
+        "subject": (payload.get("subject") or "").strip(),
+        "body_html": payload.get("body_html") or "",
+        "body_text": payload.get("body_text") or "",
+
+        "conversation_id": payload.get("conversation_id") or payload.get("conversationId") or "",
+        "message_id": payload.get("message_id") or payload.get("messageId") or "",
+
+        "lead_type": payload.get("lead_type") or payload.get("leadType") or "",
+        "test_mode": bool(payload.get("test_mode")),
+        "headers": payload.get("headers") or {},
+    }
+
+    # If subscription_id is missing, we can’t route to Fortellis correctly.
+    if not inbound["subscription_id"]:
+        return jsonify({"status": "error", "message": "subscription_id is required"}), 400
+
+    # ✅ Detect lead source quickly (keep this in-request; should be cheap)
     try:
-        payload = request.get_json(force=True, silent=False) or {}
-
-        inbound = {
-            # Required for Fortellis routing
-            "subscription_id": (payload.get("subscription_id") or payload.get("subscriptionId") or "").strip(),
-
-            # Optional, but keep for logging/analytics if you want it
-            "rooftop_code": (payload.get("rooftop_code") or payload.get("rooftopCode") or "").strip(),
-
-            # You already send this today from PA (sometimes hardcoded like "cars.com", "apollo", etc.)
-            "source": (payload.get("source") or "").strip(),
-
-            # Core email fields
-            "timestamp": payload.get("timestamp"),
-            "from": payload.get("from"),
-            "to": payload.get("to"),
-            "cc": payload.get("cc"),
-            "subject": (payload.get("subject") or "").strip(),
-            "body_html": payload.get("body_html") or "",
-            "body_text": payload.get("body_text") or "",
-
-            # Message identifiers (you already send these in your Compose)
-            "conversation_id": payload.get("conversation_id") or payload.get("conversationId") or "",
-            "message_id": payload.get("message_id") or payload.get("messageId") or "",
-
-            # Optional: some flows send lead_type
-            "lead_type": payload.get("lead_type") or payload.get("leadType") or "",
-
-            # Optional toggles
-            "test_mode": bool(payload.get("test_mode")),
-
-            # Keep headers if present (useful for debugging/dedupe later)
-            "headers": payload.get("headers") or {},
-        }
-
-        if not inbound["subscription_id"]:
-            return jsonify({
-                "status": "error",
-                "message": "subscription_id is required",
-            }), 400
-
-        # Central vendor detection (based on your PA rules)
         detected = detect_lead_source(inbound)
-        inbound["lead_source"] = detected or ""
+    except Exception:
+        # Never crash the endpoint; just treat as no match
+        detected = None
 
-        # Central vendor detection (based on your PA rules)
-        detected = detect_lead_source(inbound)
-        inbound["lead_source"] = detected or ""
-        
-        # ✅ NEW: overwrite inbound["source"] so your downstream uses the normalized value
-        if detected:
-            inbound["source"] = detected
-        
-        # ✅ NEW: if Apollo special, set lead_type (matches your PA behavior)
-        if detected == "Team Velocity - Pre-Qualification" and not inbound.get("lead_type"):
-            from lead_router import detect_lead_type
-            inbound["lead_type"] = detect_lead_type(inbound)
+    inbound["lead_source"] = detected or ""
 
-        log.info(
-            "📥 lead-notification-inbound: sub_id=%s rooftop=%s detected=%r pa_source=%r from=%r subject=%r msg_id=%r",
-            inbound.get("subscription_id"),
-            inbound.get("rooftop_code"),
-            detected,
-            inbound.get("source"),
-            (inbound.get("from") or ""),
-            (inbound.get("subject") or "")[:160],
-            inbound.get("message_id"),
-        )
+    # ✅ Normalize source for downstream (your current behavior)
+    if detected:
+        inbound["source"] = detected
 
-        # If it doesn’t match your rules, ignore (non-lead email)
-        if not detected:
-            return jsonify({
-                "status": "ok",
-                "handled": False,
-                "ignored": True,
-                "reason": "no_rule_match",
-            }), 200
+    # ✅ Log quickly (safe)
+    log.info(
+        "📥 lead-notification-inbound: sub_id=%s rooftop=%s detected=%r pa_source=%r from=%r subject=%r msg_id=%r",
+        inbound.get("subscription_id"),
+        inbound.get("rooftop_code"),
+        detected,
+        payload.get("source"),
+        (inbound.get("from") or ""),
+        (inbound.get("subject") or "")[:160],
+        inbound.get("message_id"),
+    )
 
-        # If it matched, route to your existing lead handler
-        # (This preserves your current system behavior.)
-        process_lead_notification(inbound)
-
+    # If it doesn’t match rules, ignore immediately
+    if not detected:
         return jsonify({
             "status": "ok",
-            "handled": True,
-            "lead_source": detected,
+            "handled": False,
+            "ignored": True,
+            "reason": "no_rule_match",
         }), 200
 
-    except Exception as e:
-        log.exception("lead-notification-inbound failed: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+    # ✅ Kick off background work so PA never times out
+    import threading
 
+    def _worker(snapshot: dict):
+        try:
+            # Move heavy imports inside worker (prevents cold-start import delays blocking PA)
+            if snapshot.get("source") == "Team Velocity - Pre-Qualification" and not snapshot.get("lead_type"):
+                from lead_router import detect_lead_type
+                snapshot["lead_type"] = detect_lead_type(snapshot)
+
+            from email_ingestion import process_lead_notification
+            process_lead_notification(snapshot)
+
+        except Exception:
+            log.exception("lead-notification-inbound worker failed")
+
+    threading.Thread(target=_worker, args=(inbound,), daemon=True).start()
+
+    # ✅ Respond immediately
+    return jsonify({
+        "status": "accepted",
+        "handled": True,
+        "lead_source": detected,
+    }), 200
 
 # -----------------------------
 #   Standard Email Inbound
