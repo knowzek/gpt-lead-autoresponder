@@ -11,6 +11,7 @@ from email_ingestion import process_inbound_email, process_lead_notification
 from kbb_adf_ingestion import process_kbb_adf_notification
 from sms_ingestion import process_inbound_sms
 from sms_poller import send_sms_cadence_once
+from lead_router import detect_lead_source
 
 log = logging.getLogger("patti.web")
 app = Flask(__name__)
@@ -127,26 +128,93 @@ def health():
     return jsonify({"status": "ok"}), 200
 
 @app.route("/lead-notification-inbound", methods=["POST"])
-@app.route("/lead-notification-inbound", methods=["POST"])
 def lead_notification_inbound():
-    inbound = request.get_json(force=True, silent=True) or {}
+    """
+    Central inbound endpoint for ALL rooftop mailbox flows.
+    Power Automate will POST *every* inbound email here (no vendor filtering in PA).
+    This endpoint will classify vendor/lead_source and:
+      - call process_lead_notification() if it’s a recognized lead
+      - otherwise return handled=false (ignored)
+    """
+    try:
+        payload = request.get_json(force=True, silent=False) or {}
 
-    bt = inbound.get("body_text") or ""
-    bh = inbound.get("body_html") or ""
+        inbound = {
+            # Required for Fortellis routing
+            "subscription_id": (payload.get("subscription_id") or payload.get("subscriptionId") or "").strip(),
 
-    log.info("PA PAYLOAD DEBUG body_text_head=%r", bt[:300])
-    log.info("PA PAYLOAD DEBUG body_html_head=%r", bh[:300])
+            # Optional, but keep for logging/analytics if you want it
+            "rooftop_code": (payload.get("rooftop_code") or payload.get("rooftopCode") or "").strip(),
 
-    def _worker(snapshot: dict):
-        try:
-            process_lead_notification(snapshot)
-        except Exception:
-            log.exception("lead_notification worker failed")
+            # You already send this today from PA (sometimes hardcoded like "cars.com", "apollo", etc.)
+            "source": (payload.get("source") or "").strip(),
 
-    threading.Thread(target=_worker, args=(inbound,), daemon=True).start()
+            # Core email fields
+            "timestamp": payload.get("timestamp"),
+            "from": payload.get("from"),
+            "to": payload.get("to"),
+            "cc": payload.get("cc"),
+            "subject": (payload.get("subject") or "").strip(),
+            "body_html": payload.get("body_html") or "",
+            "body_text": payload.get("body_text") or "",
 
-    # respond immediately so Power Automate never times out
-    return jsonify({"status": "accepted"}), 200
+            # Message identifiers (you already send these in your Compose)
+            "conversation_id": payload.get("conversation_id") or payload.get("conversationId") or "",
+            "message_id": payload.get("message_id") or payload.get("messageId") or "",
+
+            # Optional: some flows send lead_type
+            "lead_type": payload.get("lead_type") or payload.get("leadType") or "",
+
+            # Optional toggles
+            "test_mode": bool(payload.get("test_mode")),
+
+            # Keep headers if present (useful for debugging/dedupe later)
+            "headers": payload.get("headers") or {},
+        }
+
+        if not inbound["subscription_id"]:
+            return jsonify({
+                "status": "error",
+                "message": "subscription_id is required",
+            }), 400
+
+        # Central vendor detection (based on your PA rules)
+        detected = detect_lead_source(inbound)
+        inbound["lead_source"] = detected or ""
+
+        log.info(
+            "📥 lead-notification-inbound: sub_id=%s rooftop=%s detected=%r pa_source=%r from=%r subject=%r msg_id=%r",
+            inbound.get("subscription_id"),
+            inbound.get("rooftop_code"),
+            detected,
+            inbound.get("source"),
+            (inbound.get("from") or ""),
+            (inbound.get("subject") or "")[:160],
+            inbound.get("message_id"),
+        )
+
+        # If it doesn’t match your rules, ignore (non-lead email)
+        if not detected:
+            return jsonify({
+                "status": "ok",
+                "handled": False,
+                "ignored": True,
+                "reason": "no_rule_match",
+            }), 200
+
+        # If it matched, route to your existing lead handler
+        # (This preserves your current system behavior.)
+        process_lead_notification(inbound)
+
+        return jsonify({
+            "status": "ok",
+            "handled": True,
+            "lead_source": detected,
+        }), 200
+
+    except Exception as e:
+        log.exception("lead-notification-inbound failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 # -----------------------------
