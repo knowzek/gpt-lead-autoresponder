@@ -7,7 +7,7 @@ from flask import Flask, request, jsonify
 import os
 import threading
 
-from email_ingestion import process_inbound_email
+from email_ingestion import process_inbound_email, process_lead_notification
 from kbb_adf_ingestion import process_kbb_adf_notification
 from sms_ingestion import process_inbound_sms
 from sms_poller import send_sms_cadence_once
@@ -137,9 +137,6 @@ def lead_notification_inbound():
     log.info("PA PAYLOAD DEBUG body_text_head=%r", bt[:300])
     log.info("PA PAYLOAD DEBUG body_html_head=%r", bh[:300])
 
-    import threading
-    from email_ingestion import process_lead_notification
-
     def _worker(snapshot: dict):
         try:
             process_lead_notification(snapshot)
@@ -265,6 +262,74 @@ def sms_cadence():
 
     send_sms_cadence_once()
     return jsonify({"ok": True}), 200
+
+@app.route("/email-router-inbound", methods=["POST"])
+def email_router_inbound():
+    """
+    Universal inbound email router.
+    Power Automate rooftop flows will POST raw email payload here,
+    with subscription_id (required) + optional rooftop_code.
+    This endpoint classifies lead source and forwards to the correct processor,
+    or ignores non-lead mail.
+    """
+    try:
+        payload = request.get_json(force=True, silent=False) or {}
+
+        inbound = {
+            "subscription_id": (payload.get("subscription_id") or payload.get("subscriptionId") or "").strip(),
+            "rooftop_code": (payload.get("rooftop_code") or payload.get("rooftopCode") or "").strip(),
+            "source": (payload.get("source") or "email_router").strip(),
+
+            "conversation_id": (payload.get("conversation_id") or payload.get("conversationId") or "").strip(),
+            "message_id": (payload.get("message_id") or payload.get("messageId") or "").strip(),
+
+            "from": payload.get("from"),
+            "to": payload.get("to"),
+            "cc": payload.get("cc"),
+            "subject": (payload.get("subject") or "").strip(),
+            "body_html": payload.get("body_html") or "",
+            "body_text": payload.get("body_text") or "",
+            "timestamp": payload.get("timestamp") or _dt.utcnow().isoformat(),
+            "headers": payload.get("headers") or {},
+        }
+
+        # Require subscription_id (critical for Fortellis routing)
+        if not inbound["subscription_id"]:
+            return jsonify({
+                "status": "error",
+                "message": "subscription_id is required on /email-router-inbound",
+            }), 400
+
+        lead_source = detect_lead_source(inbound)
+
+        log.info(
+            "📥 EMAIL ROUTER inbound: sub_id=%s rooftop=%s lead_source=%r from=%r subject=%r",
+            inbound.get("subscription_id"),
+            inbound.get("rooftop_code"),
+            lead_source,
+            (inbound.get("from") or ""),
+            (inbound.get("subject") or "")[:160],
+        )
+
+        # -----------------------------------------
+        # ROUTING TABLE (we’ll finalize next)
+        # -----------------------------------------
+        # For now:
+        # - If it matches one of your lead-source rules, treat as a lead notification
+        # - Otherwise ignore (non-lead mail)
+        #
+        # Once you paste your PA rules, we can route certain sources to different
+        # processors if needed.
+        if lead_source:
+            inbound["lead_source"] = lead_source
+            process_lead_notification(inbound)
+            return jsonify({"status": "ok", "handled": True, "lead_source": lead_source}), 200
+
+        return jsonify({"status": "ok", "handled": False, "ignored": True, "reason": "no_rule_match"}), 200
+
+    except Exception as e:
+        log.exception("email router inbound failed: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 # -----------------------------
