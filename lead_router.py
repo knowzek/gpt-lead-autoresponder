@@ -1,40 +1,75 @@
-# web_app.py (or wherever your Flask routes live)
+# lead_router.py
+from __future__ import annotations
 
-from flask import request, jsonify
-from datetime import datetime as _dt
-import logging
+from dataclasses import dataclass
+from typing import Optional, Dict, Any
 
-log = logging.getLogger(__name__)
 
-@app.route("/lead-notification-inbound", methods=["POST"])
-def lead_notification_inbound():
-    inbound = request.get_json(force=True, silent=True) or {}
+@dataclass(frozen=True)
+class RoutedLead:
+    source: str
+    lead_type: Optional[str] = None
 
-    # --- NEW: apply routing rules in Python ---
-    try:
-        from lead_router import route_inbound_lead
-        routed = route_inbound_lead(inbound)
 
-        # Only override if missing (keeps backward compatibility with any PA branches that already set it)
-        if not (inbound.get("source") or "").strip() or inbound.get("source") == "carfax":
-            inbound["source"] = routed.source
+def _s(val: Any) -> str:
+    return (val or "").strip()
 
-        if routed.lead_type and not (inbound.get("lead_type") or "").strip():
-            inbound["lead_type"] = routed.lead_type
 
-        log.info("ROUTER: from=%r subject=%r -> source=%r lead_type=%r",
-                 inbound.get("from"), (inbound.get("subject") or "")[:120],
-                 inbound.get("source"), inbound.get("lead_type"))
+def route_inbound_lead(payload: Dict[str, Any]) -> RoutedLead:
+    """
+    Replicates the Power Automate routing rules in Python so PA can keep
+    sending the same payload to the same endpoint.
+    """
+    from_raw = _s(payload.get("from")).lower()
+    subject = _s(payload.get("subject"))
+    subject_l = subject.lower()
 
-    except Exception as e:
-        log.exception("ROUTER failed (continuing without override): %s", e)
+    # --- Carfax ---
+    # PA: equals from == NoReplyLead@carfax.com
+    if from_raw == "noreplylead@carfax.com":
+        return RoutedLead(source="carfax")
 
-    # Keep your existing debug
-    bt = inbound.get("body_text") or ""
-    bh = inbound.get("body_html") or ""
-    log.info("PA PAYLOAD DEBUG body_text_head=%r", bt[:300])
-    log.info("PA PAYLOAD DEBUG body_html_head=%r", bh[:300])
+    # --- Cars.com ---
+    # PA: subject contains Cars.com New/Used Car Lead for Tustin Kia
+    if "cars.com new car lead" in subject_l or "cars.com used car lead" in subject_l:
+        return RoutedLead(source="cars.com")
 
-    from email_ingestion import process_lead_notification
-    process_lead_notification(inbound)
-    return jsonify({"ok": True}), 200
+    # --- CarGurus ---
+    # PA: from contains dealer-leads@messages.cargurus.com
+    if "dealer-leads@messages.cargurus.com" in from_raw or "cargurus" in from_raw:
+        return RoutedLead(source="cargurus")
+
+    # --- CarNOW / TrueCar ---
+    # PA: from contains adf-no-reply@carnow.com OR truecarmail.com
+    if "truecarmail.com" in from_raw:
+        return RoutedLead(source="truecar")
+    if "adf-no-reply@carnow.com" in from_raw or "carnow.com" in from_raw:
+        return RoutedLead(source="carNOW")
+
+    # --- Apollo Special Leads (Team Velocity - Pre-Qual / Value Your Trade) ---
+    # PA: subject contains:
+    #  - Apollo Website Lead-Pre-Qual VDP
+    #  - Apollo Website Lead-Trade - Value Your Trade
+    if "apollo website lead-pre-qual vdp".lower() in subject_l:
+        return RoutedLead(source="Team Velocity - Pre-Qualification", lead_type="pre_qual")
+    if "apollo website lead-trade - value your trade".lower() in subject_l:
+        return RoutedLead(source="Team Velocity - Pre-Qualification", lead_type="value_your_trade")
+
+    # --- Apollo (general website lead variants) ---
+    # PA: subject contains multiple Apollo Website Lead-* strings
+    apollo_markers = [
+        "Apollo Website Lead-Contact Dealer",
+        "Apollo Website Lead-Contact Us - Vehicle",
+        "Apollo Website Lead-Check Availability",
+        "Apollo Website Lead-Transact - Contact Us",
+        "Apollo Website Lead-Contact Us - Admin",
+    ]
+    if any(m.lower() in subject_l for m in apollo_markers):
+        return RoutedLead(source="Apollo")
+
+    # Fallback: keep whatever PA sent, or unknown
+    existing = _s(payload.get("source"))
+    if existing:
+        return RoutedLead(source=existing, lead_type=_s(payload.get("lead_type")) or None)
+
+    return RoutedLead(source="unknown")
