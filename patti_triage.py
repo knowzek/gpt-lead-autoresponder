@@ -66,6 +66,67 @@ SALESTEAM_ID_TO_EMAIL = {
     "8f693b1a-7966-ea11-a977-005056b72b57": "joshuaw@pattersonautos.com",  # Joshua Wheelan
 }
 
+# --- Human review routing map (per subscription_id) ---
+def _parse_routing_json() -> dict:
+    raw = (os.getenv("HUMAN_REVIEW_ROUTING_JSON") or "").strip()
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw) if raw else {}
+    except Exception:
+        log.exception("Invalid HUMAN_REVIEW_ROUTING_JSON; falling back to single env vars.")
+        return {}
+
+_HUMAN_REVIEW_ROUTING = _parse_routing_json()
+
+def _split_emails(raw: str) -> list[str]:
+    raw = (raw or "").strip()
+    if not raw:
+        return []
+    parts = raw.replace(",", ";").split(";")
+    return [p.strip() for p in parts if p.strip()]
+
+def get_human_review_config(subscription_id: str) -> dict:
+    """
+    Returns dict with keys:
+      fallback_to, cc(list), due_hours(int), min_conf(float)
+    Order:
+      subscription-specific -> default -> legacy env vars -> hard fallback
+    """
+    sub_id = (subscription_id or "").strip()
+
+    default_cfg = _HUMAN_REVIEW_ROUTING.get("default", {}) if isinstance(_HUMAN_REVIEW_ROUTING, dict) else {}
+    sub_cfg = _HUMAN_REVIEW_ROUTING.get(sub_id, {}) if isinstance(_HUMAN_REVIEW_ROUTING, dict) else {}
+
+    # legacy envs as last resort
+    legacy_fallback = (os.getenv("HUMAN_REVIEW_FALLBACK_TO", "") or "").strip()
+    legacy_cc = (os.getenv("HUMAN_REVIEW_CC", "") or "").strip()
+
+    fallback_to = (
+        (sub_cfg.get("fallback_to") or "").strip()
+        or (default_cfg.get("fallback_to") or "").strip()
+        or legacy_fallback
+        or "knowzek@gmail.com"
+    )
+
+    cc_raw = (
+        (sub_cfg.get("cc") or "").strip()
+        or (default_cfg.get("cc") or "").strip()
+        or legacy_cc
+        or "kristin@blackoctopusai.com"
+    )
+    cc_list = _split_emails(cc_raw)
+
+    due_hours = int(sub_cfg.get("due_hours") or default_cfg.get("due_hours") or os.getenv("HUMAN_REVIEW_DUE_HOURS", "2"))
+    min_conf = float(sub_cfg.get("min_conf") or default_cfg.get("min_conf") or os.getenv("HUMAN_REVIEW_MIN_CONF", "0.75"))
+
+    return {
+        "fallback_to": fallback_to,
+        "cc": cc_list,
+        "due_hours": due_hours,
+        "min_conf": min_conf,
+    }
+
 def notify_staff_patti_scheduled_appt(
     *,
     opportunity: dict,
@@ -84,14 +145,15 @@ def notify_staff_patti_scheduled_appt(
     opp_id = opportunity.get("opportunityId") or opportunity.get("id") or ""
 
     resolved_sales_email = resolve_primary_sales_email(fresh_opp or {}) or ""
-    to_addr = resolved_sales_email or os.getenv("HUMAN_REVIEW_FALLBACK_TO", "") or "knowzek@gmail.com"
+    cfg = get_human_review_config(subscription_id)
+    to_addr = resolved_sales_email or cfg["fallback_to"]
 
-    # CC list: follow the same process as human handoff
-    raw_cc = (os.getenv("HUMAN_REVIEW_CC") or "").strip()
-    cc_addrs = []
-    if raw_cc:
-        parts = raw_cc.replace(",", ";").split(";")
-        cc_addrs = [p.strip() for p in parts if p.strip()]
+    # CC list: per-rooftop config (falls back to default/legacy inside get_human_review_config)
+    cc_addrs = list(cfg.get("cc") or [])
+    
+    # safety: don't CC the same address you're sending to
+    to_l = (to_addr or "").strip().lower()
+    cc_addrs = [c for c in cc_addrs if c.strip() and c.strip().lower() != to_l]
 
     # dedupe + don't duplicate To
     to_lower = (to_addr or "").lower()
@@ -151,7 +213,7 @@ def notify_staff_patti_scheduled_appt(
         cc_addrs = []
 
         # make it obvious
-        subj = f"[SAFE MODE] {subject}"
+        subj = f"[SAFE MODE] {subj}"
 
         # optional: show original recipients in body for debugging
         html = (
@@ -683,7 +745,9 @@ def handoff_to_human(
     # -----------------------
     # Fortellis: schedule + comment
     # -----------------------
-    due_utc = (datetime.now(timezone.utc) + timedelta(hours=TRIAGE_DUE_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    cfg = get_human_review_config(subscription_id)
+
+    due_utc = (datetime.now(timezone.utc) + timedelta(hours=int(cfg.get("due_hours") or TRIAGE_DUE_HOURS))).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     activity_comments = (
         "Patti flagged this lead for HUMAN REVIEW.\n"
@@ -727,7 +791,26 @@ def handoff_to_human(
     # -----------------------
     # Outlook email notify
     # -----------------------
-    to_addr = resolved_sales_email or os.getenv("HUMAN_REVIEW_FALLBACK_TO", "") or "knowzek@gmail.com"
+    
+    to_addr = resolved_sales_email or cfg["fallback_to"]
+    
+    # CC list: per-rooftop config (falls back to default/legacy inside get_human_review_config)
+    cc_addrs = list(cfg.get("cc") or [])
+    
+    # safety: don't CC the same address you're sending to
+    to_l = (to_addr or "").strip().lower()
+    cc_addrs = [c for c in cc_addrs if c.strip() and c.strip().lower() != to_l]
+    
+    # dedupe
+    seen = set()
+    cc_clean = []
+    for e in cc_addrs:
+        el = e.strip().lower()
+        if not el or el in seen:
+            continue
+        seen.add(el)
+        cc_clean.append(e.strip())
+    cc_addrs = cc_clean
     
     subj = f"[Patti] Human review needed - {rooftop_name} - {customer_name}"
     if vehicle:
@@ -761,27 +844,6 @@ def handoff_to_human(
     {rooftop_addr}
     </p>
     """.strip()
-    
-    # Build CC list from env
-    raw_cc = (os.getenv("HUMAN_REVIEW_CC") or "").strip()
-    cc_addrs = []
-    if raw_cc:
-        parts = raw_cc.replace(",", ";").split(";")
-        cc_addrs = [p.strip() for p in parts if p.strip()]
-    
-    # Remove duplicates + avoid duplicating To
-    to_lower = (to_addr or "").lower()
-    seen = set()
-    cc_clean = []
-    for e in cc_addrs:
-        el = e.lower()
-        if not el or el == to_lower:
-            continue
-        if el in seen:
-            continue
-        seen.add(el)
-        cc_clean.append(e)
-    cc_addrs = cc_clean
 
     # -----------------------
     # SAFE MODE recipient gate (hard override)
@@ -798,7 +860,6 @@ def handoff_to_human(
         test_to = (
             (os.getenv("TEST_TO") or "").strip()
             or (os.getenv("INTERNET_TEST_EMAIL") or "").strip()
-            or (os.getenv("HUMAN_REVIEW_FALLBACK_TO") or "").strip()
         )
         if not test_to:
             raise RuntimeError("SAFE_MODE is enabled but TEST_TO (or INTERNET_TEST_EMAIL) is not set")
