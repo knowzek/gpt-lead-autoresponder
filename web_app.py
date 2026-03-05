@@ -5,6 +5,7 @@ import re
 from datetime import datetime as _dt
 from flask import Flask, request, jsonify
 import os
+import threading
 
 from email_ingestion import process_inbound_email
 from kbb_adf_ingestion import process_kbb_adf_notification
@@ -126,15 +127,29 @@ def health():
     return jsonify({"status": "ok"}), 200
 
 @app.route("/lead-notification-inbound", methods=["POST"])
+@app.route("/lead-notification-inbound", methods=["POST"])
 def lead_notification_inbound():
     inbound = request.get_json(force=True, silent=True) or {}
+
     bt = inbound.get("body_text") or ""
     bh = inbound.get("body_html") or ""
+
     log.info("PA PAYLOAD DEBUG body_text_head=%r", bt[:300])
     log.info("PA PAYLOAD DEBUG body_html_head=%r", bh[:300])
+
+    import threading
     from email_ingestion import process_lead_notification
-    process_lead_notification(inbound)
-    return jsonify({"ok": True}), 200
+
+    def _worker(snapshot: dict):
+        try:
+            process_lead_notification(snapshot)
+        except Exception:
+            log.exception("lead_notification worker failed")
+
+    threading.Thread(target=_worker, args=(inbound,), daemon=True).start()
+
+    # respond immediately so Power Automate never times out
+    return jsonify({"status": "accepted"}), 200
 
 
 # -----------------------------
@@ -172,9 +187,13 @@ def email_inbound():
 
         log.info("📥 Incoming email: from=%s subject=%s", inbound["from"], inbound["subject"])
 
+        # Keep your existing KBB guard exactly as-is
         if _looks_like_kbb(inbound):
-            log.warning("🛑 KBB detected on /email-inbound. Ignoring. from=%s subject=%s",
-                        inbound["from"], inbound["subject"])
+            log.warning(
+                "🛑 KBB detected on /email-inbound. Ignoring. from=%s subject=%s",
+                inbound["from"],
+                inbound["subject"],
+            )
             return jsonify({"status": "ignored", "reason": "kbb_routed_elsewhere"}), 200
 
         log.info(
@@ -187,8 +206,19 @@ def email_inbound():
             inbound.get("to"),
         )
 
-        process_inbound_email(inbound)
-        return jsonify({"status": "ok"}), 200
+        # --- ASYNC: respond fast to Power Automate, process in background ---
+        import threading
+
+        def _worker(snapshot: dict):
+            try:
+                process_inbound_email(snapshot)
+            except Exception:
+                log.exception("email_inbound worker failed")
+
+        threading.Thread(target=_worker, args=(inbound,), daemon=True).start()
+
+        # Return immediately so PA never hits the ~120s timeout
+        return jsonify({"status": "accepted"}), 200
 
     except Exception as e:
         log.exception("Email ingestion failed: %s", e)
