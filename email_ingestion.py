@@ -2086,6 +2086,66 @@ def process_inbound_email(inbound: dict) -> None:
     rec2 = None
     conversation_record_id = ""
 
+    # --- Lead notification misroute guard (ALL providers) ---
+    subj_l = (subject or "").lower()
+    sender_email = _extract_email(sender_raw).strip().lower()
+    
+    looks_like_adf = (
+        _looks_like_adf_xml(body_html)
+        or _looks_like_adf_xml(raw_text)
+        or _looks_like_adf_xml(body_text)
+    )
+    
+    _PROVIDER_DOMAINS = (
+        "carfax.com",
+        "cars.com",
+        "cargurus.com",
+        "autotrader.com",
+        "truecar.com",
+        "costcoauto.com",
+        "velocityoffersites.com",
+        # add any other known lead sender domains here
+    )
+    
+    looks_like_provider_sender = (
+        any(sender_email.endswith("@" + d) for d in _PROVIDER_DOMAINS)
+        or any(d in sender_email for d in _PROVIDER_DOMAINS)  # handles weird formats
+        or "noreply" in sender_email
+        or "no-reply" in sender_email
+        or "donotreply" in sender_email
+        or "do-not-reply" in sender_email
+    )
+    
+    looks_like_provider_subject = (
+        "apollo website lead" in subj_l
+        or "team velocity" in subj_l
+        or "new customer lead" in subj_l
+        or "lead notification" in subj_l
+        or "new lead" in subj_l
+        or "truecar" in subj_l
+        or "costco" in subj_l
+        or "carfax" in subj_l
+    )
+    
+    looks_like_provider_lead = (
+        looks_like_adf
+        or looks_like_provider_sender
+        or looks_like_provider_subject
+        or bool(_PROVIDER_TEMPLATE_HINT_RE.search(body_text or ""))  # you already have this regex
+    )
+    
+    if looks_like_provider_lead:
+        log.info(
+            "Misrouted lead-notification detected in /email-inbound. Routing to process_lead_notification. sender=%r subj=%r",
+            sender_email,
+            (subject or "")[:140],
+        )
+        try:
+            process_lead_notification(inbound)
+        except Exception:
+            log.exception("process_lead_notification failed from misroute guard")
+        return
+
     # 1️⃣ Try KBB's HTML reply-stripper first (when we actually have HTML)
     if body_html:
         try:
