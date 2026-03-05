@@ -7,30 +7,35 @@ SUBSCRIPTION_TO_ROOFTOP = {
         "name":    "Mission Viejo Kia",
         "address": "28802 Marguerite Pkwy, Mission Viejo, CA 92692",
         "sender":  "Patti.MVK@Pattersonautos.com",
+        "sms_number": "+19492691775",
     },
     # Tustin Mazda
     "7a05ce2c-cf00-4748-b841-45b3442665a7": {
         "name":    "Tustin Mazda",
         "address": "28 Auto Center Dr, Tustin, CA 92782",
         "sender":  "Patti.TM@Pattersonautos.com",
+        "sms_number": "+17146405801",
     },
    # Tustin Kia
     "c27d7f4f-4a4c-45c8-8154-a5de48421fc3": {
         "name":    "Tustin Kia",
         "address": "28 B Auto Center Drive, Tustin CA 92782",
         "sender":  "Patti@Pattersonautos.com",
+        "sms_number": "+17145977229",
     },
   # Tustin Hyundai
     "2c61b27b-b239-4b54-bd34-dfd73aa5a568": {
         "name":    "Tustin Hyundai",
         "address": "16 Auto Center Dr, Tustin, CA 92782",
         "sender":  "Patti.TH@Pattersonautos.com",
+        "sms_number": "+17145977210",
     },
   # Huntington Beach Mazda
     "bb4a4f18-1693-4450-a08e-40d8df30c139": {
         "name":    "Huntington Beach Mazda",
         "address": "16800 Beach Blvd, Huntington Beach, CA 92647",
         "sender":  "Patti.HB@pattersonautos.com",
+        "sms_number": "+17148455501",
     },
 }
 
