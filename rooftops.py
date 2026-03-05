@@ -27,7 +27,7 @@ SUBSCRIPTION_TO_ROOFTOP = {
         "sender":  "Sales@tustinhyundai.edealerhub.com",
     },
   # Huntington Beach Mazda
-    "cbb4a4f18-1693-4450-a08e-40d8df30c139": {
+    "bb4a4f18-1693-4450-a08e-40d8df30c139": {
         "name":    "Huntington Beach Mazda",
         "address": "16800 Beach Blvd, Huntington Beach, CA 92647",
         "sender":  "Sales@huntingtonbeachmazda.edealerhub.com",
