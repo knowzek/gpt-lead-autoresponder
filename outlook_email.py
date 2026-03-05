@@ -21,6 +21,7 @@ def send_email_via_outlook(
     html_body,
     *,
     opp_id=None,
+    from_addr=None,
     cc_addrs=None,
     headers=None,
     timeout=10,
