@@ -187,6 +187,11 @@ def extract_customer_comment_from_provider(body_text: str) -> str:
 
     return " ".join(kept).strip()
 
+def get_rooftop_sms_number(subscription_id: str) -> str:
+    rt = get_rooftop_info(subscription_id) or {}
+    raw = (rt.get("sms_number") or "").strip()
+    return _norm_phone_e164_us(raw)
+
 # === Decline detection ==========================================================
 
 _DECLINE_RE = re.compile(
