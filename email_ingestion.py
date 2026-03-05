@@ -998,6 +998,7 @@ def process_lead_notification(inbound: dict) -> None:
                 "Customer First Name": first_name,
                 "Customer Last Name": last_name,
                 "Customer Comments": customer_comment,
+                "inbound_subject": subject,
                 "customer_phone": phone,
                 "Assigned Sales Rep": salesperson,
             },
@@ -1094,6 +1095,15 @@ def process_lead_notification(inbound: dict) -> None:
     rooftop_name = rt.get("name") or rt.get("rooftop_name") or "Rooftop"
     rooftop_sender = (
         rt.get("sender") or rt.get("patti_email") or os.getenv("TEST_FROM") or ""
+    )
+
+    log.info(
+        "FIRST_TOUCH SENDER DEBUG sub=%s rooftop=%r rooftop_sender=%r rt_keys=%s rt=%r",
+        subscription_id,
+        rooftop_name,
+        rooftop_sender,
+        sorted(list(rt.keys())),
+        rt,
     )
 
     # -----------------------------
