@@ -2090,11 +2090,15 @@ def process_inbound_email(inbound: dict) -> None:
     subj_l = (subject or "").lower()
     sender_email = _extract_email(sender_raw).strip().lower()
     
-    looks_like_adf = (
-        _looks_like_adf_xml(body_html)
-        or _looks_like_adf_xml(raw_text)
-        or _looks_like_adf_xml(body_text)
-    )
+    provider_scan_text = (raw_text or "").strip() or (clean_html(body_html) or "")
+    
+    adf_src = ""
+    if (body_html or "").lstrip().startswith("<?xml") or "<adf" in (body_html or "").lower():
+        adf_src = body_html
+    elif (provider_scan_text or "").lstrip().startswith("<?xml") or "<adf" in (provider_scan_text or "").lower():
+        adf_src = provider_scan_text
+    
+    looks_like_adf = _looks_like_adf_xml(adf_src) if adf_src else False
     
     _PROVIDER_DOMAINS = (
         "carfax.com",
@@ -2104,16 +2108,15 @@ def process_inbound_email(inbound: dict) -> None:
         "truecar.com",
         "costcoauto.com",
         "velocityoffersites.com",
-        # add any other known lead sender domains here
     )
     
     looks_like_provider_sender = (
-        any(sender_email.endswith("@" + d) for d in _PROVIDER_DOMAINS)
-        or any(d in sender_email for d in _PROVIDER_DOMAINS)  # handles weird formats
+        any(d in sender_email for d in _PROVIDER_DOMAINS)
         or "noreply" in sender_email
         or "no-reply" in sender_email
         or "donotreply" in sender_email
         or "do-not-reply" in sender_email
+        or "notification" in sender_email
     )
     
     looks_like_provider_subject = (
@@ -2121,17 +2124,22 @@ def process_inbound_email(inbound: dict) -> None:
         or "team velocity" in subj_l
         or "new customer lead" in subj_l
         or "lead notification" in subj_l
-        or "new lead" in subj_l
         or "truecar" in subj_l
         or "costco" in subj_l
         or "carfax" in subj_l
+    )
+    
+    # only use template-hint as a weak signal when sender is already suspicious
+    looks_like_provider_template = (
+        looks_like_provider_sender
+        and bool(_PROVIDER_TEMPLATE_HINT_RE.search(provider_scan_text or ""))
     )
     
     looks_like_provider_lead = (
         looks_like_adf
         or looks_like_provider_sender
         or looks_like_provider_subject
-        or bool(_PROVIDER_TEMPLATE_HINT_RE.search(body_text or ""))  # you already have this regex
+        or looks_like_provider_template
     )
     
     if looks_like_provider_lead:
