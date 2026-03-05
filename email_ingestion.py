@@ -2207,6 +2207,7 @@ def process_inbound_email(inbound: dict) -> None:
         "cargurus.com",
         "autotrader.com",
         "kbb.com",
+        "velocityoffersites.com",
     )
     is_provider_notification = (
         any(d in original_sender_email for d in _PROVIDER_DOMAINS)
