@@ -200,6 +200,15 @@ def send_patti_email(
         
     log.info("📬 send_patti_email EMAIL_MODE=%s opp=%s to=%s subject=%s", EMAIL_MODE, opp_id, to_addr, subject)
 
+    log.info(
+        "MAILER FROM DEBUG opp=%s sub=%s rooftop_sender=%r to=%r subject=%r",
+        opp_id,
+        subscription_id,
+        rooftop_sender,
+        to_addr,
+        subject[:120],
+    )
+
     # ⛔ Compliance kill switch (centralized)
     try:
         suppressed, reason = is_opp_suppressed(opp_id)
