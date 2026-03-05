@@ -2,74 +2,154 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from typing import Dict, Any, List, Optional, Tuple
+import re
 
 
 @dataclass(frozen=True)
-class RoutedLead:
-    source: str
-    lead_type: Optional[str] = None
+class LeadRule:
+    name: str
+    from_contains: Tuple[str, ...] = ()
+    from_equals: Tuple[str, ...] = ()  # exact match, case-insensitive
+    subject_contains: Tuple[str, ...] = ()
+    subject_equals: Tuple[str, ...] = ()  # exact match, case-insensitive
 
 
-def _s(val: Any) -> str:
-    return (val or "").strip()
+def _s(v: Any) -> str:
+    return (v or "").strip()
 
 
-def route_inbound_lead(payload: Dict[str, Any]) -> RoutedLead:
+def _email_addr_from_outlook_obj(v: Any) -> str:
     """
-    Replicates the Power Automate routing rules in Python so PA can keep
-    sending the same payload to the same endpoint.
+    PA sometimes sends `from` as an object.
+    Try to normalize to just the address string.
     """
-    from_raw = _s(payload.get("from")).lower()
-    subject = _s(payload.get("subject"))
-    subject_l = subject.lower()
+    if isinstance(v, dict):
+        # typical O365 trigger format:
+        # {"emailAddress": {"name": "...", "address": "foo@bar.com"}, ...}
+        ea = v.get("emailAddress") or {}
+        if isinstance(ea, dict):
+            return _s(ea.get("address"))
+        # some variants:
+        return _s(v.get("address")) or _s(v.get("email")) or _s(v.get("value"))
+    return _s(v)
 
-    # --- Carfax ---
-    # PA: equals from == NoReplyLead@carfax.com
-    if from_raw == "noreplylead@carfax.com":
-        return RoutedLead(source="carfax")
 
-    # --- Cars.com ---
-    # PA: subject contains Cars.com New/Used Car Lead for Tustin Kia
-    if "cars.com new car lead" in subject_l or "cars.com used car lead" in subject_l:
-        return RoutedLead(source="cars.com")
+def _ci_eq(a: str, b: str) -> bool:
+    return (a or "").strip().lower() == (b or "").strip().lower()
 
-    # --- CarGurus ---
-    # PA: from contains dealer-leads@messages.cargurus.com
-    if "dealer-leads@messages.cargurus.com" in from_raw or "cargurus" in from_raw:
-        return RoutedLead(source="cargurus")
 
-    # --- CarNOW / TrueCar ---
-    # PA: from contains adf-no-reply@carnow.com OR truecarmail.com
-    if "truecarmail.com" in from_raw:
-        return RoutedLead(source="truecar")
-    if "adf-no-reply@carnow.com" in from_raw or "carnow.com" in from_raw:
-        return RoutedLead(source="carNOW")
+def _ci_contains(hay: str, needles: Tuple[str, ...]) -> bool:
+    if not hay or not needles:
+        return False
+    h = hay.lower()
+    return any((n or "").lower() in h for n in needles if n)
 
-    # --- Apollo Special Leads (Team Velocity - Pre-Qual / Value Your Trade) ---
-    # PA: subject contains:
-    #  - Apollo Website Lead-Pre-Qual VDP
-    #  - Apollo Website Lead-Trade - Value Your Trade
-    if "apollo website lead-pre-qual vdp".lower() in subject_l:
-        return RoutedLead(source="Team Velocity - Pre-Qualification", lead_type="pre_qual")
-    if "apollo website lead-trade - value your trade".lower() in subject_l:
-        return RoutedLead(source="Team Velocity - Pre-Qualification", lead_type="value_your_trade")
 
-    # --- Apollo (general website lead variants) ---
-    # PA: subject contains multiple Apollo Website Lead-* strings
-    apollo_markers = [
-        "Apollo Website Lead-Contact Dealer",
-        "Apollo Website Lead-Contact Us - Vehicle",
-        "Apollo Website Lead-Check Availability",
-        "Apollo Website Lead-Transact - Contact Us",
-        "Apollo Website Lead-Contact Us - Admin",
-    ]
-    if any(m.lower() in subject_l for m in apollo_markers):
-        return RoutedLead(source="Apollo")
+def match_rule(rule: LeadRule, inbound: Dict[str, Any]) -> bool:
+    frm = _email_addr_from_outlook_obj(inbound.get("from")).lower()
+    subj = _s(inbound.get("subject")).lower()
 
-    # Fallback: keep whatever PA sent, or unknown
-    existing = _s(payload.get("source"))
-    if existing:
-        return RoutedLead(source=existing, lead_type=_s(payload.get("lead_type")) or None)
+    # exact match groups
+    if rule.from_equals and any(_ci_eq(frm, x) for x in rule.from_equals):
+        return True
+    if rule.subject_equals and any(_ci_eq(subj, x) for x in rule.subject_equals):
+        return True
 
-    return RoutedLead(source="unknown")
+    # contains groups
+    if rule.from_contains and _ci_contains(frm, rule.from_contains):
+        return True
+    if rule.subject_contains and _ci_contains(subj, tuple(s.lower() for s in rule.subject_contains)):
+        return True
+
+    return False
+
+
+# ------------------------------------------------------------
+# RULES based on your screenshots
+# ORDER MATTERS: more specific → more general
+# ------------------------------------------------------------
+LEAD_SOURCE_RULES: List[LeadRule] = [
+    # Carfax (From equals NoReplyLead@carfax.com)
+    LeadRule(
+        name="carfax",
+        from_equals=("NoReplyLead@carfax.com",),
+    ),
+
+    # Cars.com (Subject contains New/Used lead)
+    LeadRule(
+        name="cars.com",
+        subject_contains=(
+            "Cars.com New Car Lead",
+            "Cars.com Used Car Lead",
+        ),
+    ),
+
+    # Apollo Special Leads (Pre-Qual / Value Your Trade)
+    LeadRule(
+        name="apollo_special",
+        subject_contains=(
+            "Apollo Website Lead-Pre-Qual VDP",
+            "Apollo Website Lead-Trade - Value Your Trade",
+        ),
+    ),
+
+    # Apollo (general)
+    LeadRule(
+        name="apollo",
+        subject_contains=(
+            "Apollo Website Lead- Contact Dealer",
+            "Apollo Website Lead- Contact Us - Vehicle",
+            "Apollo Website Lead- Check Availability",
+            "Apollo Website Lead- Transact - Contact Us",
+            "Apollo Website Lead- Contact Us - Admin",
+        ),
+    ),
+
+    # CarGurus (From contains dealer-leads@messages.cargurus.com)
+    LeadRule(
+        name="cargurus",
+        from_contains=("dealer-leads@messages.cargurus.com",),
+    ),
+
+    # CarNOW / TrueCar (From contains these)
+    LeadRule(
+        name="carnow_or_truecar",
+        from_contains=("adf-no-reply@carnow.com", "truecarmail.com"),
+    ),
+]
+
+
+def detect_lead_source(inbound: Dict[str, Any]) -> Optional[str]:
+    """
+    Return a normalized lead source string, or None if not a known lead.
+    """
+    for rule in LEAD_SOURCE_RULES:
+        if match_rule(rule, inbound):
+            # Post-processing to match your PA "source" labels
+            if rule.name == "carnow_or_truecar":
+                frm = _email_addr_from_outlook_obj(inbound.get("from")).lower()
+                if "truecarmail.com" in frm:
+                    return "truecar"
+                return "carNOW"
+
+            if rule.name == "apollo_special":
+                # In PA, you were setting source "Team Velocity - Pre-Qualification"
+                return "Team Velocity - Pre-Qualification"
+
+            # everything else uses the rule name directly
+            return rule.name
+
+    return None
+
+
+def detect_lead_type(inbound: Dict[str, Any]) -> str:
+    """
+    Only used for Apollo Special Leads in your screenshots.
+    """
+    subj = _s(inbound.get("subject")).lower()
+    if "apollo website lead-pre-qual vdp" in subj:
+        return "pre_qual"
+    if "apollo website lead-trade - value your trade" in subj:
+        return "value_your_trade"
+    return ""
