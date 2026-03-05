@@ -437,15 +437,33 @@ def _maybe_set_phone(current_phone: str, candidate_phone: str) -> str:
 
 def _extract_adf_fields(adf_xml: str) -> dict:
     """
-    Returns dict with: email, first, last, phone, comments
+    Returns dict with: email, first, last, phone, comments, and (when present)
+    year/make/model/trim/vin (+ optional odometer/price).
     Works for CarGurus ADF and most ADF providers.
     """
-    out = {"email": "", "first": "", "last": "", "phone": "", "comments": ""}
+    out = {
+        "email": "",
+        "first": "",
+        "last": "",
+        "phone": "",
+        "comments": "",
+        # vehicle fields (optional)
+        "year": "",
+        "make": "",
+        "model": "",
+        "trim": "",
+        "vin": "",
+        "odometer": "",
+        "price": "",
+    }
+
     try:
         clean_adf_xml = _sanitize_xml(adf_xml)
         root = ET.fromstring(clean_adf_xml)
 
-        # Email / phone
+        # -----------------------
+        # Contact fields
+        # -----------------------
         email_el = root.find(".//customer/contact/email")
         phone_el = root.find(".//customer/contact/phone")
         if email_el is not None and (email_el.text or "").strip():
@@ -453,7 +471,6 @@ def _extract_adf_fields(adf_xml: str) -> dict:
         if phone_el is not None and (phone_el.text or "").strip():
             out["phone"] = (phone_el.text or "").strip()
 
-        # Names
         first_el = root.find(".//customer/contact/name[@part='first']")
         last_el = root.find(".//customer/contact/name[@part='last']")
         if first_el is not None and (first_el.text or "").strip():
@@ -461,16 +478,62 @@ def _extract_adf_fields(adf_xml: str) -> dict:
         if last_el is not None and (last_el.text or "").strip():
             out["last"] = (last_el.text or "").strip()
 
-        # Comments (CDATA or normal text; decode entities)
+        # -----------------------
+        # Comments (provider variations)
+        # -----------------------
         c_el = root.find(".//customer/comments")
+        if c_el is None:
+            # some providers put comments elsewhere
+            c_el = root.find(".//prospect/customer/comments")
         if c_el is not None and (c_el.text or "").strip():
             out["comments"] = _html.unescape((c_el.text or "").strip())
 
-    except Exception:
-        log.error("adf fields extraction error")
-        # keep defaults
-        pass
+        # -----------------------
+        # Vehicle selection
+        # Prefer buy; else trade-in; else first vehicle
+        # -----------------------
+        v_el = None
 
+        # 1) buy
+        for v in root.findall(".//vehicle"):
+            if (v.attrib.get("interest") or "").lower() == "buy":
+                v_el = v
+                break
+
+        # 2) trade-in
+        if v_el is None:
+            for v in root.findall(".//vehicle"):
+                if (v.attrib.get("interest") or "").lower() == "trade-in":
+                    v_el = v
+                    break
+
+        # 3) fallback to first
+        if v_el is None:
+            v_el = root.find(".//vehicle")
+
+        def _t(parent, tag: str) -> str:
+            el = parent.find(tag) if parent is not None else None
+            return (el.text or "").strip() if el is not None else ""
+
+        if v_el is not None:
+            out["year"] = _t(v_el, "year")
+            out["make"] = _t(v_el, "make")
+            out["model"] = _t(v_el, "model")
+            out["trim"] = _t(v_el, "trim")
+            out["vin"] = _t(v_el, "vin")
+
+            odo = _t(v_el, "odometer")
+            if odo:
+                out["odometer"] = odo
+
+            price = _t(v_el, "price")
+            if price:
+                out["price"] = price
+
+    except Exception:
+        log.exception("adf fields extraction error")
+
+    # remove empty vehicle keys if you prefer (optional)
     return out
 
 
@@ -969,6 +1032,13 @@ def process_lead_notification(inbound: dict) -> None:
                     and (veh_fields.get(k) or "").strip()
                 ):
                     patch_veh[k] = veh_fields[k]
+
+            # If Fortellis doesn't have soughtVehicles (common for CARFAX trade-in),
+            # fallback to ADF vehicle fields if present.
+            if not patch_veh and adf:
+                for k in ("year", "make", "model", "trim", "vin"):
+                    if not (opportunity.get(k) or "").strip() and (adf.get(k) or "").strip():
+                        patch_veh[k] = (adf.get(k) or "").strip()
 
             if patch_veh:
                 patch_by_id(rec_id, patch_veh)
