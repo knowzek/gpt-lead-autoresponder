@@ -182,6 +182,19 @@ def lead_notification_inbound():
         detected = detect_lead_source(inbound)
         inbound["lead_source"] = detected or ""
 
+        # Central vendor detection (based on your PA rules)
+        detected = detect_lead_source(inbound)
+        inbound["lead_source"] = detected or ""
+        
+        # ✅ NEW: overwrite inbound["source"] so your downstream uses the normalized value
+        if detected:
+            inbound["source"] = detected
+        
+        # ✅ NEW: if Apollo special, set lead_type (matches your PA behavior)
+        if detected == "Team Velocity - Pre-Qualification" and not inbound.get("lead_type"):
+            from lead_router import detect_lead_type
+            inbound["lead_type"] = detect_lead_type(inbound)
+
         log.info(
             "📥 lead-notification-inbound: sub_id=%s rooftop=%s detected=%r pa_source=%r from=%r subject=%r msg_id=%r",
             inbound.get("subscription_id"),
