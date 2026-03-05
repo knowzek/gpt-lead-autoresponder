@@ -325,6 +325,7 @@ def send_patti_email(
             to_addr=to_addr,
             subject=subject,
             html_body=body_html,
+            from_addr=rooftop_sender,
             headers={"X-Opportunity-ID": opp_id},
         )
         sent_ok = True
