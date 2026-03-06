@@ -4,7 +4,7 @@ import re
 import logging
 from datetime import datetime, timezone, timedelta
 from datetime import datetime as _dt, timezone as _tz
-
+from rooftops import get_rooftop_info
 
 from gpt import extract_appt_time
 from fortellis import get_token, schedule_activity, get_opportunity, add_opportunity_comment
@@ -137,6 +137,38 @@ def _extract_goto_payload(payload_json: dict) -> dict:
 
     return {"msg_id": str(msg_id or "").strip(), "from_phone": str(from_phone or "").strip(), "text": str(text or "").strip()}
 
+def _all_patti_numbers() -> list[str]:
+    """
+    Return all rooftop GoTo numbers Patti should poll.
+    Source of truth should be your rooftop config.
+    Fallback to PATTI_SMS_NUMBER for safety.
+    """
+    nums: list[str] = []
+
+    # ✅ Preferred: pull from rooftops config
+    try:
+        from rooftops import list_rooftops  # you may need to create this
+        for rt in (list_rooftops() or []):
+            n = _norm_phone_e164_us((rt.get("sms_number") or "").strip())
+            if n:
+                nums.append(n)
+    except Exception:
+        log.exception("Failed to load rooftop sms numbers; falling back to PATTI_SMS_NUMBER")
+
+    # Fallback
+    fallback = _norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", "").strip())
+    if fallback:
+        nums.append(fallback)
+
+    # De-dupe while preserving order
+    out = []
+    seen = set()
+    for n in nums:
+        if n not in seen:
+            seen.add(n)
+            out.append(n)
+
+    return out
 
 def handle_mazda_loyalty_inbound_sms_webhook(*, payload_json: dict) -> dict:
     """
@@ -523,7 +555,11 @@ def send_sms_cadence_once():
         # v1: simplest templated nudge by day (fast + predictable)
         body = build_mazda_loyalty_sms(day=day, fields=f)
 
-        owner = _patti_number()   # same helper used in poll_once()
+        # inside send_sms_cadence_once(), before send_sms
+        subscription_id = (f.get("subscription_id") or f.get("dealer_key") or "").strip()
+        
+        rt = get_rooftop_info(subscription_id) or {}
+        owner = _norm_phone_e164_us(rt.get("sms_number", "")) or _patti_number()
 
         # ✅ Per-record try/except so one bad send doesn't kill the entire cron run
         try:
@@ -555,404 +591,424 @@ def send_sms_cadence_once():
             })
 
 def poll_once():
-    """
-    One polling pass:
-    - pull latest conversations for Patti’s number
-    - if lastMessage is inbound and new, flip mode=convo and reply (optional)
-    """
-    owner = _patti_number()
+    owners = _all_patti_numbers()
+    log.info("SMS poll: polling %d owner numbers: %s", len(owners), owners)
 
-    # Pull enough pages to cover big outbound batches (cadence blasts)
     page_limit = int(os.getenv("GOTO_CONVERSATION_PAGE_LIMIT", "200"))
     max_pages = int(os.getenv("GOTO_CONVERSATION_MAX_PAGES", "10"))
-    
-    convs = list(iter_conversations(owner_phone_e164=owner, limit=page_limit, max_pages=max_pages))
-    log.info("SMS poll: got %d conversations (paged limit=%d max_pages=%d)", len(convs), page_limit, max_pages)
-    
-    for conv in convs:
-        last = conv.get("lastMessage") or {}
-        if not last:
-            continue
 
-        if (last.get("direction") or "").upper() != "IN":
-            continue
+    total_convs = 0
 
-        msg_id = last.get("id") or ""
-        author = last.get("authorPhoneNumber") or ""
-        
-        body = (last.get("body") or "").strip()
-        media = last.get("media") or []
-        
-        # --- Handle media-only / blank body edge case ---
-        if not body:
+    for owner in owners:
+        convs = list(iter_conversations(owner_phone_e164=owner, limit=page_limit, max_pages=max_pages))
+        total_convs += len(convs)
+        log.info("SMS poll: owner=%s got %d conversations", owner, len(convs))
+
+        for conv in convs:
+            last = conv.get("lastMessage") or {}
+            if not last:
+                continue
+    
+            if (last.get("direction") or "").upper() != "IN":
+                continue
+    
+            msg_id = last.get("id") or ""
+            author = last.get("authorPhoneNumber") or ""
+            
+            body = (last.get("body") or "").strip()
+            media = last.get("media") or []
+            
+            # --- Handle media-only / blank body edge case ---
+            if not body:
+                try:
+                    raw = list_messages(owner_phone_e164=owner, contact_phone_e164=author, limit=12)
+                    items2 = raw.get("items") or []
+            
+                    # oldest → newest
+                    items2 = sorted(items2, key=lambda m: m.get("timestamp") or "")
+            
+                    # walk newest → oldest looking for last inbound with text
+                    for m in reversed(items2):
+                        if (m.get("direction") or "").upper() == "IN":
+                            txt = (m.get("body") or "").strip()
+                            if txt:
+                                body = txt
+                                break
+                except Exception:
+                    log.exception("SMS poll: media fallback lookup failed author=%s", author)
+            
+            if not body:
+                log.info("SMS poll: skipping empty inbound (media_only=%s) author=%s", bool(media), author)
+                continue
+    
+    
+            # Pull last N messages in this thread so GPT can interpret short replies like "No thanks"
+            thread = []
+            items2 = []
             try:
                 raw = list_messages(owner_phone_e164=owner, contact_phone_e164=author, limit=12)
                 items2 = raw.get("items") or []
-        
-                # oldest → newest
+                # Oldest -> newest
                 items2 = sorted(items2, key=lambda m: m.get("timestamp") or "")
-        
-                # walk newest → oldest looking for last inbound with text
-                for m in reversed(items2):
-                    if (m.get("direction") or "").upper() == "IN":
-                        txt = (m.get("body") or "").strip()
-                        if txt:
-                            body = txt
-                            break
+    
+                for m in items2[-12:]:
+                    txt = (m.get("body") or "").strip()
+                    if not txt:
+                        continue
+    
+                    author_num = (m.get("authorPhoneNumber") or "").strip()
+                    role = "assistant" if author_num == owner else "user"
+    
+                    thread.append(
+                        {
+                            "role": role,
+                            "content": txt[:800],
+                        }
+                    )
             except Exception:
-                log.exception("SMS poll: media fallback lookup failed author=%s", author)
-        
-        if not body:
-            log.info("SMS poll: skipping empty inbound (media_only=%s) author=%s", bool(media), author)
-            continue
-
-
-        # Pull last N messages in this thread so GPT can interpret short replies like "No thanks"
-        thread = []
-        items2 = []
-        try:
-            raw = list_messages(owner_phone_e164=owner, contact_phone_e164=author, limit=12)
-            items2 = raw.get("items") or []
-            # Oldest -> newest
-            items2 = sorted(items2, key=lambda m: m.get("timestamp") or "")
-
-            for m in items2[-12:]:
-                txt = (m.get("body") or "").strip()
-                if not txt:
+                log.exception("SMS poll: failed to fetch thread messages owner=%s contact=%s", owner, author)
+                thread = []
+    
+            # ✅ inbound SMS text: some GoTo lastMessage bodies come through blank
+            last_inbound = (body or "").strip()
+            log.info("SMS poll: last_inbound_len=%d last_inbound_preview=%r", len(last_inbound or ""), (last_inbound or "")[:80])
+    
+            if not last_inbound and thread:
+                for m in reversed(thread):
+                    if m.get("role") == "user":
+                        last_inbound = (m.get("content") or "").strip()
+                        break
+    
+    
+            # ✅ Hard gate: only reply if the guest is STILL the last message in the thread
+            # This prevents double-replies when another process/user already responded.
+            if items2:
+                newest = items2[-1]
+                newest_id = (newest.get("id") or "").strip()
+                newest_author = (newest.get("authorPhoneNumber") or "").strip()
+    
+                # If the newest message isn't THIS inbound message, skip
+                if newest_id and msg_id and newest_id != msg_id:
+                    log.info("SMS poll: skip (newest_id != msg_id) newest_id=%s msg_id=%s", newest_id, msg_id)
                     continue
-
-                author_num = (m.get("authorPhoneNumber") or "").strip()
-                role = "assistant" if author_num == owner else "user"
-
-                thread.append(
-                    {
-                        "role": role,
-                        "content": txt[:800],
-                    }
+    
+                # If the newest message was authored by Patti (OUT), skip
+                if newest_author == owner:
+                    log.info("SMS poll: skip (Patti already last message) newest_id=%s", newest_id)
+                    continue
+    
+    
+            # Find the lead by author phone (customer)
+            try:
+                rec = find_by_customer_phone_loose(author)
+            except Exception as e:
+                log.warning("SMS poll: Airtable lookup failed (will skip this convo) author=%s err=%r", author, e)
+                continue
+            
+            if not rec:
+                log.info("SMS poll: no lead match for author=%s body=%r", author, body[:80])
+                continue
+    
+            opp = opp_from_record(rec)
+            fields = rec.get("fields") or {}
+            program = (fields.get("program") or "").strip().lower()
+            bucket = (fields.get("bucket") or "").strip()
+            is_mazda = ("mazda" in program) or bool(bucket)
+    
+            # ✅ If it's Mazda Loyalty, ALWAYS use Mazda path (even if opp_id exists)
+            if is_mazda:
+                rec_id = rec.get("id")
+                rooftop_name = (fields.get("rooftop_name") or fields.get("rooftop") or "").strip()
+                first_name = (fields.get("first_name") or "").strip()  # <-- ONLY Mazda table name
+                phone = (fields.get("phone") or fields.get("customer_phone") or "").strip() or author
+    
+                # 🔎 DEBUG: confirm which Airtable record we matched
+                log.warning(
+                    "MAZDA_MATCH rec_id=%s first_name=%r bucket=%r customer_phone=%r inbound_author=%r",
+                    rec_id,
+                    first_name,
+                    (fields.get("bucket") or ""),
+                    (fields.get("customer_phone") or ""),
+                    author,
                 )
-        except Exception:
-            log.exception("SMS poll: failed to fetch thread messages owner=%s contact=%s", owner, author)
-            thread = []
-
-        # ✅ inbound SMS text: some GoTo lastMessage bodies come through blank
-        last_inbound = (body or "").strip()
-        log.info("SMS poll: last_inbound_len=%d last_inbound_preview=%r", len(last_inbound or ""), (last_inbound or "")[:80])
-
-        if not last_inbound and thread:
-            for m in reversed(thread):
-                if m.get("role") == "user":
-                    last_inbound = (m.get("content") or "").strip()
-                    break
-
-
-        # ✅ Hard gate: only reply if the guest is STILL the last message in the thread
-        # This prevents double-replies when another process/user already responded.
-        if items2:
-            newest = items2[-1]
-            newest_id = (newest.get("id") or "").strip()
-            newest_author = (newest.get("authorPhoneNumber") or "").strip()
-
-            # If the newest message isn't THIS inbound message, skip
-            if newest_id and msg_id and newest_id != msg_id:
-                log.info("SMS poll: skip (newest_id != msg_id) newest_id=%s msg_id=%s", newest_id, msg_id)
-                continue
-
-            # If the newest message was authored by Patti (OUT), skip
-            if newest_author == owner:
-                log.info("SMS poll: skip (Patti already last message) newest_id=%s", newest_id)
-                continue
-
-
-        # Find the lead by author phone (customer)
-        try:
-            rec = find_by_customer_phone_loose(author)
-        except Exception as e:
-            log.warning("SMS poll: Airtable lookup failed (will skip this convo) author=%s err=%r", author, e)
-            continue
-        
-        if not rec:
-            log.info("SMS poll: no lead match for author=%s body=%r", author, body[:80])
-            continue
-
-        opp = opp_from_record(rec)
-        fields = rec.get("fields") or {}
-        program = (fields.get("program") or "").strip().lower()
-        bucket = (fields.get("bucket") or "").strip()
-        is_mazda = ("mazda" in program) or bool(bucket)
-
-        # ✅ If it's Mazda Loyalty, ALWAYS use Mazda path (even if opp_id exists)
-        if is_mazda:
-            rec_id = rec.get("id")
-            rooftop_name = (fields.get("rooftop_name") or fields.get("rooftop") or "").strip()
-            first_name = (fields.get("first_name") or "").strip()  # <-- ONLY Mazda table name
-            phone = (fields.get("phone") or fields.get("customer_phone") or "").strip() or author
-
-            # 🔎 DEBUG: confirm which Airtable record we matched
-            log.warning(
-                "MAZDA_MATCH rec_id=%s first_name=%r bucket=%r customer_phone=%r inbound_author=%r",
-                rec_id,
-                first_name,
-                (fields.get("bucket") or ""),
-                (fields.get("customer_phone") or ""),
-                author,
-            )
-
-            # --- Mazda durable dedupe (see section B) ---
-            last_seen = (fields.get("last_sms_inbound_message_id") or "").strip()
-            if last_seen and msg_id and last_seen == msg_id:
-                log.info("Mazda SMS: skipping already-processed inbound msg_id=%s rec=%s", msg_id, rec_id)
-                continue
-
-            # --- Mazda STOP / opt-out: stamp DNC + stop all cadence ---
-            if _MAZDA_STOP_RE.search(last_inbound or ""):
-                ts = last.get("timestamp") or _now_iso()
-
-                # Mark Do Not Contact (Mazda table field)
-                try:
-                    patch_by_id(rec_id, {
-                        # ✅ Keep your DNC field
-                        "do_not_contact": True,
-                    
-                        # ✅ Also set suppression checkbox (your requirement #2)
-                        "Suppressed": True,
-                    
-                        # ✅ Canonical statuses (your requirement #1)
-                        "sms_status": "opted_out",
-                        "email_status": "opted_out",
-                    
-                        # ✅ Stop all future nudges
-                        "next_sms_at": None,
-                        "next_email_at": None,
-                    
-                        # ✅ inbound markers
-                        "last_sms_inbound_message_id": msg_id,
-                        "last_sms_inbound_at": ts,
-                        "last_inbound_text": (last_inbound or "")[:2000],
-                    })
-                except Exception:
-                    # If some of these optional fields don't exist, fall back to ONLY stamping DNC + stopping SMS
+    
+                # --- Mazda durable dedupe (see section B) ---
+                last_seen = (fields.get("last_sms_inbound_message_id") or "").strip()
+                if last_seen and msg_id and last_seen == msg_id:
+                    log.info("Mazda SMS: skipping already-processed inbound msg_id=%s rec=%s", msg_id, rec_id)
+                    continue
+    
+                # --- Mazda STOP / opt-out: stamp DNC + stop all cadence ---
+                if _MAZDA_STOP_RE.search(last_inbound or ""):
+                    ts = last.get("timestamp") or _now_iso()
+    
+                    # Mark Do Not Contact (Mazda table field)
                     try:
                         patch_by_id(rec_id, {
+                            # ✅ Keep your DNC field
                             "do_not_contact": True,
+                        
+                            # ✅ Also set suppression checkbox (your requirement #2)
                             "Suppressed": True,
+                        
+                            # ✅ Canonical statuses (your requirement #1)
                             "sms_status": "opted_out",
                             "email_status": "opted_out",
+                        
+                            # ✅ Stop all future nudges
                             "next_sms_at": None,
                             "next_email_at": None,
+                        
+                            # ✅ inbound markers
                             "last_sms_inbound_message_id": msg_id,
                             "last_sms_inbound_at": ts,
                             "last_inbound_text": (last_inbound or "")[:2000],
                         })
                     except Exception:
-                        log.exception("Mazda SMS: failed to stamp do_not_contact rec=%s", rec_id)
-
-                # Reply with opt-out confirmation (keep it simple + compliant)
-                reply_text = "Understood, we’ll stop reaching out. If you need anything in the future, just reply here."
-
+                        # If some of these optional fields don't exist, fall back to ONLY stamping DNC + stopping SMS
+                        try:
+                            patch_by_id(rec_id, {
+                                "do_not_contact": True,
+                                "Suppressed": True,
+                                "sms_status": "opted_out",
+                                "email_status": "opted_out",
+                                "next_sms_at": None,
+                                "next_email_at": None,
+                                "last_sms_inbound_message_id": msg_id,
+                                "last_sms_inbound_at": ts,
+                                "last_inbound_text": (last_inbound or "")[:2000],
+                            })
+                        except Exception:
+                            log.exception("Mazda SMS: failed to stamp do_not_contact rec=%s", rec_id)
+    
+                    # Reply with opt-out confirmation (keep it simple + compliant)
+                    reply_text = "Understood, we’ll stop reaching out. If you need anything in the future, just reply here."
+    
+                    to_number = author
+                    if _sms_test_enabled() and _sms_test_to():
+                        to_number = _sms_test_to()
+    
+                    try:
+                        send_sms(from_number=owner, to_number=to_number, body=reply_text)
+                        log.info("Mazda SMS: opt-out reply sent to=%s (test=%s)", to_number, _sms_test_enabled())
+                    except Exception:
+                        log.exception("Mazda SMS: failed sending opt-out reply rec=%s", rec_id)
+    
+                    # Save outbound markers (best effort)
+                    try:
+                        patch_by_id(rec_id, {
+                            "last_sms_at": _now_iso(),
+                            "last_sms_body": reply_text[:2000],
+                        })
+                    except Exception:
+                        pass
+    
+                    continue  # ✅ do not fall through to normal Mazda reply logic
+    
+                # ✅ Stop Mazda SMS cadence on engagement + store inbound markers (Mazda fields only)
+                try:
+                    patch_by_id(rec_id, {
+                        "sms_status": "convo",
+                        "next_sms_at": None,
+                        "last_sms_inbound_message_id": msg_id,
+                        "last_sms_inbound_at": last.get("timestamp") or _now_iso(),
+                        "last_inbound_text": (last_inbound or "")[:2000],
+                    })
+                except Exception:
+                    log.exception("Mazda SMS: failed to patch convo status rec=%s", rec_id)
+    
+                decision = generate_mazda_loyalty_sms_reply(
+                    first_name=first_name,
+                    bucket=bucket,
+                    rooftop_name=rooftop_name,
+                    last_inbound=last_inbound,
+                    thread_snippet=thread,
+                )
+    
+                # --- Force voucher lookup => human handoff ---
+                code = _extract_voucherish_code(last_inbound)
+                
+                log.warning(
+                    "MAZDA_VOUCHER_CHECK rec_id=%s inbound=%r code=%r",
+                    rec_id,
+                    (last_inbound or "")[:80],
+                    code,
+                )
+                
+                if code:
+                    decision["needs_handoff"] = True
+                    decision["handoff_reason"] = "voucher_lookup"
+                
+                    prefix = f"{first_name}, " if first_name else ""
+                    decision["reply"] = (
+                        f"{prefix}thank you — I got your voucher code. "
+                        "I’m looping in a team member now to confirm eligibility and make sure everything is set up correctly."
+                    )
+    
+    
+                # Appointment intent still overrides
+                wants_appt = _looks_like_appt_intent(last_inbound)
+                if wants_appt:
+                    decision["needs_handoff"] = True
+                    decision["handoff_reason"] = "appointment"
+                    prefix = f"{first_name}, " if first_name else ""
+                    decision["reply"] = f"{prefix}thanks — I’m looping in a team member to lock in a time. What day works best, and about what time?"
+    
+                reply_text = (decision.get("reply") or "").strip()
+                if not reply_text:
+                    reply_text = "Thanks — if you have your 16-digit voucher code, text it here and I’ll help with next steps."
+    
                 to_number = author
                 if _sms_test_enabled() and _sms_test_to():
                     to_number = _sms_test_to()
-
+    
                 try:
                     send_sms(from_number=owner, to_number=to_number, body=reply_text)
-                    log.info("Mazda SMS: opt-out reply sent to=%s (test=%s)", to_number, _sms_test_enabled())
+                    log.info("Mazda SMS: replied to=%s (test=%s)", to_number, _sms_test_enabled())
                 except Exception:
-                    log.exception("Mazda SMS: failed sending opt-out reply rec=%s", rec_id)
-
-                # Save outbound markers (best effort)
+                    log.exception("Mazda SMS: failed sending reply rec=%s", rec_id)
+    
+                # ✅ Save outbound markers using Mazda fields only
                 try:
                     patch_by_id(rec_id, {
                         "last_sms_at": _now_iso(),
                         "last_sms_body": reply_text[:2000],
                     })
                 except Exception:
-                    pass
-
-                continue  # ✅ do not fall through to normal Mazda reply logic
-
-            # ✅ Stop Mazda SMS cadence on engagement + store inbound markers (Mazda fields only)
-            try:
-                patch_by_id(rec_id, {
-                    "sms_status": "convo",
-                    "next_sms_at": None,
-                    "last_sms_inbound_message_id": msg_id,
-                    "last_sms_inbound_at": last.get("timestamp") or _now_iso(),
-                    "last_inbound_text": (last_inbound or "")[:2000],
-                })
-            except Exception:
-                log.exception("Mazda SMS: failed to patch convo status rec=%s", rec_id)
-
-            decision = generate_mazda_loyalty_sms_reply(
-                first_name=first_name,
-                bucket=bucket,
-                rooftop_name=rooftop_name,
-                last_inbound=last_inbound,
-                thread_snippet=thread,
-            )
-
-            # --- Force voucher lookup => human handoff ---
-            code = _extract_voucherish_code(last_inbound)
-            
-            log.warning(
-                "MAZDA_VOUCHER_CHECK rec_id=%s inbound=%r code=%r",
-                rec_id,
-                (last_inbound or "")[:80],
-                code,
-            )
-            
-            if code:
-                decision["needs_handoff"] = True
-                decision["handoff_reason"] = "voucher_lookup"
-            
-                prefix = f"{first_name}, " if first_name else ""
-                decision["reply"] = (
-                    f"{prefix}thank you — I got your voucher code. "
-                    "I’m looping in a team member now to confirm eligibility and make sure everything is set up correctly."
+                    log.exception("Mazda SMS: failed saving outbound markers rec=%s", rec_id)
+    
+                log.warning(
+                    "MAZDA_DECISION rec_id=%s needs_handoff=%s reason=%r reply_preview=%r",
+                    rec_id,
+                    bool(decision.get("needs_handoff")),
+                    (decision.get("handoff_reason") or ""),
+                    (decision.get("reply") or "")[:90],
                 )
-
-
-            # Appointment intent still overrides
-            wants_appt = _looks_like_appt_intent(last_inbound)
-            if wants_appt:
-                decision["needs_handoff"] = True
-                decision["handoff_reason"] = "appointment"
-                prefix = f"{first_name}, " if first_name else ""
-                decision["reply"] = f"{prefix}thanks — I’m looping in a team member to lock in a time. What day works best, and about what time?"
-
-            reply_text = (decision.get("reply") or "").strip()
-            if not reply_text:
-                reply_text = "Thanks — if you have your 16-digit voucher code, text it here and I’ll help with next steps."
-
-            to_number = author
-            if _sms_test_enabled() and _sms_test_to():
-                to_number = _sms_test_to()
-
-            try:
-                send_sms(from_number=owner, to_number=to_number, body=reply_text)
-                log.info("Mazda SMS: replied to=%s (test=%s)", to_number, _sms_test_enabled())
-            except Exception:
-                log.exception("Mazda SMS: failed sending reply rec=%s", rec_id)
-
-            # ✅ Save outbound markers using Mazda fields only
-            try:
-                patch_by_id(rec_id, {
-                    "last_sms_at": _now_iso(),
-                    "last_sms_body": reply_text[:2000],
-                })
-            except Exception:
-                log.exception("Mazda SMS: failed saving outbound markers rec=%s", rec_id)
-
-            log.warning(
-                "MAZDA_DECISION rec_id=%s needs_handoff=%s reason=%r reply_preview=%r",
-                rec_id,
-                bool(decision.get("needs_handoff")),
-                (decision.get("handoff_reason") or ""),
-                (decision.get("reply") or "")[:90],
-            )
-
-            # ✅ If handoff required, do Airtable flags + email notify
-            if decision.get("needs_handoff"):
+    
+                # ✅ If handoff required, do Airtable flags + email notify
+                if decision.get("needs_handoff"):
+                    try:
+                        reason = (decision.get("handoff_reason") or "other").strip().lower()
+                        patch_by_id(rec_id, {
+                            "Needs Reply": True,
+                            "Human Review Reason": f"Mazda Loyalty SMS handoff: {reason}",
+                        })
+                    except Exception:
+                        log.exception("Mazda SMS: failed to flag Needs Reply rec=%s", rec_id)
+    
+                    try:
+                        salesperson_email = (fields.get("salesperson_email") or "").strip() or (os.getenv("HUMAN_REVIEW_FALLBACK_TO") or "").strip() or "knowzek@gmail.com"
+                        cc_addrs = _parse_cc_env()
+                        customer_email = (fields.get("customer_email") or "").strip()
+                        customer_phone = phone or author
+                        customer_name = first_name or "Customer"
+    
+                        log.warning(
+                            "MAZDA_HANDOFF_EMAIL about to send rec_id=%s to=%r cc=%r",
+                            rec_id, salesperson_email, cc_addrs
+                        )
+    
+                        _send_mazda_sms_handoff_email(
+                            to_addr=salesperson_email,
+                            cc_addrs=cc_addrs,
+                            rooftop_name=rooftop_name or "Mazda",
+                            customer_name=customer_name,
+                            customer_email=customer_email or "unknown",
+                            customer_phone=customer_phone or "unknown",
+                            bucket=bucket,
+                            inbound_text=last_inbound,
+                            reason=f"Mazda Loyalty SMS handoff: {reason}",
+                            now_iso=_now_iso(),
+                        )
+                        
+                        log.warning("MAZDA_HANDOFF_EMAIL sent rec_id=%s", rec_id)
+    
+                    except Exception:
+                        log.exception("Mazda SMS: failed handoff notify rec=%s", rec_id)
+    
+                continue  # ✅ Mazda handled; don't fall through to Fortellis
+    
+            subscription_id = (opp.get("subscription_id") or opp.get("dealer_key") or "").strip()
+            opp_id = (opp.get("opportunityId") or opp.get("opportunity_id") or "").strip()
+    
+            customer_details = _fetch_customer_details(opp_id=opp_id) or {}
+    
+            patti = opp.setdefault("patti", {})
+    
+            # ✅ Dedupe BEFORE STOP
+            last_seen = (opp.get("last_sms_inbound_message_id") or "").strip()
+            if last_seen and msg_id and last_seen == msg_id:
+                log.info("SMS poll: skipping already-processed msg_id=%s", msg_id)
+                continue
+    
+            # --- STOP / opt-out: stamp Airtable fields that suppress cadence ---
+            if _STOP_RE.search(last_inbound or ""):
+                inbound_ts = last.get("timestamp") or _now_iso()
+    
+                # Persist the opt-out + stop any future nudges
                 try:
-                    reason = (decision.get("handoff_reason") or "other").strip().lower()
-                    patch_by_id(rec_id, {
-                        "Needs Reply": True,
-                        "Human Review Reason": f"Mazda Loyalty SMS handoff: {reason}",
+                    save_opp(opp, extra_fields={
+                        "sms_opted_out": True,
+                        "sms_opted_out_at": inbound_ts,
+                        "sms_opt_out_reason": "STOP",
+                        "sms_followup_due_at": None,
+                        "follow_up_at": None,  # if your email cadence uses this, kill it too
+                        "mode": "opt_out",
+                        "last_sms_inbound_message_id": msg_id,
+                        "last_sms_inbound_at": inbound_ts,
                     })
                 except Exception:
-                    log.exception("Mazda SMS: failed to flag Needs Reply rec=%s", rec_id)
-
+                    log.exception("SMS poll: failed to stamp STOP opt-out opp=%s rec=%s", opp_id, rec.get("id"))
+    
+                # Best-effort: still mark convo / clear next_sms_at if those fields exist
                 try:
-                    salesperson_email = (fields.get("salesperson_email") or "").strip() or (os.getenv("HUMAN_REVIEW_FALLBACK_TO") or "").strip() or "knowzek@gmail.com"
-                    cc_addrs = _parse_cc_env()
-                    customer_email = (fields.get("customer_email") or "").strip()
-                    customer_phone = phone or author
-                    customer_name = first_name or "Customer"
-
-                    log.warning(
-                        "MAZDA_HANDOFF_EMAIL about to send rec_id=%s to=%r cc=%r",
-                        rec_id, salesperson_email, cc_addrs
-                    )
-
-                    _send_mazda_sms_handoff_email(
-                        to_addr=salesperson_email,
-                        cc_addrs=cc_addrs,
-                        rooftop_name=rooftop_name or "Mazda",
-                        customer_name=customer_name,
-                        customer_email=customer_email or "unknown",
-                        customer_phone=customer_phone or "unknown",
-                        bucket=bucket,
+                    mark_sms_convo_on_inbound(
+                        rec_id=rec.get("id"),
                         inbound_text=last_inbound,
-                        reason=f"Mazda Loyalty SMS handoff: {reason}",
-                        now_iso=_now_iso(),
+                        inbound_ts=inbound_ts,
                     )
-                    
-                    log.warning("MAZDA_HANDOFF_EMAIL sent rec_id=%s", rec_id)
-
                 except Exception:
-                    log.exception("Mazda SMS: failed handoff notify rec=%s", rec_id)
-
-            continue  # ✅ Mazda handled; don't fall through to Fortellis
-
-        subscription_id = (opp.get("subscription_id") or opp.get("dealer_key") or "").strip()
-        opp_id = (opp.get("opportunityId") or opp.get("opportunity_id") or "").strip()
-
-        customer_details = _fetch_customer_details(opp_id=opp_id) or {}
-
-        patti = opp.setdefault("patti", {})
-
-        # ✅ Dedupe BEFORE STOP
-        last_seen = (opp.get("last_sms_inbound_message_id") or "").strip()
-        if last_seen and msg_id and last_seen == msg_id:
-            log.info("SMS poll: skipping already-processed msg_id=%s", msg_id)
-            continue
-
-        # --- STOP / opt-out: stamp Airtable fields that suppress cadence ---
-        if _STOP_RE.search(last_inbound or ""):
-            inbound_ts = last.get("timestamp") or _now_iso()
-
-            # Persist the opt-out + stop any future nudges
-            try:
-                save_opp(opp, extra_fields={
-                    "sms_opted_out": True,
-                    "sms_opted_out_at": inbound_ts,
-                    "sms_opt_out_reason": "STOP",
-                    "sms_followup_due_at": None,
-                    "follow_up_at": None,  # if your email cadence uses this, kill it too
-                    "mode": "opt_out",
+                    # Don’t let schema mismatch break STOP
+                    pass
+    
+                log.info("SMS poll: STOP handled (opt-out stamped) opp=%s author=%s", opp.get("opportunityId"), author)
+                continue
+            
+            # ✅ Hard suppression gate
+            stop, reason = should_suppress_all_sends_airtable(opp)
+            if stop:
+                extra = {
                     "last_sms_inbound_message_id": msg_id,
-                    "last_sms_inbound_at": inbound_ts,
-                })
-            except Exception:
-                log.exception("SMS poll: failed to stamp STOP opt-out opp=%s rec=%s", opp_id, rec.get("id"))
-
-            # Best-effort: still mark convo / clear next_sms_at if those fields exist
-            try:
-                mark_sms_convo_on_inbound(
-                    rec_id=rec.get("id"),
-                    inbound_text=last_inbound,
-                    inbound_ts=inbound_ts,
-                )
-            except Exception:
-                # Don’t let schema mismatch break STOP
-                pass
-
-            log.info("SMS poll: STOP handled (opt-out stamped) opp=%s author=%s", opp.get("opportunityId"), author)
-            continue
-        
-        # ✅ Hard suppression gate
-        stop, reason = should_suppress_all_sends_airtable(opp)
-        if stop:
-            extra = {
-                "last_sms_inbound_message_id": msg_id,
-                "last_sms_inbound_at": last.get("timestamp") or _now_iso(),
-            }
-            try:
-                save_opp(opp, extra_fields=extra)
-            except Exception:
-                log.exception("SMS poll: failed to save inbound markers while suppressed opp=%s", opp.get("opportunityId"))
-            log.info("SMS poll: suppressed=%s opp=%s (no reply)", reason, opp.get("opportunityId"))
-
-            # ✅ Still stop cadence nudges on inbound, even if suppressed
+                    "last_sms_inbound_at": last.get("timestamp") or _now_iso(),
+                }
+                try:
+                    save_opp(opp, extra_fields=extra)
+                except Exception:
+                    log.exception("SMS poll: failed to save inbound markers while suppressed opp=%s", opp.get("opportunityId"))
+                log.info("SMS poll: suppressed=%s opp=%s (no reply)", reason, opp.get("opportunityId"))
+    
+                # ✅ Still stop cadence nudges on inbound, even if suppressed
+                try:
+                    inbound_ts = last.get("timestamp") or _now_iso()
+                    mark_sms_convo_on_inbound(
+                        rec_id=rec.get("id"),
+                        inbound_text=last_inbound,
+                        inbound_ts=inbound_ts,
+                    )
+                except Exception:
+                    log.exception("SMS poll: suppressed but failed to set sms_status=convo rec_id=%s", rec.get("id"))
+    
+                continue
+            
+            # ✅ Dedupe: only act once per inbound message id
+            source = opp.get("source", "")
+            opp_id = opp.get("opportunityId", "")
+            subscription_id = opp.get("subscription_id", "")
+    
+            conversation_record_id = _ensure_conversation(opp, channel="sms", linked_lead_record_id=rec.get("id", ""))
+            conversation_id = f"conv_{subscription_id}_{opp_id}"
+    
+            # ✅ Flip Mazda record into convo mode so cadence stops
             try:
                 inbound_ts = last.get("timestamp") or _now_iso()
                 mark_sms_convo_on_inbound(
@@ -961,365 +1017,344 @@ def poll_once():
                     inbound_ts=inbound_ts,
                 )
             except Exception:
-                log.exception("SMS poll: suppressed but failed to set sms_status=convo rec_id=%s", rec.get("id"))
-
-            continue
-        
-        # ✅ Dedupe: only act once per inbound message id
-        source = opp.get("source", "")
-        opp_id = opp.get("opportunityId", "")
-        subscription_id = opp.get("subscription_id", "")
-
-        conversation_record_id = _ensure_conversation(opp, channel="sms", linked_lead_record_id=rec.get("id", ""))
-        conversation_id = f"conv_{subscription_id}_{opp_id}"
-
-        # ✅ Flip Mazda record into convo mode so cadence stops
-        try:
-            inbound_ts = last.get("timestamp") or _now_iso()
-            mark_sms_convo_on_inbound(
-                rec_id=rec.get("id"),
-                inbound_text=last_inbound,
-                inbound_ts=inbound_ts,
-            )
-        except Exception:
-            log.exception("SMS poll: failed to flip sms_status=convo for rec_id=%s", rec.get("id"))
-
-        
-        # ✅ NOW we know this inbound is new — log it to CRM once
-        try:
-            token = get_token(subscription_id)
-            log_sms_note_to_crm(
-                token=token,
-                subscription_id=subscription_id,
-                opp_id=opp_id,
-                direction="Inbound",
-                text=last_inbound,
-            )
-
-        except Exception:
-            log.exception("SMS poll: failed to log inbound SMS to CRM opp=%s", opp.get("opportunityId"))
-
-        timestamp = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
-        resolved_message_id = (
-            _normalize_message_id(msg_id) if msg_id else _generate_message_id(opp_id, timestamp, "", author, body)
-        )
-
-        try:
-            airtable_log = Message(
-                message_id=resolved_message_id,
-                conversation=conversation_record_id,
-                direction="inbound",
-                channel="sms",
-                timestamp=timestamp,
-                from_=author,
-                to=owner,
-                subject="",
-                body_text=body,
-                body_html="",
-                provider=source,
-                opp_id=opp_id,
-                delivery_status="received",
-                rooftop_name="",
-                rooftop_sender="",
-            )
-            message_log_status = log_message(airtable_log)
-            if message_log_status:
-                log.info("Inbound sms logged successfully.")
-            else:
-                log.error("Failed to log inbound sms.")
-        except Exception as e:
-            log.error(f"Error during inbound message logging (process_inbound_sms): {e}.")
-            pass
-
-        try:
-            message_update_convo = Conversation(
-                conversation_id=conversation_id,
-                last_channel="sms",
-                last_activity_at=timestamp,
-                last_customer_message=body[:300],
-                customer_last_reply_at=timestamp,
-                status="open",
-                customer_full_name=customer_details.get("customer_full_name", ""),
-                customer_email=customer_details.get("customer_email", ""),
-                customer_phone=customer_details.get("customer_phone", ""),
-                salesperson_assigned=customer_details.get("salesperson_assigned", ""),
-                linked_lead_record=customer_details.get("linked_lead_record", "")
-            )
-            conversation_record_id = upsert_conversation(message_update_convo)
-        except Exception as e:
-            log.error(
-                f"Something went wrong while upserting message update in poll_once to Conversations table (1): {e}"
-            )
-
-        # Record inbound + switch mode
-        patti["mode"] = "convo"
-        extra = {
-            "last_sms_inbound_message_id": msg_id,
-            "last_sms_inbound_at": last.get("timestamp") or _now_iso(),
-            "mode": "convo",
-        }
-        save_opp(opp, extra_fields=extra)
-
-        log.info("SMS poll: new inbound msg opp=%s author=%s body=%r", opp.get("opportunityId"), author, body[:120])
-
-        # Build GPT reply
-
-        log.info(
-            "SMS poll: thread context turns=%d (most recent=%r)",
-            len(thread),
-            (thread[-1]["content"][:80] if thread else None),
-        )
-
-        # opp is already canonicalized by opp_from_record()
-        decision = generate_sms_reply(
-            rooftop_name=opp["rooftop_name"],
-            customer_first_name=opp["customer_first_name"],
-            customer_phone=opp["customer_phone"],
-            salesperson=opp["salesperson_name"],
-            vehicle=opp.get("vehicle") or "",
-            last_inbound=last_inbound,
-            thread_snippet=thread,  # ✅ pass real history
-            include_optout_footer=False,
-        )
-
-        needs_handoff = bool(decision.get("needs_handoff"))
-        handoff_reason = (decision.get("handoff_reason") or "other").strip().lower()
-
-        if needs_handoff:
-            name = (opp.get("customer_first_name") or "").strip()
-            prefix = f"Thanks, {name}. " if name else "Thanks. "
-
-            if handoff_reason == "pricing":
-                decision["reply"] = prefix + "I’ll have the team follow up with pricing details shortly."
-            elif handoff_reason == "phone_call":
-                decision["reply"] = prefix + "I’ll have someone give you a quick call shortly."
-            elif handoff_reason in ("angry", "complaint"):
-                decision["reply"] = prefix + "I’m sorry about that. I’m looping in a manager now so we can help."
-            else:
-                decision["reply"] = prefix + "I’m looping in a team member to help, and they’ll follow up shortly."
-            try:
-                handoff_update_convo = Conversation(
-                    conversation_id=conversation_id,
-                    status="needs_review",
-                    needs_human_review=True,
-                    needs_human_review_reason=handoff_reason,
-                    last_activity_at=_dt.now(_tz.utc).replace(microsecond=0).isoformat(),
-                    last_channel="sms",
-                )
-                conversation_record_id = upsert_conversation(handoff_update_convo)
-            except Exception as e:
-                log.error(
-                    f"Something went wrong while upserting message update in poll_once to Conversations table (2): {e}"
-                )
-
-        # --- Appointment detect + schedule (authoritative actions happen here, not in GPT text) ---
-        appt = extract_appt_time(last_inbound, tz="America/Los_Angeles")
-        appt_iso = (appt.get("iso") or "").strip()
-        appt_conf = float(appt.get("confidence") or 0)
-
-        if appt_iso and appt_conf >= 0.80:
-            try:
-                # Convert local ISO w/ offset -> UTC Z for Fortellis
-                dt_local = datetime.fromisoformat(appt_iso)
-                dt_utc = dt_local.astimezone(timezone.utc)
-                due_utc = dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-                # Get CRM token + schedule activity
-                dealer_key = opp.get("subscription_id") or opp.get("dealer_key")
-                if not dealer_key:
-                    raise RuntimeError(f"Missing subscription_id/dealer_key for opp={opp.get('opportunityId')}")
-                token = get_token(dealer_key)
-
-                schedule_activity(
-                    token,
-                    opp["subscription_id"],
-                    opp["opportunityId"],
-                    due_dt_iso_utc=due_utc,
-                    activity_name="Sales Appointment",
-                    activity_type=7,
-                    comments=f"Patti scheduled via SMS based on customer reply: {last_inbound[:200]}",
-                )
-        
-                # ✅ Send appointment notification email (same as email flow)
-                try:
-                    fresh_opp = None
-                    try:
-                        fresh_opp = get_opportunity(
-                            opp["opportunityId"],
-                            token,
-                            dealer_key
-                        )
-                    except Exception:
-                        log.exception(
-                            "SMS poll: failed to fetch fresh opp for appt notify opp=%s",
-                            opp.get("opportunityId"),
-                        )
-        
-                    appt_human = dt_local.strftime("%a %-m/%-d %-I:%M %p")
-        
-                    notify_staff_patti_scheduled_appt(
-                        opportunity=opp,
-                        fresh_opp=fresh_opp,
-                        subscription_id=dealer_key,
-                        rooftop_name=opp.get("rooftop_name") or opp.get("rooftop") or "",
-                        appt_human=appt_human,
-                        customer_reply=last_inbound,
-                    )
-        
-                except Exception:
-                    log.exception(
-                        "SMS poll: failed to send appt notify email opp=%s",
-                        opp.get("opportunityId"),
-                    )
-        
-                # ✅ Best-effort Airtable update (should NOT block notify)
-                try:
-                    extra_appt = {
-                        "AI Set Appointment": True,
-                        "AI Appointment At": due_utc,
-                    }
-                    save_opp(opp, extra_fields=extra_appt)
-                except Exception:
-                    log.exception(
-                        "SMS poll: failed to save Airtable appt fields opp=%s",
-                        opp.get("opportunityId"),
-                    )
-
-        
-            except Exception:
-                log.exception("SMS poll: failed to schedule appointment opp=%s appt_iso=%r", opp.get("opportunityId"), appt_iso)
-
-            try:
-                activity_update_convo = Conversation(
-                    conversation_id=conversation_id,
-                    last_activity_at=_dt.now(_tz.utc).replace(microsecond=0).isoformat(),
-                    last_channel="sms",
-                )
-                conversation_record_id = upsert_conversation(activity_update_convo)
-            except Exception as e:
-                log.error(
-                    f"Something went wrong while upserting last activity in poll_once to Conversations table (3): {e}"
-                )
-
-        # --- Send SMS reply + persist metrics + optional handoff escalation ---
-        reply_text = (decision.get("reply") or "").strip()
-        if not reply_text:
-            reply_text = "Thanks — what day/time works best for you to come in?"
-
-        to_number = author
-        if _sms_test_enabled() and _sms_test_to():
-            to_number = _sms_test_to()
-
-        try:
-            # 1) Send the SMS reply first
-            send_sms(
-                from_number=owner,
-                to_number=to_number,
-                body=reply_text,
-            )
-            log.info("SMS poll: replied to=%s (test=%s)", to_number, _sms_test_enabled())
+                log.exception("SMS poll: failed to flip sms_status=convo for rec_id=%s", rec.get("id"))
+    
             
-            # ✅ Log outbound SMS to CRM
+            # ✅ NOW we know this inbound is new — log it to CRM once
             try:
                 token = get_token(subscription_id)
                 log_sms_note_to_crm(
                     token=token,
                     subscription_id=subscription_id,
                     opp_id=opp_id,
-                    direction="Outbound",
-                    text=reply_text,
+                    direction="Inbound",
+                    text=last_inbound,
                 )
+    
             except Exception:
-                log.exception("SMS poll: failed to log outbound SMS to CRM opp=%s", opp_id)
-                
-
-            inbound_count = len(_get_messages_for_conversation(conversation_id, "inbound"))
-            outbound_count = len(_get_messages_for_conversation(conversation_id, "outbound"))
-
+                log.exception("SMS poll: failed to log inbound SMS to CRM opp=%s", opp.get("opportunityId"))
+    
+            timestamp = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
+            resolved_message_id = (
+                _normalize_message_id(msg_id) if msg_id else _generate_message_id(opp_id, timestamp, "", author, body)
+            )
+    
             try:
-                event_now = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
-                activity_update_convo = Conversation(
-                    conversation_id=conversation_id,
-                    ai_last_reply_at=event_now,
-                    last_activity_at=event_now,
-                    last_channel="sms",
-                    status="open" if not needs_handoff else None,
-                    message_count_inbound=inbound_count,
-                    message_count_outbound=outbound_count,
-                    message_count_total=inbound_count+outbound_count
+                airtable_log = Message(
+                    message_id=resolved_message_id,
+                    conversation=conversation_record_id,
+                    direction="inbound",
+                    channel="sms",
+                    timestamp=timestamp,
+                    from_=author,
+                    to=owner,
+                    subject="",
+                    body_text=body,
+                    body_html="",
+                    provider=source,
+                    opp_id=opp_id,
+                    delivery_status="received",
+                    rooftop_name="",
+                    rooftop_sender="",
                 )
-                conversation_record_id = upsert_conversation(activity_update_convo)
+                message_log_status = log_message(airtable_log)
+                if message_log_status:
+                    log.info("Inbound sms logged successfully.")
+                else:
+                    log.error("Failed to log inbound sms.")
+            except Exception as e:
+                log.error(f"Error during inbound message logging (process_inbound_sms): {e}.")
+                pass
+    
+            try:
+                message_update_convo = Conversation(
+                    conversation_id=conversation_id,
+                    last_channel="sms",
+                    last_activity_at=timestamp,
+                    last_customer_message=body[:300],
+                    customer_last_reply_at=timestamp,
+                    status="open",
+                    customer_full_name=customer_details.get("customer_full_name", ""),
+                    customer_email=customer_details.get("customer_email", ""),
+                    customer_phone=customer_details.get("customer_phone", ""),
+                    salesperson_assigned=customer_details.get("salesperson_assigned", ""),
+                    linked_lead_record=customer_details.get("linked_lead_record", "")
+                )
+                conversation_record_id = upsert_conversation(message_update_convo)
             except Exception as e:
                 log.error(
-                    f"Something went wrong while upserting message activity in poll_once to Conversations table (4): {e}"
+                    f"Something went wrong while upserting message update in poll_once to Conversations table (1): {e}"
                 )
-
-            # 2) Always update “sent” metrics (fail-open)
-            now_iso = _now_iso()
-            next_due = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
-
-            try:
-                extra_sent = {
-                    "last_sms_sent_at": now_iso,
-                    "sms_followup_due_at": next_due,
-                    "sms_nudge_count": int(opp.get("sms_nudge_count") or 0) + 1,
-                    "AI Texts Sent": int(opp.get("AI Texts Sent") or 0) + 1,
-                }
-                save_opp(opp, extra_fields=extra_sent)
-            except Exception:
-                log.exception("SMS poll: failed to save SMS sent metrics opp=%s", opp.get("opportunityId"))
-
-            # 3) If handoff, flag Airtable + notify salesperson/GMs (fail-open)
+    
+            # Record inbound + switch mode
+            patti["mode"] = "convo"
+            extra = {
+                "last_sms_inbound_message_id": msg_id,
+                "last_sms_inbound_at": last.get("timestamp") or _now_iso(),
+                "mode": "convo",
+            }
+            save_opp(opp, extra_fields=extra)
+    
+            log.info("SMS poll: new inbound msg opp=%s author=%s body=%r", opp.get("opportunityId"), author, body[:120])
+    
+            # Build GPT reply
+    
+            log.info(
+                "SMS poll: thread context turns=%d (most recent=%r)",
+                len(thread),
+                (thread[-1]["content"][:80] if thread else None),
+            )
+    
+            # opp is already canonicalized by opp_from_record()
+            decision = generate_sms_reply(
+                rooftop_name=opp["rooftop_name"],
+                customer_first_name=opp["customer_first_name"],
+                customer_phone=opp["customer_phone"],
+                salesperson=opp["salesperson_name"],
+                vehicle=opp.get("vehicle") or "",
+                last_inbound=last_inbound,
+                thread_snippet=thread,  # ✅ pass real history
+                include_optout_footer=False,
+            )
+    
+            needs_handoff = bool(decision.get("needs_handoff"))
+            handoff_reason = (decision.get("handoff_reason") or "other").strip().lower()
+    
             if needs_handoff:
+                name = (opp.get("customer_first_name") or "").strip()
+                prefix = f"Thanks, {name}. " if name else "Thanks. "
+    
+                if handoff_reason == "pricing":
+                    decision["reply"] = prefix + "I’ll have the team follow up with pricing details shortly."
+                elif handoff_reason == "phone_call":
+                    decision["reply"] = prefix + "I’ll have someone give you a quick call shortly."
+                elif handoff_reason in ("angry", "complaint"):
+                    decision["reply"] = prefix + "I’m sorry about that. I’m looping in a manager now so we can help."
+                else:
+                    decision["reply"] = prefix + "I’m looping in a team member to help, and they’ll follow up shortly."
                 try:
-                    save_opp(
-                        opp,
-                        extra_fields={
-                            "Needs Human Review": True,
-                            "Human Review Reason": f"SMS handoff: {handoff_reason}",
-                            # "Human Review At": now_iso,  # only if this Airtable field exists
-                        },
+                    handoff_update_convo = Conversation(
+                        conversation_id=conversation_id,
+                        status="needs_review",
+                        needs_human_review=True,
+                        needs_human_review_reason=handoff_reason,
+                        last_activity_at=_dt.now(_tz.utc).replace(microsecond=0).isoformat(),
+                        last_channel="sms",
                     )
-                except Exception:
-                    log.exception("SMS poll: failed to set Needs Human Review fields opp=%s", opp.get("opportunityId"))
-
+                    conversation_record_id = upsert_conversation(handoff_update_convo)
+                except Exception as e:
+                    log.error(
+                        f"Something went wrong while upserting message update in poll_once to Conversations table (2): {e}"
+                    )
+    
+            # --- Appointment detect + schedule (authoritative actions happen here, not in GPT text) ---
+            appt = extract_appt_time(last_inbound, tz="America/Los_Angeles")
+            appt_iso = (appt.get("iso") or "").strip()
+            appt_conf = float(appt.get("confidence") or 0)
+    
+            if appt_iso and appt_conf >= 0.80:
                 try:
-                    subscription_id = opp.get("subscription_id") or opp.get("dealer_key")
-                    token = get_token(subscription_id)
-
-                    log.warning(
-                      "SMS_HR_DEBUG opp=%s rooftop=%r sub=%r salesperson_name=%r salesperson_email=%r keys_has_rep_email=%s",
-                      opp.get("opportunityId"),
-                      opp.get("rooftop_name"),
-                      opp.get("subscription_id"),
-                      opp.get("salesperson_name"),
-                      opp.get("Assigned Sales Rep Email") or opp.get("salesperson_email") or opp.get("salespersonEmail"),
-                      any(k in opp for k in ("Assigned Sales Rep Email", "salesperson_email", "salespersonEmail"))
+                    # Convert local ISO w/ offset -> UTC Z for Fortellis
+                    dt_local = datetime.fromisoformat(appt_iso)
+                    dt_utc = dt_local.astimezone(timezone.utc)
+                    due_utc = dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+                    # Get CRM token + schedule activity
+                    dealer_key = opp.get("subscription_id") or opp.get("dealer_key")
+                    if not dealer_key:
+                        raise RuntimeError(f"Missing subscription_id/dealer_key for opp={opp.get('opportunityId')}")
+                    token = get_token(dealer_key)
+    
+                    schedule_activity(
+                        token,
+                        opp["subscription_id"],
+                        opp["opportunityId"],
+                        due_dt_iso_utc=due_utc,
+                        activity_name="Sales Appointment",
+                        activity_type=7,
+                        comments=f"Patti scheduled via SMS based on customer reply: {last_inbound[:200]}",
                     )
-
-                    fresh_opp = None
+            
+                    # ✅ Send appointment notification email (same as email flow)
                     try:
-                        fresh_opp = get_opportunity(opp_id, token, subscription_id)  # matches fortellis.py signature
+                        fresh_opp = None
+                        try:
+                            fresh_opp = get_opportunity(
+                                opp["opportunityId"],
+                                token,
+                                dealer_key
+                            )
+                        except Exception:
+                            log.exception(
+                                "SMS poll: failed to fetch fresh opp for appt notify opp=%s",
+                                opp.get("opportunityId"),
+                            )
+            
+                        appt_human = dt_local.strftime("%a %-m/%-d %-I:%M %p")
+            
+                        notify_staff_patti_scheduled_appt(
+                            opportunity=opp,
+                            fresh_opp=fresh_opp,
+                            subscription_id=dealer_key,
+                            rooftop_name=opp.get("rooftop_name") or opp.get("rooftop") or "",
+                            appt_human=appt_human,
+                            customer_reply=last_inbound,
+                        )
+            
                     except Exception:
-                        log.exception("SMS poll: failed to fetch fresh opp from Fortellis opp=%s", opp_id)
-                    
-                    handoff_to_human(
-                        opportunity=opp,
-                        fresh_opp=fresh_opp,   # ✅ this is the whole point
+                        log.exception(
+                            "SMS poll: failed to send appt notify email opp=%s",
+                            opp.get("opportunityId"),
+                        )
+            
+                    # ✅ Best-effort Airtable update (should NOT block notify)
+                    try:
+                        extra_appt = {
+                            "AI Set Appointment": True,
+                            "AI Appointment At": due_utc,
+                        }
+                        save_opp(opp, extra_fields=extra_appt)
+                    except Exception:
+                        log.exception(
+                            "SMS poll: failed to save Airtable appt fields opp=%s",
+                            opp.get("opportunityId"),
+                        )
+    
+            
+                except Exception:
+                    log.exception("SMS poll: failed to schedule appointment opp=%s appt_iso=%r", opp.get("opportunityId"), appt_iso)
+    
+                try:
+                    activity_update_convo = Conversation(
+                        conversation_id=conversation_id,
+                        last_activity_at=_dt.now(_tz.utc).replace(microsecond=0).isoformat(),
+                        last_channel="sms",
+                    )
+                    conversation_record_id = upsert_conversation(activity_update_convo)
+                except Exception as e:
+                    log.error(
+                        f"Something went wrong while upserting last activity in poll_once to Conversations table (3): {e}"
+                    )
+    
+            # --- Send SMS reply + persist metrics + optional handoff escalation ---
+            reply_text = (decision.get("reply") or "").strip()
+            if not reply_text:
+                reply_text = "Thanks — what day/time works best for you to come in?"
+    
+            to_number = author
+            if _sms_test_enabled() and _sms_test_to():
+                to_number = _sms_test_to()
+    
+            try:
+                # 1) Send the SMS reply first
+                send_sms(
+                    from_number=owner,
+                    to_number=to_number,
+                    body=reply_text,
+                )
+                log.info("SMS poll: replied to=%s (test=%s)", to_number, _sms_test_enabled())
+                
+                # ✅ Log outbound SMS to CRM
+                try:
+                    token = get_token(subscription_id)
+                    log_sms_note_to_crm(
                         token=token,
                         subscription_id=subscription_id,
-                        rooftop_name=opp.get("rooftop_name") or "",
-                        inbound_subject=f"SMS handoff: {handoff_reason}",
-                        inbound_text=last_inbound,
-                        inbound_ts=now_iso,
-                        triage={"reason": f"SMS handoff: {handoff_reason}", "confidence": 1.0},
+                        opp_id=opp_id,
+                        direction="Outbound",
+                        text=reply_text,
                     )
-
                 except Exception:
-                    log.exception("SMS poll: failed to trigger handoff_to_human opp=%s", opp.get("opportunityId"))
-
-        except Exception:
-            log.exception("SMS poll: reply send failed opp=%s", opp.get("opportunityId"))
+                    log.exception("SMS poll: failed to log outbound SMS to CRM opp=%s", opp_id)
+                    
+    
+                inbound_count = len(_get_messages_for_conversation(conversation_id, "inbound"))
+                outbound_count = len(_get_messages_for_conversation(conversation_id, "outbound"))
+    
+                try:
+                    event_now = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
+                    activity_update_convo = Conversation(
+                        conversation_id=conversation_id,
+                        ai_last_reply_at=event_now,
+                        last_activity_at=event_now,
+                        last_channel="sms",
+                        status="open" if not needs_handoff else None,
+                        message_count_inbound=inbound_count,
+                        message_count_outbound=outbound_count,
+                        message_count_total=inbound_count+outbound_count
+                    )
+                    conversation_record_id = upsert_conversation(activity_update_convo)
+                except Exception as e:
+                    log.error(
+                        f"Something went wrong while upserting message activity in poll_once to Conversations table (4): {e}"
+                    )
+    
+                # 2) Always update “sent” metrics (fail-open)
+                now_iso = _now_iso()
+                next_due = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    
+                try:
+                    extra_sent = {
+                        "last_sms_sent_at": now_iso,
+                        "sms_followup_due_at": next_due,
+                        "sms_nudge_count": int(opp.get("sms_nudge_count") or 0) + 1,
+                        "AI Texts Sent": int(opp.get("AI Texts Sent") or 0) + 1,
+                    }
+                    save_opp(opp, extra_fields=extra_sent)
+                except Exception:
+                    log.exception("SMS poll: failed to save SMS sent metrics opp=%s", opp.get("opportunityId"))
+    
+                # 3) If handoff, flag Airtable + notify salesperson/GMs (fail-open)
+                if needs_handoff:
+                    try:
+                        save_opp(
+                            opp,
+                            extra_fields={
+                                "Needs Human Review": True,
+                                "Human Review Reason": f"SMS handoff: {handoff_reason}",
+                                # "Human Review At": now_iso,  # only if this Airtable field exists
+                            },
+                        )
+                    except Exception:
+                        log.exception("SMS poll: failed to set Needs Human Review fields opp=%s", opp.get("opportunityId"))
+    
+                    try:
+                        subscription_id = opp.get("subscription_id") or opp.get("dealer_key")
+                        token = get_token(subscription_id)
+    
+                        log.warning(
+                          "SMS_HR_DEBUG opp=%s rooftop=%r sub=%r salesperson_name=%r salesperson_email=%r keys_has_rep_email=%s",
+                          opp.get("opportunityId"),
+                          opp.get("rooftop_name"),
+                          opp.get("subscription_id"),
+                          opp.get("salesperson_name"),
+                          opp.get("Assigned Sales Rep Email") or opp.get("salesperson_email") or opp.get("salespersonEmail"),
+                          any(k in opp for k in ("Assigned Sales Rep Email", "salesperson_email", "salespersonEmail"))
+                        )
+    
+                        fresh_opp = None
+                        try:
+                            fresh_opp = get_opportunity(opp_id, token, subscription_id)  # matches fortellis.py signature
+                        except Exception:
+                            log.exception("SMS poll: failed to fetch fresh opp from Fortellis opp=%s", opp_id)
+                        
+                        handoff_to_human(
+                            opportunity=opp,
+                            fresh_opp=fresh_opp,   # ✅ this is the whole point
+                            token=token,
+                            subscription_id=subscription_id,
+                            rooftop_name=opp.get("rooftop_name") or "",
+                            inbound_subject=f"SMS handoff: {handoff_reason}",
+                            inbound_text=last_inbound,
+                            inbound_ts=now_iso,
+                            triage={"reason": f"SMS handoff: {handoff_reason}", "confidence": 1.0},
+                        )
+    
+                    except Exception:
+                        log.exception("SMS poll: failed to trigger handoff_to_human opp=%s", opp.get("opportunityId"))
+    
+            except Exception:
+                log.exception("SMS poll: reply send failed opp=%s", opp.get("opportunityId"))
 
 if __name__ == "__main__":
     import os, logging, traceback
