@@ -95,3 +95,18 @@ def get_rooftop_info(subscription_id: str) -> dict:
     )
 
     return {"name": name, "sender": sender, "address": address, "sms_number": sms_number}
+
+def list_rooftop_sms_numbers() -> list[str]:
+    nums = []
+    for rec in SUBSCRIPTION_TO_ROOFTOP.values():
+        n = (rec.get("sms_number") or "").strip()
+        if n:
+            nums.append(n)
+    # de-dupe, preserve order
+    seen = set()
+    out = []
+    for n in nums:
+        if n not in seen:
+            seen.add(n)
+            out.append(n)
+    return out
