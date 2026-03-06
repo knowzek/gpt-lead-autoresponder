@@ -49,9 +49,38 @@ def _sms_test_enabled() -> bool:
 def _sms_test_to() -> str:
     return _norm_phone_e164_us(os.getenv("SMS_TEST_TO", "").strip())
 
+def _get_rooftop_sms_number(subscription_id: str) -> str:
+    """
+    Look up the GoTo SMS number configured for a rooftop.
+    """
+    if not subscription_id:
+        return ""
 
-def _patti_from_number() -> str:
-    return _norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", "+17145977229").strip())
+    try:
+        from rooftops import get_rooftop_info
+        rt = get_rooftop_info(subscription_id) or {}
+        return _norm_phone_e164_us(rt.get("sms_number", ""))
+    except Exception:
+        log.exception("Failed to resolve rooftop sms_number subscription_id=%s", subscription_id)
+        return ""
+
+
+def _patti_from_number(subscription_id: str = "", inbound_to_phone: str = "") -> str:
+    """
+    Determine which number Patti should send SMS from.
+    """
+
+    # 1️⃣ Try rooftop config
+    num = _get_rooftop_sms_number(subscription_id)
+    if num:
+        return num
+
+    # 2️⃣ Use the number the guest texted
+    if inbound_to_phone:
+        return _norm_phone_e164_us(inbound_to_phone)
+
+    # 3️⃣ Final fallback
+    return _norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", "").strip())
 
 
 # --- Rule detectors (simple v1) ---
@@ -256,7 +285,7 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
 
     subscription_id = opp.get("subscription_id", "")
     conversation_id = f"conv_{subscription_id}_{opp_id}"
-
+    from_number = _patti_from_number(subscription_id=subscription_id, inbound_to_phone=to_number)
     conversation_record_id = _ensure_conversation(opp=opp, channel="sms", linked_lead_record_id=rec.get("id", ""))
 
     patti_mode = (opp.get("patti") or {}).get("mode") or ""
@@ -356,9 +385,7 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
                 to_number = test_to
 
         try:
-
-            send_sms(
-                from_number=_patti_from_number(), to_number=to_number, body=reply_text, opp_id=opp_id, source=source
+                send_sms(from_number=from_number, to_number=to_number, body=reply_text, opp_id=opp_id, source=source
             )
         except Exception:
             log.exception("SMS opt-out confirmation send failed opp=%s", opp.get("opportunityId"))
@@ -450,8 +477,7 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
             log.error(f"Something went wrong while upserting handoff update (process_inbound_sms) (3). {e}")
 
         try:
-            send_sms(
-                from_number=_patti_from_number(), to_number=to_number, body=reply_text, opp_id=opp_id, source=source
+            send_sms(from_number=from_number, to_number=to_number, body=reply_text, opp_id=opp_id, source=source
             )
         except Exception:
             log.exception("SMS pricing handoff reply failed opp=%s", opp.get("opportunityId"))
@@ -460,6 +486,8 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
             now_iso = _dt.now(_tz.utc).replace(microsecond=0).isoformat()
             conversation_id = f"conv_{subscription_id}_{opp_id}"
 
+            from_number = _patti_from_number(subscription_id=subscription_id, inbound_to_phone=to_number)
+            
             convo = Conversation(
                 conversation_id=conversation_id,
                 last_channel="sms",
@@ -482,7 +510,7 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
     # Pull last N messages in this thread so GPT can interpret short replies & be conversational
     thread = []
     try:
-        owner = _patti_from_number()
+        owner = from_number
         raw = list_messages(owner_phone_e164=owner, contact_phone_e164=from_phone, limit=12)
         items2 = raw.get("items") or []
         # Oldest -> newest
@@ -498,7 +526,7 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
             thread.append({"role": role, "content": txt[:800]})
     except Exception:
         log.exception(
-            "SMS inbound: failed to fetch thread messages owner=%s contact=%s", _patti_from_number(), from_phone
+            "SMS inbound: failed to fetch thread messages owner=%s contact=%s", owner, from_phone
         )
         thread = []
 
@@ -528,7 +556,7 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
             to_number = test_to
 
     try:
-        send_sms(from_number=_patti_from_number(), to_number=to_number, body=reply_text, opp_id=opp_id, source=source)
+        send_sms(from_number=from_number, to_number=to_number, body=reply_text, opp_id=opp_id, source=source)
 
         inbound_count = len(_get_messages_for_conversation(conversation_id, "inbound"))
         outbound_count = len(_get_messages_for_conversation(conversation_id, "outbound"))
