@@ -1770,6 +1770,24 @@ def process_lead_notification(inbound: dict) -> None:
                 pass
             return
         # otherwise: continue to normal first-touch
+    
+        # Absolute safety: trade leads should never fall into normal sales first-touch
+        if is_value_trade:
+            log.warning(
+                "Trade lead reached normal first-touch area unexpectedly opp=%s; forcing handoff stop",
+                opp_id,
+            )
+            try:
+                save_opp(
+                    opportunity,
+                    extra_fields={
+                        "mode": "handoff",
+                        "follow_up_at": None,
+                    },
+                )
+            except Exception:
+                log.exception("Trade lead safety stop save failed opp=%s", opp_id)
+            return
 
     # Vehicle string (Airtable fields are canonical source)
     vehicle_str = "one of our vehicles"
