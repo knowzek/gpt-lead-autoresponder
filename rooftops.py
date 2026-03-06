@@ -78,11 +78,20 @@ ROOFTOP_INFO = {
 
 def get_rooftop_info(subscription_id: str) -> dict:
     """
-    Return {name, sender, address} for a given Fortellis Subscription-Id.
+    Return {name, sender, address, sms_number} for a given Fortellis Subscription-Id.
     Falls back gracefully if mappings are incomplete.
     """
     rec = SUBSCRIPTION_TO_ROOFTOP.get(subscription_id, {})
+
     name = rec.get("name") or "Patterson Auto Group"
     sender = rec.get("sender", "")
     address = ROOFTOP_INFO.get(name, {}).get("address", "")
-    return {"name": name, "sender": sender, "address": address}
+
+    # ✅ NEW: rooftop-specific GoTo/Patti SMS number (E.164)
+    sms_number = (
+        rec.get("sms_number")
+        or ROOFTOP_INFO.get(name, {}).get("sms_number", "")
+        or ""
+    )
+
+    return {"name": name, "sender": sender, "address": address, "sms_number": sms_number}
