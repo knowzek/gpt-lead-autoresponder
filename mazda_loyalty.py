@@ -124,6 +124,7 @@ def _send_mazda_handoff_email(
         to_addr=to_addr,
         subject=subj[:180],
         html_body=html,
+        from_addr=rooftop_sender,
         opp_id="mazda-loyalty",   # any string; required by your sender helper for logging
         cc_addrs=cc_addrs,
         timeout=20,
