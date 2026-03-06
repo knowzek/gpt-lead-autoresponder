@@ -594,7 +594,7 @@ def poll_once(owner: str):
         author = last.get("authorPhoneNumber") or ""
 
         body = (last.get("body") or "").strip()
-        media = last.get("media") or [][]
+        media = last.get("media") or []
             
         # --- Handle media-only / blank body edge case ---
         if not body:
