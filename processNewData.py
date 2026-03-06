@@ -3676,6 +3676,27 @@ def send_first_touch_email(
             airtable_save(opportunity)
         return False
 
+    # Defensive trade-lead guard:
+    # if a trade-in lead somehow reaches this function, do not frame the trade vehicle
+    # as the vehicle the guest wants to buy.
+    trade_ctx = opportunity.get("trade_in_vehicle") or {}
+    is_trade_lead = False
+
+    if isinstance(trade_ctx, dict) and trade_ctx:
+        if (trade_ctx.get("vehicle_interest") or "").strip().lower() == "trade-in":
+            is_trade_lead = True
+        elif any((trade_ctx.get(k) or "").strip() for k in ("year", "make", "model", "vin")):
+            is_trade_lead = True
+
+    if not is_trade_lead:
+        src = (source or "").strip().lower()
+        if "trade-in" in src or "trade in" in src or "value your trade" in src:
+            is_trade_lead = True
+
+    safe_vehicle_phrase = vehicle_str
+    if is_trade_lead:
+        safe_vehicle_phrase = "your trade-in vehicle"
+
     variant = get_or_assign_ab_variant(opportunity)
 
     VARIANT_LONG = "A_long"
@@ -3710,98 +3731,166 @@ def send_first_touch_email(
         subject = f"Your Kia Telluride Inquiry at {rooftop_name}"
         # skip straight to normalization / send (below)
     elif variant == VARIANT_SHORT:
-        subject = f"Quick question about the {vehicle_str} at {rooftop_name}"
-        body_html = (
-            f"<p>Hi {customer_name},</p>"
-            "<p>Thank you for your internet inquiry. I’d love to set up a time for you to come by and visit our showroom - is there a day and time that works best for you?</p>"
-        )
-
-    if not _is_telluride and variant != VARIANT_SHORT:
-        # === Compose with GPT ===============================================
-        fallback_mode = not inquiry_text or inquiry_text.strip().lower() in [
-            "",
-            "request a quote",
-            "interested",
-            "info",
-            "information",
-            "looking",
-        ]
-
-        SUBJECT_RULES = f"""
-        IMPORTANT — SUBJECT LINE RULES:
-        This is the FIRST email in a new conversation thread.
-        
-        - Do NOT reuse, reference, or paraphrase the inbound lead email subject.
-        - Do NOT use words like "lead", "listing"
-        
-        Write a short, friendly, customer-facing subject line that feels like a human reaching out.
-        
-        Preferred formats:
-        - "Quick question about the {vehicle_str} at {rooftop_name}"
-        - "Your interest in the {vehicle_str} at {rooftop_name}"
-        - "Hi {customer_name} - your vehicle inquiry at {rooftop_name}"
-        
-        """
-
-        if fallback_mode:
-            prompt = f"""
-        You are Patti, a helpful sales assistant for {rooftop_name}.
-        Your job is to write personalized, dealership-branded emails from Patti.
-        The guest submitted a lead through {source}. They’re interested in: {vehicle_str}. Salesperson: {salesperson}
-        They didn’t leave a detailed message.
-    
-        Please write a warm, professional email reply that:
-        - Begin with exactly `Hi {customer_name},`
-        - Immediately acknowledge their inquiry in ONE sentence, like: "Thanks for your inquiry on our {vehicle_str}."
-        - Start with 1–2 appealing vehicle features or dealership Why Buys
-        - Welcome the guest and highlight our helpfulness
-        - Invite specific questions or preferences
-        - The goal in your responses is to be helpful but also encourage the person to book an appointment to see the vehicle without sounding salesly or high-pressure
-        - Mention the salesperson by name
-        - If this lead is about valuing or trading in the guest's current vehicle, do NOT describe that vehicle as the one they want to buy. In that case, acknowledge it as their trade-in vehicle and invite an appraisal / review instead.
-    
-        Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
-    
-        """
+        if is_trade_lead:
+            subject = f"Quick question about your trade-in request at {rooftop_name}"
+            body_html = (
+                f"<p>Hi {customer_name},</p>"
+                "<p>Thanks for reaching out about your trade-in. We’d be happy to take a look and help with an appraisal. Is there a day and time that works best for you?</p>"
+            )
         else:
-            prompt = f"""
-        You are Patti, a helpful sales assistant for {rooftop_name}.
-        Your job is to write personalized, dealership-branded emails from Patti.
-    
-        When writing:
-        - Begin with exactly `Hi {customer_name},`
-        - Immediately acknowledge their inquiry in ONE sentence, like: "Thanks for your inquiry on our {vehicle_str}."
-        - Lead with value (features / Why Buy)
-        - If a specific vehicle is mentioned, answer directly and link if possible
-        - If a specific question exists, answer it first
-        - The goal in your responses is to be helpful but also encourage the person to book an appointment to see the vehicle without sounding salesly or high-pressure
-        - Keep it warm, clear, and human
-        - If this lead is about valuing or trading in the guest's current vehicle, do NOT describe that vehicle as the one they want to buy. In that case, acknowledge it as their trade-in vehicle and invite an appraisal / review instead.
-    
-        Info (may None):
-        - salesperson’s name: {salesperson}
-        - vehicle: {vehicle_str}
-    
-        Guest inquiry:
-        \"\"\"{inquiry_text}\"\"\"
-    
-        Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
-        """
-        prompt += SUBJECT_RULES
+            subject = f"Quick question about the {vehicle_str} at {rooftop_name}"
+            body_html = (
+                f"<p>Hi {customer_name},</p>"
+                "<p>Thank you for your internet inquiry. I’d love to set up a time for you to come by and visit our showroom - is there a day and time that works best for you?</p>"
+            )
 
-        # --- NEW: if Patti auto-scheduled an appointment, tell GPT to confirm it ---
-        if created_appt_ok and appt_human:
-            prompt += f"""
+        if not _is_telluride and variant != VARIANT_SHORT:
+            # === Compose with GPT ===============================================
+            fallback_mode = not inquiry_text or inquiry_text.strip().lower() in [
+                "",
+                "request a quote",
+                "interested",
+                "info",
+                "information",
+                "looking",
+            ]
     
-    IMPORTANT APPOINTMENT CONTEXT (do not skip):
-    - The guest proposed a time and Patti already scheduled a dealership appointment for {appt_human}.
+            if is_trade_lead:
+                SUBJECT_RULES = f"""
+            IMPORTANT — SUBJECT LINE RULES:
+            This is the FIRST email in a new conversation thread.
+            
+            - Do NOT reuse, reference, or paraphrase the inbound lead email subject.
+            - Do NOT use words like "lead", "listing"
+            - Do NOT frame the guest's vehicle as a vehicle they want to buy.
+            
+            Write a short, friendly, customer-facing subject line that feels like a human reaching out.
+            
+            Preferred formats:
+            - "Quick question about your trade-in request at {rooftop_name}"
+            - "About your trade-in request at {rooftop_name}"
+            - "Hi {customer_name} - your trade-in request at {rooftop_name}"
+            
+            """
+            else:
+                SUBJECT_RULES = f"""
+            IMPORTANT — SUBJECT LINE RULES:
+            This is the FIRST email in a new conversation thread.
+            
+            - Do NOT reuse, reference, or paraphrase the inbound lead email subject.
+            - Do NOT use words like "lead", "listing"
+            
+            Write a short, friendly, customer-facing subject line that feels like a human reaching out.
+            
+            Preferred formats:
+            - "Quick question about the {vehicle_str} at {rooftop_name}"
+            - "Your interest in the {vehicle_str} at {rooftop_name}"
+            - "Hi {customer_name} - your vehicle inquiry at {rooftop_name}"
+            
+            """
     
-    In your email:
-    - Clearly confirm that date and time in plain language.
-    - Thank them for scheduling.
-    - Invite them to reply if they need to adjust the time or have any questions.
-    - Do NOT ask them to pick a time; the appointment is already scheduled. Focus on confirming it.
-    """
+            if fallback_mode:
+                if is_trade_lead:
+                    prompt = f"""
+            You are Patti, a helpful sales assistant for {rooftop_name}.
+            Your job is to write personalized, dealership-branded emails from Patti.
+            The guest submitted a trade-in lead through {source}. Their trade-in vehicle is: {vehicle_str}. Salesperson: {salesperson}
+            They didn’t leave a detailed message.
+        
+            Please write a warm, professional email reply that:
+            - Begin with exactly `Hi {customer_name},`
+            - Acknowledge that we received their trade-in request in ONE sentence.
+            - Refer to {vehicle_str} only as their trade-in vehicle, never as the vehicle they want to buy.
+            - Invite them to reply with any condition details or a good time to come in for an appraisal.
+            - The goal in your responses is to be helpful and move them toward an appraisal / conversation without sounding salesly or high-pressure.
+            - Mention the salesperson by name.
+            - Keep it warm, clear, and human.
+        
+            Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
+        
+            """
+                else:
+                    prompt = f"""
+            You are Patti, a helpful sales assistant for {rooftop_name}.
+            Your job is to write personalized, dealership-branded emails from Patti.
+            The guest submitted a lead through {source}. They’re interested in: {vehicle_str}. Salesperson: {salesperson}
+            They didn’t leave a detailed message.
+        
+            Please write a warm, professional email reply that:
+            - Begin with exactly `Hi {customer_name},`
+            - Immediately acknowledge their inquiry in ONE sentence, like: "Thanks for your inquiry on our {vehicle_str}."
+            - Start with 1–2 appealing vehicle features or dealership Why Buys
+            - Welcome the guest and highlight our helpfulness
+            - Invite specific questions or preferences
+            - The goal in your responses is to be helpful but also encourage the person to book an appointment to see the vehicle without sounding salesly or high-pressure
+            - Mention the salesperson by name
+        
+            Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
+        
+            """
+            else:
+                if is_trade_lead:
+                    prompt = f"""
+            You are Patti, a helpful sales assistant for {rooftop_name}.
+            Your job is to write personalized, dealership-branded emails from Patti.
+        
+            When writing:
+            - Begin with exactly `Hi {customer_name},`
+            - Acknowledge the guest's trade-in request in ONE sentence.
+            - Refer to the vehicle only as the guest's trade-in vehicle, never as the vehicle they want to buy.
+            - If the guest asked a specific question, answer it first.
+            - Invite them to share condition details or set a time for an appraisal / review.
+            - The goal in your responses is to be helpful and move them toward an appraisal / conversation without sounding salesly or high-pressure.
+            - Keep it warm, clear, and human.
+        
+            Info (may None):
+            - salesperson’s name: {salesperson}
+            - trade-in vehicle: {vehicle_str}
+        
+            Guest inquiry:
+            \"\"\"{inquiry_text}\"\"\"
+        
+            Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
+            """
+                else:
+                    prompt = f"""
+            You are Patti, a helpful sales assistant for {rooftop_name}.
+            Your job is to write personalized, dealership-branded emails from Patti.
+        
+            When writing:
+            - Begin with exactly `Hi {customer_name},`
+            - Immediately acknowledge their inquiry in ONE sentence, like: "Thanks for your inquiry on our {vehicle_str}."
+            - Lead with value (features / Why Buy)
+            - If a specific vehicle is mentioned, answer directly and link if possible
+            - If a specific question exists, answer it first
+            - The goal in your responses is to be helpful but also encourage the person to book an appointment to see the vehicle without sounding salesly or high-pressure
+            - Keep it warm, clear, and human
+        
+            Info (may None):
+            - salesperson’s name: {salesperson}
+            - vehicle: {vehicle_str}
+        
+            Guest inquiry:
+            \"\"\"{inquiry_text}\"\"\"
+        
+            Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
+            """
+    
+            prompt += SUBJECT_RULES
+    
+            # --- NEW: if Patti auto-scheduled an appointment, tell GPT to confirm it ---
+            if created_appt_ok and appt_human:
+                prompt += f"""
+        
+        IMPORTANT APPOINTMENT CONTEXT (do not skip):
+        - The guest proposed a time and Patti already scheduled a dealership appointment for {appt_human}.
+        
+        In your email:
+        - Clearly confirm that date and time in plain language.
+        - Thank them for scheduling.
+        - Invite them to reply if they need to adjust the time or have any questions.
+        - Do NOT ask them to pick a time; the appointment is already scheduled. Focus on confirming it.
+        """
 
         # === Inventory recommendations =====================================
 
