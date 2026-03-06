@@ -3758,6 +3758,7 @@ def send_first_touch_email(
         - Invite specific questions or preferences
         - The goal in your responses is to be helpful but also encourage the person to book an appointment to see the vehicle without sounding salesly or high-pressure
         - Mention the salesperson by name
+        - If this lead is about valuing or trading in the guest's current vehicle, do NOT describe that vehicle as the one they want to buy. In that case, acknowledge it as their trade-in vehicle and invite an appraisal / review instead.
     
         Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
     
@@ -3775,6 +3776,7 @@ def send_first_touch_email(
         - If a specific question exists, answer it first
         - The goal in your responses is to be helpful but also encourage the person to book an appointment to see the vehicle without sounding salesly or high-pressure
         - Keep it warm, clear, and human
+        - If this lead is about valuing or trading in the guest's current vehicle, do NOT describe that vehicle as the one they want to buy. In that case, acknowledge it as their trade-in vehicle and invite an appraisal / review instead.
     
         Info (may None):
         - salesperson’s name: {salesperson}
