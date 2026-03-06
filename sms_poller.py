@@ -4,8 +4,7 @@ import re
 import logging
 from datetime import datetime, timezone, timedelta
 from datetime import datetime as _dt, timezone as _tz
-from rooftops import get_rooftop_info
-
+from rooftops import get_rooftop_info, list_rooftop_sms_numbers
 from gpt import extract_appt_time
 from fortellis import get_token, schedule_activity, get_opportunity, add_opportunity_comment
 
@@ -78,6 +77,25 @@ from zoneinfo import ZoneInfo
 
 STORE_TZ = os.getenv("STORE_TIMEZONE", "America/Los_Angeles")
 
+def _patti_numbers() -> list[str]:
+    # Option 1: from rooftops.py mapping (recommended)
+    nums = list_rooftop_sms_numbers()
+
+    # Optional: allow env override/additions
+    extra = (os.getenv("PATTI_SMS_NUMBERS") or "").strip()
+    if extra:
+        nums.extend([n.strip() for n in extra.split(",") if n.strip()])
+
+    # Normalize + de-dupe
+    out = []
+    seen = set()
+    for n in nums:
+        nn = _norm_phone_e164_us(n)
+        if nn and nn not in seen:
+            seen.add(nn)
+            out.append(nn)
+    return out
+
 def _within_send_window() -> bool:
     now_local = datetime.now(ZoneInfo(STORE_TZ))
     return 8 <= now_local.hour < 20
@@ -136,39 +154,6 @@ def _extract_goto_payload(payload_json: dict) -> dict:
     )
 
     return {"msg_id": str(msg_id or "").strip(), "from_phone": str(from_phone or "").strip(), "text": str(text or "").strip()}
-
-def _all_patti_numbers() -> list[str]:
-    """
-    Return all rooftop GoTo numbers Patti should poll.
-    Source of truth should be your rooftop config.
-    Fallback to PATTI_SMS_NUMBER for safety.
-    """
-    nums: list[str] = []
-
-    # ✅ Preferred: pull from rooftops config
-    try:
-        from rooftops import list_rooftops  # you may need to create this
-        for rt in (list_rooftops() or []):
-            n = _norm_phone_e164_us((rt.get("sms_number") or "").strip())
-            if n:
-                nums.append(n)
-    except Exception:
-        log.exception("Failed to load rooftop sms numbers; falling back to PATTI_SMS_NUMBER")
-
-    # Fallback
-    fallback = _norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", "").strip())
-    if fallback:
-        nums.append(fallback)
-
-    # De-dupe while preserving order
-    out = []
-    seen = set()
-    for n in nums:
-        if n not in seen:
-            seen.add(n)
-            out.append(n)
-
-    return out
 
 def handle_mazda_loyalty_inbound_sms_webhook(*, payload_json: dict) -> dict:
     """
@@ -590,57 +575,50 @@ def send_sms_cadence_once():
                 "sms_status": "ready"
             })
 
-def poll_once():
-    owners = _all_patti_numbers()
-    log.info("SMS poll: polling %d owner numbers: %s", len(owners), owners)
-
+def poll_once(owner: str):
     page_limit = int(os.getenv("GOTO_CONVERSATION_PAGE_LIMIT", "200"))
     max_pages = int(os.getenv("GOTO_CONVERSATION_MAX_PAGES", "10"))
 
-    total_convs = 0
+    convs = list(iter_conversations(owner_phone_e164=owner, limit=page_limit, max_pages=max_pages))
+    log.info("SMS poll: owner=%s got %d conversations", owner, len(convs))
 
-    for owner in owners:
-        convs = list(iter_conversations(owner_phone_e164=owner, limit=page_limit, max_pages=max_pages))
-        total_convs += len(convs)
-        log.info("SMS poll: owner=%s got %d conversations", owner, len(convs))
+    for conv in convs:
+        last = conv.get("lastMessage") or {}
+        if not last:
+            continue
 
-        for conv in convs:
-            last = conv.get("lastMessage") or {}
-            if not last:
-                continue
-    
-            if (last.get("direction") or "").upper() != "IN":
-                continue
-    
-            msg_id = last.get("id") or ""
-            author = last.get("authorPhoneNumber") or ""
+        if (last.get("direction") or "").upper() != "IN":
+            continue
+
+        msg_id = last.get("id") or ""
+        author = last.get("authorPhoneNumber") or ""
+
+        body = (last.get("body") or "").strip()
+        media = last.get("media") or [][]
             
-            body = (last.get("body") or "").strip()
-            media = last.get("media") or []
-            
-            # --- Handle media-only / blank body edge case ---
-            if not body:
-                try:
-                    raw = list_messages(owner_phone_e164=owner, contact_phone_e164=author, limit=12)
-                    items2 = raw.get("items") or []
-            
-                    # oldest → newest
-                    items2 = sorted(items2, key=lambda m: m.get("timestamp") or "")
-            
-                    # walk newest → oldest looking for last inbound with text
-                    for m in reversed(items2):
-                        if (m.get("direction") or "").upper() == "IN":
-                            txt = (m.get("body") or "").strip()
-                            if txt:
-                                body = txt
-                                break
-                except Exception:
-                    log.exception("SMS poll: media fallback lookup failed author=%s", author)
-            
-            if not body:
-                log.info("SMS poll: skipping empty inbound (media_only=%s) author=%s", bool(media), author)
-                continue
-    
+        # --- Handle media-only / blank body edge case ---
+        if not body:
+            try:
+                raw = list_messages(owner_phone_e164=owner, contact_phone_e164=author, limit=12)
+                items2 = raw.get("items") or []
+        
+                # oldest → newest
+                items2 = sorted(items2, key=lambda m: m.get("timestamp") or "")
+        
+                # walk newest → oldest looking for last inbound with text
+                for m in reversed(items2):
+                    if (m.get("direction") or "").upper() == "IN":
+                        txt = (m.get("body") or "").strip()
+                        if txt:
+                            body = txt
+                            break
+            except Exception:
+                log.exception("SMS poll: media fallback lookup failed author=%s", author)
+        
+        if not body:
+            log.info("SMS poll: skipping empty inbound (media_only=%s) author=%s", bool(media), author)
+            continue
+
     
             # Pull last N messages in this thread so GPT can interpret short replies like "No thanks"
             thread = []
@@ -1357,16 +1335,42 @@ def poll_once():
                 log.exception("SMS poll: reply send failed opp=%s", opp.get("opportunityId"))
 
 if __name__ == "__main__":
-    import os, logging, traceback
+    import os
+    import logging
+    import traceback
+
     logging.basicConfig(
         level=getattr(logging, os.getenv("APP_LOG_LEVEL", "INFO").upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
+
     log = logging.getLogger("patti.sms_poller")
+
     try:
         log.info("sms_poller starting (service=%s)", os.getenv("RENDER_SERVICE_NAME"))
-        poll_once()
+
+        owners = _patti_numbers()
+        if not owners:
+            fallback = _norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", ""))
+            if fallback:
+                owners = [fallback]
+
+        owners = list(dict.fromkeys([o for o in owners if o]))
+        log.info("SMS poller will poll %d owner numbers: %s", len(owners), owners)
+
+        for owner in owners:
+            try:
+                log.info("Polling SMS for owner=%s", owner)
+                poll_once(owner)
+            except Exception:
+                log.error(
+                    "sms_poller error while polling owner=%s\n%s",
+                    owner,
+                    traceback.format_exc(),
+                )
+
         log.info("sms_poller finished")
+
     except Exception:
         log.error("sms_poller crashed:\n%s", traceback.format_exc())
         raise
