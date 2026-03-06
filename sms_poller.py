@@ -618,45 +618,44 @@ def poll_once(owner: str):
         if not body:
             log.info("SMS poll: skipping empty inbound (media_only=%s) author=%s", bool(media), author)
             continue
+    
+        # Pull last N messages in this thread so GPT can interpret short replies like "No thanks"
+        thread = []
+        items2 = []
+        try:
+            raw = list_messages(owner_phone_e164=owner, contact_phone_e164=author, limit=12)
+            items2 = raw.get("items") or []
+            # Oldest -> newest
+            items2 = sorted(items2, key=lambda m: m.get("timestamp") or "")
 
-    
-            # Pull last N messages in this thread so GPT can interpret short replies like "No thanks"
+            for m in items2[-12:]:
+                txt = (m.get("body") or "").strip()
+                if not txt:
+                    continue
+
+                author_num = (m.get("authorPhoneNumber") or "").strip()
+                role = "assistant" if author_num == owner else "user"
+
+                thread.append(
+                    {
+                        "role": role,
+                        "content": txt[:800],
+                    }
+                )
+        except Exception:
+            log.exception("SMS poll: failed to fetch thread messages owner=%s contact=%s", owner, author)
             thread = []
-            items2 = []
-            try:
-                raw = list_messages(owner_phone_e164=owner, contact_phone_e164=author, limit=12)
-                items2 = raw.get("items") or []
-                # Oldest -> newest
-                items2 = sorted(items2, key=lambda m: m.get("timestamp") or "")
-    
-                for m in items2[-12:]:
-                    txt = (m.get("body") or "").strip()
-                    if not txt:
-                        continue
-    
-                    author_num = (m.get("authorPhoneNumber") or "").strip()
-                    role = "assistant" if author_num == owner else "user"
-    
-                    thread.append(
-                        {
-                            "role": role,
-                            "content": txt[:800],
-                        }
-                    )
-            except Exception:
-                log.exception("SMS poll: failed to fetch thread messages owner=%s contact=%s", owner, author)
-                thread = []
-    
-            # ✅ inbound SMS text: some GoTo lastMessage bodies come through blank
-            last_inbound = (body or "").strip()
-            log.info("SMS poll: last_inbound_len=%d last_inbound_preview=%r", len(last_inbound or ""), (last_inbound or "")[:80])
-    
-            if not last_inbound and thread:
-                for m in reversed(thread):
-                    if m.get("role") == "user":
-                        last_inbound = (m.get("content") or "").strip()
-                        break
-    
+
+        # ✅ inbound SMS text: some GoTo lastMessage bodies come through blank
+        last_inbound = (body or "").strip()
+        log.info("SMS poll: last_inbound_len=%d last_inbound_preview=%r", len(last_inbound or ""), (last_inbound or "")[:80])
+
+        if not last_inbound and thread:
+            for m in reversed(thread):
+                if m.get("role") == "user":
+                    last_inbound = (m.get("content") or "").strip()
+                    break
+
     
             # ✅ Hard gate: only reply if the guest is STILL the last message in the thread
             # This prevents double-replies when another process/user already responded.
