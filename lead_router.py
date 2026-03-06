@@ -98,11 +98,7 @@ LEAD_SOURCE_RULES: List[LeadRule] = [
     LeadRule(
         name="apollo",
         subject_contains=(
-            "Apollo Website Lead- Contact Dealer",
-            "Apollo Website Lead- Contact Us - Vehicle",
-            "Apollo Website Lead- Check Availability",
-            "Apollo Website Lead- Transact - Contact Us",
-            "Apollo Website Lead- Contact Us - Admin",
+            "Apollo Website Lead",
         ),
     ),
 
@@ -121,23 +117,23 @@ LEAD_SOURCE_RULES: List[LeadRule] = [
 
 
 def detect_lead_source(inbound: Dict[str, Any]) -> Optional[str]:
-    """
-    Return a normalized lead source string, or None if not a known lead.
-    """
+    subj = _s(inbound.get("subject")).lower()
+
+    # Explicit exclusion first
+    if "apollo website lead-schedule a service" in subj:
+        return None
+
     for rule in LEAD_SOURCE_RULES:
         if match_rule(rule, inbound):
-            # Post-processing to match your PA "source" labels
             if rule.name == "carnow_or_truecar":
                 frm = _email_addr_from_outlook_obj(inbound.get("from")).lower()
                 if "truecarmail.com" in frm:
                     return "truecar"
-                return "carNOW"
+                return "carnow"
 
             if rule.name == "apollo_special":
-                # In PA, you were setting source "Team Velocity - Pre-Qualification"
                 return "Team Velocity - Pre-Qualification"
 
-            # everything else uses the rule name directly
             return rule.name
 
     return None
