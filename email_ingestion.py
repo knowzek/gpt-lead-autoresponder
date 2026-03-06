@@ -438,7 +438,8 @@ def _maybe_set_phone(current_phone: str, candidate_phone: str) -> str:
 def _extract_adf_fields(adf_xml: str) -> dict:
     """
     Returns dict with: email, first, last, phone, comments, and (when present)
-    year/make/model/trim/vin (+ optional odometer/price).
+    year/make/model/trim/vin (+ optional odometer/price), plus metadata useful
+    for routing trade-in leads.
     Works for CarGurus ADF and most ADF providers.
     """
     out = {
@@ -447,7 +448,7 @@ def _extract_adf_fields(adf_xml: str) -> dict:
         "last": "",
         "phone": "",
         "comments": "",
-        # vehicle fields (optional)
+        # selected vehicle fields (optional)
         "year": "",
         "make": "",
         "model": "",
@@ -455,6 +456,11 @@ def _extract_adf_fields(adf_xml: str) -> dict:
         "vin": "",
         "odometer": "",
         "price": "",
+        # routing metadata
+        "vehicle_interest": "",
+        "vehicle_status": "",
+        "provider_name": "",
+        "vendor_name": "",
     }
 
     try:
@@ -483,10 +489,20 @@ def _extract_adf_fields(adf_xml: str) -> dict:
         # -----------------------
         c_el = root.find(".//customer/comments")
         if c_el is None:
-            # some providers put comments elsewhere
             c_el = root.find(".//prospect/customer/comments")
         if c_el is not None and (c_el.text or "").strip():
             out["comments"] = _html.unescape((c_el.text or "").strip())
+
+        # -----------------------
+        # Provider / vendor metadata
+        # -----------------------
+        provider_name_el = root.find(".//provider/name[@part='full']")
+        if provider_name_el is not None and (provider_name_el.text or "").strip():
+            out["provider_name"] = (provider_name_el.text or "").strip()
+
+        vendor_name_el = root.find(".//vendor/vendorname")
+        if vendor_name_el is not None and (vendor_name_el.text or "").strip():
+            out["vendor_name"] = (vendor_name_el.text or "").strip()
 
         # -----------------------
         # Vehicle selection
@@ -516,6 +532,9 @@ def _extract_adf_fields(adf_xml: str) -> dict:
             return (el.text or "").strip() if el is not None else ""
 
         if v_el is not None:
+            out["vehicle_interest"] = (v_el.attrib.get("interest") or "").strip().lower()
+            out["vehicle_status"] = (v_el.attrib.get("status") or "").strip().lower()
+
             out["year"] = _t(v_el, "year")
             out["make"] = _t(v_el, "make")
             out["model"] = _t(v_el, "model")
@@ -533,7 +552,6 @@ def _extract_adf_fields(adf_xml: str) -> dict:
     except Exception:
         log.exception("adf fields extraction error")
 
-    # remove empty vehicle keys if you prefer (optional)
     return out
 
 
@@ -547,6 +565,41 @@ def _extract_adf_email(adf_xml: str) -> str:
         pass
     return ""
 
+def _looks_like_trade_in_adf(adf: dict) -> bool:
+    interest = (adf.get("vehicle_interest") or "").strip().lower()
+    provider = (adf.get("provider_name") or "").strip().lower()
+    comments = (adf.get("comments") or "").strip().lower()
+
+    if interest == "trade-in":
+        return True
+
+    if "trade-in" in provider:
+        return True
+
+    if "trade-in lead" in comments or "trade-in lead provided by carfax" in comments:
+        return True
+
+    return False
+
+
+def _looks_like_trade_in_subject_or_source(subject: str, source: str, sender: str) -> bool:
+    s = (subject or "").strip().lower()
+    src = (source or "").strip().lower()
+    snd = (sender or "").strip().lower()
+
+    if "trade-in lead" in s:
+        return True
+
+    if src in {"trade_in", "trade-in", "value_your_trade", "trade_in_lead"}:
+        return True
+
+    if "carfax" in src and "trade-in" in s:
+        return True
+
+    if snd.endswith("@carfax.com") and "trade-in" in s:
+        return True
+
+    return False
 
 def _extract_shopper_email_from_provider(body_text: str) -> str | None:
     body_text = body_text or ""
@@ -812,8 +865,29 @@ def process_lead_notification(inbound: dict) -> None:
 
     # ✅ PA routes Pre-Qual leads explicitly
     lead_type = (inbound.get("lead_type") or "").strip().lower()
-    is_prequal = lead_type == "pre_qual"
-    is_value_trade = lead_type == "value_your_trade"
+    is_prequal = (lead_type == "pre_qual")
+    
+    is_trade_adf = _looks_like_trade_in_adf(adf) if adf else False
+    is_trade_subject = _looks_like_trade_in_subject_or_source(subject, source, sender)
+    
+    is_value_trade = (
+        lead_type == "value_your_trade"
+        or is_trade_adf
+        or is_trade_subject
+    )
+    
+    if is_value_trade:
+        log.info(
+            "TRADE LEAD DETECTED opp_pending_email=%r lead_type=%r source=%r sender=%r "
+            "adf_interest=%r provider=%r subject=%r",
+            (adf.get("email", "") if adf else ""),
+            lead_type,
+            source,
+            sender,
+            (adf.get("vehicle_interest", "") if adf else ""),
+            (adf.get("provider_name", "") if adf else ""),
+            subject[:160],
+        )
 
     if not customer_comment and provider_template:
         customer_comment = extract_customer_comment_from_provider(body_text)
@@ -1081,6 +1155,21 @@ def process_lead_notification(inbound: dict) -> None:
         "customer_phone": phone,
         "Customer Comments": customer_comment,
     }
+    
+    # Keep trade-in details in opp snapshot for debugging / future handling
+    if adf and is_value_trade:
+        opportunity["trade_in_vehicle"] = {
+            "year": (adf.get("trade_year") or "").strip(),
+            "make": (adf.get("trade_make") or "").strip(),
+            "model": (adf.get("trade_model") or "").strip(),
+            "trim": (adf.get("trade_trim") or "").strip(),
+            "vin": (adf.get("trade_vin") or "").strip(),
+            "odometer": (adf.get("trade_odometer") or "").strip(),
+            "provider_name": (adf.get("provider_name") or "").strip(),
+            "vendor_name": (adf.get("vendor_name") or "").strip(),
+            "vehicle_interest": (adf.get("vehicle_interest") or "").strip(),
+            "vehicle_status": (adf.get("vehicle_status") or "").strip(),
+        }
 
     save_opp(opportunity, extra_fields=extra)
 
