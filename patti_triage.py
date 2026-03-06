@@ -235,6 +235,7 @@ def notify_staff_patti_scheduled_appt(
         subject=_clip(subj, 180),
         html_body=html,
         opp_id=opp_id,
+        from_addr=rooftop_sender,
         cc_addrs=cc_addrs,
         timeout=20,
         enforce_compliance=False,
@@ -896,6 +897,7 @@ def handoff_to_human(
         html_body=html,
         opp_id=opp_id,
         cc_addrs=cc_addrs,
+        from_addr=rooftop_sender,
         timeout=20,
         enforce_compliance=False,
     )
