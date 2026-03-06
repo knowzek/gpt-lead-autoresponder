@@ -433,6 +433,7 @@ def _send_mazda_sms_handoff_email(
         html_body=html,
         opp_id="mazda-loyalty",  # Mazda has no Fortellis opp id
         cc_addrs=cc_addrs,
+        from_addr=rooftop_sender,
         timeout=20,
         enforce_compliance=False,
     )
