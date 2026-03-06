@@ -65,6 +65,7 @@ def send_email_via_outlook(
     payload = {
         "to": to_addr,
         "cc": cc_str,
+        "from": (from_addr or "").strip(),
         "subject": subject,
         "html_body": html_body,
         "headers": headers,
