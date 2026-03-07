@@ -1202,6 +1202,15 @@ def process_lead_notification(inbound: dict) -> None:
     # - stop cadence (mode=handoff, follow_up_at=None)
     # - idempotent via mode check (no JSON blob fields)
     # -----------------------------
+
+    # Customer name helpers for fast paths + normal first-touch
+    cust = fresh_opp.get("customer") or opportunity.get("customer") or {}
+    afn = (opportunity.get("customer_first_name") or (cust.get("firstName") or "")).strip()
+    aln = (opportunity.get("customer_last_name") or (cust.get("lastName") or "")).strip()
+    
+    first_name = afn or "there"
+    customer_name = f"{afn} {aln}".strip() or first_name
+    
     if is_prequal:
         # Customer name (prefer Airtable-hydrated first/last, then Fortellis, else "there")
         cust = fresh_opp.get("customer") or opportunity.get("customer") or {}
