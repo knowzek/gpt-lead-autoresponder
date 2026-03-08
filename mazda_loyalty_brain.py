@@ -116,7 +116,7 @@ Instead:
 1. Acknowledge their situation naturally.
 2. If they mention buying a vehicle, briefly congratulate them.
 3. Explain that the voucher can be transferred to a family member or friend.
-4. Mention that they can also redeem it for a $100 Service & Parts credit at {{rooftop_name}} in exchange for the loyalty code.
+4. Mention that they can also redeem it for a $100 Service & Parts credit at {rooftop_name} in exchange for the loyalty code.
 5. Offer to help with either transfer or redemption.
 
 Tone guidance for this scenario:
@@ -126,12 +126,12 @@ Tone guidance for this scenario:
 
 Output format:
 Return ONLY valid JSON:
-{
+{{
   "reply_text": string,
   "reply_html": string,
   "needs_handoff": boolean,
   "handoff_reason": "pricing"|"trade"|"finance"|"angry"|"complaint"|"other"
-}
+}}
 """
 
 def _contains_any(text: str, tokens: tuple[str, ...]) -> bool:
@@ -205,6 +205,23 @@ def _looks_like_recent_purchase(text: str) -> bool:
 
     return False
 
+_NOT_IN_MARKET_RE = re.compile(
+    r"\b("
+    r"not in the market|"
+    r"don't need a car|dont need a car|"
+    r"not interested right now|"
+    r"not interested in buying right now|"
+    r"already replaced it|"
+    r"already replaced the vehicle|"
+    r"we already bought something|"
+    r"don't need another car|dont need another car"
+    r")\b",
+    re.I,
+)
+
+def _looks_like_not_in_market(text: str) -> bool:
+    return bool(_NOT_IN_MARKET_RE.search(text or ""))
+
 def generate_mazda_loyalty_email_reply(
     *,
     first_name: str,
@@ -250,18 +267,26 @@ def generate_mazda_loyalty_email_reply(
             "handoff_reason": "pricing",
         }
         
-    # ---- Recent purchase / retroactive question ----
-    if _looks_like_recent_purchase(inbound):
+    # ---- Already bought / not in market ----
+    if _looks_like_recent_purchase(inbound) or _looks_like_not_in_market(inbound):
+        opening = (
+            "Congratulations on your new vehicle."
+            if _looks_like_recent_purchase(inbound)
+            else "Totally understand."
+        )
         txt = (
             f"{'Hi ' + first_name + ',' if first_name else 'Hi there,'}\n\n"
-            "The Mazda Loyalty reward must be applied at the time of purchase. "
-            "If your purchase has already been completed, I’ll loop in a team member to review your situation and see what options may be available."
-        )
+            f"{opening}\n\n"
+            f"If you do not need the voucher for yourself, it may still be transferred to a family member or friend. "
+            f"You may also be able to redeem it for a $100 Service & Parts credit at {rooftop_name or 'Patterson Autos Mazda dealership'} "
+            "in exchange for the loyalty code.\n\n"
+            "If you’d like, I can help with either option."
+        ).strip()
         return {
             "reply_text": txt,
             "reply_html": _as_html(txt),
-            "needs_handoff": True,
-            "handoff_reason": "retroactive_purchase",
+            "needs_handoff": False,
+            "handoff_reason": "other",
         }
 
     # ---- “can't find / didn't receive my code” ----
@@ -333,7 +358,7 @@ def generate_mazda_loyalty_email_reply(
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
-            ]
+            ],
             temperature=0.3,
         )
         raw = (resp.choices[0].message.content or "").strip()
