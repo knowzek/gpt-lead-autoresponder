@@ -236,3 +236,113 @@ def build_mazda_loyalty_sms(*, day: int, fields: dict) -> str:
         f"{incentive_text}. If you'd like help using it or transferring it, "
         f"I'm here to assist."
     )
+
+
+def build_event_email(day: int, fields: dict):
+    first = fields.get("first_name", "")
+    store = fields.get("store", "")
+    rsvp = fields.get("rsvp_url", "")
+
+    if day == 1:
+        subject = "Be among the first to drive the all-new CX-5 at Patterson Autos"
+
+        body_html = f"""
+        <p>Hi {first},</p>
+
+        <p>We’re excited to invite you to our <strong>CX-5 Launch Event</strong> at <strong>{store}</strong>.</p>
+
+        <p><strong>Saturday March 21<br>
+        9:00 AM – Noon</strong></p>
+
+        <p>Stop by anytime to:</p>
+
+        <ul>
+        <li>See the all-new redesigned CX-5</li>
+        <li>Take a drive</li>
+        <li>Enjoy Chick-fil-A breakfast and lunch</li>
+        <li>Pick up a few surprise gifts</li>
+        </ul>
+
+        <p>This is a relaxed drop-in event, but if you plan to attend it helps us to know.</p>
+
+        <p><a href="{rsvp}">RSVP here</a></p>
+        """
+
+    elif day == 2:
+        subject = "Reminder: CX-5 Launch Event at Patterson Autos"
+
+        body_html = f"""
+        <p>Hi {first},</p>
+
+        <p>Just a reminder about our CX-5 Launch Event at {store}.</p>
+
+        <p><strong>Saturday March 21 | 9:00 AM – Noon</strong></p>
+
+        <p>Stop by anytime to see and drive the new CX-5.</p>
+
+        <p><a href="{rsvp}">RSVP if you might attend</a></p>
+        """
+
+    else:
+        subject = "Tomorrow: CX-5 Launch Event at Patterson Autos"
+
+        body_html = f"""
+        <p>Hi {first},</p>
+
+        <p>Our CX-5 Launch Event is tomorrow morning at {store}.</p>
+
+        <p>Stop by anytime between 9:00 AM and Noon.</p>
+
+        <p><a href="{rsvp}">Let us know if you're coming</a></p>
+        """
+
+    return {
+        "subject": subject,
+        "body_html": body_html
+    }
+
+
+def build_event_sms(day: int, fields: dict):
+    first = fields.get("first_name", "")
+    rsvp = fields.get("rsvp_url", "")
+    store = fields.get("store", "")
+
+    if day == 1:
+        return f"""
+Hi {first}, you're invited to our CX-5 Launch Event at {store} on March 21 (9-Noon).
+
+Stop by to see and drive the new CX-5.
+
+RSVP so we know you're coming:
+{rsvp}
+Reply STOP to Opt Out
+"""
+
+    elif day == 2:
+        return f"""
+Reminder: CX-5 Launch Event March 21 at {store}.
+
+Food and test drives will be ready.
+
+RSVP if you might stop by:
+{rsvp}
+-Reply STOP to Opt Out
+"""
+
+    elif day == 3:
+        return f"""
+Tomorrow: CX-5 Launch Event at {store}.
+
+Stop by anytime between 9-Noon.
+
+RSVP here:
+{rsvp}
+-Reply STOP to Opt Out
+"""
+
+    else:
+        return f"""
+Today's the CX-5 Launch Event at {store}.
+
+We're here from 9-Noon with food and vehicles ready to drive.
+"""
