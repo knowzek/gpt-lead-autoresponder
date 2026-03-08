@@ -405,11 +405,14 @@ _NON_LEAD_RE = re.compile(r"(?i)\b(auto-?reply|out\s+of\s+office|delivery\s+has\
 # Inventory-specific config questions (model + qualifier) => human review
 _INVENTORY_QUAL_RE = re.compile(
     r"(?i)\b("
-    r"panoramic|sunroof|moonroof|interior|leather|heated|ventilated|"
-    r"awd|fwd|4wd|4x4|"
-    r"package|tech|technology|premium|"
-    r"color|grey|gray|black|white|tan|beige|red|blue|"
-    r"captain|bench|tow|navigation|nav"
+    r"panoramic|sunroof|moonroof|interior|leather|heated|ventilated|cooling|"
+    r"awd|fwd|rwd|4wd|4x4|"
+    r"package|tech|technology|premium|trim|"
+    r"color|grey|gray|black|white|tan|beige|red|blue|silver|"
+    r"captain|bench|tow|"
+    r"navigation|nav|gps|carplay|android\s+auto|"
+    r"blind\s+spot|backup\s+camera|360|head[-\s]?up|hud|"
+    r"bose|premium\s+audio|mark\s+levinson|third\s+row"
     r")\b"
 )
 
