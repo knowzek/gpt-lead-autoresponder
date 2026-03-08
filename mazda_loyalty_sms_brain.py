@@ -83,7 +83,7 @@ Special handling:
 - Do not make this sound pushy.
 
 Return ONLY JSON:
-{"reply": "...", "needs_handoff": true/false, "handoff_reason": "pricing|trade|finance|angry|complaint|other"}
+{{"reply": "...", "needs_handoff": true/false, "handoff_reason": "pricing|trade|finance|angry|complaint|other"}}
 """
 
 def _contains_any(t: str, toks: tuple[str, ...]) -> bool:
@@ -199,9 +199,14 @@ def generate_mazda_loyalty_sms_reply(
     # ---- Already bought / not in market ----
     if _looks_like_recent_purchase(inbound) or _looks_like_not_in_market(inbound):
         prefix = f"{first}, " if first else ""
+        opening = (
+            "congrats on the new vehicle. "
+            if _looks_like_recent_purchase(inbound)
+            else "totally understand. "
+        )
         return {
             "reply": (
-                f"{prefix}congrats on the new vehicle. "
+                f"{prefix}{opening}"
                 f"If you do not need the voucher for yourself, you may still be able to transfer it to a family member or friend, "
                 f"or redeem it for a $100 Service & Parts credit at {rooftop_name or 'Patterson Autos Mazda dealership'} "
                 "in exchange for the loyalty code. "
