@@ -309,11 +309,11 @@ def build_event_sms(day: int, fields: dict):
 
     if day == 1:
         return f"""
-Hi {first}, you're invited to our CX-5 Launch Event at {store} on March 21 (9-Noon).
+Hi {first}, this is Patti from {store}. You're invited to our CX-5 Launch Event at {store} on March 21st (9-Noon)!
 
 Stop by to see and drive the new CX-5.
 
-RSVP so we know you're coming:
+RSVP so we know you're coming or let me know if you have any questions:
 {rsvp}
 Reply STOP to Opt Out
 """
@@ -342,7 +342,7 @@ RSVP here:
 
     else:
         return f"""
-Today's the CX-5 Launch Event at {store}.
+Today's the CX-5 Launch Event at {store}!
 
 We're here from 9-Noon with food and vehicles ready to drive.
 """
