@@ -482,7 +482,13 @@ def _send_text(event_fields: dict, guest_fields: dict, step_no: int) -> tuple[bo
         return False, "missing_phone"
 
     store_name = (event_fields.get("Store") or guest_fields.get("Store") or "").strip()
-    from_number = STORE_TO_SMS_FROM.get(store_name.lower(), "")
+
+    override_from = (os.getenv("EVENT_SMS_FROM_NUMBER") or "").strip()
+    if override_from:
+        from_number = override_from
+    else:
+        from_number = STORE_TO_SMS_FROM.get(store_name.lower(), "")
+    
     if not from_number:
         return False, f"missing_store_sms_number:{store_name}"
 
