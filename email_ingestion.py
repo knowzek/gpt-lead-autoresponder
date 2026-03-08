@@ -899,6 +899,29 @@ def process_lead_notification(inbound: dict) -> None:
         sender,
     )
 
+    if customer_comment:
+        customer_comment = customer_comment.strip()
+    
+    _FEATURE_QUESTION_RE = re.compile(
+        r"(?i)\b("
+        r"confirm\s+navigation|navigation|nav\b|gps|carplay|android\s+auto|"
+        r"sunroof|moonroof|heated\s+seats?|cooled\s+seats?|leather|third\s+row|"
+        r"blind\s+spot|backup\s+camera|360|heads?\s*up\s+display|"
+        r"bose|premium\s+audio|mark\s+levinson|package|trim\s+level|"
+        r"awd|4wd|fwd|rwd|hybrid|ev|mileage|accident|carfax|service\s+records?"
+        r")\b"
+    )
+    
+    if customer_comment and _FEATURE_QUESTION_RE.search(customer_comment):
+        log.info(
+            "TRIAGE DEBUG forcing HUMAN_REVIEW for feature/equipment question opp_comment=%r",
+            customer_comment[:220],
+        )
+        triage = {
+            "classification": "HUMAN_REVIEW_REQUIRED",
+            "reason": "Customer asked a vehicle feature/equipment/history question that requires human verification",
+        }
+
     if is_cars:
         log.info(
             "cars.com before extract len=%d head=%r",
