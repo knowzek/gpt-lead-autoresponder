@@ -556,38 +556,74 @@ def classify_inbound_email(email_text: str, *, provider_template: bool = False) 
         }
 
 
-    if provider_template:
-        # Extract only the customer-written part from the provider template
-        comment = extract_customer_comment_from_provider(t_short)  # you already have this helper
-        comment = (comment or "").strip()
+        if provider_template:
+            # Extract only the customer-written part from the provider template
+            comment = extract_customer_comment_from_provider(t_short)
+            comment = (comment or "").strip()
     
-        # If we truly have no customer comment, it's just a normal first-touch lead
-        if not comment:
+            log.info(
+                "TRIAGE DEBUG provider_template=%s extracted_comment_len=%s extracted_comment=%r",
+                True,
+                len(comment),
+                comment[:300],
+            )
+    
+            # If we truly have no customer comment, it's just a normal first-touch lead
+            if not comment:
+                return {
+                    "classification": "AUTO_REPLY_SAFE",
+                    "confidence": 0.85,
+                    "reason": "Provider template with no customer comment; safe for normal first-touch."
+                }
+    
+            # If customer comment contains opt-out, honor it
+            if _OPT_OUT_RE.search(comment):
+                return {
+                    "classification": "EXPLICIT_OPTOUT",
+                    "confidence": 0.98,
+                    "reason": "Opt-out in customer comment."
+                }
+    
+            comment_lower = comment.lower()
+    
+            # Hard rule: inventory/config/feature/equipment questions always need human review,
+            # including provider-template leads like Apollo/Cars/Carfax.
+            if _INVENTORY_QUAL_RE.search(comment):
+                return {
+                    "classification": "HUMAN_REVIEW_REQUIRED",
+                    "confidence": 0.92,
+                    "reason": "Vehicle feature/config/equipment question in provider comment needs human verification."
+                }
+    
+            # Generic trade interest (no numbers/value/offer/payment/finance terms) should not auto-escalate
+            if re.search(r"\btrade\b|\btrade[-\s]?in\b", comment_lower):
+                has_trade_value_terms = re.search(
+                    r"\$|\b\d{3,}\b|\boffer\b|\bvalue\b|\bworth\b|\bapprais|\bquote\b|\botd\b|\bout the door\b|"
+                    r"\bpayoff\b|\bowe\b|\bnegative equity\b|\bpayment\b|\bfinance\b|\bapr\b|\brate\b",
+                    comment_lower
+                )
+                if has_trade_value_terms:
+                    return {
+                        "classification": "HUMAN_REVIEW_REQUIRED",
+                        "confidence": 0.90,
+                        "reason": "Trade/value/payment question in provider comment needs human review."
+                    }
+    
+            # Run the GPT reply gate ONLY on the extracted customer comment
+            gate = gpt_reply_gate(comment)
+    
+            if not gate.get("can_auto_reply", False):
+                return {
+                    "classification": "HUMAN_REVIEW_REQUIRED",
+                    "confidence": float(gate.get("confidence") or 0.0),
+                    "reason": gate.get("reason") or "Reply gate: requires human review (provider comment)."
+                }
+    
             return {
                 "classification": "AUTO_REPLY_SAFE",
-                "confidence": 0.85,
-                "reason": "Provider template with no customer comment; safe for normal first-touch."
-            }
-    
-        # If customer comment contains opt-out, honor it
-        if _OPT_OUT_RE.search(comment):
-            return {"classification": "EXPLICIT_OPTOUT", "confidence": 0.98, "reason": "Opt-out in customer comment."}
-    
-        # Run the GPT reply gate ONLY on the extracted customer comment
-        gate = gpt_reply_gate(comment)
-    
-        if not gate.get("can_auto_reply", False):
-            return {
-                "classification": "HUMAN_REVIEW_REQUIRED",
                 "confidence": float(gate.get("confidence") or 0.0),
-                "reason": gate.get("reason") or "Reply gate: requires human review (provider comment)."
+                "reason": gate.get("reason") or "Reply gate: safe to auto-reply (provider comment)."
             }
-    
-        return {
-            "classification": "AUTO_REPLY_SAFE",
-            "confidence": float(gate.get("confidence") or 0.0),
-            "reason": gate.get("reason") or "Reply gate: safe to auto-reply (provider comment)."
-        }
 
     # Generic trade interest (no numbers/value/offer/payment/finance terms) should NOT force human review
     if re.search(r"\btrade\b|\btrade[-\s]?in\b", t_lower):
