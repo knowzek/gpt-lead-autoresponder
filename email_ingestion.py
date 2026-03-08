@@ -842,6 +842,15 @@ def process_lead_notification(inbound: dict) -> None:
         if not triage_text.strip():
             triage_text = ""  # keep it empty on purpose
 
+        log.info(
+            "ADF PARSE DEBUG email=%r first=%r last=%r comments_len=%s comments_preview=%r",
+            adf.get("email", ""),
+            adf.get("first", ""),
+            adf.get("last", ""),
+            len(customer_comment or ""),
+            (customer_comment or "")[:220],
+        )
+
     sender = (inbound.get("from") or "").lower()
     is_cars = (
         ("cars.com" in sender)
@@ -2000,6 +2009,12 @@ def process_lead_notification(inbound: dict) -> None:
     except Exception as e:
         log.exception("SMS first-touch failed opp=%s err=%s", opp_id, e)
 
+    log.info(
+        "FIRST_TOUCH inquiry_text len=%s preview=%r",
+        len((customer_comment or triage_text or "").strip()),
+        ((customer_comment or triage_text or "").strip())[:220],
+    )
+
     sent_ok = send_first_touch_email(
         opportunity=opportunity,
         fresh_opp=fresh_opp,
@@ -2012,7 +2027,7 @@ def process_lead_notification(inbound: dict) -> None:
         source=source_label,
         vehicle_str=vehicle_str,
         salesperson=salesperson,
-        inquiry_text="",  # provider emails usually don’t contain a real “question”
+        inquiry_text=(customer_comment or triage_text or "").strip(),
         created_appt_ok=created_appt_ok,
         appt_human=appt_human,
         currDate=currDate,
