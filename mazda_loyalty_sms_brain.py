@@ -66,6 +66,22 @@ Rules:
 - If asked about pricing/trade/finance, escalate to a human.
 - If user provides a 16-digit voucher code, acknowledge and say you'll verify it.
 - Ask at most ONE question in the reply.
+
+Program context:
+- If the customer does not want or need a vehicle right now, there are still two helpful alternatives:
+  1. They may transfer the voucher to a family member or friend.
+  2. They may redeem it for a $100 Service & Parts credit at {rooftop_name} in exchange for the loyalty code.
+
+Special handling:
+- If the customer says they already bought a car, just purchased, already replaced it, are not in the market, do not need a car, or are not interested right now:
+  - do NOT continue sales messaging
+  - briefly acknowledge their situation
+  - if appropriate, briefly congratulate them
+  - mention they can transfer the voucher to a family member or friend
+  - mention they can redeem it for a $100 Service & Parts credit at {rooftop_name} in exchange for the loyalty code
+  - offer help with either transfer or redemption
+- Do not make this sound pushy.
+
 Return ONLY JSON:
 {"reply": "...", "needs_handoff": true/false, "handoff_reason": "pricing|trade|finance|angry|complaint|other"}
 """
@@ -126,6 +142,23 @@ def _looks_like_recent_purchase(text: str) -> bool:
 
     return False
 
+_NOT_IN_MARKET_RE = re.compile(
+    r"\b("
+    r"not in the market|"
+    r"don't need a car|dont need a car|"
+    r"not interested right now|"
+    r"not interested in buying right now|"
+    r"already replaced it|"
+    r"already replaced the vehicle|"
+    r"we already bought something|"
+    r"don't need another car|dont need another car"
+    r")\b",
+    re.I,
+)
+
+def _looks_like_not_in_market(text: str) -> bool:
+    return bool(_NOT_IN_MARKET_RE.search(text or ""))
+
 def generate_mazda_loyalty_sms_reply(
     *,
     first_name: str,
@@ -163,16 +196,19 @@ def generate_mazda_loyalty_sms_reply(
             "handoff_reason": "other",
         }
 
-    # ---- Recent purchase / retroactive question ----
-    if _looks_like_recent_purchase(inbound):
+    # ---- Already bought / not in market ----
+    if _looks_like_recent_purchase(inbound) or _looks_like_not_in_market(inbound):
         prefix = f"{first}, " if first else ""
         return {
             "reply": (
-                f"{prefix}the Mazda Loyalty reward must be applied at the time of purchase. "
-                "If your purchase has already been completed, I’ll loop in a team member to review your situation and see what options may be available."
+                f"{prefix}congrats on the new vehicle. "
+                f"If you do not need the voucher for yourself, you may still be able to transfer it to a family member or friend, "
+                f"or redeem it for a $100 Service & Parts credit at {rooftop_name or 'Patterson Autos Mazda dealership'} "
+                "in exchange for the loyalty code. "
+                "If you'd like, I can help with either option."
             ),
-            "needs_handoff": True,
-            "handoff_reason": "retroactive_purchase",
+            "needs_handoff": False,
+            "handoff_reason": "other",
         }
 
     # Voucher code present
@@ -209,15 +245,20 @@ def generate_mazda_loyalty_sms_reply(
         "Write the best next SMS reply following the rules."
     )
 
+    system_prompt = SYSTEM.format(
+        rooftop_name=rooftop_name or "Patterson Autos Mazda dealership"
+    )
+    
     try:
         resp = _oai.chat.completions.create(
             model=SMS_MODEL,
             messages=[
-                {"role": "system", "content": SYSTEM},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user},
             ],
             temperature=0.3,
         )
+        
         data = _safe_json(resp.choices[0].message.content or "")
         reply = (data.get("reply") or "").strip()
         needs = bool(data.get("needs_handoff"))
