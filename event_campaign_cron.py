@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from patti_mailer import send_via_sendgrid
 from goto_sms import send_sms
 from rooftops import SUBSCRIPTION_TO_ROOFTOP
+from templates import build_event_email, build_event_sms
 
 
 # =========================================================
@@ -220,7 +221,7 @@ def _event_benefits(event: dict) -> list[str]:
             "See the all-new CX-5 before most shoppers do",
             "Get familiar with the redesign, technology, and size updates",
             "Take a test drive while launch inventory is fresh",
-            "Enjoy Chick-fil-A breakfast or lunch while you’re here",
+            "Enjoy Chick-fil-A breakfast or lunch while you're here",
         ]
 
     if brand == "kia" and "telluride" in model:
@@ -264,7 +265,10 @@ def build_event_email(event: dict, guest: dict, template_no: int) -> dict[str, s
                 f"We’re excited to invite you to an exclusive preview of the {title} at {store}. "
                 "This is a Patterson customer event, and we’d love to have you there before the general rush starts."
             ),
-            "closer": "If you’d like, use the button below to reserve your spot or simply reply to this email and we’ll help from there.",
+            "closer": (
+                "This is a relaxed drop-in event, but if you plan to attend it helps us plan food and vehicles. "
+                "Use the button below to let us know you're coming or simply reply to this email."
+            ),
         },
         2: {
             "subject": f"You’re invited: {title} launch event at {store}",
@@ -298,7 +302,7 @@ def build_event_email(event: dict, guest: dict, template_no: int) -> dict[str, s
         if poster_url else ""
     )
     cta_html = (
-        f"<a href='{escape(rsvp_url)}' style='display:inline-block;background:#111111;color:#ffffff;text-decoration:none;padding:14px 22px;border-radius:6px;font-weight:700;'>Reserve Your Spot</a>"
+        f"<a href='{escape(rsvp_url)}' style='display:inline-block;background:#111111;color:#ffffff;text-decoration:none;padding:14px 22px;border-radius:6px;font-weight:700;'>Let Us Know You're Coming</a>"
         if rsvp_url else ""
     )
 
@@ -376,7 +380,7 @@ def build_event_sms(event: dict, guest: dict, template_no: int) -> str:
     url_part = f" {rsvp_url}" if rsvp_url else ""
 
     defaults = {
-        1: f"{prefix}you’re invited to our {title} launch at {store} on {date_display} from {time_window}. Come see it early and take a drive. Reply YES if you want us to watch for you.{url_part}",
+        1: f"{prefix}you're invited to our {title} launch at {store} on {date_display} from {time_window}. Stop by anytime and take a drive. Reply YES if you want us to watch for you.{url_part}",
         2: f"{prefix}quick reminder about our {title} event at {store} on {date_display} from {time_window}. Food is on us and test drives will be ready. Reply YES if you may stop by.{url_part}",
         3: f"{prefix}our {title} event at {store} is tomorrow from {time_window}. If you want to come by, reply YES and we’ll be ready for you.{url_part}",
         4: f"{prefix}today’s the day. Our {title} event at {store} runs {time_window}. Stop by if you’d like to see it and take a drive. We’d love to have you here.",
