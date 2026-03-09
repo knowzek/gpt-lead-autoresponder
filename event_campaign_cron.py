@@ -380,8 +380,8 @@ def build_event_sms(event: dict, guest: dict, template_no: int) -> str:
     url_part = f" {rsvp_url}" if rsvp_url else ""
 
     defaults = {
-        1: f"{prefix}you're invited to our {title} launch at {store} on {date_display} from {time_window}. Stop by anytime and take a drive. Reply YES if you want us to watch for you.{url_part}",
-        2: f"{prefix}quick reminder about our {title} event at {store} on {date_display} from {time_window}. Food is on us and test drives will be ready. Reply YES if you may stop by.{url_part}",
+        1: f"{prefix}this is Patti from {store}. You're invited to our {title} launch at {store} on {date_display} from {time_window}. Stop by anytime and take a drive. Reply YES if you want us to watch for you.{url_part}",
+        2: f"{prefix}this is Patti from {store}. Quick reminder about our {title} event at {store} on {date_display} from {time_window}. Food is on us and test drives will be ready. Reply YES if you may stop by.{url_part}",
         3: f"{prefix}our {title} event at {store} is tomorrow from {time_window}. If you want to come by, reply YES and we’ll be ready for you.{url_part}",
         4: f"{prefix}today’s the day. Our {title} event at {store} runs {time_window}. Stop by if you’d like to see it and take a drive. We’d love to have you here.",
     }
