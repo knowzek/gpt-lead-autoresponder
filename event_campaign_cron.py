@@ -13,7 +13,6 @@ from zoneinfo import ZoneInfo
 from patti_mailer import send_via_sendgrid
 from goto_sms import send_sms
 from rooftops import SUBSCRIPTION_TO_ROOFTOP
-from templates import build_event_email, build_event_sms
 
 
 # =========================================================
@@ -262,31 +261,31 @@ def build_event_email(event: dict, guest: dict, template_no: int) -> dict[str, s
             "subject": f"Be among the first to drive the {title}",
             "preheader": f"Join us at {store} on {date_display} for an exclusive launch event.",
             "opener": (
-                f"We’re excited to invite you to an exclusive preview of the {title} at {store}. "
-                "This is a Patterson customer event, and we’d love to have you there before the general rush starts."
+                f"We're excited to invite you to an exclusive preview of the {title} at {store}. "
+                "This is a Patterson customer event, and we'd love to have you there before the general rush starts."
             ),
             "closer": (
                 "This is a relaxed drop-in event, but if you plan to attend it helps us plan food and vehicles. "
-                "Use the button below to let us know you're coming or simply reply to this email."
+                "Just reply YES to this email and we'll mark you down."
             ),
         },
         2: {
-            "subject": f"You’re invited: {title} launch event at {store}",
+            "subject": f"You're invited: {title} launch event at {store}",
             "preheader": f"Reminder: see and drive the {title} on {date_display}.",
             "opener": (
                 f"Just a quick reminder that our {title} launch event is coming up at {store}. "
-                "If this is a model you’ve been curious about, this is the easiest time to come see it, drive it, and ask questions in person."
+                "If this is a model you've been curious about, this is the easiest time to come see it, drive it, and ask questions in person."
             ),
-            "closer": "If you want us to expect you, click below to reserve a spot or reply back and we’ll take care of it.",
+            "closer": "If you think you'll stop by, just reply YES so we can expect you.",
         },
         3: {
             "subject": f"Tomorrow morning: experience the {title} at {store}",
-            "preheader": "Final reminder for tomorrow’s Patterson customer event.",
+            "preheader": "Final reminder for tomorrow's Patterson customer event.",
             "opener": (
                 f"Our {title} event at {store} is tomorrow, and I wanted to send one last reminder in case you meant to stop by. "
-                "It’s a simple, low-pressure way to see the vehicle in person and take a drive while inventory is still arriving."
+                "It's a simple, low-pressure way to see the vehicle in person and take a drive while inventory is still arriving."
             ),
-            "closer": "If you plan to come, hit reply and let us know. We’d be happy to watch for you.",
+            "closer": "If you plan to come, just reply YES and we'll be ready for you.",
         },
     }
 
@@ -380,10 +379,10 @@ def build_event_sms(event: dict, guest: dict, template_no: int) -> str:
     url_part = f" {rsvp_url}" if rsvp_url else ""
 
     defaults = {
-        1: f"{prefix}this is Patti from {store}. You're invited to our {title} launch at {store} on {date_display} from {time_window}. Stop by anytime and take a drive. Reply YES if you want us to watch for you.{url_part}",
-        2: f"{prefix}this is Patti from {store}. Quick reminder about our {title} event at {store} on {date_display} from {time_window}. Food is on us and test drives will be ready. Reply YES if you may stop by.{url_part}",
-        3: f"{prefix}our {title} event at {store} is tomorrow from {time_window}. If you want to come by, reply YES and we’ll be ready for you.{url_part}",
-        4: f"{prefix}today’s the day. Our {title} event at {store} runs {time_window}. Stop by if you’d like to see it and take a drive. We’d love to have you here.",
+        1: f"{prefix}this is Patti from {store}. You're invited to our {title} launch at {store} on {date_display} from {time_window}. Stop by anytime to see it and take a drive. Reply YES if you plan to attend.",
+        2: f"{prefix}this is Patti from {store}. Quick reminder about our {title} event at {store} on {date_display} from {time_window}. Food is on us and vehicles will be ready. Reply YES if you think you'll stop by.",
+        3: f"{prefix}Patti from {store}. Our {title} event at {store} is tomorrow from {time_window}. If you plan to come by, reply YES and we'll be ready for you.",
+        4: f"{prefix}can't wait to see you at the {title} event today at {store}. We're here from {time_window}. Stop by anytime — the vehicle, food, and team will be ready for you.",
     }
     return defaults[template_no]
 
@@ -428,9 +427,17 @@ def _effective_send_at(event_fields: dict, explicit_field: str, offset_field: st
 
     send_dt = event_dt - timedelta(days=offset_days)
 
-    # If Airtable only stores a date, default to 9am local
+    # If Airtable only stores a date, default local send time.
+    # Day-of RSVP reminder goes at 7:30 AM local; everything else at 9:00 AM local.
     if send_dt.hour == 0 and send_dt.minute == 0:
-        local_dt = send_dt.astimezone(ZoneInfo(STORE_TIMEZONE)).replace(hour=9, minute=0, second=0, microsecond=0)
+        hour = 7 if default_offset_days == 0 else 9
+        minute = 30 if default_offset_days == 0 else 0
+        local_dt = send_dt.astimezone(ZoneInfo(STORE_TIMEZONE)).replace(
+            hour=hour,
+            minute=minute,
+            second=0,
+            microsecond=0,
+        )
         return local_dt.astimezone(timezone.utc)
 
     return send_dt
@@ -440,9 +447,26 @@ def _due_actions(invite_fields: dict, event_fields: dict) -> list[SendPlan]:
     now = _now_utc()
     due: list[SendPlan] = []
 
+    invite_status = str(invite_fields.get("Invite Status") or "").strip().lower()
+    rsvp = str(invite_fields.get("RSVP") or "").strip().lower()
+    stop_nudges = _boolish(invite_fields.get("Stop Event Nudges"))
+
+    # Hard skip statuses
+    if invite_status in {"opted out", "attended", "cancelled", "do not send"}:
+        return []
+
     for plan in SEND_PLANS:
         if invite_fields.get(plan.sent_field):
             continue
+
+        # Step 4 = day-of reminder only to RSVP Yes
+        if plan.channel == "sms" and plan.step_no == 4:
+            if rsvp != "yes":
+                continue
+        else:
+            # Once someone RSVPs yes/maybe/no or we explicitly stop nudges, stop the regular nudges
+            if stop_nudges or rsvp in {"yes", "maybe", "no"}:
+                continue
 
         send_at = _effective_send_at(
             event_fields,
