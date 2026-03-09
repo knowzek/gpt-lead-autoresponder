@@ -187,14 +187,24 @@ def handle_mazda_loyalty_inbound_email(*, inbound: dict, subject: str, body_text
         return
 
     # ✅ STOP both cadences on any engagement
-    patch_by_id(rec_id, {
-        "email_status": "convo",
+    # But do not revive an already opted-out record
+    current_sms_status = (fields.get("sms_status") or "").strip().lower()
+    current_email_status = (fields.get("email_status") or "").strip().lower()
+    
+    patch = {
         "next_email_at": None,
-        "sms_status": "convo",
         "next_sms_at": None,
         "last_inbound_at": ts,
         "last_inbound_text": (body_text or "")[:2000],
-    })
+    }
+    
+    if current_email_status != "opted_out":
+        patch["email_status"] = "convo"
+    
+    if current_sms_status != "opted_out":
+        patch["sms_status"] = "convo"
+    
+    patch_by_id(rec_id, patch)
 
     first_name = (fields.get("first_name") or fields.get("customer_first_name") or "").strip()
     bucket = (fields.get("bucket") or "").strip()
