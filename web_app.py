@@ -280,6 +280,26 @@ def email_inbound():
             inbound.get("to"),
         )
 
+        # --- Event campaign RSVP / STOP handling ---
+        try:
+            from event_campaign_state import handle_event_email_reply
+
+            event_out = handle_event_email_reply(inbound)
+            if event_out.get("handled"):
+                log.info(
+                    "📨 Event email reply handled action=%s from=%s subject=%s",
+                    event_out.get("action"),
+                    inbound.get("from"),
+                    inbound.get("subject"),
+                )
+                return jsonify({
+                    "status": "ok",
+                    "event_handled": True,
+                    "action": event_out.get("action"),
+                }), 200
+        except Exception as e:
+            log.exception("Event email reply handler failed: %s", e)
+
         # --- ASYNC: respond fast to Power Automate, process in background ---
         import threading
 
@@ -302,12 +322,29 @@ def email_inbound():
 def sms_inbound():
     """
     Webhook endpoint called by GoTo for inbound SMS.
-    Mazda service: route directly to Mazda Loyalty handler (Airtable + GPT + handoff).
+    First try event RSVP / STOP handling.
+    If not matched, fall back to Mazda Loyalty handling.
     """
     try:
         payload_json = request.get_json(silent=True) or {}
         log.info("📥 Incoming SMS webhook")
 
+        # 1) Event campaign RSVP / STOP handling
+        try:
+            from event_campaign_state import handle_event_sms_reply
+
+            event_out = handle_event_sms_reply(payload_json=payload_json)
+            if event_out.get("handled"):
+                log.info("📲 Event SMS reply handled action=%s", event_out.get("action"))
+                return jsonify({
+                    "status": "ok",
+                    "event_handled": True,
+                    "action": event_out.get("action"),
+                }), 200
+        except Exception as e:
+            log.exception("Event SMS reply handler failed: %s", e)
+
+        # 2) Existing Mazda loyalty fallback
         from sms_poller import handle_mazda_loyalty_inbound_sms_webhook
         out = handle_mazda_loyalty_inbound_sms_webhook(payload_json=payload_json)
 
