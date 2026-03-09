@@ -1179,6 +1179,7 @@ def poll_once(owner: str):
                         fresh_opp=fresh_opp,
                         subscription_id=dealer_key,
                         rooftop_name=opp.get("rooftop_name") or opp.get("rooftop") or "",
+                        subject="Patti scheduled appointment via SMS",
                         appt_human=appt_human,
                         customer_reply=last_inbound,
                     )
