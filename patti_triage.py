@@ -62,8 +62,20 @@ SALESTEAM_ID_TO_EMAIL = {
     "0084c9ba-94a8-f011-814f-00505690ec8c": "ala@pattersonautos.com",  # Al Alcontin (BDC)
     "ea44fdc0-c1c7-f011-814f-00505690ec8c": "Juliem@pattersonautos.com",  # Julie Manallo (BDC)
     "598a45a3-efca-f011-814f-00505690ec8c": "Jhoannec@pattersonautos.com",  # Jhoanne Canceran (BDC)
-
     "8f693b1a-7966-ea11-a977-005056b72b57": "joshuaw@pattersonautos.com",  # Joshua Wheelan
+    
+    # --- HB Mazda / Internet leads ---
+    "7eb88128-5274-ef11-814b-00505690ec8c": "mauricioJ@pattersonautos.com", # Mauricio Jimenez
+    "14b22ee3-ebcd-ea11-a97d-005056b72b57": "MannyC@pattersonautos.com", # Manny Ayala Camacho
+    "fd1a3deb-f7ad-f011-814f-00505690ec8c": "jamesd@pattersonautos.com", # James Donnelson
+    "d5683b1a-7966-ea11-a977-005056b72b57": "jerryh@pattersonautos.com", # Jerry Hicks
+    "da683b1a-7966-ea11-a977-005056b72b57": "joeb@pattersonautos.com", # Joe Balisalisa
+    "df683b1a-7966-ea11-a977-005056b72b57": "georger@pattersonautos.com",  # George Rocha
+    "db683b1a-7966-ea11-a977-005056b72b57": "ericm@pattersonautos.com", # Eric Magana
+    "b67e5380-34d0-ea11-a97e-005056b72b57": "veronicap@pattersonautos.com", # Veronica Paco
+    "01e24045-5f04-f111-814f-00505690ec8c": "Vnguyen@pattersonautos.com", # Vu Nguyen
+    
+    
 }
 
 # --- Human review routing map (per subscription_id) ---
