@@ -92,7 +92,22 @@ SALESTEAM_ID_TO_EMAIL = {
     "6fabddf5-eaed-ed11-b0cd-00505690dca3": "Danielm@pattersonautos.com", # Daniel Maciel
     "35426250-d43f-ef11-814a-00505690043e": "omarh@pattersonautos.com", # Omar Heredia
     "41f7e632-940c-ee11-b0ce-00505690dca3": "austiny@pattersonautos.com", # Austin Yoon
-    
+
+    # Tustin Mazda
+    "8f693b1a-7966-ea11-a977-005056b72b57": "joshuaw@pattersonautos.com", # Joshua Wheelan
+    "85693b1a-7966-ea11-a977-005056b72b57": "ericc@pattersonautos.com", # Eric Casillas
+    "a09475b6-58fd-f011-814f-00505690ec8c": "ala@pattersonautos.com", # Al Alcontin
+    "86693b1a-7966-ea11-a977-005056b72b57": "dshin@pattersonautos.com", # Dong Shin
+    "81693b1a-7966-ea11-a977-005056b72b57": "OmarJ@pattersonautos.com", # Omar Jasso
+    "8a693b1a-7966-ea11-a977-005056b72b57": "Victorc@pattersonautos.com", # Victor Centeno
+    "665d5cd6-f751-eb11-a988-005056b72b57": "Charlesp@pattersonautos.com", # Charles Pelser
+    "83693b1a-7966-ea11-a977-005056b72b57": "Jimf@pattersonautos.com", # Jim Feinstein
+    "6f9407e7-1459-f011-814d-00505690ec8c": "MannyZ@pattersonautos.com", # Manny Zecena
+    "8d693b1a-7966-ea11-a977-005056b72b57": "javierc@pattersonautos.com", # Javier Carvente
+    "2451083c-ed98-f011-814f-00505690ec8c": "hunters@pattersonautos.com", # Hunter Schauerman
+    "96693b1a-7966-ea11-a977-005056b72b57": "JeffL@pattersonautos.com", # Jeffrey Lesniak
+    "88693b1a-7966-ea11-a977-005056b72b57": "Saifurr@pattersonautos.com", # Saifur Rahman
+    "91693b1a-7966-ea11-a977-005056b72b57": "kevink@pattersonautos.com", # Kevin Keogh
     
     
     
