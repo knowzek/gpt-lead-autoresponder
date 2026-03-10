@@ -119,8 +119,11 @@ LEAD_SOURCE_RULES: List[LeadRule] = [
 def detect_lead_source(inbound: Dict[str, Any]) -> Optional[str]:
     subj = _s(inbound.get("subject")).lower()
 
-    # Explicit exclusion first
-    if "apollo website lead-schedule a service" in subj:
+    # Explicit exclusions first
+    if (
+        "apollo website lead-schedule a service" in subj
+        or "chat transcript" in subj
+    ):
         return None
 
     for rule in LEAD_SOURCE_RULES:
