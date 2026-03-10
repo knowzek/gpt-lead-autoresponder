@@ -76,6 +76,143 @@ PROVIDER_BOILERPLATE_LINES_RE = re.compile(
 
 _WS_RE = re.compile(r"\s+")
 
+# === Shared SMS deterministic router helpers ================================
+
+_NEGOTIATION_RE = re.compile(
+    r"""(?ix)
+    \b(
+        beat\s+this|
+        beat\s+that|
+        can\s+you\s+beat|
+        can\s+u\s+beat|
+        match\s+this|
+        can\s+you\s+match|
+        can\s+u\s+match|
+        do\s+better|
+        better\s+than\s+this|
+        something\s+to\s+beat|
+        work\s+with\s+me\s+on\s+price|
+        what\s+can\s+you\s+do
+    )\b
+    """
+)
+
+_PRICE_SHEET_HINT_RE = re.compile(
+    r"""(?ix)
+    \b(
+        msrp|
+        total|
+        sale\s+price|
+        selling\s+price|
+        out\s+the\s+door|
+        otd|
+        discount|
+        rebate|
+        incentive|
+        monthly|
+        down\s+payment|
+        payment|
+        quote|
+        numbers
+    )\b
+    """
+)
+
+_SMS_APPT_RE = re.compile(
+    r"""(?ix)
+    \b(
+        appointment|appt|test\s*drive|schedule|book|
+        available|availability|come\s+in|come\s+by|stop\s+by|
+        what\s+time|what\s+times|today|tomorrow|this\s+weekend
+    )\b
+    """
+)
+
+_SMS_STOP_RE = re.compile(
+    r"""(?ix)
+    ^\s*(stop|unsubscribe|end|quit)\s*$ |
+    \b(stop\s+text(ing)?|stop\s+messages?)\b |
+    \b(do\s*not\s*text|do\s*not\s*contact|dont\s*text|don't\s*text|dont\s*contact|don't\s*contact)\b |
+    \b(remove\s+me|take\s+me\s+off)\b
+    """
+)
+
+def sms_stop_requested(text: str) -> bool:
+    return bool(_SMS_STOP_RE.search(text or ""))
+
+def looks_like_price_challenge(
+    text: str,
+    *,
+    media_count: int = 0,
+    thread_snippet: list[dict] | None = None,
+) -> bool:
+    t = (text or "").lower().strip()
+
+    if not t and media_count <= 0:
+        return False
+
+    if _NEGOTIATION_RE.search(t):
+        return True
+
+    if _PRICE_SHEET_HINT_RE.search(t):
+        return True
+
+    # screenshot/image + short deictic challenge language
+    if media_count > 0 and any(p in t for p in ("this", "that", "beat", "match", "better", "offer")):
+        return True
+
+    if thread_snippet:
+        joined = " | ".join(
+            (m.get("content") or "").lower()
+            for m in thread_snippet
+            if (m.get("role") or "").lower() == "user"
+        )
+        if _NEGOTIATION_RE.search(joined):
+            return True
+
+    return False
+
+def looks_like_sms_appointment_intent(text: str) -> bool:
+    t = (text or "").lower().strip()
+    if not t:
+        return False
+
+    has_day = bool(re.search(r"\b(mon(day)?|tue(sday)?|wed(nesday)?|thu(rsday)?|fri(day)?|sat(urday)?|sun(day)?)\b", t))
+    has_time = bool(re.search(r"\b(\d{1,2})(:\d{2})?\s?(am|pm)?\b", t, re.I))
+
+    if _SMS_APPT_RE.search(t):
+        return True
+
+    if (has_day or has_time) and any(x in t for x in ("available", "availability", "schedule", "book", "come in", "come by", "stop by")):
+        return True
+
+    return False
+
+def classify_sms_inbound_route(
+    text: str,
+    *,
+    media_count: int = 0,
+    thread_snippet: list[dict] | None = None,
+) -> str:
+    """
+    Returns one of:
+      - stop
+      - pricing
+      - appointment
+      - normal
+    Order matters and is intentionally deterministic.
+    """
+    if sms_stop_requested(text):
+        return "stop"
+
+    if looks_like_price_challenge(text, media_count=media_count, thread_snippet=thread_snippet):
+        return "pricing"
+
+    if looks_like_sms_appointment_intent(text):
+        return "appointment"
+
+    return "normal"
+
 def get_next_template_day(
     *,
     last_template_day_sent: int | None,
