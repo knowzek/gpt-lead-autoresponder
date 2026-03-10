@@ -118,15 +118,80 @@ _PRICE_SHEET_HINT_RE = re.compile(
     """
 )
 
+import re
+
 _SMS_APPT_RE = re.compile(
     r"""(?ix)
     \b(
         appointment|appt|test\s*drive|schedule|book|
         available|availability|come\s+in|come\s+by|stop\s+by|
-        what\s+time|what\s+times|today|tomorrow|this\s+weekend
+        what\s+time|what\s+times|today|tomorrow|this\s+weekend|
+        be\s+there|i'll\s+be\s+there|i'll\s+be\s+in|see\s+you\s+then
     )\b
     """
 )
+
+_SMS_DAY_RE = re.compile(
+    r"\b(mon(day)?|tue(sday)?|wed(nesday)?|thu(rsday)?|fri(day)?|sat(urday)?|sun(day)?|today|tomorrow|this\s+weekend)\b",
+    re.I,
+)
+
+_SMS_TIME_RE = re.compile(
+    r"""(?ix)
+    \b(
+        \d{1,2}:\d{2}\s*(am|pm)? |   # 2:30, 2:30 pm
+        \d{1,2}\s*(am|pm) |          # 2pm, 2 pm
+        \d{1,2}\s*o'?clock |         # 2 o'clock, 2oclock
+        noon | midnight
+    )\b
+    """
+)
+
+_SMS_CONFIRM_RE = re.compile(
+    r"""(?ix)
+    \b(
+        i'll\s+be\s+there|
+        i\s+will\s+be\s+there|
+        be\s+there|
+        see\s+you\s+then|
+        that\s+works|
+        works\s+for\s+me|
+        i'll\s+come\s+by|
+        i\s+can\s+come\s+by|
+        i'?ll\s+stop\s+by|
+        i'?ll\s+be\s+in
+    )\b
+    """
+)
+
+def looks_like_sms_appointment_intent(text: str) -> bool:
+    t = (text or "").lower().strip()
+    if not t:
+        return False
+
+    has_day = bool(_SMS_DAY_RE.search(t))
+    has_time = bool(_SMS_TIME_RE.search(t))
+    has_confirm = bool(_SMS_CONFIRM_RE.search(t))
+
+    # Strong direct scheduling language
+    if _SMS_APPT_RE.search(t):
+        return True
+
+    # Day + time is enough by itself
+    if has_day and has_time:
+        return True
+
+    # Natural confirmation language + day/time
+    if has_confirm and (has_day or has_time):
+        return True
+
+    # Existing softer scheduling language
+    if (has_day or has_time) and any(
+        x in t for x in ("available", "availability", "schedule", "book", "come in", "come by", "stop by")
+    ):
+        return True
+
+    return False
 
 _SMS_STOP_RE = re.compile(
     r"""(?ix)
@@ -169,22 +234,6 @@ def looks_like_price_challenge(
         )
         if _NEGOTIATION_RE.search(joined):
             return True
-
-    return False
-
-def looks_like_sms_appointment_intent(text: str) -> bool:
-    t = (text or "").lower().strip()
-    if not t:
-        return False
-
-    has_day = bool(re.search(r"\b(mon(day)?|tue(sday)?|wed(nesday)?|thu(rsday)?|fri(day)?|sat(urday)?|sun(day)?)\b", t))
-    has_time = bool(re.search(r"\b(\d{1,2})(:\d{2})?\s?(am|pm)?\b", t, re.I))
-
-    if _SMS_APPT_RE.search(t):
-        return True
-
-    if (has_day or has_time) and any(x in t for x in ("available", "availability", "schedule", "book", "come in", "come by", "stop by")):
-        return True
 
     return False
 
