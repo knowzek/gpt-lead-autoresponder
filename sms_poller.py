@@ -71,6 +71,68 @@ from zoneinfo import ZoneInfo
 
 STORE_TZ = os.getenv("STORE_TIMEZONE", "America/Los_Angeles")
 
+NEGOTIATION_RE = re.compile(
+    r"""(?ix)
+    \b(
+        beat\s+this|
+        beat\s+that|
+        can\s+you\s+beat|
+        can\s+u\s+beat|
+        match\s+this|
+        do\s+better|
+        better\s+than\s+this|
+        something\s+to\s+beat|
+        can\s+you\s+do\s+better|
+        can\s+u\s+do\s+better|
+        work\s+with\s+me\s+on\s+price|
+        what\s+can\s+you\s+do|
+        can\s+you\s+match|
+        can\s+u\s+match
+    )\b
+    """
+)
+
+PRICE_SHEET_HINT_RE = re.compile(
+    r"""(?ix)
+    \b(
+        msrp|
+        total|
+        sale\s+price|
+        selling\s+price|
+        out\s+the\s+door|
+        otd|
+        discount|
+        rebate|
+        incentive|
+        monthly|
+        down\s+payment
+    )\b
+    """
+)
+
+def _looks_like_price_challenge(text: str, media: list | None = None, thread: list | None = None) -> bool:
+    t = (text or "").lower().strip()
+    if not t and not media:
+        return False
+
+    if NEGOTIATION_RE.search(t):
+        return True
+
+    if PRICE_SHEET_HINT_RE.search(t):
+        return True
+
+    # image/screenshot + short challenge text = likely negotiation
+    if media and any(p in t for p in ("this", "that", "beat", "match", "better", "offer")):
+        return True
+
+    # look back at recent customer turns for combined meaning
+    if thread:
+        joined = " | ".join((m.get("content") or "").lower() for m in thread if m.get("role") == "user")
+        if NEGOTIATION_RE.search(joined):
+            return True
+
+    return False
+
 def _patti_numbers() -> list[str]:
     # Option 1: from rooftops.py mapping (recommended)
     nums = list_rooftop_sms_numbers()
@@ -682,8 +744,10 @@ def poll_once(owner: str):
             except Exception:
                 log.exception("SMS poll: media fallback lookup failed author=%s", author)
         
-        if not body:
-            log.info("SMS poll: skipping empty inbound (media_only=%s) author=%s", bool(media), author)
+        if not body and media:
+            body = "[Customer sent an attachment with no text]"
+        elif not body:
+            log.info("SMS poll: skipping empty inbound author=%s", author)
             continue
     
         # Pull last N messages in this thread so GPT can interpret short replies like "No thanks"
@@ -697,16 +761,24 @@ def poll_once(owner: str):
 
             for m in items2[-12:]:
                 txt = (m.get("body") or "").strip()
-                if not txt:
+                media_items = m.get("media") or []
+            
+                media_note = ""
+                if media_items:
+                    media_note = f" [media:{len(media_items)} attachment(s)]"
+            
+                if not txt and not media_note:
                     continue
-
+            
                 author_num = (m.get("authorPhoneNumber") or "").strip()
                 role = "assistant" if author_num == owner else "user"
-
+            
+                content = ((txt[:800] if txt else "") + media_note).strip()
+            
                 thread.append(
                     {
                         "role": role,
-                        "content": txt[:800],
+                        "content": content,
                     }
                 )
         except Exception:
@@ -715,6 +787,12 @@ def poll_once(owner: str):
 
         # ✅ inbound SMS text: some GoTo lastMessage bodies come through blank
         last_inbound = (body or "").strip()
+
+        if media:
+            if last_inbound:
+                last_inbound = f"{last_inbound} [Customer attached {len(media)} image/file attachment(s)]"
+            else:
+                last_inbound = f"[Customer attached {len(media)} image/file attachment(s)]"
         log.info("SMS poll: last_inbound_len=%d last_inbound_preview=%r", len(last_inbound or ""), (last_inbound or "")[:80])
 
         if not last_inbound and thread:
@@ -1003,17 +1081,6 @@ def poll_once(owner: str):
             except Exception:
                 log.exception("SMS poll: failed to stamp STOP opt-out opp=%s rec=%s", opp_id, rec.get("id"))
 
-            # Best-effort: still mark convo / clear next_sms_at if those fields exist
-            try:
-                mark_sms_convo_on_inbound(
-                    rec_id=rec.get("id"),
-                    inbound_text=last_inbound,
-                    inbound_ts=inbound_ts,
-                )
-            except Exception:
-                # Don’t let schema mismatch break STOP
-                pass
-
             log.info("SMS poll: STOP handled (opt-out stamped) opp=%s author=%s", opp.get("opportunityId"), author)
             continue
         
@@ -1148,17 +1215,29 @@ def poll_once(owner: str):
             (thread[-1]["content"][:80] if thread else None),
         )
 
-        # opp is already canonicalized by opp_from_record()
-        decision = generate_sms_reply(
-            rooftop_name=opp["rooftop_name"],
-            customer_first_name=opp["customer_first_name"],
-            customer_phone=opp["customer_phone"],
-            salesperson=opp["salesperson_name"],
-            vehicle=opp.get("vehicle") or "",
-            last_inbound=last_inbound,
-            thread_snippet=thread,  # ✅ pass real history
-            include_optout_footer=False,
-        )
+        # Deterministic router BEFORE GPT
+        if _looks_like_price_challenge(last_inbound, media=media, thread=thread):
+            name = (opp.get("customer_first_name") or "").strip()
+            prefix = f"Thanks, {name}. " if name else "Thanks. "
+        
+            decision = {
+                "reply": prefix + "I got that offer you sent over. I’m looping in the team now to review it and follow up with you shortly.",
+                "intent": "handoff",
+                "needs_handoff": True,
+                "handoff_reason": "pricing",
+                "include_optout_footer": False,
+            }
+        else:
+            decision = generate_sms_reply(
+                rooftop_name=opp["rooftop_name"],
+                customer_first_name=opp["customer_first_name"],
+                customer_phone=opp["customer_phone"],
+                salesperson=opp["salesperson_name"],
+                vehicle=opp.get("vehicle") or "",
+                last_inbound=last_inbound,
+                thread_snippet=thread,
+                include_optout_footer=False,
+            )
 
         needs_handoff = bool(decision.get("needs_handoff"))
         handoff_reason = (decision.get("handoff_reason") or "other").strip().lower()
@@ -1168,7 +1247,7 @@ def poll_once(owner: str):
             prefix = f"Thanks, {name}. " if name else "Thanks. "
 
             if handoff_reason == "pricing":
-                decision["reply"] = prefix + "I’ll have the team follow up with pricing details shortly."
+                decision["reply"] = prefix + "I got the offer you sent over. I’m having the team review it now and they’ll follow up with you shortly."
             elif handoff_reason == "phone_call":
                 decision["reply"] = prefix + "I’ll have someone give you a quick call shortly."
             elif handoff_reason in ("angry", "complaint"):
