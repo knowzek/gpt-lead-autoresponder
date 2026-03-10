@@ -18,6 +18,13 @@ from outlook_email import send_email_via_outlook
 
 from models.airtable_model import Conversation, Message
 
+from patti_common import (
+    classify_sms_inbound_route,
+    looks_like_price_challenge,
+    looks_like_sms_appointment_intent,
+    sms_stop_requested,
+)
+
 from airtable_store import (
     _fetch_customer_details,
     find_by_customer_phone_loose,
@@ -70,68 +77,6 @@ _VOUCHERISH_RE = re.compile(r"(?<!\d)(\d{12,20})(?!\d)")  # catches 12–20 digi
 from zoneinfo import ZoneInfo
 
 STORE_TZ = os.getenv("STORE_TIMEZONE", "America/Los_Angeles")
-
-NEGOTIATION_RE = re.compile(
-    r"""(?ix)
-    \b(
-        beat\s+this|
-        beat\s+that|
-        can\s+you\s+beat|
-        can\s+u\s+beat|
-        match\s+this|
-        do\s+better|
-        better\s+than\s+this|
-        something\s+to\s+beat|
-        can\s+you\s+do\s+better|
-        can\s+u\s+do\s+better|
-        work\s+with\s+me\s+on\s+price|
-        what\s+can\s+you\s+do|
-        can\s+you\s+match|
-        can\s+u\s+match
-    )\b
-    """
-)
-
-PRICE_SHEET_HINT_RE = re.compile(
-    r"""(?ix)
-    \b(
-        msrp|
-        total|
-        sale\s+price|
-        selling\s+price|
-        out\s+the\s+door|
-        otd|
-        discount|
-        rebate|
-        incentive|
-        monthly|
-        down\s+payment
-    )\b
-    """
-)
-
-def _looks_like_price_challenge(text: str, media: list | None = None, thread: list | None = None) -> bool:
-    t = (text or "").lower().strip()
-    if not t and not media:
-        return False
-
-    if NEGOTIATION_RE.search(t):
-        return True
-
-    if PRICE_SHEET_HINT_RE.search(t):
-        return True
-
-    # image/screenshot + short challenge text = likely negotiation
-    if media and any(p in t for p in ("this", "that", "beat", "match", "better", "offer")):
-        return True
-
-    # look back at recent customer turns for combined meaning
-    if thread:
-        joined = " | ".join((m.get("content") or "").lower() for m in thread if m.get("role") == "user")
-        if NEGOTIATION_RE.search(joined):
-            return True
-
-    return False
 
 def _patti_numbers() -> list[str]:
     # Option 1: from rooftops.py mapping (recommended)
@@ -491,7 +436,7 @@ def _finalize_mazda_sms_decision(*, decision: dict, inbound_text: str, first_nam
     if decision.get("needs_handoff") and existing_reason in {"pricing", "trade", "finance", "angry", "complaint"}:
         return decision
 
-    if _looks_like_appt_intent(inbound):
+    if looks_like_sms_appointment_intent(inbound):
         return {
             "reply": (
                 f"{prefix}thanks — I’m looping in a team member to lock in a time. "
@@ -1063,7 +1008,13 @@ def poll_once(owner: str):
             continue
 
         # --- STOP / opt-out: stamp Airtable fields that suppress cadence ---
-        if _STOP_RE.search(last_inbound or ""):
+        route = classify_sms_inbound_route(
+            last_inbound,
+            media_count=len(media or []),
+            thread_snippet=thread,
+        )
+        
+        if route == "stop":
             inbound_ts = last.get("timestamp") or _now_iso()
 
             # Persist the opt-out + stop any future nudges
@@ -1216,12 +1167,18 @@ def poll_once(owner: str):
         )
 
         # Deterministic router BEFORE GPT
-        if _looks_like_price_challenge(last_inbound, media=media, thread=thread):
+        route = classify_sms_inbound_route(
+            last_inbound,
+            media_count=len(media or []),
+            thread_snippet=thread,
+        )
+        
+        if route == "pricing":
             name = (opp.get("customer_first_name") or "").strip()
             prefix = f"Thanks, {name}. " if name else "Thanks. "
         
             decision = {
-                "reply": prefix + "I got that offer you sent over. I’m looping in the team now to review it and follow up with you shortly.",
+                "reply": prefix + "I got the offer you sent over. I’m having the team review it now and they’ll follow up with you shortly.",
                 "intent": "handoff",
                 "needs_handoff": True,
                 "handoff_reason": "pricing",
