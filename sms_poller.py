@@ -72,6 +72,21 @@ _MAZDA_STOP_RE = re.compile(r"""(?ix)
     \b(stop\s+sending)\b
 """)
 
+_MAZDA_TRANSFER_RE = re.compile(
+    r"""(?ix)
+    \b(
+        transfer|
+        gift\s+it|
+        give\s+it\s+to|
+        family\s+member|
+        friend
+    )\b
+    """
+)
+
+def _looks_like_mazda_transfer_intent(text: str) -> bool:
+    return bool(_MAZDA_TRANSFER_RE.search(text or ""))
+
 _VOUCHERISH_RE = re.compile(r"(?<!\d)(\d{12,20})(?!\d)")  # catches 12–20 digit codes
 
 from zoneinfo import ZoneInfo
@@ -412,9 +427,10 @@ def _finalize_mazda_sms_decision(*, decision: dict, inbound_text: str, first_nam
     Final deterministic Mazda SMS overrides after the brain runs.
     Priority:
       1. actual voucher code
-      2. preserve stronger existing handoff reasons
-      3. true appointment intent
-      4. leave brain decision alone
+      2. transfer intent
+      3. preserve stronger existing handoff reasons
+      4. true appointment intent
+      5. leave brain decision alone
     """
     inbound = (inbound_text or "").strip()
     first = (first_name or "").strip()
@@ -429,6 +445,16 @@ def _finalize_mazda_sms_decision(*, decision: dict, inbound_text: str, first_nam
             ),
             "needs_handoff": True,
             "handoff_reason": "voucher_lookup",
+        }
+
+    if _looks_like_mazda_transfer_intent(inbound):
+        return {
+            "reply": (
+                f"{prefix}Perfect — I’ll have a team member handle the voucher transfer for you "
+                "to make sure it’s done correctly. They’ll reach out shortly."
+            ),
+            "needs_handoff": True,
+            "handoff_reason": "other",
         }
 
     existing_reason = (decision.get("handoff_reason") or "").strip().lower()
