@@ -31,18 +31,58 @@ _TIME_RE = re.compile(r"\b(\d{1,2})(:\d{2})?\s?(am|pm)?\b", re.IGNORECASE)
 _DOW_RE = re.compile(r"\b(mon(day)?|tue(sday)?|wed(nesday)?|thu(rsday)?|fri(day)?|sat(urday)?|sun(day)?)\b", re.IGNORECASE)
 
 def _looks_like_appt_intent(text: str) -> bool:
-    t = (text or "").lower()
-    if any(k in t for k in (
-        "appointment", "appt", "test drive", "testdrive", "come in", "come by",
-        "schedule", "available", "availability", "what times", "book", "set up a time",
-        "today", "tomorrow", "this weekend"
+    """
+    Keep Mazda email appointment intent narrow so code-finding / voucher questions
+    are not misread as scheduling asks.
+    """
+    t = (text or "").lower().strip()
+    if not t:
+        return False
+
+    if any(x in t for x in (
+        "16-digit code",
+        "voucher code",
+        "where can i find",
+        "where do i find",
+        "where is my code",
+        "where's my code",
+        "wheres my code",
+        "can't find",
+        "cant find",
+        "didn't receive",
+        "didnt receive",
+        "no code",
     )):
+        return False
+
+    strong_phrases = (
+        "appointment",
+        "appt",
+        "test drive",
+        "testdrive",
+        "schedule an appointment",
+        "book an appointment",
+        "set up a time",
+        "what day works",
+        "what time works",
+        "what day and time",
+        "come in",
+        "come by",
+        "stop by",
+        "when can i come",
+        "when are you available",
+        "what times are available",
+        "available today",
+        "available tomorrow",
+    )
+    if any(k in t for k in strong_phrases):
         return True
-    if _DOW_RE.search(t):
-        return True
-    if _TIME_RE.search(t):
-        return True
-    return False
+
+    has_day = bool(_DOW_RE.search(t)) or any(x in t for x in ("today", "tomorrow", "this weekend"))
+    has_time = bool(_TIME_RE.search(t))
+    has_sched_context = any(x in t for x in ("available", "availability", "schedule", "book", "come in", "come by", "stop by"))
+
+    return (has_day or has_time) and has_sched_context
 
 def _parse_cc_env() -> list[str]:
     raw_cc = (os.getenv("HUMAN_REVIEW_CC") or "").strip()
@@ -132,21 +172,6 @@ def _send_mazda_handoff_email(
     )
 
 
-def _looks_like_appt_intent(text: str) -> bool:
-    t = (text or "").lower()
-    if any(k in t for k in (
-        "appointment", "appt", "test drive", "testdrive", "come in", "come by",
-        "stop by", "schedule", "available", "availability", "what times",
-        "can i", "could i", "book", "reserve", "set up a time",
-        "today", "tomorrow", "this weekend", "saturday", "sunday"
-    )):
-        return True
-    if _DOW_RE.search(t):
-        return True
-    if _TIME_RE.search(t):
-        return True
-    return False
-
 def handle_mazda_loyalty_inbound_email(*, inbound: dict, subject: str, body_text: str):
     sender_raw = (inbound.get("from") or "").strip()
     sender_email = _extract_email(sender_raw).strip().lower()
@@ -210,34 +235,46 @@ def handle_mazda_loyalty_inbound_email(*, inbound: dict, subject: str, body_text
     bucket = (fields.get("bucket") or "").strip()
     rooftop_name = (fields.get("rooftop_name") or fields.get("rooftop") or "").strip()
 
-    # Deterministic appointment intent => force human handoff
-    wants_appt = _looks_like_appt_intent(body_text)
-
     decision = generate_mazda_loyalty_email_reply(
         first_name=first_name,
         bucket=bucket,
         rooftop_name=rooftop_name,
         last_inbound=body_text,
     )
-    
-    if (decision.get("handoff_reason") or "").strip().lower() in ("voucher_lookup", "voucher", "voucher code", "voucher_code"):
+
+    reason_now = (decision.get("handoff_reason") or "").strip().lower()
+    if reason_now in ("voucher_lookup", "voucher", "voucher code", "voucher_code"):
         decision["needs_handoff"] = True
         decision["handoff_reason"] = "voucher_lookup"
 
-
-    # If appointment intent, force handoff regardless of model output
-    if wants_appt:
+    # Only apply appointment override if the email is truly about scheduling
+    # and the decision is not already in a higher-priority voucher/code path.
+    if (
+        reason_now not in ("voucher_lookup",)
+        and not any(x in (body_text or "").lower() for x in (
+            "16-digit code",
+            "voucher code",
+            "where can i find",
+            "where do i find",
+            "where is my code",
+            "where's my code",
+            "wheres my code",
+            "can't find",
+            "cant find",
+            "didn't receive",
+            "didnt receive",
+            "no code",
+        ))
+        and _looks_like_appt_intent(body_text)
+    ):
         decision["needs_handoff"] = True
         decision["handoff_reason"] = "appointment"
-        # Keep reply calm and structured; don't promise a time.
         decision["reply_text"] = (
             f"{'Hi ' + first_name + ',' if first_name else 'Hi there,'}\n\n"
             "Thanks — I can help with that. I’m looping in a team member to confirm the best time with you.\n\n"
             "What day and time were you hoping for?"
         )
-        # simple HTML conversion if not provided
-        if not decision.get("reply_html"):
-            decision["reply_html"] = "<br>".join(decision["reply_text"].split("\n"))
+        decision["reply_html"] = "<br>".join(decision["reply_text"].split("\n"))
 
     # Send reply back to customer via SendGrid
     out_subject = f"Re: {subject}" if subject else "[Mazda Loyalty] Re: Your voucher"
