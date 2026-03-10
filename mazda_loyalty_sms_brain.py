@@ -159,6 +159,70 @@ _NOT_IN_MARKET_RE = re.compile(
 def _looks_like_not_in_market(text: str) -> bool:
     return bool(_NOT_IN_MARKET_RE.search(text or ""))
 
+_BUYING_INTENT_RE = re.compile(
+    r"""(?ix)
+    \b(
+        i\s+want\s+to\s+use\s+it|
+        i\s+want\s+to\s+use\s+the\s+(?:reward|voucher|loyalty\s+reward)|
+        want\s+to\s+redeem|
+        redeem\s+it|
+        use\s+my\s+(?:reward|voucher|code)|
+        use\s+the\s+(?:reward|voucher|loyalty\s+reward)|
+        apply\s+the\s+(?:reward|voucher)|
+        i'd\s+like\s+to\s+use\s+it|
+        i\s+will\s+like\s+to\s+redeem|
+        i\s+would\s+like\s+to\s+redeem
+    )\b
+    """
+)
+
+_TRANSFER_INTENT_RE = re.compile(
+    r"""(?ix)
+    \b(
+        transfer|
+        gift\s+it|
+        give\s+it\s+to|
+        family\s+member|
+        friend
+    )\b
+    """
+)
+
+_SERVICE_CREDIT_INTENT_RE = re.compile(
+    r"""(?ix)
+    \b(
+        service\s+credit|
+        service\s+and\s+parts\s+credit|
+        parts\s+credit|
+        redeem\s+it\s+for\s+\$?100
+    )\b
+    """
+)
+
+def _looks_like_buying_intent(text: str) -> bool:
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+    if _BUYING_INTENT_RE.search(t):
+        return True
+
+    # light heuristic: mentions using/redeeming voucher/reward without transfer/service wording
+    if (
+        any(x in t for x in ("use", "redeem", "apply"))
+        and any(x in t for x in ("reward", "voucher", "code", "loyalty"))
+        and not _TRANSFER_INTENT_RE.search(t)
+        and not _SERVICE_CREDIT_INTENT_RE.search(t)
+    ):
+        return True
+
+    return False
+
+def _looks_like_transfer_intent(text: str) -> bool:
+    return bool(_TRANSFER_INTENT_RE.search(text or ""))
+
+def _looks_like_service_credit_intent(text: str) -> bool:
+    return bool(_SERVICE_CREDIT_INTENT_RE.search(text or ""))
+
 def generate_mazda_loyalty_sms_reply(
     *,
     first_name: str,
@@ -191,6 +255,43 @@ def generate_mazda_loyalty_sms_reply(
                 f"{prefix}no worries — the loyalty voucher code is usually emailed from Mazda at "
                 "mazdaemail@dealers-mazdausa.com. Please check your Inbox + Spam + Promotions + All Mail/Archive. "
                 "If you still can’t find it after searching, tell me and I’ll loop in a team member to help."
+            ),
+            "needs_handoff": False,
+            "handoff_reason": "other",
+        }
+        
+    # ---- Clear buying intent: do NOT push transfer/service credit ----
+    if _looks_like_buying_intent(inbound):
+        prefix = f"{first}, " if first else ""
+        return {
+            "reply": (
+                f"{prefix}great — I can help with that. "
+                "Do you already have your 16-digit Mazda loyalty voucher code?"
+            ),
+            "needs_handoff": False,
+            "handoff_reason": "other",
+        }
+
+    # ---- Explicit transfer intent ----
+    if _looks_like_transfer_intent(inbound):
+        prefix = f"{first}, " if first else ""
+        return {
+            "reply": (
+                f"{prefix}I can help with that. "
+                "Please send the recipient’s name and best phone or email."
+            ),
+            "needs_handoff": False,
+            "handoff_reason": "other",
+        }
+
+    # ---- Explicit service-credit intent ----
+    if _looks_like_service_credit_intent(inbound):
+        prefix = f"{first}, " if first else ""
+        return {
+            "reply": (
+                f"{prefix}I can help with that. "
+                "If you already have your 16-digit voucher code, text it here. "
+                "If not, I can help you figure out where to find it."
             ),
             "needs_handoff": False,
             "handoff_reason": "other",
