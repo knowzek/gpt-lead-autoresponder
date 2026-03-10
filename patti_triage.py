@@ -108,8 +108,23 @@ SALESTEAM_ID_TO_EMAIL = {
     "96693b1a-7966-ea11-a977-005056b72b57": "JeffL@pattersonautos.com", # Jeffrey Lesniak
     "88693b1a-7966-ea11-a977-005056b72b57": "Saifurr@pattersonautos.com", # Saifur Rahman
     "91693b1a-7966-ea11-a977-005056b72b57": "kevink@pattersonautos.com", # Kevin Keogh
-    
-    
+
+    # Tustin Hyundai
+    "04753b1a-7966-ea11-a977-005056b72b57": "Marcosr@pattersonautos.com", # Marcos Rodriguez
+    "a2fa4ddd-2c3c-ed11-b0c6-00505690dca3": "Dennism@pattersonautos.com", # Dennis Migashkin    
+    "fd743b1a-7966-ea11-a977-005056b72b57": "shawnb@pattersonautos.com", # Shawn Brown
+    "62c4289f-c0f7-f011-814f-00505690ec8c": "Charlesg@pattersonautos.com", # Charles guillen
+    "09753b1a-7966-ea11-a977-005056b72b57": "Roobenk@pattersonautos.com", # Rooben Khachatoorian
+    "35693b1a-7966-ea11-a977-005056b72b57": "Frankj@pattersonautos.com", # Frank Joubran
+    "f6061eef-a036-f011-814d-00505690ec8c": "Jacquelinec@pattersonautos.com", # Jacqueline Cruz
+    "3c9c716f-57bf-ec11-b0c3-00505690dca3": "MichaelShieh@pattersonautos.com", # Michael Sheh
+    "25a637df-56b0-f011-814f-00505690ec8c": "OscarC@pattersonautos.com", # Oscar Cantarero
+    "1f753b1a-7966-ea11-a977-005056b72b57": "Ivanv@pattersonautos.com", # Ivan Ventura
+    "64ed3f12-0d07-ef11-b0d2-00505690dca3": "Brennanm@pattersonautos.com", # Brennan mccormick
+    "2d0b136f-fff9-ee11-b0d2-00505690dca3": "terry@pattersonautos.com", # Terry Barnett
+    "05753b1a-7966-ea11-a977-005056b72b57": "carlosm@pattersonautos.com", # Carlos Menjivar
+    "ac6e9561-ac53-f011-814d-00505690ec8c": "davids@pattersonautos.com", # David Stea
+    "6c9b15a3-4253-ef11-814a-00505690043e": "Scottsc@pattersonautos.com", # Scott SCARLATA
     
 }
 
