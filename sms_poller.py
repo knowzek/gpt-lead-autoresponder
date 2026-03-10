@@ -248,35 +248,28 @@ def handle_mazda_loyalty_inbound_sms_webhook(*, payload_json: dict) -> dict:
     except Exception:
         log.exception("Mazda SMS webhook: failed patching inbound markers rec=%s", rec_id)
 
-    # Generate bucket-aware reply
     decision = generate_mazda_loyalty_sms_reply(
         first_name=first_name,
         bucket=bucket,
         rooftop_name=rooftop_name,
         last_inbound=inbound_text,
-        thread_snippet=None,  # webhook usually doesn’t have thread
+        thread_snippet=None,
     )
 
-    # ✅ Force voucher handoff (Patti can’t actually verify)
-    voucher = _extract_voucher_code(inbound_text)
-    if voucher:
-        decision["needs_handoff"] = True
-        decision["handoff_reason"] = "voucher_lookup"
-        prefix = f"{first_name}, " if first_name else ""
-        decision["reply"] = (
-            f"{prefix}thanks — I got that. I’m looping in a team member now to confirm eligibility and make sure everything is set up correctly."
-        )
-
-    # ✅ Force appointment handoff + one narrowing question
-    if _looks_like_appt_intent(inbound_text):
-        decision["needs_handoff"] = True
-        decision["handoff_reason"] = "appointment"
-        prefix = f"{first_name}, " if first_name else ""
-        decision["reply"] = f"{prefix}thanks — I’m looping in a team member to lock in a time. What day works best, and about what time?"
+    decision = _finalize_mazda_sms_decision(
+        decision=decision,
+        inbound_text=inbound_text,
+        first_name=first_name,
+    )
 
     reply_text = (decision.get("reply") or "").strip()
     if not reply_text:
-        reply_text = "Thanks — if you have your 16-digit voucher code, text it here and I’ll help with next steps."
+        prefix = f"{first_name}, " if first_name else ""
+        reply_text = (
+            f"{prefix}I can help with that. "
+            "If you already have your 16-digit voucher code, text it here. "
+            "If not, I can help you figure out where to find it."
+        )
 
     # Send SMS reply
     owner = (os.getenv("PATTI_PHONE_E164") or os.getenv("PATTI_NUMBER") or "").strip()
@@ -353,32 +346,96 @@ def handle_mazda_loyalty_inbound_sms_webhook(*, payload_json: dict) -> dict:
 
 def _looks_like_appt_intent(text: str) -> bool:
     """
-    Best-effort detection that the guest is trying to schedule / book / confirm a time.
-    Used to force human handoff + ask one narrowing question.
+    Mazda-only scheduling detection.
+    Keep this narrow so it does not hijack voucher/code conversations.
     """
     t = (text or "").lower().strip()
     if not t:
         return False
 
-    # Strong intent phrases
-    if any(k in t for k in (
-        "appointment", "appt", "schedule", "book", "set up a time",
-        "test drive", "testdrive", "come in", "come by", "stop by",
-        "available", "availability", "what times", "what time works",
-        "can i come", "could i come", "when can i", "works for you",
-        "today", "tomorrow", "this weekend"
+    # Do NOT treat code / voucher-finding messages as appointment intent
+    if any(x in t for x in (
+        "16-digit code",
+        "voucher code",
+        "where can i find",
+        "where do i find",
+        "where is my code",
+        "where's my code",
+        "wheres my code",
+        "can't find",
+        "cant find",
+        "didn't receive",
+        "didnt receive",
+        "no code",
     )):
+        return False
+
+    strong_phrases = (
+        "appointment",
+        "appt",
+        "test drive",
+        "testdrive",
+        "schedule an appointment",
+        "book an appointment",
+        "set up a time",
+        "what day works",
+        "what time works",
+        "what day and time",
+        "come in",
+        "come by",
+        "stop by",
+        "when can i come",
+        "when are you available",
+        "what times are available",
+        "available today",
+        "available tomorrow",
+    )
+    if any(k in t for k in strong_phrases):
         return True
 
-    # Day-of-week mention
-    if _DOW_RE.search(t):
-        return True
+    # Require a day/time signal plus some scheduling context
+    has_day = bool(_DOW_RE.search(t)) or any(x in t for x in ("today", "tomorrow", "this weekend"))
+    has_time = bool(_TIME_RE.search(t))
+    has_sched_context = any(x in t for x in ("available", "availability", "schedule", "book", "come in", "come by", "stop by"))
 
-    # Time mention (e.g., 11:30, 3pm, 12, 7:15pm)
-    if _TIME_RE.search(t):
-        return True
+    return (has_day or has_time) and has_sched_context
 
-    return False
+def _finalize_mazda_sms_decision(*, decision: dict, inbound_text: str, first_name: str) -> dict:
+    """
+    Final deterministic Mazda SMS overrides after the brain runs.
+    Priority:
+      1. actual voucher code
+      2. true appointment intent
+      3. leave brain decision alone
+    """
+    inbound = (inbound_text or "").strip()
+    first = (first_name or "").strip()
+    prefix = f"{first}, " if first else ""
+
+    # Actual voucher code always wins
+    code = _extract_voucherish_code(inbound)
+    if code:
+        return {
+            "reply": (
+                f"{prefix}thank you — I got your voucher code. "
+                "I’m looping in a team member now to confirm eligibility and make sure everything is set up correctly."
+            ),
+            "needs_handoff": True,
+            "handoff_reason": "voucher_lookup",
+        }
+
+    # Only override to appointment if it's truly an appointment ask
+    if _looks_like_appt_intent(inbound):
+        return {
+            "reply": (
+                f"{prefix}thanks — I’m looping in a team member to lock in a time. "
+                "What day works best, and about what time?"
+            ),
+            "needs_handoff": True,
+            "handoff_reason": "appointment",
+        }
+
+    return decision or {}
 
 def _send_mazda_sms_handoff_email(
     *,
@@ -807,38 +864,26 @@ def poll_once(owner: str):
                 thread_snippet=thread,
             )
 
-            # --- Force voucher lookup => human handoff ---
-            code = _extract_voucherish_code(last_inbound)
-            
             log.warning(
-                "MAZDA_VOUCHER_CHECK rec_id=%s inbound=%r code=%r",
+                "MAZDA_PRE_FINALIZE rec_id=%s inbound=%r",
                 rec_id,
                 (last_inbound or "")[:80],
-                code,
             )
-            
-            if code:
-                decision["needs_handoff"] = True
-                decision["handoff_reason"] = "voucher_lookup"
-            
-                prefix = f"{first_name}, " if first_name else ""
-                decision["reply"] = (
-                    f"{prefix}thank you — I got your voucher code. "
-                    "I’m looping in a team member now to confirm eligibility and make sure everything is set up correctly."
-                )
 
-
-            # Appointment intent still overrides
-            wants_appt = _looks_like_appt_intent(last_inbound)
-            if wants_appt:
-                decision["needs_handoff"] = True
-                decision["handoff_reason"] = "appointment"
-                prefix = f"{first_name}, " if first_name else ""
-                decision["reply"] = f"{prefix}thanks — I’m looping in a team member to lock in a time. What day works best, and about what time?"
+            decision = _finalize_mazda_sms_decision(
+                decision=decision,
+                inbound_text=last_inbound,
+                first_name=first_name,
+            )
 
             reply_text = (decision.get("reply") or "").strip()
             if not reply_text:
-                reply_text = "Thanks — if you have your 16-digit voucher code, text it here and I’ll help with next steps."
+                prefix = f"{first_name}, " if first_name else ""
+                reply_text = (
+                    f"{prefix}I can help with that. "
+                    "If you already have your 16-digit voucher code, text it here. "
+                    "If not, I can help you figure out where to find it."
+                )
 
             to_number = author
             if _sms_test_enabled() and _sms_test_to():
