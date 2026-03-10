@@ -46,12 +46,6 @@ log = logging.getLogger("patti.sms.poller")
 _TIME_RE = re.compile(r"\b(\d{1,2})(:\d{2})?\s?(am|pm)?\b", re.IGNORECASE)
 _DOW_RE  = re.compile(r"\b(mon(day)?|tue(sday)?|wed(nesday)?|thu(rsday)?|fri(day)?|sat(urday)?|sun(day)?)\b", re.IGNORECASE)
 
-VOUCHER_RE = re.compile(r"\b(\d{16})\b")
-APPT_RE = re.compile(
-    r"\b(appointment|appt|test drive|come in|schedule|book|available|availability|what time|tomorrow|today|this (week|weekend)|weekday|saturday|sunday)\b",
-    re.I
-)
-
 _STOP_RE = re.compile(
     r"""(?ix)
     ^\s*(stop|unsubscribe|end|quit)\s*$ |
@@ -111,10 +105,6 @@ def _extract_voucherish_code(text: str) -> str:
 def _now_iso():
     return datetime.now(timezone.utc).isoformat()
 
-def _extract_voucher_code(text: str) -> str | None:
-    m = VOUCHER_RE.search(text or "")
-    return m.group(1) if m else None
-
 def _parse_cc_env() -> list[str]:
     raw = (os.getenv("HUMAN_REVIEW_CC") or "").strip()
     if not raw:
@@ -123,13 +113,8 @@ def _parse_cc_env() -> list[str]:
     return [p.strip() for p in parts if p.strip()]
 
 def _extract_goto_payload(payload_json: dict) -> dict:
-    """
-    Best-effort extraction for GoTo webhook shapes.
-    Returns: {"msg_id": str, "from_phone": str, "text": str}
-    """
     p = payload_json or {}
 
-    # common candidates
     msg_id = (
         p.get("id")
         or p.get("messageId")
@@ -145,6 +130,14 @@ def _extract_goto_payload(payload_json: dict) -> dict:
         or ""
     )
 
+    owner_phone = (
+        p.get("ownerPhoneNumber")
+        or p.get("to")
+        or (p.get("message") or {}).get("ownerPhoneNumber")
+        or (p.get("message") or {}).get("to")
+        or ""
+    )
+
     text = (
         p.get("body")
         or p.get("text")
@@ -153,7 +146,12 @@ def _extract_goto_payload(payload_json: dict) -> dict:
         or ""
     )
 
-    return {"msg_id": str(msg_id or "").strip(), "from_phone": str(from_phone or "").strip(), "text": str(text or "").strip()}
+    return {
+        "msg_id": str(msg_id or "").strip(),
+        "from_phone": str(from_phone or "").strip(),
+        "owner_phone": str(owner_phone or "").strip(),
+        "text": str(text or "").strip(),
+    }
 
 def handle_mazda_loyalty_inbound_sms_webhook(*, payload_json: dict) -> dict:
     """
@@ -198,6 +196,7 @@ def handle_mazda_loyalty_inbound_sms_webhook(*, payload_json: dict) -> dict:
         return {"ok": True, "skipped": True, "reason": "dedupe"}
 
     rooftop_name = (fields.get("rooftop_name") or fields.get("rooftop") or "").strip()
+    rooftop_sender = (fields.get("rooftop_sender") or fields.get("sender") or "").strip()
     first_name = (fields.get("first_name") or "").strip()  # ✅ Mazda table only
     customer_email = (fields.get("customer_email") or fields.get("email") or "").strip()
     phone = (fields.get("customer_phone") or "").strip() or author
@@ -223,7 +222,7 @@ def handle_mazda_loyalty_inbound_sms_webhook(*, payload_json: dict) -> dict:
             log.exception("Mazda SMS webhook: failed patching opt-out rec=%s", rec_id)
     
         # Optional but recommended: confirm opt-out to the customer
-        owner = (os.getenv("PATTI_PHONE_E164") or os.getenv("PATTI_NUMBER") or "").strip()
+        owner = _norm_phone_e164_us(owner_phone) or _norm_phone_e164_us(os.getenv("PATTI_PHONE_E164") or os.getenv("PATTI_NUMBER") or "")
         try:
             send_sms(
                 from_number=owner,
@@ -272,7 +271,7 @@ def handle_mazda_loyalty_inbound_sms_webhook(*, payload_json: dict) -> dict:
         )
 
     # Send SMS reply
-    owner = (os.getenv("PATTI_PHONE_E164") or os.getenv("PATTI_NUMBER") or "").strip()
+    owner = _norm_phone_e164_us(owner_phone) or _norm_phone_e164_us(os.getenv("PATTI_PHONE_E164") or os.getenv("PATTI_NUMBER") or "")
     try:
         send_sms(from_number=owner, to_number=author, body=reply_text)
         log.info("Mazda SMS webhook: replied to=%s", author)
@@ -330,6 +329,7 @@ def handle_mazda_loyalty_inbound_sms_webhook(*, payload_json: dict) -> dict:
                 to_addr=to_addr,
                 cc_addrs=_parse_cc_env(),
                 rooftop_name=rooftop_name or "Mazda",
+                rooftop_sender=rooftop_sender,
                 customer_name=first_name or "Customer",
                 customer_email=customer_email or "unknown",
                 customer_phone=phone or "unknown",
@@ -405,14 +405,14 @@ def _finalize_mazda_sms_decision(*, decision: dict, inbound_text: str, first_nam
     Final deterministic Mazda SMS overrides after the brain runs.
     Priority:
       1. actual voucher code
-      2. true appointment intent
-      3. leave brain decision alone
+      2. preserve stronger existing handoff reasons
+      3. true appointment intent
+      4. leave brain decision alone
     """
     inbound = (inbound_text or "").strip()
     first = (first_name or "").strip()
     prefix = f"{first}, " if first else ""
 
-    # Actual voucher code always wins
     code = _extract_voucherish_code(inbound)
     if code:
         return {
@@ -424,7 +424,10 @@ def _finalize_mazda_sms_decision(*, decision: dict, inbound_text: str, first_nam
             "handoff_reason": "voucher_lookup",
         }
 
-    # Only override to appointment if it's truly an appointment ask
+    existing_reason = (decision.get("handoff_reason") or "").strip().lower()
+    if decision.get("needs_handoff") and existing_reason in {"pricing", "trade", "finance", "angry", "complaint"}:
+        return decision
+
     if _looks_like_appt_intent(inbound):
         return {
             "reply": (
@@ -442,6 +445,7 @@ def _send_mazda_sms_handoff_email(
     to_addr: str,
     cc_addrs: list[str],
     rooftop_name: str,
+    rooftop_sender: str,
     customer_name: str,
     customer_email: str,
     customer_phone: str,
@@ -758,6 +762,7 @@ def poll_once(owner: str):
         if is_mazda:
             rec_id = rec.get("id")
             rooftop_name = (fields.get("rooftop_name") or fields.get("rooftop") or "").strip()
+            rooftop_sender = (fields.get("rooftop_sender") or fields.get("sender") or "").strip()
             first_name = (fields.get("first_name") or "").strip()  # <-- ONLY Mazda table name
             phone = (fields.get("phone") or fields.get("customer_phone") or "").strip() or author
 
@@ -914,14 +919,23 @@ def poll_once(owner: str):
 
             # ✅ If handoff required, do Airtable flags + email notify
             if decision.get("needs_handoff"):
+                reason = (decision.get("handoff_reason") or "other").strip().lower()
+                msg = f"Mazda Loyalty SMS handoff: {reason}"
+                
                 try:
-                    reason = (decision.get("handoff_reason") or "other").strip().lower()
                     patch_by_id(rec_id, {
                         "Needs Reply": True,
-                        "Human Review Reason": f"Mazda Loyalty SMS handoff: {reason}",
+                        "Human Review Reason": msg,
                     })
                 except Exception:
-                    log.exception("Mazda SMS: failed to flag Needs Reply rec=%s", rec_id)
+                    log.exception("Mazda SMS: failed flag schema A rec=%s", rec_id)
+                    try:
+                        patch_by_id(rec_id, {
+                            "Needs Human Review": True,
+                            "Human Review Reason": msg,
+                        })
+                    except Exception:
+                        log.exception("Mazda SMS: failed flag schema B rec=%s", rec_id)
 
                 try:
                     salesperson_email = (fields.get("salesperson_email") or "").strip() or (os.getenv("HUMAN_REVIEW_FALLBACK_TO") or "").strip() or "knowzek@gmail.com"
@@ -939,6 +953,7 @@ def poll_once(owner: str):
                         to_addr=salesperson_email,
                         cc_addrs=cc_addrs,
                         rooftop_name=rooftop_name or "Mazda",
+                        rooftop_sender=rooftop_sender,
                         customer_name=customer_name,
                         customer_email=customer_email or "unknown",
                         customer_phone=customer_phone or "unknown",
