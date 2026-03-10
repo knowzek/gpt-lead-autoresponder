@@ -12,6 +12,7 @@ from goto_sms import list_conversations, iter_conversations, list_messages, send
 from sms_brain import generate_sms_reply
 from mazda_loyalty_sms_brain import generate_mazda_loyalty_sms_reply
 from templates import build_mazda_loyalty_sms
+from event_campaign_state import handle_event_sms_reply
 
 from patti_triage import handoff_to_human, notify_staff_patti_scheduled_appt
 from outlook_email import send_email_via_outlook
@@ -739,6 +740,8 @@ def poll_once(owner: str):
                 last_inbound = f"[Customer attached {len(media)} image/file attachment(s)]"
         log.info("SMS poll: last_inbound_len=%d last_inbound_preview=%r", len(last_inbound or ""), (last_inbound or "")[:80])
 
+        
+
         if not last_inbound and thread:
             for m in reversed(thread):
                 if m.get("role") == "user":
@@ -763,6 +766,34 @@ def poll_once(owner: str):
                 log.info("SMS poll: skip (Patti already last message) newest_id=%s", newest_id)
                 continue
 
+        # ---------------------------------------------------
+        # Event campaign SMS handling (RSVP / opt-out / event Q&A)
+        # Try this FIRST for inbound texts on polled numbers.
+        # ---------------------------------------------------
+        try:
+            event_payload = {
+                "authorPhoneNumber": author,
+                "ownerPhoneNumber": owner,
+                "body": last_inbound,
+                "id": msg_id,
+            }
+
+            event_out = handle_event_sms_reply(payload_json=event_payload)
+
+            if event_out.get("handled"):
+                log.info(
+                    "EVENT SMS handled via poller action=%s owner=%s author=%s",
+                    event_out.get("action"),
+                    owner,
+                    author,
+                )
+
+                # important: mark message as processed so we don't re-handle it
+                # use your existing dedupe / save logic here if you already have one
+                continue
+
+        except Exception:
+            log.exception("Event SMS handler failed in poller owner=%s author=%s", owner, author)
 
         # Find the lead by author phone (customer)
         try:
