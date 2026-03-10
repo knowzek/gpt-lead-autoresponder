@@ -102,6 +102,15 @@ LEAD_SOURCE_RULES: List[LeadRule] = [
         ),
     ),
 
+    # AutoTrader
+    LeadRule(
+        name="autotrader",
+        from_contains=("autotrader.com",),
+        subject_contains=(
+            "Lead: Autotrader Vehicle:",
+        ),
+    ),
+
     # CarGurus (From contains dealer-leads@messages.cargurus.com)
     LeadRule(
         name="cargurus",
