@@ -46,6 +46,70 @@ CODE_NOT_FOUND_TOKENS = [
     "didn't get my voucher", "didnt get my voucher",
 ]
 
+_BUYING_INTENT_RE = re.compile(
+    r"""(?ix)
+    \b(
+        i\s+want\s+to\s+use\s+it|
+        i\s+want\s+to\s+use\s+the\s+(?:reward|voucher|loyalty\s+reward)|
+        want\s+to\s+redeem|
+        redeem\s+it|
+        use\s+my\s+(?:reward|voucher|code)|
+        use\s+the\s+(?:reward|voucher|loyalty\s+reward)|
+        apply\s+the\s+(?:reward|voucher)|
+        i'd\s+like\s+to\s+use\s+it|
+        i\s+will\s+like\s+to\s+redeem|
+        i\s+would\s+like\s+to\s+redeem
+    )\b
+    """
+)
+
+_TRANSFER_INTENT_RE = re.compile(
+    r"""(?ix)
+    \b(
+        transfer|
+        gift\s+it|
+        give\s+it\s+to|
+        family\s+member|
+        friend
+    )\b
+    """
+)
+
+_SERVICE_CREDIT_INTENT_RE = re.compile(
+    r"""(?ix)
+    \b(
+        service\s+credit|
+        service\s+and\s+parts\s+credit|
+        parts\s+credit|
+        redeem\s+it\s+for\s+\$?100
+    )\b
+    """
+)
+
+def _looks_like_buying_intent(text: str) -> bool:
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+    if _BUYING_INTENT_RE.search(t):
+        return True
+
+    # light heuristic: mentions using/redeeming voucher/reward without transfer/service wording
+    if (
+        any(x in t for x in ("use", "redeem", "apply"))
+        and any(x in t for x in ("reward", "voucher", "code", "loyalty"))
+        and not _TRANSFER_INTENT_RE.search(t)
+        and not _SERVICE_CREDIT_INTENT_RE.search(t)
+    ):
+        return True
+
+    return False
+
+def _looks_like_transfer_intent(text: str) -> bool:
+    return bool(_TRANSFER_INTENT_RE.search(text or ""))
+
+def _looks_like_service_credit_intent(text: str) -> bool:
+    return bool(_SERVICE_CREDIT_INTENT_RE.search(text or ""))
+
 def _looks_like_code_not_found(text: str) -> bool:
     t = (text or "").strip().lower()
     if not t:
@@ -68,6 +132,7 @@ HANDOFF_REASONS = {
     "finance",
     "angry",
     "complaint",
+    "voucher_lookup",
     "other",
 }
 
@@ -172,8 +237,6 @@ def _as_html(text: str) -> str:
     for c in chunks:
         parts.append(f"<p style='margin:0 0 12px 0;'>{c.replace(chr(10), '<br>')}</p>")
     return "".join(parts)
-
-import re
 
 _PURCHASE_VERBS_RE = re.compile(
     r"\b(purchased|bought|leased|lease(d)?|picked up|took delivery|delivered|closed|signed)\b",
@@ -306,6 +369,50 @@ def generate_mazda_loyalty_email_reply(
             "handoff_reason": "other",
         }
 
+    # ---- Clear buying intent: do NOT push transfer/service credit ----
+    if _looks_like_buying_intent(inbound):
+        txt = (
+            f"{'Hi ' + first_name + ',' if first_name else 'Hi there,'}\n\n"
+            "I can help with that.\n\n"
+            "If you already have your 16-digit voucher code, send it here. "
+            "If not, I can help you figure out where to find it."
+        ).strip()
+        return {
+            "reply_text": txt,
+            "reply_html": _as_html(txt),
+            "needs_handoff": False,
+            "handoff_reason": "other",
+        }
+
+    # ---- Explicit transfer intent ----
+    if _looks_like_transfer_intent(inbound):
+        txt = (
+            f"{'Hi ' + first_name + ',' if first_name else 'Hi there,'}\n\n"
+            "I can help with that.\n\n"
+            "Please send the recipient’s name and best phone or email."
+        ).strip()
+        return {
+            "reply_text": txt,
+            "reply_html": _as_html(txt),
+            "needs_handoff": False,
+            "handoff_reason": "other",
+        }
+
+    # ---- Explicit service-credit intent ----
+    if _looks_like_service_credit_intent(inbound):
+        txt = (
+            f"{'Hi ' + first_name + ',' if first_name else 'Hi there,'}\n\n"
+            "I can help with that.\n\n"
+            "If you already have your 16-digit voucher code, send it here. "
+            "If not, I can help you figure out where to find it."
+        ).strip()
+        return {
+            "reply_text": txt,
+            "reply_html": _as_html(txt),
+            "needs_handoff": False,
+            "handoff_reason": "other",
+        }
+
     code = _extract_voucher_code(inbound)
     if code:
         # ✅ Voucher lookup requires a human (Patti cannot verify)
@@ -322,14 +429,14 @@ def generate_mazda_loyalty_email_reply(
             "handoff_reason": "voucher_lookup",
         }
 
-
     # ---- GPT for everything else ----
     if not _oai:
         # fail-open, minimal helpful reply
         txt = (
             f"{'Hi ' + first_name + ',' if first_name else 'Hi there,'}\n\n"
-            "Thanks for the reply — I can help. If you have your 16-digit voucher code, send it here and I’ll verify it.\n\n"
-            "Or tell me whether you’d like to use it yourself or transfer it to someone else."
+            "I can help with that.\n\n"
+            "If you already have your 16-digit voucher code, send it here. "
+            "If not, I can help you figure out where to find it."
         ).strip()
         return {
             "reply_text": txt,
@@ -375,8 +482,9 @@ def generate_mazda_loyalty_email_reply(
             # fallback if model returns something odd
             reply_text = (
                 f"{'Hi ' + first_name + ',' if first_name else 'Hi there,'}\n\n"
-                "Thanks — I can help. If you have your 16-digit voucher code, send it here and I’ll verify it.\n\n"
-                "Would you like to use it yourself, or transfer it to someone else?"
+                "I can help with that.\n\n"
+                "If you already have your 16-digit voucher code, send it here. "
+                "If not, I can help you figure out where to find it."
             ).strip()
         if not reply_html:
             reply_html = _as_html(reply_text)
@@ -392,8 +500,9 @@ def generate_mazda_loyalty_email_reply(
         log.exception("Mazda Loyalty GPT reply failed")
         txt = (
             f"{'Hi ' + first_name + ',' if first_name else 'Hi there,'}\n\n"
-            "Thanks for the reply — I can help. If you have your 16-digit voucher code, send it here and I’ll verify it.\n\n"
-            "Or tell me whether you’d like to use it yourself or transfer it to someone else."
+            "I can help with that.\n\n"
+            "If you already have your 16-digit voucher code, send it here. "
+            "If not, I can help you figure out where to find it."
         ).strip()
         return {
             "reply_text": txt,
