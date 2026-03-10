@@ -149,7 +149,7 @@ Program context:
 - Customers received a Mazda Loyalty Voucher related to their Mazda CX-5.
 - The voucher can typically be used toward a qualifying vehicle purchase.
 - If the customer does not want or need a vehicle right now, there are still two helpful options:
-  1. They may transfer the voucher to a family member or friend.
+  1. They may transfer the voucher to a family member or friend to use towards the purchase of a new Mazda CX-5.
   2. They may redeem it for a $100 Service & Parts credit at {rooftop_name} in exchange for the loyalty code.
 - When referencing the service credit, describe it as a "$100 Service & Parts credit at {rooftop_name}."
 
@@ -180,7 +180,7 @@ Do NOT continue sales messaging.
 Instead:
 1. Acknowledge their situation naturally.
 2. If they mention buying a vehicle, briefly congratulate them.
-3. Explain that the voucher can be transferred to a family member or friend.
+3. Explain that the voucher can be transferred to a family member or friend to use towards the purchase of a new Mazda CX-5.
 4. Mention that they can also redeem it for a $100 Service & Parts credit at {rooftop_name} in exchange for the loyalty code.
 5. Offer to help with either transfer or redemption.
 
@@ -340,7 +340,7 @@ def generate_mazda_loyalty_email_reply(
         txt = (
             f"{'Hi ' + first_name + ',' if first_name else 'Hi there,'}\n\n"
             f"{opening}\n\n"
-            f"If you do not need the voucher for yourself, it may still be transferred to a family member or friend. "
+            f"If you do not need the voucher for yourself, it may still be transferred to a family member or friend to use towards the purchase of a new Mazda CX-5. "
             f"You may also be able to redeem it for a $100 Service & Parts credit at {rooftop_name or 'Patterson Autos Mazda dealership'} "
             "in exchange for the loyalty code.\n\n"
             "If you’d like, I can help with either option."
