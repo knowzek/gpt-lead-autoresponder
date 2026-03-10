@@ -169,19 +169,40 @@ def looks_like_sms_appointment_intent(text: str) -> bool:
     if not t:
         return False
 
-    has_day = bool(_SMS_DAY_RE.search(t))
-    has_time = bool(_SMS_TIME_RE.search(t))
-    has_confirm = bool(_SMS_CONFIRM_RE.search(t))
+    has_day = bool(re.search(
+        r"\b(mon(day)?|tue(sday)?|wed(nesday)?|thu(rsday)?|fri(day)?|sat(urday)?|sun(day)?|today|tomorrow|this\s+weekend)\b",
+        t,
+        re.I,
+    ))
+
+    has_time = bool(re.search(
+        r"\b(\d{1,2})(:\d{2})?\s?(am|pm|o'?clock)?\b|"
+        r"\b(noon|midnight)\b",
+        t,
+        re.I,
+    ))
+
+    has_confirm = bool(re.search(
+        r"\b("
+        r"i'll be there|i will be there|be there|"
+        r"i'll be in|i will be in|"
+        r"see you then|that works|works for me|"
+        r"i'll come by|i will come by|"
+        r"i'll stop by|i will stop by"
+        r")\b",
+        t,
+        re.I,
+    ))
 
     # Strong direct scheduling language
     if _SMS_APPT_RE.search(t):
         return True
 
-    # Day + time is enough by itself
+    # Day + time should count even without scheduling words
     if has_day and has_time:
         return True
 
-    # Natural confirmation language + day/time
+    # Natural confirmation language + day or time should count
     if has_confirm and (has_day or has_time):
         return True
 
