@@ -299,10 +299,10 @@ def generate_mazda_loyalty_sms_reply(
         prefix = f"{first}, " if first else ""
         return {
             "reply": (
-                f"{prefix}I can help with that. "
-                "Please send the recipient’s name and best phone or email."
+                f"{prefix}Perfect — I’ll have a team member handle the voucher transfer for you "
+                "to make sure it’s done correctly. They’ll reach out shortly."
             ),
-            "needs_handoff": False,
+            "needs_handoff": True,
             "handoff_reason": "other",
         }
 
