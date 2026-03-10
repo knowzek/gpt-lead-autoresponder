@@ -68,7 +68,6 @@ _MAZDA_STOP_RE = re.compile(r"""(?ix)
     \b(stop\s+text(ing)?|stop\s+messages?)\b |
     \b(do\s*not\s*text|do\s*not\s*contact|dont\s*text|don't\s*text|dont\s*contact|don't\s*contact)\b |
     \b(remove\s+me|take\s+me\s+off)\b |
-    \b(not\s+interested)\b |
     \b(please\s+stop)\b |
     \b(stop\s+sending)\b
 """)
