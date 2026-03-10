@@ -165,6 +165,7 @@ def handle_mazda_loyalty_inbound_sms_webhook(*, payload_json: dict) -> dict:
     extracted = _extract_goto_payload(payload_json)
     msg_id = extracted["msg_id"]
     author = extracted["from_phone"]
+    owner_phone = extracted["owner_phone"]
     inbound_text = extracted["text"]
 
     log.info("📥 Mazda SMS webhook: author=%r msg_id=%r text_preview=%r", author, msg_id, inbound_text[:80])
@@ -202,7 +203,7 @@ def handle_mazda_loyalty_inbound_sms_webhook(*, payload_json: dict) -> dict:
     phone = (fields.get("customer_phone") or "").strip() or author
 
     # ✅ STOP / opt-out handling (must run BEFORE setting sms_status="convo")
-    if re.search(r"(?i)\b(stop|unsubscribe|cancel|end|quit)\b", inbound_text or ""):
+    if _MAZDA_STOP_RE.search(inbound_text or ""):
         now_iso = _now_iso()
         try:
             patch_by_id(rec_id, {
