@@ -79,13 +79,12 @@ from zoneinfo import ZoneInfo
 STORE_TZ = os.getenv("STORE_TIMEZONE", "America/Los_Angeles")
 
 def _patti_numbers() -> list[str]:
-    # Option 1: from rooftops.py mapping (recommended)
-    nums = list_rooftop_sms_numbers()
-
-    # Optional: allow env override/additions
-    extra = (os.getenv("PATTI_SMS_NUMBERS") or "").strip()
-    if extra:
-        nums.extend([n.strip() for n in extra.split(",") if n.strip()])
+    # If explicitly set, treat as the ONLY numbers to poll
+    override = (os.getenv("PATTI_SMS_NUMBERS") or "").strip()
+    if override:
+        nums = [n.strip() for n in override.split(",") if n.strip()]
+    else:
+        nums = list_rooftop_sms_numbers()
 
     # Normalize + de-dupe
     out = []
