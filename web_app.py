@@ -322,8 +322,10 @@ def email_inbound():
 def sms_inbound():
     """
     Webhook endpoint called by GoTo for inbound SMS.
-    First try event RSVP / STOP handling.
-    If not matched, fall back to Mazda Loyalty handling.
+    Routing order:
+      1) Event RSVP / STOP
+      2) Regular internet lead SMS handling
+      3) Mazda loyalty fallback
     """
     try:
         payload_json = request.get_json(silent=True) or {}
@@ -332,7 +334,6 @@ def sms_inbound():
         # 1) Event campaign RSVP / STOP handling
         try:
             from event_campaign_state import handle_event_sms_reply
-
             event_out = handle_event_sms_reply(payload_json=payload_json)
             if event_out.get("handled"):
                 log.info("📲 Event SMS reply handled action=%s", event_out.get("action"))
@@ -344,7 +345,16 @@ def sms_inbound():
         except Exception as e:
             log.exception("Event SMS reply handler failed: %s", e)
 
-        # 2) Existing Mazda loyalty fallback
+        # 2) Regular internet leads / standard Patti SMS handling
+        try:
+            out = process_inbound_sms(payload_json=payload_json)
+            if (out or {}).get("status") == "ok":
+                log.info("📲 Standard SMS inbound handled action=%s", (out or {}).get("action"))
+                return jsonify(out), 200
+        except Exception as e:
+            log.exception("Standard SMS inbound handler failed: %s", e)
+
+        # 3) Existing Mazda loyalty fallback
         from sms_poller import handle_mazda_loyalty_inbound_sms_webhook
         out = handle_mazda_loyalty_inbound_sms_webhook(payload_json=payload_json)
 
