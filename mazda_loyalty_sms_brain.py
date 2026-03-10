@@ -34,10 +34,19 @@ CODE_NOT_FOUND_TOKENS = [
     "can't find", "cant find", "cannot find", "can't locate", "cant locate",
     "can't see", "cant see", "missing", "lost",
     "where is my code", "where's my code", "wheres my code",
+    "where do i get the code", "where can i get the code",
+    "how can i get the code", "how do i get the code",
+    "how can i obtain the code", "how do i obtain the code",
+    "how can i get my code", "how do i get my code",
+    "where do i get my code", "where can i get my code",
+    "where is my voucher", "where's my voucher", "wheres my voucher",
+    "where do i get the voucher", "where can i get the voucher",
+    "how can i get the voucher", "how do i get the voucher",
     "no code", "not received", "haven't received", "havent received",
     "can't find my voucher", "cant find my voucher",
     "can't find my code", "cant find my code",
     "didn't get my voucher", "didnt get my voucher",
+    "didn't get my code", "didnt get my code",
 ]
 
 def _looks_like_code_not_found(text: str) -> bool:
@@ -71,6 +80,19 @@ Program context:
 - If the customer does not want or need a vehicle right now, there are still two helpful alternatives:
   1. They may transfer the voucher to a family member or friend.
   2. They may redeem it for a $100 Service & Parts credit at {rooftop_name} in exchange for the loyalty code.
+
+Program guardrails:
+- Do NOT invent program rules, deadlines, eligibility criteria, or availability.
+- If the customer provides a voucher code, acknowledge it and say a team member will verify it.
+- If the customer says they didn’t receive, can’t find, lost, or don’t know how to get their voucher code:
+  - tell them the code should have been emailed from Mazda at mazdaemail@dealers-mazdausa.com
+  - tell them to check Inbox, Spam, Promotions, and All Mail/Archive
+  - do NOT tell them to come into the dealership to get the code
+  - do NOT say the code is available in-store unless a human has confirmed that
+  - do NOT invent alternate ways to retrieve the code
+- If the customer wants to transfer/gift it, say you can help and ask for the recipient’s name and best contact info.
+- If they show buying intent, move to the next step briefly and naturally.
+- Never quote pricing, OTD, payments, APR, lease terms, or trade values. Escalate those to a human.
 
 Special handling:
 - If the customer says they already bought a car, just purchased, already replaced it, are not in the market, do not need a car, or are not interested right now:
@@ -253,7 +275,7 @@ def generate_mazda_loyalty_sms_reply(
         return {
             "reply": (
                 f"{prefix}no worries — the loyalty voucher code is usually emailed from Mazda at "
-                "mazdaemail@dealers-mazdausa.com. Please check your Inbox + Spam + Promotions + All Mail/Archive. "
+                "mazdaemail@dealers-mazdausa.com. Please check your Inbox, Spam, Promotions, and All Mail/Archive. "
                 "If you still can’t find it after searching, tell me and I’ll loop in a team member to help."
             ),
             "needs_handoff": False,
