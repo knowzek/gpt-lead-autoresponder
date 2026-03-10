@@ -74,6 +74,26 @@ SALESTEAM_ID_TO_EMAIL = {
     "db683b1a-7966-ea11-a977-005056b72b57": "ericm@pattersonautos.com", # Eric Magana
     "b67e5380-34d0-ea11-a97e-005056b72b57": "veronicap@pattersonautos.com", # Veronica Paco
     "01e24045-5f04-f111-814f-00505690ec8c": "Vnguyen@pattersonautos.com", # Vu Nguyen
+
+    # --- Mission Viejo Kia / Internet Leads ---
+    "b41d4c1a-7966-ea11-a977-005056b72b57": "samanthat@pattersonautos.com", #Samantha Taylor
+    "465d558c-7d40-ef11-814a-00505690043e": "TrevorM@pattersonautos.com", # Trevor Morgan
+    "d206c2f7-f219-ef11-b0d2-00505690dca3": "roanm@pattersonautos.com", # Roan Maqui
+    "204d07ee-11f4-f011-814f-00505690ec8c": "rayak@pattersonautos.com", # Raya Khadage
+    "e7dab46a-480a-ef11-b0d2-00505690dca3": "AsalK@pattersonautos.com", # Asal Khosraviani
+    "82595556-b733-ee11-b0ce-00505690dca3": "jacoba@pattersonautos.com", # Jacob Amezola
+    "54faece6-9aa0-f011-814f-00505690ec8c": "AnthonyC@pattersonautos.com",  # Anthony Calabrese
+    "37609e7b-02e1-f011-814f-00505690ec8c": "michaelq@pattersonautos.com", # Michael Quezada
+    "d4b8a1d4-e105-f111-814f-00505690ec8c": "Bills@pattersonautos.com", # Bill Saul
+    "5d673b1a-7966-ea11-a977-005056b72b57": "Louaya@pattersonautos.com", # Louay awad
+    "67d60972-80ca-ed11-b0cb-00505690dca3": "steveh@pattersonautos.com", # Steve Hahn
+    "c1eb7a58-40f5-ef11-814d-00505690ec8c": "Anniec@pattersonautos.com", # Anna Cuevas
+    "68567702-7bc6-f011-814f-00505690ec8c": "lexig@pattersonautos.com", # Lexi Gable
+    "6fabddf5-eaed-ed11-b0cd-00505690dca3": "Danielm@pattersonautos.com", # Daniel Maciel
+    "35426250-d43f-ef11-814a-00505690043e": "omarh@pattersonautos.com", # Omar Heredia
+    "41f7e632-940c-ee11-b0ce-00505690dca3": "austiny@pattersonautos.com", # Austin Yoon
+    
+    
     
     
 }
