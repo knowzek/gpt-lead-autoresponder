@@ -1961,6 +1961,19 @@ def processHit(hit):
     opportunity["opportunityId"] = opportunity.get("opportunityId") or opportunityId
     opportunity["id"] = opportunity.get("id") or opportunity["opportunityId"]
 
+    # -----------------------------
+    # HARDEN checkedDict
+    # -----------------------------
+    checkedDict = opportunity.get("checkedDict") or {}
+    if not isinstance(checkedDict, dict):
+        checkedDict = {}
+
+    checkedDict.setdefault("is_sales_contacted", False)
+    checkedDict.setdefault("patti_already_contacted", False)
+    checkedDict.setdefault("last_msg_by", None)
+
+    opportunity["checkedDict"] = checkedDict
+
     # --- HARD STOP: Needs Human Review ---
     # (covers cases where the Airtable checkbox exists AND cases where opp_from_record hydrated needs_human_review)
     needs_hr = bool(fields.get("Needs Human Review")) or bool(opportunity.get("needs_human_review"))
@@ -2833,7 +2846,7 @@ def processHit(hit):
             if customerFirstMsgDict.get("salesAlreadyContact", False):
                 opportunity["isActive"] = False
                 opportunity["follow_up_at"] = None
-                opportunity["checkedDict"]["is_sales_contacted"] = True
+                checkedDict["is_sales_contacted"] = True
                 if not OFFLINE_MODE:
                     airtable_save(opportunity, extra_fields={"follow_up_at": None})
 
