@@ -56,6 +56,48 @@ OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY") or "").strip()
 
 log = logging.getLogger("patti.email_ingestion")
 
+def _extract_provider_comment_best_effort(*texts: str) -> str:
+    """
+    Try multiple provider-body representations and return the first real
+    guest-written comment we can extract.
+
+    Why:
+    - Power Automate may send only body_html
+    - clean_html() may produce a different text shape than raw body_text
+    - some providers parse better from one representation than another
+
+    We try each candidate in order and return the first non-empty comment.
+    """
+    seen: set[str] = set()
+
+    for txt in texts:
+        s = (txt or "").strip()
+        if not s:
+            continue
+
+        # de-dupe near-identical candidates
+        key = s[:4000]
+        if key in seen:
+            continue
+        seen.add(key)
+
+        try:
+            comment = (extract_customer_comment_from_provider(s) or "").strip()
+        except Exception:
+            log.exception("provider comment extraction failed for one candidate")
+            comment = ""
+
+        if comment:
+            log.info(
+                "PROVIDER COMMENT DEBUG matched candidate_len=%d comment_len=%d preview=%r",
+                len(s),
+                len(comment),
+                comment[:220],
+            )
+            return comment
+
+    return ""
+
 
 def _norm_phone_e164_us(raw: str) -> str:
     raw = (raw or "").strip()
@@ -899,7 +941,18 @@ def process_lead_notification(inbound: dict) -> None:
         )
 
     if not customer_comment and provider_template:
-        customer_comment = extract_customer_comment_from_provider(body_text)
+        customer_comment = _extract_provider_comment_best_effort(
+            raw_text,        # exact plain text from PA if present
+            body_text,       # chosen working text used elsewhere in this function
+            cleaned_text,    # clean_html(raw_html)
+            raw_html,        # last resort
+        )
+
+        log.info(
+            "TRIAGE DEBUG initial_provider_comment_len=%s preview=%r",
+            len(customer_comment or ""),
+            (customer_comment or "")[:220],
+        )
 
     log.info(
         "TRIAGE DEBUG provider_template=%s source=%r sender=%r",
@@ -1674,14 +1727,21 @@ def process_lead_notification(inbound: dict) -> None:
 
             # Provider template? Only triage guest-written comment (non-ADF only)
             if provider_template and not is_adf:
-                comment = extract_customer_comment_from_provider(triage_text)
+                comment = _extract_provider_comment_best_effort(
+                    customer_comment,
+                    triage_text,
+                    raw_text,
+                    body_text,
+                    cleaned_text,
+                    raw_html,
+                )
 
                 log.info("TRIAGE DEBUG extracted_comment_len=%s", len(comment or ""))
                 log.info(
                     "TRIAGE DEBUG extracted_comment_preview=%r", (comment or "")[:220]
                 )
 
-                triage_text = comment.strip() if comment else ""
+                triage_text = (comment or "").strip()
 
                 if not triage_text:
                     triage = {
