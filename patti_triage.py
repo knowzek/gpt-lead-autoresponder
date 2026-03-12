@@ -63,6 +63,7 @@ SALESTEAM_ID_TO_EMAIL = {
     "ea44fdc0-c1c7-f011-814f-00505690ec8c": "Juliem@pattersonautos.com",  # Julie Manallo (BDC)
     "598a45a3-efca-f011-814f-00505690ec8c": "Jhoannec@pattersonautos.com",  # Jhoanne Canceran (BDC)
     "8f693b1a-7966-ea11-a977-005056b72b57": "joshuaw@pattersonautos.com",  # Joshua Wheelan
+    "5e1fb354-2c0c-f111-814f-00505690ec8c": "Anniec@pattersonautos.com", # Anna Cuevas
     
     # --- HB Mazda / Internet leads ---
     "7eb88128-5274-ef11-814b-00505690ec8c": "mauricioJ@pattersonautos.com", # Mauricio Jimenez
