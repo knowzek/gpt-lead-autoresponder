@@ -713,7 +713,7 @@ def handle_event_email_reply(inbound: dict) -> dict:
         _patch_opt_out_invite(invite_rec, "email", body_text)
         _send_email_confirmation(
             to_email=sender_email,
-            subject=_reply_subject(subject, "[Event] Opt-out confirmed")
+            subject=_reply_subject(subject, "[Event] Opt-out confirmed"),
             body_text="Understood — we won't email you again about this event.",
         )
         return {"handled": True, "action": "opt_out"}
