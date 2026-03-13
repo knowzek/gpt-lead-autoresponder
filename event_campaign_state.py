@@ -12,6 +12,9 @@ import requests
 from patti_mailer import send_via_sendgrid
 from goto_sms import send_sms
 from rooftops import SUBSCRIPTION_TO_ROOFTOP
+from patti_triage import get_human_review_config
+from outlook_email import send_email_via_outlook
+from event_campaign_brain import generate_event_reply
 
 log = logging.getLogger("patti.event_campaign_state")
 
@@ -407,6 +410,122 @@ def _send_email_confirmation(*, to_email: str, subject: str, body_text: str) -> 
     except Exception:
         log.exception("Event email confirmation failed to=%s", to_email)
 
+def _guest_first_name(guest_fields: dict) -> str:
+    return (
+        _s(guest_fields.get("First Name"))
+        or _s(guest_fields.get("first_name"))
+        or _s(guest_fields.get("customer_first_name"))
+    )
+
+def _event_handoff_subject(event_fields: dict, guest_fields: dict, reason: str) -> str:
+    store = _s(event_fields.get("Store")) or "the store"
+    title = _event_title(event_fields)
+    guest_name = (
+        f"{_guest_first_name(guest_fields)} {_s(guest_fields.get('Last Name'))}".strip()
+        or _s(guest_fields.get("Full Name"))
+        or "Guest"
+    )
+    return f"[Patti Event Handoff] {store} — {title} — {guest_name} — {reason}"
+
+def _event_handoff_html(
+    *,
+    event_fields: dict,
+    guest_fields: dict,
+    invite_fields: dict,
+    channel: str,
+    inbound_text: str,
+    reason: str,
+) -> str:
+    store = _s(event_fields.get("Store"))
+    title = _event_title(event_fields)
+    date_display = _s(event_fields.get("Event Date Display")) or _s(event_fields.get("Event Date"))
+    event_time = _event_time(event_fields)
+    location = _s(event_fields.get("Event Location"))
+    guest_name = (
+        f"{_guest_first_name(guest_fields)} {_s(guest_fields.get('Last Name'))}".strip()
+        or _s(guest_fields.get("Full Name"))
+        or "Guest"
+    )
+    guest_email = _s(guest_fields.get("Email")) or _s(guest_fields.get("customer_email"))
+    guest_phone = _s(guest_fields.get("Phone")) or _s(guest_fields.get("customer_phone"))
+
+    return f"""
+    <p><strong>Patti event handoff needed</strong></p>
+    <p>
+      <strong>Reason:</strong> {reason}<br>
+      <strong>Channel:</strong> {channel}<br>
+      <strong>Store:</strong> {store}<br>
+      <strong>Event:</strong> {title}<br>
+      <strong>Date:</strong> {date_display}<br>
+      <strong>Time:</strong> {event_time}<br>
+      <strong>Location:</strong> {location}
+    </p>
+    <p>
+      <strong>Guest:</strong> {guest_name}<br>
+      <strong>Email:</strong> {guest_email or "unknown"}<br>
+      <strong>Phone:</strong> {guest_phone or "unknown"}
+    </p>
+    <p><strong>Guest message:</strong><br>{(inbound_text or "")[:2000]}</p>
+    <p><strong>Invite record:</strong> {invite_fields.get("Invite ID") or ""}</p>
+    """.strip()
+
+def _notify_event_handoff(
+    *,
+    event_fields: dict,
+    guest_fields: dict,
+    invite_rec: dict,
+    channel: str,
+    inbound_text: str,
+    reason: str,
+) -> None:
+    store = _s(event_fields.get("Store"))
+    cfg = get_human_review_config("")
+    to_addr = (
+        _s(guest_fields.get("salesperson_email"))
+        or _s(event_fields.get("Salesperson Email"))
+        or _s(event_fields.get("Handoff Email"))
+        or cfg.get("fallback_to")
+        or (os.getenv("HUMAN_REVIEW_FALLBACK_TO") or "").strip()
+    )
+    if not to_addr:
+        log.warning("Event handoff: no recipient configured")
+        return
+
+    cc_addrs = list(cfg.get("cc") or [])
+    subject = _event_handoff_subject(event_fields, guest_fields, reason)
+    html = _event_handoff_html(
+        event_fields=event_fields,
+        guest_fields=guest_fields,
+        invite_fields=invite_rec.get("fields") or {},
+        channel=channel,
+        inbound_text=inbound_text,
+        reason=reason,
+    )
+
+    try:
+        send_email_via_outlook(
+            to_addr=to_addr,
+            subject=subject,
+            html_body=html,
+            cc_addrs=cc_addrs,
+            headers={"X-Patti-Flow": "event_handoff"},
+            enforce_compliance=False,
+        )
+    except Exception:
+        log.exception("Event handoff email failed")
+
+def _patch_event_handoff(invite_rec: dict, channel: str, body_text: str, reason: str) -> None:
+    _patch_record(
+        INVITES_TABLE,
+        invite_rec["id"],
+        {
+            "Needs Human Review": True,
+            "Human Review Reason": f"Event handoff: {reason}",
+            "Last Response At": _now_iso(),
+            "Last Response Channel": channel,
+            "Last Response Text": body_text[:1000],
+        },
+    )
 
 def handle_event_sms_reply(payload_json: dict | None, raw_text: str = "") -> dict:
     payload_json = payload_json or {}
@@ -488,7 +607,41 @@ def handle_event_sms_reply(payload_json: dict | None, raw_text: str = "") -> dic
         )
         return {"handled": True, "action": "rsvp_no"}
 
-    return {"handled": False, "reason": "not_event_reply"}
+    guest_fields = guest_rec.get("fields") or {}
+    invite_fields = invite_rec.get("fields") or {}
+
+    decision = generate_event_reply(
+        first_name=_guest_first_name(guest_fields),
+        event_fields=event_fields,
+        guest_message=clean,
+        channel="sms",
+    )
+
+    reply = (decision.get("reply") or "").strip()
+    if not reply:
+        return {"handled": False, "reason": "empty_event_reply"}
+
+    _send_sms_confirmation(
+        to_number=from_phone,
+        from_number=from_number,
+        body=reply,
+        rooftop_name=store,
+    )
+
+    if decision.get("needs_handoff"):
+        reason = (decision.get("handoff_reason") or "event_unknown").strip().lower()
+        _patch_event_handoff(invite_rec, "sms", clean, reason)
+        _notify_event_handoff(
+            event_fields=event_fields,
+            guest_fields=guest_fields,
+            invite_rec=invite_rec,
+            channel="sms",
+            inbound_text=clean,
+            reason=reason,
+        )
+        return {"handled": True, "action": "handoff", "reason": reason}
+
+    return {"handled": True, "action": "qa_reply"}
 
 
 def handle_event_email_reply(inbound: dict) -> dict:
@@ -555,4 +708,37 @@ def handle_event_email_reply(inbound: dict) -> dict:
         )
         return {"handled": True, "action": "rsvp_no"}
 
-    return {"handled": False, "reason": "not_event_reply"}
+    guest_fields = guest_rec.get("fields") or {}
+    invite_fields = invite_rec.get("fields") or {}
+
+    decision = generate_event_reply(
+        first_name=_guest_first_name(guest_fields),
+        event_fields=event_fields,
+        guest_message=body_text,
+        channel="email",
+    )
+
+    reply = (decision.get("reply") or "").strip()
+    if not reply:
+        return {"handled": False, "reason": "empty_event_reply"}
+
+    _send_email_confirmation(
+        to_email=sender_email,
+        subject=f"Re: {subject}" if subject else f"[Event] {title}",
+        body_text=reply,
+    )
+
+    if decision.get("needs_handoff"):
+        reason = (decision.get("handoff_reason") or "event_unknown").strip().lower()
+        _patch_event_handoff(invite_rec, "email", body_text, reason)
+        _notify_event_handoff(
+            event_fields=event_fields,
+            guest_fields=guest_fields,
+            invite_rec=invite_rec,
+            channel="email",
+            inbound_text=body_text,
+            reason=reason,
+        )
+        return {"handled": True, "action": "handoff", "reason": reason}
+
+    return {"handled": True, "action": "qa_reply"}
