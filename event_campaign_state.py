@@ -61,6 +61,25 @@ def _request(method: str, url: str, **kwargs) -> dict:
         raise RuntimeError(f"Airtable {method} failed {r.status_code}: {r.text[:800]}")
     return r.json()
 
+def _patch_event_reply_activity(
+    invite_rec: dict,
+    channel: str,
+    body_text: str,
+    *,
+    stop_nudges: bool = True,
+    status: str = "Responded",
+) -> None:
+    fields = {
+        "Last Response At": _now_iso(),
+        "Last Response Channel": channel,
+        "Last Response Text": body_text[:1000],
+    }
+    if stop_nudges:
+        fields["Stop Event Nudges"] = True
+    if status:
+        fields["Invite Status"] = status
+
+    _patch_record(INVITES_TABLE, invite_rec["id"], fields)
 
 def _fetch_all_records(table_name: str, *, formula: str = "", max_records: int = 1000) -> list[dict]:
     records: list[dict] = []
@@ -481,9 +500,9 @@ def _notify_event_handoff(
     store = _s(event_fields.get("Store"))
     cfg = get_human_review_config("")
     to_addr = (
-        _s(guest_fields.get("salesperson_email"))
+        _s(event_fields.get("Handoff Email"))
         or _s(event_fields.get("Salesperson Email"))
-        or _s(event_fields.get("Handoff Email"))
+        or _s(guest_fields.get("salesperson_email"))
         or cfg.get("fallback_to")
         or (os.getenv("HUMAN_REVIEW_FALLBACK_TO") or "").strip()
     )
@@ -521,11 +540,21 @@ def _patch_event_handoff(invite_rec: dict, channel: str, body_text: str, reason:
         {
             "Needs Human Review": True,
             "Human Review Reason": f"Event handoff: {reason}",
+            "Invite Status": "Human Review",
+            "Stop Event Nudges": True,
             "Last Response At": _now_iso(),
             "Last Response Channel": channel,
             "Last Response Text": body_text[:1000],
         },
     )
+
+def _reply_subject(subject: str, fallback: str) -> str:
+    s = _s(subject)
+    if not s:
+        return fallback
+    if s.lower().startswith("re:"):
+        return s
+    return f"Re: {s}"
 
 def handle_event_sms_reply(payload_json: dict | None, raw_text: str = "") -> dict:
     payload_json = payload_json or {}
@@ -610,6 +639,14 @@ def handle_event_sms_reply(payload_json: dict | None, raw_text: str = "") -> dic
     guest_fields = guest_rec.get("fields") or {}
     invite_fields = invite_rec.get("fields") or {}
 
+    _patch_event_reply_activity(
+        invite_rec,
+        "sms",
+        clean,
+        stop_nudges=True,
+        status="Responded",
+    )
+
     decision = generate_event_reply(
         first_name=_guest_first_name(guest_fields),
         event_fields=event_fields,
@@ -676,7 +713,7 @@ def handle_event_email_reply(inbound: dict) -> dict:
         _patch_opt_out_invite(invite_rec, "email", body_text)
         _send_email_confirmation(
             to_email=sender_email,
-            subject=f"Re: {subject}" if subject else "[Event] Opt-out confirmed",
+            subject=_reply_subject(subject, "[Event] Opt-out confirmed")
             body_text="Understood — we won't email you again about this event.",
         )
         return {"handled": True, "action": "opt_out"}
@@ -710,6 +747,14 @@ def handle_event_email_reply(inbound: dict) -> dict:
 
     guest_fields = guest_rec.get("fields") or {}
     invite_fields = invite_rec.get("fields") or {}
+
+    _patch_event_reply_activity(
+        invite_rec,
+        "email",
+        body_text,
+        stop_nudges=True,
+        status="Responded",
+    )
 
     decision = generate_event_reply(
         first_name=_guest_first_name(guest_fields),
