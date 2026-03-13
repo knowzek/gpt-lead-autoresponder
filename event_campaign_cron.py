@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from patti_mailer import send_via_sendgrid
 from goto_sms import send_sms
 from rooftops import SUBSCRIPTION_TO_ROOFTOP
+from patti_common import build_patti_footer
 
 
 # =========================================================
@@ -305,43 +306,50 @@ def build_event_email(event: dict, guest: dict, template_no: int) -> dict[str, s
         if rsvp_url else ""
     )
 
+    signature_html = build_patti_footer(store)
+
     body_html = f"""
-<!doctype html>
-<html>
-  <body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,Helvetica,sans-serif;color:#111111;">
-    <div style="display:none;max-height:0;overflow:hidden;opacity:0;">{escape(preheader)}</div>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f4f4;">
-      <tr>
-        <td align="center" style="padding:24px 12px;">
-          <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="width:100%;max-width:640px;background:#ffffff;border-radius:12px;overflow:hidden;">
-            <tr><td style="padding:0;">{hero_html}</td></tr>
-            <tr>
-              <td style="padding:28px 32px;">
-                <div style="font-size:12px;letter-spacing:1.2px;text-transform:uppercase;color:#b01d24;font-weight:700;margin-bottom:10px;">A Patterson customer exclusive</div>
-                <h1 style="margin:0 0 14px 0;font-size:30px;line-height:1.15;">Be among the first to experience the {escape(title)}</h1>
-                <p style="margin:0 0 18px 0;font-size:16px;line-height:1.6;">Hi {escape(first_name)},</p>
-                <p style="margin:0 0 18px 0;font-size:16px;line-height:1.6;">{escape(opener)}</p>
-                <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 20px 0;background:#f8f8f8;border-radius:8px;width:100%;">
-                  <tr>
-                    <td style="padding:18px 20px;font-size:15px;line-height:1.7;">
-                      <strong>{escape(title)}</strong><br>
-                      {escape(date_display)}{('<br>' + escape(time_window)) if time_window else ''}<br>
-                      {escape(location)}
-                    </td>
-                  </tr>
-                </table>
-                <ul style="padding-left:18px;margin:0 0 22px 0;font-size:16px;line-height:1.6;">{bullet_html}</ul>
-                <p style="margin:0 0 22px 0;font-size:16px;line-height:1.6;">{escape(closer)}</p>
-                {cta_html}
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>
-""".strip()
+    <!doctype html>
+    <html>
+      <body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,Helvetica,sans-serif;color:#111111;">
+        <div style="display:none;max-height:0;overflow:hidden;opacity:0;">{escape(preheader)}</div>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f4f4;">
+          <tr>
+            <td align="center" style="padding:24px 12px;">
+              <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="width:100%;max-width:640px;background:#ffffff;border-radius:12px;overflow:hidden;">
+                <tr><td style="padding:0;">{hero_html}</td></tr>
+                <tr>
+                  <td style="padding:28px 32px;">
+                    <div style="font-size:12px;letter-spacing:1.2px;text-transform:uppercase;color:#b01d24;font-weight:700;margin-bottom:10px;">A Patterson customer exclusive</div>
+                    <h1 style="margin:0 0 14px 0;font-size:30px;line-height:1.15;">Be among the first to experience the {escape(title)}</h1>
+                    <p style="margin:0 0 18px 0;font-size:16px;line-height:1.6;">Hi {escape(first_name)},</p>
+                    <p style="margin:0 0 18px 0;font-size:16px;line-height:1.6;">{escape(opener)}</p>
+                    <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 20px 0;background:#f8f8f8;border-radius:8px;width:100%;">
+                      <tr>
+                        <td style="padding:18px 20px;font-size:15px;line-height:1.7;">
+                          <strong>{escape(title)}</strong><br>
+                          {escape(date_display)}{('<br>' + escape(time_window)) if time_window else ''}<br>
+                          {escape(location)}
+                        </td>
+                      </tr>
+                    </table>
+                    <ul style="padding-left:18px;margin:0 0 22px 0;font-size:16px;line-height:1.6;">{bullet_html}</ul>
+                    <p style="margin:0 0 22px 0;font-size:16px;line-height:1.6;">{escape(closer)}</p>
+                    {cta_html}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:0 32px 32px 32px;">
+                    {signature_html}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+    </html>
+    """.strip()
 
     bullet_text = "\n".join(f"- {item}" for item in benefits)
     body_text = (
