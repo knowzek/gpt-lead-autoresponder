@@ -379,18 +379,14 @@ def build_event_sms(event: dict, guest: dict, template_no: int) -> str:
     title = _event_title(event)
     date_display = (event.get("Event Date Display") or event.get("Event Date") or "").strip()
     time_window = _fmt_time_window(event.get("Event Start Time", ""), event.get("Event End Time", ""))
-    rsvp_url = (
-        (event.get("RSVP URL") or "").strip()
-        or (event.get("Calendly URL") or "").strip()
-        or (event.get("Landing Page URL") or "").strip()
-    )
-    url_part = f" {rsvp_url}" if rsvp_url else ""
+    poster_url = (event.get("Poster Image URL") or event.get("Hero Image URL") or "").strip()
+    url_part = f" Details: {poster_url}" if poster_url else ""
 
     defaults = {
-        1: f"{prefix}this is Patti from {store}. You're invited to our {title} launch at {store} on {date_display} from {time_window}. Stop by anytime to see it and take a drive. Reply YES if you plan to attend.",
-        2: f"{prefix}this is Patti from {store}. Quick reminder about our {title} event at {store} on {date_display} from {time_window}. Food is on us and vehicles will be ready. Reply YES if you think you'll stop by.",
-        3: f"{prefix}Patti from {store}. Our {title} event at {store} is tomorrow from {time_window}. If you plan to come by, reply YES and we'll be ready for you.",
-        4: f"{prefix}can't wait to see you at the {title} event today at {store}. We're here from {time_window}. Stop by anytime — the vehicle, food, and team will be ready for you.",
+        1: f"{prefix}this is Patti from {store}. You're invited to our {title} launch at {store} on {date_display} from {time_window}. Stop by anytime to see it and take a drive. Reply YES if you plan to attend.{url_part}",
+        2: f"{prefix}this is Patti from {store}. Quick reminder about our {title} event at {store} on {date_display} from {time_window}. Food is on us and vehicles will be ready. Reply YES if you think you'll stop by.{url_part}",
+        3: f"{prefix}Patti from {store}. Our {title} event at {store} is tomorrow from {time_window}. If you plan to come by, reply YES and we'll be ready for you.{url_part}",
+        4: f"{prefix}can't wait to see you at the {title} event today at {store}. We're here from {time_window}. Stop by anytime — the vehicle, food, and team will be ready for you.{url_part}",
     }
     return defaults[template_no]
 
