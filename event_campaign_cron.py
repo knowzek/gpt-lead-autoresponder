@@ -301,10 +301,6 @@ def build_event_email(event: dict, guest: dict, template_no: int) -> dict[str, s
         f"<img src='{escape(poster_url)}' alt='{escape(title)}' style='width:100%;max-width:640px;display:block;border:0;border-radius:10px;'>"
         if poster_url else ""
     )
-    cta_html = (
-        f"<a href='{escape(rsvp_url)}' style='display:inline-block;background:#111111;color:#ffffff;text-decoration:none;padding:14px 22px;border-radius:6px;font-weight:700;'>Let Us Know You're Coming</a>"
-        if rsvp_url else ""
-    )
 
     signature_html = build_patti_footer(store)
 
@@ -322,20 +318,20 @@ def build_event_email(event: dict, guest: dict, template_no: int) -> dict[str, s
                   <td style="padding:28px 32px;">
                     <div style="font-size:12px;letter-spacing:1.2px;text-transform:uppercase;color:#b01d24;font-weight:700;margin-bottom:10px;">A Patterson customer exclusive</div>
                     <h1 style="margin:0 0 14px 0;font-size:30px;line-height:1.15;">Be among the first to experience the {escape(title)}</h1>
+                    <div style="width:60px;height:4px;background:#b01d24;margin:0 0 18px 0;border-radius:2px;"></div>
                     <p style="margin:0 0 18px 0;font-size:16px;line-height:1.6;">Hi {escape(first_name)},</p>
                     <p style="margin:0 0 18px 0;font-size:16px;line-height:1.6;">{escape(opener)}</p>
-                    <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 20px 0;background:#f8f8f8;border-radius:8px;width:100%;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 22px 0;background:#f7f7f7;border-radius:10px;width:100%;border:1px solid #ececec;">
                       <tr>
-                        <td style="padding:18px 20px;font-size:15px;line-height:1.7;">
+                        <td style="padding:20px 22px;font-size:15px;line-height:1.7;">
                           <strong>{escape(title)}</strong><br>
-                          {escape(date_display)}{('<br>' + escape(time_window)) if time_window else ''}<br>
+                          <strong>{escape(date_display)}</strong>{('<br>' + escape(time_window)) if time_window else ''}<br>
                           {escape(location)}
                         </td>
                       </tr>
                     </table>
                     <ul style="padding-left:18px;margin:0 0 22px 0;font-size:16px;line-height:1.6;">{bullet_html}</ul>
                     <p style="margin:0 0 22px 0;font-size:16px;line-height:1.6;">{escape(closer)}</p>
-                    {cta_html}
                   </td>
                 </tr>
                 <tr>
