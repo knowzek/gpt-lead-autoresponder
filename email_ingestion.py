@@ -1938,136 +1938,52 @@ def process_lead_notification(inbound: dict) -> None:
         opp_id,
     )
 
-    # --- STEP 1: First SMS on new lead (General Leads only) ---
+    # --- STEP 1: Queue first SMS on new lead (General Leads only) ---
     try:
-        # Only send SMS if first-touch SMS has NOT been sent yet
+        # Only queue SMS if first-touch SMS has NOT already been sent
         already_sms = bool((opportunity.get("first_sms_sent_at") or "").strip())
-
+    
         if not already_sms:
-            from goto_sms import send_sms
-
-            from_number = _norm_phone_e164_us(
-                os.getenv("PATTI_SMS_NUMBER", "+17145977229")
-            )
-            if not from_number:
-                log.warning("SMS: missing PATTI_SMS_NUMBER; skipping opp=%s", opp_id)
+            guest_phone_raw = (opportunity.get("customer_phone") or "").strip()
+            guest_phone = _norm_phone_e164_us(guest_phone_raw)
+    
+            if not guest_phone:
+                log.warning(
+                    "SMS: no Airtable customer_phone (raw=%r); skipping opp=%s",
+                    guest_phone_raw,
+                    opp_id,
+                )
             else:
-                guest_phone_raw = (opportunity.get("customer_phone") or "").strip()
-                guest_phone = _norm_phone_e164_us(guest_phone_raw)
-
-                if not guest_phone:
-                    log.warning(
-                        "SMS: no Airtable customer_phone (raw=%r); skipping opp=%s",
-                        guest_phone_raw,
+                stop_send, reason = should_suppress_all_sends_airtable(opportunity)
+                if stop_send:
+                    log.info(
+                        "SMS first-touch suppressed=%s opp=%s (queue skipped)",
+                        reason,
                         opp_id,
                     )
                 else:
-                    # SMS_TEST reroute
-                    to_number = guest_phone
-                    if _sms_test_enabled():
-                        test_to = _sms_test_to()
-                        if not test_to:
-                            log.warning(
-                                "SMS_TEST=1 but SMS_TEST_TO invalid; skipping opp=%s",
-                                opp_id,
-                            )
-                            to_number = ""
-                        else:
-                            to_number = test_to
-
-                    if to_number:
-                        # Impel-style first text (shorter than email, still crisp)
-                        rooftop_display = rooftop_name or "Patterson Autos"
-
-                        vehicle_phrase = (
-                            vehicle_str
-                            if (vehicle_str and vehicle_str != "one of our vehicles")
-                            else "your vehicle inquiry"
-                        )
-                        call_line = (
-                            f"If you’d rather talk first, we can call {phone}."
-                            if phone
-                            else ""
-                        )
-
-                        msg = (
-                            f"Hi {first_name or 'there'}, this is Patti with {rooftop_display}. "
-                            f"Thanks for reaching out about {vehicle_phrase}. "
-                            f"I'm happy to confirm it’s currently available. "
-                            f"If you’d like to come by to see it in person or for a test drive, just let me know a day and time and I’ll set it up. "
-                            f"Or, would you prefer a quick call instead? Opt-out reply STOP"
-                        )
-
-                        stop_send, reason = should_suppress_all_sends_airtable(
-                            opportunity
-                        )
-                        if stop_send:
-                            log.info(
-                                "SMS first-touch suppressed=%s opp=%s (skip SMS only)",
-                                reason,
-                                opp_id,
-                            )
-                        else:
-                            resp = send_sms(
-                                from_number=from_number, to_number=to_number, body=msg
-                            )
-
-                            # Persist SMS metadata (best-effort)
-                            extra_sms = {
-                                "last_sms_sent_at": _dt.now(_tz.utc).isoformat(),
-                                "first_sms_sent_at": _dt.now(_tz.utc).isoformat(),
-                                "sms_conversation_id": resp.get("conversationId")
-                                or resp.get("conversation_id")
-                                or resp.get("id")
-                                or "",
-                                "sms_nudge_count": 0,
-                                "sms_followup_due_at": (
-                                    _dt.now(_tz.utc) + timedelta(hours=24)
-                                )
-                                .replace(microsecond=0)
-                                .isoformat(),
-                            }
-                            save_opp(opportunity, extra_fields=extra_sms)
-
-                            # after SMS send succeeds
-                            try:
-                                sms_preview = (msg or "").strip().replace("\n", " ")
-                                if len(sms_preview) > 800:
-                                    sms_preview = sms_preview[:800] + "…"
-
-                                reroute_note = ""
-                                if (
-                                    _sms_test_enabled()
-                                    and to_number
-                                    and to_number != guest_phone
-                                ):
-                                    reroute_note = f" (SMS_TEST rerouted from {guest_phone} to {to_number})"
-
-                                add_opportunity_comment(
-                                    token,
-                                    subscription_id,
-                                    opp_id,
-                                    f"<b>Patti SMS (outbound):</b> to {to_number}{reroute_note}<br/>{sms_preview}",
-                                )
-                                log.info(
-                                    "Logged outbound SMS as CRM comment opp=%s", opp_id
-                                )
-                            except Exception as e:
-                                log.warning(
-                                    "Failed to log outbound SMS as CRM comment opp=%s: %s",
-                                    opp_id,
-                                    e,
-                                )
-
-                            log.info(
-                                "SMS first-touch sent opp=%s to=%s (test=%s)",
-                                opp_id,
-                                to_number,
-                                _sms_test_enabled(),
-                            )
-
+                    first_sms_due = (_dt.now(_tz.utc) + timedelta(minutes=15)).replace(
+                        microsecond=0
+                    ).isoformat()
+    
+                    extra_sms = {
+                        "sms_status": "ready",
+                        "sms_day": 1,
+                        "next_sms_at": first_sms_due,
+                        "sms_nudge_count": 0,
+                        "last_sms_body": "",
+                    }
+    
+                    save_opp(opportunity, extra_fields=extra_sms)
+    
+                    log.info(
+                        "SMS first-touch queued opp=%s due_at=%s",
+                        opp_id,
+                        first_sms_due,
+                    )
+    
     except Exception as e:
-        log.exception("SMS first-touch failed opp=%s err=%s", opp_id, e)
+        log.exception("SMS first-touch queue failed opp=%s err=%s", opp_id, e)
 
     log.info(
         "FIRST_TOUCH inquiry_text len=%s preview=%r",
