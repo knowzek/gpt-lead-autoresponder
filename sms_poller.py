@@ -84,6 +84,53 @@ _MAZDA_TRANSFER_RE = re.compile(
     """
 )
 
+# --- STEP 1: Queue first SMS on new lead (General Leads only) ---
+try:
+    # Only queue SMS if first-touch SMS has NOT already been sent
+    already_sms = bool((opportunity.get("first_sms_sent_at") or "").strip())
+
+    if not already_sms:
+        guest_phone_raw = (opportunity.get("customer_phone") or "").strip()
+        guest_phone = _norm_phone_e164_us(guest_phone_raw)
+
+        if not guest_phone:
+            log.warning(
+                "SMS: no Airtable customer_phone (raw=%r); skipping opp=%s",
+                guest_phone_raw,
+                opp_id,
+            )
+        else:
+            stop_send, reason = should_suppress_all_sends_airtable(opportunity)
+            if stop_send:
+                log.info(
+                    "SMS first-touch suppressed=%s opp=%s (queue skipped)",
+                    reason,
+                    opp_id,
+                )
+            else:
+                first_sms_due = (_dt.now(_tz.utc) + timedelta(minutes=15)).replace(
+                    microsecond=0
+                ).isoformat()
+
+                extra_sms = {
+                    "sms_status": "ready",
+                    "sms_day": 1,
+                    "next_sms_at": first_sms_due,
+                    "sms_nudge_count": 0,
+                    "last_sms_body": "",
+                }
+
+                save_opp(opportunity, extra_fields=extra_sms)
+
+                log.info(
+                    "SMS first-touch queued opp=%s due_at=%s",
+                    opp_id,
+                    first_sms_due,
+                )
+
+except Exception as e:
+    log.exception("SMS first-touch queue failed opp=%s err=%s", opp_id, e)
+    
 def _looks_like_mazda_transfer_intent(text: str) -> bool:
     return bool(_MAZDA_TRANSFER_RE.search(text or ""))
 
@@ -589,6 +636,7 @@ def send_sms_cadence_once():
     if not _within_send_window():
         log.info("⏰ Outside SMS send window (8am–8pm local). Skipping run.")
         return
+
     # Pull queue
     recs = list_records_by_view(SMS_DUE_VIEW, max_records=50)
 
@@ -599,81 +647,207 @@ def send_sms_cadence_once():
         # Raw phone from Airtable
         phone_raw = (f.get("customer_phone") or f.get("phone") or "").strip()
 
-        # ✅ Normalize to E.164 (+1XXXXXXXXXX). If invalid, this returns ""
+        # Normalize to E.164 (+1XXXXXXXXXX). If invalid, this returns ""
         phone = _norm_phone_e164_us(phone_raw)
 
         log.info(
             "SMS cadence candidate rid=%s phone_raw=%r phone=%r sms_status=%r email_status=%r next_sms_at=%r sms_day=%r",
-            rid, phone_raw, phone, f.get("sms_status"), f.get("email_status"), f.get("next_sms_at"), f.get("sms_day")
+            rid,
+            phone_raw,
+            phone,
+            f.get("sms_status"),
+            f.get("email_status"),
+            f.get("next_sms_at"),
+            f.get("sms_day"),
         )
 
-        # ✅ If missing/invalid phone, pause so it doesn't keep retrying every cron run
+        # If missing/invalid phone, pause so it doesn't keep retrying every cron run
         if not phone:
             try:
-                patch_by_id(rid, {
-                    "sms_status": "paused",
-                    "next_sms_at": None,
-                    "last_sms_body": f"Skipped: invalid phone (raw={phone_raw!r})",
-                })
+                patch_by_id(
+                    rid,
+                    {
+                        "sms_status": "paused",
+                        "next_sms_at": None,
+                        "last_sms_body": f"Skipped: invalid phone (raw={phone_raw!r})",
+                    },
+                )
             except Exception:
-                log.exception("SMS cadence: failed to pause invalid phone rid=%s raw=%r", rid, phone_raw)
+                log.exception(
+                    "SMS cadence: failed to pause invalid phone rid=%s raw=%r",
+                    rid,
+                    phone_raw,
+                )
             continue
 
-        # Global suppression / opt-out protection (reuse your existing guard)
+        # Global suppression / opt-out protection
         stop, reason = should_suppress_all_sends_airtable(f)
         if stop:
-            # ✅ Preserve terminal status like opted_out (don’t overwrite to paused)
             current_status = (f.get("sms_status") or "").strip().lower()
             new_status = "opted_out" if current_status == "opted_out" else "paused"
 
-            patch_by_id(rid, {
-                "sms_status": new_status,
-                "next_sms_at": None,
-                "last_sms_body": f"Suppressed: {reason}",
-            })
-            log.info("SMS cadence suppressed rid=%s reason=%r (sms_status=%s)", rid, reason, new_status)
+            patch_by_id(
+                rid,
+                {
+                    "sms_status": new_status,
+                    "next_sms_at": None,
+                    "last_sms_body": f"Suppressed: {reason}",
+                },
+            )
+            log.info(
+                "SMS cadence suppressed rid=%s reason=%r (sms_status=%s)",
+                rid,
+                reason,
+                new_status,
+            )
             continue
 
         day = int(f.get("sms_day") or 1)
 
-        # v1: simplest templated nudge by day (fast + predictable)
-        body = build_mazda_loyalty_sms(day=day, fields=f)
+        # Keep Mazda cadence intact, use general-lead delayed first-touch for non-Mazda
+        program = (f.get("program") or "").strip().lower()
+        bucket = (f.get("bucket") or "").strip()
+        is_mazda = ("mazda" in program) or bool(bucket)
 
-        # inside send_sms_cadence_once(), before send_sms
+        if is_mazda:
+            body = build_mazda_loyalty_sms(day=day, fields=f)
+        else:
+            body = _build_general_lead_first_sms(f)
+
         subscription_id = (f.get("subscription_id") or f.get("dealer_key") or "").strip()
-        
+        opp_id = (f.get("opportunityId") or f.get("opportunity_id") or "").strip()
+
         rt = get_rooftop_info(subscription_id) or {}
         owner = _norm_phone_e164_us(rt.get("sms_number", "")) or _patti_number()
 
-        # ✅ Per-record try/except so one bad send doesn't kill the entire cron run
+        # Preserve SMS_TEST reroute behavior
+        to_number = phone
+        if _sms_test_enabled():
+            test_to = _sms_test_to()
+            if not test_to:
+                log.warning(
+                    "SMS cadence: SMS_TEST=1 but SMS_TEST_TO invalid; skipping rid=%s",
+                    rid,
+                )
+                try:
+                    patch_by_id(
+                        rid,
+                        {
+                            "sms_status": "paused",
+                            "last_sms_body": "Skipped: SMS_TEST enabled but SMS_TEST_TO invalid",
+                        },
+                    )
+                except Exception:
+                    log.exception(
+                        "SMS cadence: failed to pause invalid SMS_TEST_TO rid=%s",
+                        rid,
+                    )
+                continue
+            to_number = test_to
+
+        # Per-record try/except so one bad send doesn't kill the entire cron run
         try:
-            ok = send_sms(
+            resp = send_sms(
                 from_number=owner,
-                to_number=phone,   # ✅ normalized
-                body=body
+                to_number=to_number,
+                body=body,
             )
+            ok = bool(resp)
         except Exception as e:
-            log.exception("SMS cadence: send_sms failed rid=%s phone=%r err=%r", rid, phone, e)
+            log.exception(
+                "SMS cadence: send_sms failed rid=%s phone=%r err=%r",
+                rid,
+                to_number,
+                e,
+            )
             try:
-                patch_by_id(rid, {
-                    "sms_status": "paused",
-                    "last_sms_body": f"Send failed: {str(e)[:300]}",
-                })
+                patch_by_id(
+                    rid,
+                    {
+                        "sms_status": "paused",
+                        "last_sms_body": f"Send failed: {str(e)[:300]}",
+                    },
+                )
             except Exception:
-                log.exception("SMS cadence: failed to mark send failure rid=%s", rid)
+                log.exception(
+                    "SMS cadence: failed to mark send failure rid=%s",
+                    rid,
+                )
             continue
 
         if ok:
             now_iso = datetime.now(timezone.utc).isoformat()
-            patch_by_id(rid, {
+
+            patch = {
                 "last_sms_at": now_iso,
+                "last_sms_sent_at": now_iso,
                 "last_sms_body": body,
                 "sms_day": day + 1,
-                # You decide spacing; example 3-day cadence:
-                "next_sms_at": (datetime.now(timezone.utc) + timedelta(days=3)).isoformat(),
-                "sms_status": "ready"
-            })
+                "sms_status": "ready",
+                "sms_nudge_count": int(f.get("sms_nudge_count") or 0),
+                "sms_conversation_id": (
+                    (resp.get("conversationId") if isinstance(resp, dict) else None)
+                    or (resp.get("conversation_id") if isinstance(resp, dict) else None)
+                    or (resp.get("id") if isinstance(resp, dict) else None)
+                    or (f.get("sms_conversation_id") or "")
+                ),
+            }
 
+            # Stamp first-touch only once, after actual successful send
+            if not (f.get("first_sms_sent_at") or "").strip():
+                patch["first_sms_sent_at"] = now_iso
+                patch["sms_followup_due_at"] = (
+                    datetime.now(timezone.utc) + timedelta(hours=24)
+                ).replace(microsecond=0).isoformat()
+
+                # For general leads, next scheduled SMS can be 24h later.
+                # If you want 3 days instead, change timedelta(hours=24) to timedelta(days=3).
+                patch["next_sms_at"] = (
+                    datetime.now(timezone.utc) + timedelta(hours=24)
+                ).replace(microsecond=0).isoformat()
+            else:
+                # Existing cadence records continue normally
+                patch["next_sms_at"] = (
+                    datetime.now(timezone.utc) + timedelta(days=3)
+                ).replace(microsecond=0).isoformat()
+
+            patch_by_id(rid, patch)
+
+            # Log outbound SMS as CRM comment (same behavior you had on immediate send)
+            if subscription_id and opp_id:
+                try:
+                    sms_preview = (body or "").strip().replace("\n", " ")
+                    if len(sms_preview) > 800:
+                        sms_preview = sms_preview[:800] + "…"
+
+                    reroute_note = ""
+                    if _sms_test_enabled() and to_number and to_number != phone:
+                        reroute_note = f" (SMS_TEST rerouted from {phone} to {to_number})"
+
+                    tok = get_token(subscription_id)
+                    add_opportunity_comment(
+                        tok,
+                        subscription_id,
+                        opp_id,
+                        f"<b>Patti SMS (outbound):</b> to {to_number}{reroute_note}<br/>{sms_preview}",
+                    )
+                    log.info("Logged cadence outbound SMS as CRM comment opp=%s", opp_id)
+                except Exception as e:
+                    log.warning(
+                        "Failed to log cadence outbound SMS as CRM comment opp=%s: %s",
+                        opp_id,
+                        e,
+                    )
+
+            log.info(
+                "SMS cadence sent rid=%s opp=%s to=%s owner=%s mazda=%s test=%s",
+                rid,
+                opp_id,
+                to_number,
+                owner,
+                is_mazda,
+                _sms_test_enabled(),
+            )
 def poll_once(owner: str):
     page_limit = int(os.getenv("GOTO_CONVERSATION_PAGE_LIMIT", "200"))
     max_pages = int(os.getenv("GOTO_CONVERSATION_MAX_PAGES", "10"))
