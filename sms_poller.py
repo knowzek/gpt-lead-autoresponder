@@ -108,11 +108,11 @@ def _build_general_lead_first_sms(fields: dict) -> str:
         vehicle_phrase = "your vehicle inquiry"
 
     return (
-        f"Hi {first_name or 'there'}, this is Patti with {rooftop_name}. "
+        f"Hi {first_name or 'there'}, this is Patti with {rooftop_display}. "
         f"Thanks for reaching out about {vehicle_phrase}. "
-        f"I'm happy to confirm it’s currently available. "
-        f"If you’d like to come by to see it in person or for a test drive, just let me know a day and time and I’ll set it up. "
-        f"Or, would you prefer a quick call instead? Opt-out reply STOP"
+        f"I’d be happy to check current availability for you. "
+        f"Are you looking for a specific trim or color, or would you prefer to come by for a quick look? "
+        f"Opt-out reply STOP"
     )
     
 def _looks_like_mazda_transfer_intent(text: str) -> bool:
