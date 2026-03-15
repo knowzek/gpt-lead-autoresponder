@@ -6,6 +6,8 @@ from datetime import datetime, timezone, timedelta
 import json
 import time
 import logging
+import re
+from html import unescape
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -41,6 +43,27 @@ def _headers_get(subscription_id: str, token: str) -> dict:
         "Request-Id": str(uuid.uuid4()),
     }
 
+def _html_to_text(html: str) -> str:
+    """Convert simple HTML email body to readable plain text."""
+    if not html:
+        return ""
+
+    text = html
+
+    # line breaks
+    text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+    text = re.sub(r"(?i)</p>", "\n\n", text)
+
+    # remove all tags
+    text = re.sub(r"<[^>]+>", "", text)
+
+    # decode HTML entities
+    text = unescape(text)
+
+    # normalize whitespace
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    return text.strip()
 def _clean_token(tok: str) -> str:
     tok = (tok or "").strip()
     if tok.lower().startswith("bearer "):
@@ -1109,12 +1132,19 @@ def complete_activity(
     """
     Complete an activity.
     Tries known-good (name,type) combos to avoid InvalidActivityType per-rooftop issues.
+
+    Special handling:
+    - If the fallback would be Send Email/Letter (14), write an opportunity comment
+      instead of creating that CRM activity, because on some rooftops type 14 only
+      shows the text on hover and not in the visible body area.
     """
     url = f"{BASE_URL}{ACTIVITIES_BASE}/complete"
 
     def _post(name: str, type_id: int):
-        log.info("complete_activity payload: name=%s type=%s due=%s completed=%s activity_id=%s",
-                 name, type_id, due_dt_iso_utc, completed_dt_iso_utc, activity_id)
+        log.info(
+            "complete_activity payload: name=%s type=%s due=%s completed=%s activity_id=%s",
+            name, type_id, due_dt_iso_utc, completed_dt_iso_utc, activity_id
+        )
 
         payload = {
             "opportunityId": opportunity_id,
@@ -1134,8 +1164,6 @@ def complete_activity(
             json=payload,
         )
 
-    # Always try the caller's requested combo first, then known fallback.
-    # If caller passes Send Email/3 already, this still works.
     combos = [
         (activity_name, _coerce_activity_type(activity_type)),
         ("Send Email", 3),
@@ -1152,7 +1180,23 @@ def complete_activity(
             ordered.append(key)
 
     last_err = None
+
     for name, type_id in ordered:
+        # Special case: do NOT create Send Email/Letter 14 activity.
+        # Log as an opportunity comment instead so the text is visible in CRM.
+        if name == "Send Email/Letter" and int(type_id) == 14:
+            log.info(
+                "Replacing Send Email/Letter (14) activity with opportunity comment dealer_key=%s opp=%s",
+                dealer_key,
+                opportunity_id,
+            )
+            return add_opportunity_comment(
+                token,
+                dealer_key,
+                opportunity_id,
+                comments or "",
+            )
+
         try:
             resp = _post(name, type_id)
             log.info(
@@ -1163,31 +1207,23 @@ def complete_activity(
                 opportunity_id,
             )
             return resp
+
         except HTTPError as e:
-            # Identify InvalidActivityType
             try:
                 err_json = e.response.json()
                 err_code = err_json.get("code")
             except Exception:
                 err_code = None
-    
-            msg = str(e)
-            is_invalid_type = (err_code == "InvalidActivityType") or ("InvalidActivityType" in msg)
-    
-            if not is_invalid_type:
-                raise  # not a type issue, bubble it up
 
             msg = str(e)
             is_invalid_type = (err_code == "InvalidActivityType") or ("InvalidActivityType" in msg)
 
             if not is_invalid_type:
-                raise  # not a type issue, bubble it up
+                raise
 
             last_err = e
 
-    # If we exhausted combos, raise the last InvalidActivityType error
     raise last_err
-
 from datetime import datetime, timezone
 
 def _iso_z(dt: datetime) -> str:
@@ -1206,16 +1242,21 @@ def complete_send_email_activity(
 ):
     now = _iso_z(datetime.now(timezone.utc))
 
-    # ✅ strip footer
+    # strip footer
     body_no_footer = body_html or ""
     footer_marker = "<!-- PATTI_FOOTER_START -->"
     if footer_marker in body_no_footer:
         body_no_footer = body_no_footer.split(footer_marker, 1)[0]
 
+    # convert to plain text
+    body_text = _html_to_text(body_no_footer)
+
     full_comments = (
-        f"Patti Outlook: sent to {to_addr} | subject={subject}"
-        + (f" | {comments_extra}" if comments_extra else "")
-        + ("\n\n--- EMAIL BODY ---\n" + (body_no_footer or "") if (body_no_footer or "").strip() else "")
+        f"Patti Outlook Email\n"
+        f"Sent To: {to_addr}\n"
+        f"Subject: {subject}"
+        + (f"\n{comments_extra}" if comments_extra else "")
+        + ("\n\n--- EMAIL BODY ---\n" + body_text if body_text else "")
     )
 
     return complete_activity(
