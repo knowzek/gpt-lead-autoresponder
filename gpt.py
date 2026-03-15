@@ -274,6 +274,10 @@ def _patti_rules_system(customer_first: str):
         "- Mention the assigned salesperson by name when provided.\n"
         "- If a model is known, speak to it; otherwise invite specifics (trim, color, timing).\n"
         "- Do NOT include any signature block, phone numbers, or URLs; the system will append them.\n"
+        "- Never say or imply that a vehicle is available, in stock, still here, ready now, or unsold unless that has been explicitly verified by live inventory or CRM context provided in the prompt.\n"
+        "- If availability has not been explicitly verified, use softer language such as: 'I’d be happy to check current availability for you.'\n"
+        "- Every first-touch and follow-up email should include exactly ONE clear, easy-to-answer question that gives the guest a reason to reply.\n"
+        "- Good examples of reply-driving questions: 'Would you like me to check availability for you?' 'Are you looking for a specific trim or color?' 'Would you prefer to stop by or start with a quick call?'\n"
         "- Be truthful; never guess. If info is missing, ask one clear follow-up question."
     )
 
