@@ -84,52 +84,36 @@ _MAZDA_TRANSFER_RE = re.compile(
     """
 )
 
-# --- STEP 1: Queue first SMS on new lead (General Leads only) ---
-try:
-    # Only queue SMS if first-touch SMS has NOT already been sent
-    already_sms = bool((opportunity.get("first_sms_sent_at") or "").strip())
+def _build_general_lead_first_sms(fields: dict) -> str:
+    first_name = (
+        (fields.get("Customer First Name") or "")
+        or (fields.get("customer_first_name") or "")
+        or (fields.get("first_name") or "")
+        or ""
+    ).strip()
 
-    if not already_sms:
-        guest_phone_raw = (opportunity.get("customer_phone") or "").strip()
-        guest_phone = _norm_phone_e164_us(guest_phone_raw)
+    rooftop_name = (
+        (fields.get("rooftop_name") or "")
+        or (fields.get("rooftop") or "")
+        or "Patterson Autos"
+    ).strip()
 
-        if not guest_phone:
-            log.warning(
-                "SMS: no Airtable customer_phone (raw=%r); skipping opp=%s",
-                guest_phone_raw,
-                opp_id,
-            )
-        else:
-            stop_send, reason = should_suppress_all_sends_airtable(opportunity)
-            if stop_send:
-                log.info(
-                    "SMS first-touch suppressed=%s opp=%s (queue skipped)",
-                    reason,
-                    opp_id,
-                )
-            else:
-                first_sms_due = (_dt.now(_tz.utc) + timedelta(minutes=15)).replace(
-                    microsecond=0
-                ).isoformat()
+    year = (fields.get("year") or "").strip()
+    make = (fields.get("make") or "").strip()
+    model = (fields.get("model") or "").strip()
+    trim = (fields.get("trim") or "").strip()
 
-                extra_sms = {
-                    "sms_status": "ready",
-                    "sms_day": 1,
-                    "next_sms_at": first_sms_due,
-                    "sms_nudge_count": 0,
-                    "last_sms_body": "",
-                }
+    vehicle_phrase = f"{year} {make} {model} {trim}".strip()
+    if not vehicle_phrase:
+        vehicle_phrase = "your vehicle inquiry"
 
-                save_opp(opportunity, extra_fields=extra_sms)
-
-                log.info(
-                    "SMS first-touch queued opp=%s due_at=%s",
-                    opp_id,
-                    first_sms_due,
-                )
-
-except Exception as e:
-    log.exception("SMS first-touch queue failed opp=%s err=%s", opp_id, e)
+    return (
+        f"Hi {first_name or 'there'}, this is Patti with {rooftop_name}. "
+        f"Thanks for reaching out about {vehicle_phrase}. "
+        f"I'm happy to confirm it’s currently available. "
+        f"If you’d like to come by to see it in person or for a test drive, just let me know a day and time and I’ll set it up. "
+        f"Or, would you prefer a quick call instead? Opt-out reply STOP"
+    )
     
 def _looks_like_mazda_transfer_intent(text: str) -> bool:
     return bool(_MAZDA_TRANSFER_RE.search(text or ""))
@@ -745,7 +729,6 @@ def send_sms_cadence_once():
                 continue
             to_number = test_to
 
-        # Per-record try/except so one bad send doesn't kill the entire cron run
         try:
             resp = send_sms(
                 from_number=owner,
@@ -799,21 +782,17 @@ def send_sms_cadence_once():
                 patch["sms_followup_due_at"] = (
                     datetime.now(timezone.utc) + timedelta(hours=24)
                 ).replace(microsecond=0).isoformat()
-
-                # For general leads, next scheduled SMS can be 24h later.
-                # If you want 3 days instead, change timedelta(hours=24) to timedelta(days=3).
                 patch["next_sms_at"] = (
                     datetime.now(timezone.utc) + timedelta(hours=24)
                 ).replace(microsecond=0).isoformat()
             else:
-                # Existing cadence records continue normally
                 patch["next_sms_at"] = (
                     datetime.now(timezone.utc) + timedelta(days=3)
                 ).replace(microsecond=0).isoformat()
 
             patch_by_id(rid, patch)
 
-            # Log outbound SMS as CRM comment (same behavior you had on immediate send)
+            # Log outbound SMS as CRM comment
             if subscription_id and opp_id:
                 try:
                     sms_preview = (body or "").strip().replace("\n", " ")
