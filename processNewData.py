@@ -3852,6 +3852,8 @@ Please write a warm, professional email reply that:
 - Invite specific questions or preferences.
 - The goal in your responses is to be helpful but also encourage the person to book an appointment to see the vehicle without sounding salesly or high-pressure.
 - Mention the salesperson by name.
+- Never say or imply that the vehicle is available, in stock, still available, or ready now unless that has been explicitly verified in the provided context.
+- Always include exactly ONE clear question that gives the guest a reason to reply.
 
 Do not include any signature, dealership contact block, address, phone number, or URL in your reply; I will append it.
 """
@@ -3891,6 +3893,8 @@ When writing:
 - If a specific vehicle is mentioned, answer directly.
 - If a specific question exists, answer it first.
 - The goal in your responses is to be helpful but also encourage the person to book an appointment to see the vehicle without sounding salesly or high-pressure.
+- Never say or imply that the vehicle is available, in stock, still available, or ready now unless that has been explicitly verified in the provided context.
+- Always include exactly ONE clear question that gives the guest a reason to reply.
 - Keep it warm, clear, and human.
 
 Info (may be None):
