@@ -16,15 +16,36 @@ def _now_iso():
 def send_email_cadence_once():
     records = list_records_by_view(EMAIL_DUE_VIEW, max_records=50)
 
+    MAX_EMAIL_DAY = int(os.getenv("MAZDA_MAX_EMAIL_DAY", "10"))
+
     for r in records:
         rid = r.get("id")
         f = r.get("fields") or {}
 
         to_email = (f.get("customer_email") or f.get("email") or "").strip()
         if not to_email:
+            try:
+                patch_by_id(rid, {
+                    "email_status": "paused",
+                    "next_email_at": None,
+                })
+            except Exception:
+                log.exception("Email cadence: failed missing-email pause rid=%s", rid)
             continue
 
         day = int(f.get("email_day") or 1)
+
+        # Hard stop: if somehow this record already advanced past the final day,
+        # do not send again.
+        if day > MAX_EMAIL_DAY:
+            try:
+                patch_by_id(rid, {
+                    "email_status": "complete",
+                    "next_email_at": None,
+                })
+            except Exception:
+                log.exception("Email cadence: failed terminal-complete patch rid=%s", rid)
+            continue
 
         msg = build_mazda_loyalty_email(day=day, fields=f)
         ok = send_via_sendgrid(
@@ -37,13 +58,25 @@ def send_email_cadence_once():
             continue
 
         now_iso = _now_iso()
-        next_iso = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
+        next_day = day + 1
 
-        patch_by_id(rid, {
-            "last_email_at": now_iso,
-            "last_email_subject": msg["subject"],
-            "last_email_body": msg.get("body_text") or "",
-            "email_day": day + 1,
-            "next_email_at": next_iso,
-            "email_status": "ready",
-        })
+        # If this was the final scheduled email, stop cadence here.
+        if day >= MAX_EMAIL_DAY:
+            patch_by_id(rid, {
+                "last_email_at": now_iso,
+                "last_email_subject": msg["subject"],
+                "last_email_body": msg.get("body_text") or "",
+                "email_day": next_day,
+                "next_email_at": None,
+                "email_status": "complete",
+            })
+        else:
+            next_iso = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
+            patch_by_id(rid, {
+                "last_email_at": now_iso,
+                "last_email_subject": msg["subject"],
+                "last_email_body": msg.get("body_text") or "",
+                "email_day": next_day,
+                "next_email_at": next_iso,
+                "email_status": "ready",
+            })
