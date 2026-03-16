@@ -80,23 +80,29 @@ ROOFTOP_INFO = {
 
 def get_rooftop_info(subscription_id: str) -> dict:
     """
-    Return {name, sender, address, sms_number} for a given Fortellis Subscription-Id.
-    Falls back gracefully if mappings are incomplete.
+    Return merged rooftop info for a given Fortellis Subscription-Id.
+
+    Keeps ALL fields from SUBSCRIPTION_TO_ROOFTOP (including patti_start_day),
+    while overlaying ROOFTOP_INFO for shared metadata like address.
     """
-    rec = SUBSCRIPTION_TO_ROOFTOP.get(subscription_id, {})
+    rec = dict(SUBSCRIPTION_TO_ROOFTOP.get(subscription_id) or {})
 
     name = rec.get("name") or "Patterson Auto Group"
-    sender = rec.get("sender", "")
-    address = ROOFTOP_INFO.get(name, {}).get("address", "")
 
-    # ✅ NEW: rooftop-specific GoTo/Patti SMS number (E.164)
-    sms_number = (
-        rec.get("sms_number")
-        or ROOFTOP_INFO.get(name, {}).get("sms_number", "")
-        or ""
-    )
+    extras = dict(ROOFTOP_INFO.get(name) or {})
 
-    return {"name": name, "sender": sender, "address": address, "sms_number": sms_number}
+    # Merge: subscription config takes priority
+    merged = {}
+    merged.update(extras)
+    merged.update(rec)
+
+    # Ensure required keys always exist
+    merged.setdefault("name", name)
+    merged.setdefault("sender", rec.get("sender", ""))
+    merged.setdefault("address", extras.get("address", ""))
+    merged.setdefault("sms_number", rec.get("sms_number") or extras.get("sms_number", ""))
+
+    return merged
 
 def list_rooftop_sms_numbers() -> list[str]:
     nums = []
