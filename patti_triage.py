@@ -196,6 +196,7 @@ def notify_staff_patti_scheduled_appt(
     fresh_opp: dict | None,
     subscription_id: str,
     rooftop_name: str,
+    rooftop_sender: str,
     appt_human: str,
     customer_reply: str,
     subject: str,
