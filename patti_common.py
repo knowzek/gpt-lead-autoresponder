@@ -22,6 +22,31 @@ import os
 
 STORE_TZ = os.getenv("STORE_TIMEZONE", "America/Los_Angeles")
 
+from goto_sms import send_sms
+
+def notify_salesperson_patti_first_touch(
+    *,
+    salesperson_phone: str,
+    salesperson_name: str,
+    customer_name: str,
+    vehicle_str: str,
+    rooftop_name: str,
+    owner_sms_number: str,
+):
+    body = (
+        f"Hi {salesperson_name}, "
+        f"{customer_name} just submitted a lead for {vehicle_str}. "
+        f"I sent them an email and text with available options from {rooftop_name}. "
+        "Have you been able to reach them by phone yet? "
+        "Should I continue following up?"
+    )
+
+    send_sms(
+        from_number=owner_sms_number,
+        to_number=salesperson_phone,
+        body=body,
+    )
+
 def within_email_send_window() -> bool:
     now_local = datetime.now(ZoneInfo(STORE_TZ))
     return 8 <= now_local.hour < 20
