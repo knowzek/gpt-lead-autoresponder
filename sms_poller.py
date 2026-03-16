@@ -129,7 +129,7 @@ def _build_general_lead_first_sms(fields: dict) -> str:
         vehicle_phrase = "your vehicle inquiry"
 
     return (
-        f"Hi {first_name or 'there'}, this is Patti with {rooftop_display}. "
+        f"Hi {first_name or 'there'}, this is Patti with {rooftop_name}. "
         f"Thanks for reaching out about {vehicle_phrase}. "
         f"I’d be happy to check current availability for you. "
         f"Are you looking for a specific trim or color, or would you prefer to come by for a quick look? "
