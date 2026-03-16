@@ -14,6 +14,7 @@ SUBSCRIPTION_TO_ROOFTOP = {
         "name":    "Tustin Mazda",
         "address": "28 Auto Center Dr, Tustin, CA 92782",
         "sender":  "Patti.TM@Pattersonautos.com",
+        "patti_start_day": 2,
         "sms_number": "+17146405801",
     },
    # Tustin Kia
@@ -35,6 +36,7 @@ SUBSCRIPTION_TO_ROOFTOP = {
         "name":    "Huntington Beach Mazda",
         "address": "16800 Beach Blvd, Huntington Beach, CA 92647",
         "sender":  "Patti.HB@pattersonautos.com",
+        "patti_start_day": 2,
         "sms_number": "+17148455501",
     },
 }
