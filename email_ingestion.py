@@ -4,7 +4,7 @@ import re
 import logging
 from datetime import datetime as _dt, timezone as _tz, timedelta
 from typing import Optional
-
+from phone_utils import norm_phone_e164_us
 from pydantic import BaseModel
 from openai import OpenAI
 
@@ -99,20 +99,6 @@ def _extract_provider_comment_best_effort(*texts: str) -> str:
     return ""
 
 
-def _norm_phone_e164_us(raw: str) -> str:
-    raw = (raw or "").strip()
-    if not raw:
-        return ""
-    digits = re.sub(r"\D+", "", raw)
-    if len(digits) == 10:
-        return "+1" + digits
-    if len(digits) == 11 and digits.startswith("1"):
-        return "+" + digits
-    if raw.startswith("+") and len(digits) >= 10:
-        return "+" + digits
-    return ""
-
-
 def _extract_phone_from_opp(fresh_opp: dict, body_text: str = "") -> str:
     # 1) Try Fortellis customer phone fields
     cust = (fresh_opp or {}).get("customer") or {}
@@ -123,14 +109,14 @@ def _extract_phone_from_opp(fresh_opp: dict, body_text: str = "") -> str:
                 n = p.get("number") or p.get("phoneNumber") or ""
             else:
                 n = str(p or "")
-            e164 = _norm_phone_e164_us(n)
+            e164 = norm_phone_e164_us(n)
             if e164:
                 return e164
 
     # 2) Fallback: regex in provider email body (if present)
     m = PHONE_RE.search(body_text or "")
     if m:
-        return _norm_phone_e164_us(m.group(1))
+        return norm_phone_e164_us(m.group(1))
 
     return ""
 
@@ -140,7 +126,7 @@ def _sms_test_enabled() -> bool:
 
 
 def _sms_test_to() -> str:
-    return _norm_phone_e164_us(os.getenv("SMS_TEST_TO", "").strip())
+    return norm_phone_e164_us(os.getenv("SMS_TEST_TO", "").strip())
 
 
 # For now we only want this running on your single test opp
@@ -1015,7 +1001,7 @@ def process_lead_notification(inbound: dict) -> None:
             )
 
         # normalize once after possible assignment
-        # phone = _norm_phone_e164_us(phone) # Dont't have to normalize, since the phone extracted using the llm is already in the format +1XXXXXXXXXX
+        # phone = norm_phone_e164_us(phone) # Dont't have to normalize, since the phone extracted using the llm is already in the format +1XXXXXXXXXX
 
     is_adf = bool(adf)  # already parsed from _looks_like_adf_xml(body_text)
 
@@ -1361,9 +1347,9 @@ def process_lead_notification(inbound: dict) -> None:
         try:
             from goto_sms import send_sms
 
-            from_number = _norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", ""))
+            from_number = norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", ""))
             guest_phone_raw = (opportunity.get("customer_phone") or "").strip()
-            guest_phone = _norm_phone_e164_us(guest_phone_raw)
+            guest_phone = norm_phone_e164_us(guest_phone_raw)
 
             if from_number and guest_phone:
                 # SMS test reroute if enabled in your env
@@ -1576,9 +1562,9 @@ def process_lead_notification(inbound: dict) -> None:
         try:
             from goto_sms import send_sms
 
-            from_number = _norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", ""))
+            from_number = norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", ""))
             guest_phone_raw = (opportunity.get("customer_phone") or "").strip()
-            guest_phone = _norm_phone_e164_us(guest_phone_raw)
+            guest_phone = norm_phone_e164_us(guest_phone_raw)
 
             if from_number and guest_phone:
 
@@ -1945,7 +1931,7 @@ def process_lead_notification(inbound: dict) -> None:
     
         if not already_sms:
             guest_phone_raw = (opportunity.get("customer_phone") or "").strip()
-            guest_phone = _norm_phone_e164_us(guest_phone_raw)
+            guest_phone = norm_phone_e164_us(guest_phone_raw)
     
             if not guest_phone:
                 log.warning(
