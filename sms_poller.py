@@ -697,6 +697,8 @@ def send_sms_cadence_once():
         log.info("⏰ Outside SMS send window (8am–8pm local). Skipping run.")
         return
 
+    MAX_SMS_DAY = int(os.getenv("MAZDA_MAX_SMS_DAY", "3"))
+
     recs = list_records_by_view(SMS_DUE_VIEW, max_records=50)
 
     for r in recs:
@@ -706,46 +708,55 @@ def send_sms_cadence_once():
         phone_raw = (f.get("customer_phone") or f.get("phone") or "").strip()
         phone = _norm_phone_e164_us(phone_raw)
 
-        try:
-            day = int(f.get("sms_day") or 1)
-        except Exception:
-            day = 1
-
         log.info(
-            "SMS cadence candidate rid=%s phone_raw=%r phone=%r sms_status=%r email_status=%r next_sms_at=%r sms_day=%r sms_nudge_count=%r",
+            "SMS cadence candidate rid=%s phone_raw=%r phone=%r sms_status=%r email_status=%r next_sms_at=%r sms_day=%r",
             rid,
             phone_raw,
             phone,
             f.get("sms_status"),
             f.get("email_status"),
             f.get("next_sms_at"),
-            day,
-            f.get("sms_nudge_count"),
+            f.get("sms_day"),
         )
 
-        # HARD STOP: if this record already got the last Mazda SMS, complete it now
-        if _is_terminal_mazda_sms(f):
+        # Hard stop for records that already got the final SMS or advanced past max day
+        last_sms_body = (f.get("last_sms_body") or "").strip().lower()
+        try:
+            day = int(f.get("sms_day") or 1)
+        except Exception:
+            day = 1
+
+        if "one last time" in last_sms_body or day > MAX_SMS_DAY:
             try:
-                patch_by_id(rid, {
-                    "sms_status": "complete",
-                    "next_sms_at": None,
-                    "sms_followup_due_at": None,
-                })
+                patch_by_id(
+                    rid,
+                    {
+                        "sms_status": "complete",
+                        "next_sms_at": None,
+                        "sms_followup_due_at": None,
+                    },
+                )
             except Exception:
                 log.exception("SMS cadence: failed terminal-complete patch rid=%s", rid)
-            log.info("SMS cadence terminal stop rid=%s", rid)
             continue
 
         if not phone:
             try:
-                patch_by_id(rid, {
-                    "sms_status": "paused",
-                    "next_sms_at": None,
-                    "sms_followup_due_at": None,
-                    "last_sms_body": f"Skipped: invalid phone (raw={phone_raw!r})",
-                })
+                patch_by_id(
+                    rid,
+                    {
+                        "sms_status": "paused",
+                        "next_sms_at": None,
+                        "sms_followup_due_at": None,
+                        "last_sms_body": f"Skipped: invalid phone (raw={phone_raw!r})",
+                    },
+                )
             except Exception:
-                log.exception("SMS cadence: failed to pause invalid phone rid=%s raw=%r", rid, phone_raw)
+                log.exception(
+                    "SMS cadence: failed to pause invalid phone rid=%s raw=%r",
+                    rid,
+                    phone_raw,
+                )
             continue
 
         stop, reason = should_suppress_all_sends_airtable(f)
@@ -753,98 +764,170 @@ def send_sms_cadence_once():
             current_status = (f.get("sms_status") or "").strip().lower()
             new_status = "opted_out" if current_status == "opted_out" else "paused"
 
-            try:
-                patch_by_id(rid, {
+            patch_by_id(
+                rid,
+                {
                     "sms_status": new_status,
                     "next_sms_at": None,
                     "sms_followup_due_at": None,
                     "last_sms_body": f"Suppressed: {reason}",
-                })
-            except Exception:
-                log.exception("SMS cadence: failed suppressed patch rid=%s", rid)
-
-            log.info("SMS cadence suppressed rid=%s reason=%r (sms_status=%s)", rid, reason, new_status)
+                },
+            )
+            log.info(
+                "SMS cadence suppressed rid=%s reason=%r (sms_status=%s)",
+                rid,
+                reason,
+                new_status,
+            )
             continue
 
-        body = build_mazda_loyalty_sms(day=day, fields=f)
+        program = (f.get("program") or "").strip().lower()
+        bucket = (f.get("bucket") or "").strip()
+        is_mazda = ("mazda" in program) or bool(bucket)
+
+        if is_mazda:
+            body = build_mazda_loyalty_sms(day=day, fields=f)
+        else:
+            body = _build_general_lead_first_sms(f)
 
         subscription_id = (f.get("subscription_id") or f.get("dealer_key") or "").strip()
+        opp_id = (f.get("opportunityId") or f.get("opportunity_id") or "").strip()
+
         rt = get_rooftop_info(subscription_id) or {}
         owner = _norm_phone_e164_us(rt.get("sms_number", "")) or _patti_number()
 
+        to_number = phone
+        if _sms_test_enabled():
+            test_to = _sms_test_to()
+            if not test_to:
+                log.warning(
+                    "SMS cadence: SMS_TEST=1 but SMS_TEST_TO invalid; skipping rid=%s",
+                    rid,
+                )
+                try:
+                    patch_by_id(
+                        rid,
+                        {
+                            "sms_status": "paused",
+                            "last_sms_body": "Skipped: SMS_TEST enabled but SMS_TEST_TO invalid",
+                        },
+                    )
+                except Exception:
+                    log.exception(
+                        "SMS cadence: failed to pause invalid SMS_TEST_TO rid=%s",
+                        rid,
+                    )
+                continue
+            to_number = test_to
+
         try:
-            ok = send_sms(
+            resp = send_sms(
                 from_number=owner,
-                to_number=phone,
+                to_number=to_number,
                 body=body,
             )
+            ok = bool(resp)
         except Exception as e:
-            log.exception("SMS cadence: send_sms failed rid=%s phone=%r err=%r", rid, phone, e)
+            log.exception(
+                "SMS cadence: send_sms failed rid=%s phone=%r err=%r",
+                rid,
+                to_number,
+                e,
+            )
             try:
-                patch_by_id(rid, {
-                    "sms_status": "paused",
-                    "last_sms_body": f"Send failed: {str(e)[:300]}",
-                })
+                patch_by_id(
+                    rid,
+                    {
+                        "sms_status": "paused",
+                        "last_sms_body": f"Send failed: {str(e)[:300]}",
+                    },
+                )
             except Exception:
-                log.exception("SMS cadence: failed to mark send failure rid=%s", rid)
+                log.exception(
+                    "SMS cadence: failed to mark send failure rid=%s",
+                    rid,
+                )
             continue
 
-        if not ok:
-            continue
-
-        now_iso = datetime.now(timezone.utc).isoformat()
-        next_day = day + 1
-
-        try:
+        if ok:
+            now_iso = datetime.now(timezone.utc).isoformat()
             current_nudges = int(float(f.get("sms_nudge_count") or 0))
-        except Exception:
-            current_nudges = 0
 
-        try:
-            current_ai_texts = int(float(f.get("AI Texts Sent") or 0))
-        except Exception:
-            current_ai_texts = 0
+            is_final_send = is_mazda and (
+                day >= MAX_SMS_DAY or "one last time" in (body or "").lower()
+            )
 
-        # final send if this day is the last configured day OR template text is the final wording
-        is_final_send = (day >= MAZDA_MAX_SMS_DAY) or ("one last time" in (body or "").lower())
+            patch = {
+                "last_sms_at": now_iso,
+                "last_sms_sent_at": now_iso,
+                "last_sms_body": body,
+                "sms_day": day + 1,
+                "sms_nudge_count": current_nudges + 1,
+                "sms_conversation_id": (
+                    (resp.get("conversationId") if isinstance(resp, dict) else None)
+                    or (resp.get("conversation_id") if isinstance(resp, dict) else None)
+                    or (resp.get("id") if isinstance(resp, dict) else None)
+                    or (f.get("sms_conversation_id") or "")
+                ),
+            }
 
-        patch = {
-            "last_sms_at": now_iso,
-            "last_sms_sent_at": now_iso,
-            "last_sms_body": body,
-            "sms_day": next_day,
-            "sms_nudge_count": current_nudges + 1,
-            "AI Texts Sent": current_ai_texts + 1,
-        }
+            if is_final_send:
+                patch["sms_status"] = "complete"
+                patch["next_sms_at"] = None
+                patch["sms_followup_due_at"] = None
+            else:
+                patch["sms_status"] = "ready"
+                if not (f.get("first_sms_sent_at") or "").strip():
+                    next_iso = (
+                        datetime.now(timezone.utc) + timedelta(hours=24)
+                    ).replace(microsecond=0).isoformat()
+                    patch["first_sms_sent_at"] = now_iso
+                    patch["sms_followup_due_at"] = next_iso
+                    patch["next_sms_at"] = next_iso
+                else:
+                    next_iso = (
+                        datetime.now(timezone.utc) + timedelta(days=3)
+                    ).replace(microsecond=0).isoformat()
+                    patch["sms_followup_due_at"] = next_iso
+                    patch["next_sms_at"] = next_iso
 
-        if is_final_send:
-            patch.update({
-                "next_sms_at": None,
-                "sms_followup_due_at": None,
-                "sms_status": "complete",
-            })
-        else:
-            next_iso = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
-            patch.update({
-                "next_sms_at": next_iso,
-                "sms_followup_due_at": next_iso,
-                "sms_status": "ready",
-            })
-
-        try:
             patch_by_id(rid, patch)
-        except Exception:
-            log.exception("SMS cadence: failed post-send patch rid=%s", rid)
-            continue
 
-        log.info(
-            "SMS cadence sent rid=%s to=%s owner=%s mazda=True final=%s next_sms_at=%r",
-            rid,
-            phone,
-            owner,
-            is_final_send,
-            patch.get("next_sms_at"),
-        )
+            if subscription_id and opp_id:
+                try:
+                    sms_preview = (body or "").strip().replace("\n", " ")
+                    if len(sms_preview) > 800:
+                        sms_preview = sms_preview[:800] + "…"
+
+                    reroute_note = ""
+                    if _sms_test_enabled() and to_number and to_number != phone:
+                        reroute_note = f" (SMS_TEST rerouted from {phone} to {to_number})"
+
+                    tok = get_token(subscription_id)
+                    add_opportunity_comment(
+                        tok,
+                        subscription_id,
+                        opp_id,
+                        f"<b>Patti SMS (outbound):</b> to {to_number}{reroute_note}<br/>{sms_preview}",
+                    )
+                    log.info("Logged cadence outbound SMS as CRM comment opp=%s", opp_id)
+                except Exception as e:
+                    log.warning(
+                        "Failed to log cadence outbound SMS as CRM comment opp=%s: %s",
+                        opp_id,
+                        e,
+                    )
+
+            log.info(
+                "SMS cadence sent rid=%s opp=%s to=%s owner=%s mazda=%s final=%s test=%s",
+                rid,
+                opp_id,
+                to_number,
+                owner,
+                is_mazda,
+                is_final_send,
+                _sms_test_enabled(),
+            )
 
 def poll_once(owner: str):
     page_limit = int(os.getenv("GOTO_CONVERSATION_PAGE_LIMIT", "200"))
