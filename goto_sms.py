@@ -6,7 +6,7 @@ import requests
 import logging
 from airtable_store import _generate_message_id, _normalize_message_id, find_by_customer_phone, opp_from_record
 from airtable_store import log_message, _get_conversation_record_id_by_opportunity_id
-from email_ingestion import _norm_phone_e164_us
+from phone_utils import norm_phone_e164_us
 from models.airtable_model import Message
 from rooftops import get_rooftop_info
 
@@ -174,7 +174,7 @@ def send_sms(
     opp = {}
     e164_to_number = None
     try:
-        e164_to_number = _norm_phone_e164_us(to_number)
+        e164_to_number = norm_phone_e164_us(to_number)
         rec = find_by_customer_phone(e164_to_number) if e164_to_number else None
         if rec:
             opp = opp_from_record(rec) or {}
