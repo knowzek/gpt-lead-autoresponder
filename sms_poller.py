@@ -8,6 +8,7 @@ from rooftops import get_rooftop_info, list_rooftop_sms_numbers
 from gpt import extract_appt_time
 from fortellis import get_token, schedule_activity, get_opportunity, add_opportunity_comment
 
+from phone_utils import norm_phone_e164_us
 from goto_sms import list_conversations, iter_conversations, list_messages, send_sms
 from sms_brain import generate_sms_reply
 from mazda_loyalty_sms_brain import generate_mazda_loyalty_sms_reply
@@ -156,7 +157,7 @@ def _patti_numbers() -> list[str]:
     out = []
     seen = set()
     for n in nums:
-        nn = _norm_phone_e164_us(n)
+        nn = norm_phone_e164_us(n)
         if nn and nn not in seen:
             seen.add(nn)
             out.append(nn)
@@ -295,7 +296,7 @@ def handle_mazda_loyalty_inbound_sms_webhook(*, payload_json: dict) -> dict:
             log.exception("Mazda SMS webhook: failed patching opt-out rec=%s", rec_id)
     
         # Optional but recommended: confirm opt-out to the customer
-        owner = _norm_phone_e164_us(owner_phone) or _norm_phone_e164_us(os.getenv("PATTI_PHONE_E164") or os.getenv("PATTI_NUMBER") or "")
+        owner = norm_phone_e164_us(owner_phone) or norm_phone_e164_us(os.getenv("PATTI_PHONE_E164") or os.getenv("PATTI_NUMBER") or "")
         try:
             send_sms(
                 from_number=owner,
@@ -361,7 +362,7 @@ def handle_mazda_loyalty_inbound_sms_webhook(*, payload_json: dict) -> dict:
         )
 
     # Send SMS reply
-    owner = _norm_phone_e164_us(owner_phone) or _norm_phone_e164_us(os.getenv("PATTI_PHONE_E164") or os.getenv("PATTI_NUMBER") or "")
+    owner = norm_phone_e164_us(owner_phone) or norm_phone_e164_us(os.getenv("PATTI_PHONE_E164") or os.getenv("PATTI_NUMBER") or "")
     try:
         send_sms(from_number=owner, to_number=author, body=reply_text)
         log.info("Mazda SMS webhook: replied to=%s", author)
@@ -628,19 +629,6 @@ def mark_sms_convo_on_inbound(*, rec_id: str, inbound_text: str, inbound_ts: str
     })
 
 
-def _norm_phone_e164_us(raw: str) -> str:
-    raw = (raw or "").strip()
-    if not raw:
-        return ""
-    digits = "".join(ch for ch in raw if ch.isdigit())
-    if len(digits) == 10:
-        return "+1" + digits
-    if len(digits) == 11 and digits.startswith("1"):
-        return "+" + digits
-    if raw.startswith("+") and len(digits) >= 10:
-        return "+" + digits
-    return ""
-
 def _now_utc_z() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -658,11 +646,11 @@ def _sms_test_enabled() -> bool:
 
 
 def _sms_test_to() -> str:
-    return _norm_phone_e164_us(os.getenv("SMS_TEST_TO", "").strip())
+    return norm_phone_e164_us(os.getenv("SMS_TEST_TO", "").strip())
 
 
 def _patti_number() -> str:
-    return _norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", "+17145977229").strip())
+    return norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", "+17145977229").strip())
 
 SMS_DUE_VIEW = os.getenv("SMS_DUE_VIEW", "SMS Due")
 
@@ -706,7 +694,7 @@ def send_sms_cadence_once():
         f = (r.get("fields") or {})
 
         phone_raw = (f.get("customer_phone") or f.get("phone") or "").strip()
-        phone = _norm_phone_e164_us(phone_raw)
+        phone = norm_phone_e164_us(phone_raw)
 
         log.info(
             "SMS cadence candidate rid=%s phone_raw=%r phone=%r sms_status=%r email_status=%r next_sms_at=%r sms_day=%r",
@@ -794,7 +782,7 @@ def send_sms_cadence_once():
         opp_id = (f.get("opportunityId") or f.get("opportunity_id") or "").strip()
 
         rt = get_rooftop_info(subscription_id) or {}
-        owner = _norm_phone_e164_us(rt.get("sms_number", "")) or _patti_number()
+        owner = norm_phone_e164_us(rt.get("sms_number", "")) or _patti_number()
 
         to_number = phone
         if _sms_test_enabled():
@@ -1765,7 +1753,7 @@ if __name__ == "__main__":
 
         owners = _patti_numbers()
         if not owners:
-            fallback = _norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", ""))
+            fallback = norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", ""))
             if fallback:
                 owners = [fallback]
 
