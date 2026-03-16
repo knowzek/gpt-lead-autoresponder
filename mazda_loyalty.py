@@ -20,7 +20,13 @@ log = logging.getLogger("patti.mazda_loyalty")
 
 _TIME_RE = re.compile(r"\b(\d{1,2})(:\d{2})?\s?(am|pm)?\b", re.IGNORECASE)
 _DOW_RE = re.compile(r"\b(mon(day)?|tue(sday)?|wed(nesday)?|thu(rsday)?|fri(day)?|sat(urday)?|sun(day)?)\b", re.IGNORECASE)
-_MAZDA_STOP_RE = re.compile(r"(?i)\b(stop|unsubscribe|end|quit|do not contact|dont contact)\b")
+_MAZDA_STOP_RE = re.compile(r"""(?ix)
+    \b(stop|unsubscribe|end|quit|do\s+not\s+contact|dont\s+contact)\b |
+    \b(please\s+stop)\b |
+    \b(stop\s+sending)\b |
+    \b(leave\s+me\s+alone)\b |
+    \b(for\s+the\s+love\s+of\s+god\s+please\s+stop)\b
+""")
 
 def _now_iso():
     return datetime.now(timezone.utc).isoformat()
