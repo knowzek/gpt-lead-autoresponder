@@ -94,6 +94,7 @@ def _is_trade_in_lead(source: str, subject: str, adf: dict) -> bool:
         return True
 
     return False
+    
 
 def _is_trade_in_lead_for_subject(source: str, inbound_subject: str, inquiry_text: str | None, vehicle_str: str) -> bool:
     s = (source or "").lower()
@@ -107,6 +108,13 @@ def _is_trade_in_lead_for_subject(source: str, inbound_subject: str, inquiry_tex
     if "trade" in iq and not vehicle_str:
         return True
     return False
+
+def _is_delayed_start_rooftop(subscription_id: str, rooftop_name: str = "") -> bool:
+    rt = get_rooftop_info(subscription_id) or {}
+    try:
+        return int(rt.get("patti_start_day") or 0) > 0
+    except Exception:
+        return False
 
 def _normalize_cadence_brain_fields(opportunity: dict) -> None:
     """
