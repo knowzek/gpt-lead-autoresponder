@@ -12,7 +12,7 @@ PHONE_RE = re.compile(
     r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b"
 )
 
-
+from phone_utils import norm_phone_e164_us
 from datetime import datetime as _dt
 import zoneinfo as _zi
 
@@ -422,7 +422,7 @@ def extract_customer_comment_from_provider(body_text: str) -> str:
 def get_rooftop_sms_number(subscription_id: str) -> str:
     rt = get_rooftop_info(subscription_id) or {}
     raw = (rt.get("sms_number") or "").strip()
-    return _norm_phone_e164_us(raw)
+    return norm_phone_e164_us(raw)
 
 # === Decline detection ==========================================================
 
