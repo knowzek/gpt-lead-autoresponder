@@ -16,7 +16,7 @@ def _now_iso():
 def send_email_cadence_once():
     records = list_records_by_view(EMAIL_DUE_VIEW, max_records=50)
 
-    MAX_EMAIL_DAY = int(os.getenv("MAZDA_MAX_EMAIL_DAY", "10"))
+    MAX_EMAIL_DAY = int(os.getenv("MAZDA_MAX_EMAIL_DAY", "9"))
 
     for r in records:
         rid = r.get("id")
@@ -35,8 +35,7 @@ def send_email_cadence_once():
 
         day = int(f.get("email_day") or 1)
 
-        # Hard stop: if somehow this record already advanced past the final day,
-        # do not send again.
+        # Hard stop: if this record already advanced past the final day, do not send again.
         if day > MAX_EMAIL_DAY:
             try:
                 patch_by_id(rid, {
@@ -60,7 +59,6 @@ def send_email_cadence_once():
         now_iso = _now_iso()
         next_day = day + 1
 
-        # If this was the final scheduled email, stop cadence here.
         if day >= MAX_EMAIL_DAY:
             patch_by_id(rid, {
                 "last_email_at": now_iso,
