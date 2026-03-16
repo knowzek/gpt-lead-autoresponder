@@ -4,7 +4,7 @@ import re
 import json
 import logging
 from datetime import datetime as _dt, timezone as _tz
-
+from phone_utils import norm_phone_e164_us
 from patti_common import (
     classify_sms_inbound_route,
     looks_like_sms_appointment_intent,
@@ -33,26 +33,13 @@ _LOGGED_DIR_ID_ONCE: set[tuple[str, str]] = set()
 
 
 # --- Normalization / routing ---
-def _norm_phone_e164_us(raw: str) -> str:
-    raw = (raw or "").strip()
-    if not raw:
-        return ""
-    digits = re.sub(r"\D+", "", raw)
-    if len(digits) == 10:
-        return "+1" + digits
-    if len(digits) == 11 and digits.startswith("1"):
-        return "+" + digits
-    if raw.startswith("+") and len(digits) >= 10:
-        return "+" + digits
-    return ""
-
 
 def _sms_test_enabled() -> bool:
     return os.getenv("SMS_TEST", "0").strip() == "1"
 
 
 def _sms_test_to() -> str:
-    return _norm_phone_e164_us(os.getenv("SMS_TEST_TO", "").strip())
+    return norm_phone_e164_us(os.getenv("SMS_TEST_TO", "").strip())
 
 def _get_rooftop_sms_number(subscription_id: str) -> str:
     """
@@ -64,7 +51,7 @@ def _get_rooftop_sms_number(subscription_id: str) -> str:
     try:
         from rooftops import get_rooftop_info
         rt = get_rooftop_info(subscription_id) or {}
-        return _norm_phone_e164_us(rt.get("sms_number", ""))
+        return norm_phone_e164_us(rt.get("sms_number", ""))
     except Exception:
         log.exception("Failed to resolve rooftop sms_number subscription_id=%s", subscription_id)
         return ""
@@ -82,10 +69,10 @@ def _patti_from_number(subscription_id: str = "", inbound_to_phone: str = "") ->
 
     # 2️⃣ Use the number the guest texted
     if inbound_to_phone:
-        return _norm_phone_e164_us(inbound_to_phone)
+        return norm_phone_e164_us(inbound_to_phone)
 
     # 3️⃣ Final fallback
-    return _norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", "").strip())
+    return norm_phone_e164_us(os.getenv("PATTI_SMS_NUMBER", "").strip())
 
 
 def _now_iso() -> str:
@@ -227,8 +214,8 @@ def _extract_inbound(payload: dict, raw_text: str) -> dict:
             body = candidate.strip()
 
     return {
-        "from_phone": _norm_phone_e164_us(from_phone),
-        "to_phone": _norm_phone_e164_us(to_phone),
+        "from_phone": norm_phone_e164_us(from_phone),
+        "to_phone": norm_phone_e164_us(to_phone),
         "body": (body or "").strip(),
         "conversation_id": (conversation_id or "").strip(),
         "message_id": (message_id or "").strip(),
