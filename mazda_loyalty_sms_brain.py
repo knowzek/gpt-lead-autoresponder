@@ -167,13 +167,20 @@ def _looks_like_recent_purchase(text: str) -> bool:
 _NOT_IN_MARKET_RE = re.compile(
     r"\b("
     r"not in the market|"
-    r"not in the market for (a|another) (car|vehicle)|"
-    r"not looking to buy (a|another) (car|vehicle)|"
-    r"not interested in buying (a|another)? (car|vehicle)? right now|"
-    r"not interested right now|"
-    r"don't need (a|another) (car|vehicle)|dont need (a|another) (car|vehicle)|"
-    r"already replaced (it|the vehicle|the car)|"
-    r"we already bought (something|a car|another car)"
+    r"i'?m not interested(?: at this time| right now)?|"
+    r"not interested(?: at this time| right now)?|"
+    r"not interested in buying right now|"
+    r"don't need a car|dont need a car|"
+    r"don't need another car|dont need another car|"
+    r"no need for anyone to reach out|"
+    r"no need to reach out|"
+    r"no one to transfer it to|"
+    r"keep the voucher|"
+    r"already replaced it|"
+    r"already replaced the vehicle|"
+    r"we already bought something|"
+    r"already bought|"
+    r"already purchased"
     r")\b",
     re.I,
 )
