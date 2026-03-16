@@ -50,6 +50,143 @@ from patti_common import EMAIL_RE, PHONE_RE
 from patti_common import extract_customer_comment_from_provider
 from prompt.customer_phone_number_extraction import CUSTOMER_PHONE_EXTRACTION_PROMPT
 
+# --- Sales-engaged / salesperson-heads-up config -----------------------------
+
+TM_SUBSCRIPTION_ID = "7a05ce2c-cf00-4748-b841-45b3442665a7"
+
+# Fill this in with your real mapping
+TM_SALESTEAM_ID_TO_PHONE = {
+    # "fortellis-salesperson-id": "+17145551234",  # Jane Doe
+    # "fortellis-salesperson-id": "+17145556789",  # John Smith
+}
+
+# SubStatuses that mean the guest has already engaged with sales
+ENGAGED_SUBSTATUSES = {
+    "manager review",
+    "contact made",
+    "appointment set",
+}
+
+
+def _norm_text(v) -> str:
+    return str(v or "").strip()
+
+
+def _norm_name_key(v) -> str:
+    return re.sub(r"\s+", " ", _norm_text(v).lower())
+
+
+def _is_tustin_mazda(subscription_id: str, rooftop_name: str = "") -> bool:
+    if _norm_text(subscription_id) == TM_SUBSCRIPTION_ID:
+        return True
+    return _norm_name_key(rooftop_name) == "tustin mazda"
+
+
+def _current_substatus(*, opportunity: dict | None, fresh_opp: dict | None) -> str:
+    """
+    Prefer fresh Fortellis opp, then fall back to Airtable-hydrated opp.
+    """
+    for src in (fresh_opp or {}, opportunity or {}):
+        ss = (
+            src.get("subStatus")
+            or src.get("substatus")
+            or ""
+        )
+        ss = _norm_text(ss)
+        if ss:
+            return ss
+    return ""
+
+
+def _is_sales_engaged_substatus(*, opportunity: dict | None, fresh_opp: dict | None) -> tuple[bool, str]:
+    sub = _current_substatus(opportunity=opportunity, fresh_opp=fresh_opp)
+    return (_norm_name_key(sub) in ENGAGED_SUBSTATUSES, sub)
+
+
+def _get_rooftop_sms_number(subscription_id: str) -> str:
+    rt = get_rooftop_info(subscription_id) or {}
+    return norm_phone_e164_us(
+        (rt.get("sms_number") or "").strip()
+        or (os.getenv("PATTI_SMS_NUMBER") or "").strip()
+    )
+
+
+def _resolve_primary_salesperson(fresh_opp: dict | None, opportunity: dict | None) -> dict:
+    sales_team = (fresh_opp or {}).get("salesTeam")
+    if not isinstance(sales_team, list) or not sales_team:
+        sales_team = (opportunity or {}).get("salesTeam") or []
+
+    if not isinstance(sales_team, list) or not sales_team:
+        return {}
+
+    for m in sales_team:
+        if not isinstance(m, dict):
+            continue
+        if str(m.get("isPrimary") or "").strip().lower() in ("true", "1", "yes"):
+            return m
+
+    for m in sales_team:
+        if isinstance(m, dict):
+            return m
+
+    return {}
+
+
+def _resolve_tm_salesperson_phone(*, fresh_opp: dict | None, opportunity: dict | None) -> str:
+    sp = _resolve_primary_salesperson(fresh_opp=fresh_opp, opportunity=opportunity)
+    sales_id = _norm_text(sp.get("id"))
+    if not sales_id:
+        return ""
+
+    phone = _norm_text(TM_SALESTEAM_ID_TO_PHONE.get(sales_id))
+    return norm_phone_e164_us(phone)
+
+
+def _notify_tm_salesperson_after_first_touch(
+    *,
+    subscription_id: str,
+    salesperson_phone: str,
+    salesperson_name: str,
+    customer_name: str,
+    vehicle_str: str,
+    patti_email_sent: bool,
+    patti_sms_queued: bool,
+):
+    if not salesperson_phone:
+        return
+
+    from_number = _get_rooftop_sms_number(subscription_id)
+    if not from_number:
+        log.warning("TM heads-up skipped: missing rooftop sms_number")
+        return
+
+    parts = []
+    if patti_email_sent:
+        parts.append("an email")
+    if patti_sms_queued:
+        parts.append("queued a text")
+
+    if not parts:
+        return
+
+    sent_phrase = " and ".join(parts) if len(parts) == 2 else parts[0]
+    vehicle_phrase = vehicle_str if _norm_text(vehicle_str) and vehicle_str != "one of our vehicles" else "their inquiry"
+
+    body = (
+        f"Hi {salesperson_name or 'there'}, "
+        f"{customer_name or 'A guest'} submitted a lead. "
+        f"I sent {sent_phrase} regarding {vehicle_phrase}. "
+        f"Have you been in contact with this guest by phone yet? "
+        f"Would you like me to continue following up?"
+    )
+
+    from goto_sms import send_sms
+    send_sms(
+        from_number=from_number,
+        to_number=salesperson_phone,
+        body=body,
+    )
+
 log = logging.getLogger("patti.airtable")
 
 OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY") or "").strip()
@@ -1082,7 +1219,7 @@ def process_lead_notification(inbound: dict) -> None:
     salesperson = "our team"
     # Airtable bootstrap
     rec = find_by_opp_id(opp_id)
-    is_new_record = not bool(rec)
+
     if rec:
         opportunity = opp_from_record(rec)
         salesperson = (
@@ -1671,7 +1808,9 @@ def process_lead_notification(inbound: dict) -> None:
     aln = (
         opportunity.get("customer_last_name") or (cust.get("lastName") or "")
     ).strip()
-    customer_name = afn or "there"
+    
+    customer_first_name = afn or "there"
+    customer_full_name = f"{afn} {aln}".strip() or customer_first_name
 
     # ✅ For provider lead notifications, always send to the provider-extracted shopper email
     customer_email = shopper_email
@@ -1906,11 +2045,19 @@ def process_lead_notification(inbound: dict) -> None:
 
     patti = opportunity.get("patti") or {}
     checked = opportunity.get("checkedDict") or {}
+    if not isinstance(checked, dict):
+        checked = {}
+    opportunity["checkedDict"] = checked
 
     if opportunity.get("needs_human_review") is True or patti.get(
         "human_review_reason"
     ):
         log.warning("Blocking first-touch: human review lock opp=%s", opp_id)
+        return
+
+    # Durable do-not-send gate if we previously determined sales already engaged the guest
+    if checked.get("is_sales_contacted") is True:
+        log.info("Blocking first-touch: sales-engaged gate already set opp=%s", opp_id)
         return
 
     log.info(
@@ -1924,7 +2071,42 @@ def process_lead_notification(inbound: dict) -> None:
         opp_id,
     )
 
+    # --- Hard stop: if CRM subStatus shows the guest already engaged with sales, remove from Patti queue ---
+    engaged_by_sales, current_substatus = _is_sales_engaged_substatus(
+        opportunity=opportunity,
+        fresh_opp=fresh_opp,
+    )
+
+    if engaged_by_sales:
+        log.info(
+            "Blocking first-touch: engaged subStatus=%r opp=%s",
+            current_substatus,
+            opp_id,
+        )
+
+        checked["is_sales_contacted"] = True
+        checked["sales_contact_reason"] = f"subStatus={current_substatus}"
+        opportunity["checkedDict"] = checked
+
+        opportunity["followUP_date"] = None
+        opportunity["follow_up_at"] = None
+
+        try:
+            save_opp(
+                opportunity,
+                extra_fields={
+                    "follow_up_at": None,
+                    "followUP_date": None,
+                    "mode": "sales_contacted",
+                },
+            )
+        except Exception:
+            log.exception("Failed persisting sales-contacted gate opp=%s", opp_id)
+
+        return
+
     # --- STEP 1: Queue first SMS on new lead (General Leads only) ---
+    first_sms_queued_ok = False
     try:
         # Only queue SMS if first-touch SMS has NOT already been sent
         already_sms = bool((opportunity.get("first_sms_sent_at") or "").strip())
@@ -1961,7 +2143,7 @@ def process_lead_notification(inbound: dict) -> None:
                     }
     
                     save_opp(opportunity, extra_fields=extra_sms)
-    
+                    first_sms_queued_ok = True
                     log.info(
                         "SMS first-touch queued opp=%s due_at=%s",
                         opp_id,
@@ -1984,7 +2166,7 @@ def process_lead_notification(inbound: dict) -> None:
         subscription_id=subscription_id,
         rooftop_name=rooftop_name,
         rooftop_sender=rooftop_sender,
-        customer_name=customer_name,
+        customer_name=customer_first_name,
         customer_email=customer_email,
         source=source_label,
         vehicle_str=vehicle_str,
@@ -2003,6 +2185,32 @@ def process_lead_notification(inbound: dict) -> None:
 
     # right after successful first-touch email send (sent_ok=True)
     if sent_ok:
+        # Tustin Mazda only: heads-up text to salesperson after Patti first touch
+        if _is_tustin_mazda(subscription_id, rooftop_name):
+            try:
+                salesperson_phone = _resolve_tm_salesperson_phone(
+                    fresh_opp=fresh_opp,
+                    opportunity=opportunity,
+                )
+                if salesperson_phone:
+                    _notify_tm_salesperson_after_first_touch(
+                        subscription_id=subscription_id,
+                        salesperson_phone=salesperson_phone,
+                        salesperson_name=salesperson,
+                        customer_name=customer_full_name,
+                        vehicle_str=vehicle_str,
+                        patti_email_sent=True,
+                        patti_sms_queued=bool(first_sms_queued_ok),
+                    )
+                else:
+                    log.warning(
+                        "TM heads-up skipped: no salesperson phone mapping opp=%s salesperson=%r",
+                        opp_id,
+                        salesperson,
+                    )
+            except Exception:
+                log.exception("TM heads-up text failed opp=%s", opp_id)
+
         when_iso = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         next_iso = (_dt.now(_tz.utc) + timedelta(days=1)).isoformat()
 
