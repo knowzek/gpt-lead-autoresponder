@@ -53,6 +53,91 @@ from prompt.customer_phone_number_extraction import CUSTOMER_PHONE_EXTRACTION_PR
 # --- Sales-engaged / salesperson-heads-up config -----------------------------
 
 TM_SUBSCRIPTION_ID = "7a05ce2c-cf00-4748-b841-45b3442665a7"
+HBM_SUBSCRIPTION_ID = "bb4a4f18-1693-4450-a08e-40d8df30c139"
+
+
+def _is_day2_start_rooftop(subscription_id: str, rooftop_name: str = "") -> bool:
+    rt = get_rooftop_info(subscription_id) or {}
+    try:
+        return int(rt.get("patti_start_day") or 0) >= 2
+    except Exception:
+        return False
+
+
+def _parse_iso_utc_best_effort(v: str | None) -> _dt | None:
+    s = (v or "").strip()
+    if not s:
+        return None
+    try:
+        dt = _dt.fromisoformat(s.replace("Z", "+00:00"))
+        return dt if dt.tzinfo else dt.replace(tzinfo=_tz.utc)
+    except Exception:
+        return None
+
+
+def _resolve_lead_created_dt(
+    *,
+    inbound_ts: str | None,
+    opportunity: dict | None,
+    fresh_opp: dict | None,
+) -> _dt:
+    candidates = [
+        (fresh_opp or {}).get("createdAt"),
+        (fresh_opp or {}).get("created_at"),
+        (fresh_opp or {}).get("dateIn"),
+        (opportunity or {}).get("Lead Created At"),
+        (opportunity or {}).get("created_at"),
+        (opportunity or {}).get("dateIn"),
+        inbound_ts,
+    ]
+
+    for c in candidates:
+        dt = _parse_iso_utc_best_effort(c)
+        if dt:
+            return dt
+
+    return _dt.now(_tz.utc)
+
+def _customer_already_engaged(opportunity: dict) -> bool:
+    if not isinstance(opportunity, dict):
+        return False
+
+    if opportunity.get("Customer Replied") is True:
+        return True
+
+    mode = str(opportunity.get("mode") or "").strip().lower()
+    if mode == "convo":
+        return True
+
+    checked = opportunity.get("checkedDict") or {}
+    if isinstance(checked, dict):
+        if str(checked.get("last_msg_by") or "").strip().lower() == "customer":
+            return True
+
+    patti_metrics = opportunity.get("patti_metrics") or {}
+    if isinstance(patti_metrics, dict) and patti_metrics.get("customer_replied") is True:
+        return True
+
+    if (opportunity.get("Last Customer Reply At") or "").strip():
+        return True
+
+    return False
+
+
+def _day2_first_touch_due_iso(
+    *,
+    inbound_ts: str | None,
+    opportunity: dict | None,
+    fresh_opp: dict | None,
+    start_day: int = 2,
+) -> str:
+    created_dt = _resolve_lead_created_dt(
+        inbound_ts=inbound_ts,
+        opportunity=opportunity,
+        fresh_opp=fresh_opp,
+    )
+    due_dt = (created_dt + timedelta(days=start_day)).astimezone(_tz.utc).replace(microsecond=0)
+    return due_dt.isoformat()
 
 # Fill this in with your real mapping
 TM_SALESTEAM_ID_TO_PHONE = {
@@ -2117,6 +2202,71 @@ def process_lead_notification(inbound: dict) -> None:
 
         return
 
+    # --- Hard stop: if the customer already engaged, Patti should not start later on Day 2 ---
+    if _customer_already_engaged(opportunity):
+        log.info("Blocking first-touch: customer already engaged opp=%s", opp_id)
+
+        opportunity["followUP_date"] = None
+        opportunity["follow_up_at"] = None
+
+        try:
+            save_opp(
+                opportunity,
+                extra_fields={
+                    "follow_up_at": None,
+                    "followUP_date": None,
+                    "mode": "convo",
+                },
+            )
+        except Exception:
+            log.exception("Failed persisting customer-engaged gate opp=%s", opp_id)
+
+        return
+
+    # ------------------------------------------------------------------
+    # DAY-2 START ROOFTOPS:
+    # Tustin Mazda / Huntington Beach Mazda should not get immediate Patti first-touch.
+    # Instead, queue Patti to begin on Day 2 only if sales has NOT already engaged.
+    # ------------------------------------------------------------------
+    if _is_day2_start_rooftop(subscription_id, rooftop_name):
+        due_iso = _day2_first_touch_due_iso(
+            inbound_ts=ts,
+            opportunity=opportunity,
+            fresh_opp=fresh_opp,
+            start_day=2,
+        )
+
+        log.info(
+            "Day-2 start rooftop: deferring Patti first-touch opp=%s rooftop=%r due_at=%s",
+            opp_id,
+            rooftop_name,
+            due_iso,
+        )
+
+        extra_fields = {
+            # email cadence seed
+            "email_status": "ready",
+            "email_day": 1,
+            "next_email_at": due_iso,
+
+            # sms cadence seed
+            "sms_status": "ready",
+            "sms_day": 1,
+            "next_sms_at": due_iso,
+            "sms_nudge_count": 0,
+
+            # shared cadence state
+            "follow_up_at": due_iso,
+            "followUP_date": due_iso,
+            "mode": "cadence",
+        }
+
+        try:
+            save_opp(opportunity, extra_fields=extra_fields)
+        except Exception:
+            log.exception("Failed to seed Day-2 Patti start opp=%s", opp_id)
+
+        return
     # --- STEP 1: Queue first SMS on new lead (General Leads only) ---
     first_sms_queued_ok = False
     try:
