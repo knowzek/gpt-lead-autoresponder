@@ -1634,6 +1634,7 @@ def checkActivities(opportunity, currDate, rooftop_name, activities_override=Non
                                 opportunity=opportunity,
                                 fresh_opp=fresh_opp if "fresh_opp" in locals() else {},
                                 rooftop_name=rooftop_name,
+                                rooftop_sender=rooftop_sender,
                                 appt_human=appt_human,
                                 customer_reply=customer_body,
                             )
@@ -2881,6 +2882,7 @@ def processHit(hit):
                         opportunity=opportunity,
                         fresh_opp=fresh_opp if "fresh_opp" in locals() else {},
                         rooftop_name=rooftop_name,
+                        rooftop_sender=rooftop_sender,
                         appt_human=appt_human,
                         customer_reply=inquiry_text,
                     )
@@ -4368,6 +4370,7 @@ def send_thread_reply_now(
                     opportunity=opportunity,
                     fresh_opp=fresh_opp if "fresh_opp" in locals() else {},
                     rooftop_name=rooftop_name,
+                    rooftop_sender=rooftop_sender,
                     appt_human=appt_human,
                     customer_reply=customer_body,
                     subject=inbound_subject
