@@ -56,10 +56,10 @@ TM_SUBSCRIPTION_ID = "7a05ce2c-cf00-4748-b841-45b3442665a7"
 HBM_SUBSCRIPTION_ID = "bb4a4f18-1693-4450-a08e-40d8df30c139"
 
 
-def _is_day2_start_rooftop(subscription_id: str, rooftop_name: str = "") -> bool:
+def _is_delayed_start_rooftop(subscription_id: str, rooftop_name: str = "") -> bool:
     rt = get_rooftop_info(subscription_id) or {}
     try:
-        return int(rt.get("patti_start_day") or 0) >= 2
+        return int(rt.get("patti_start_day") or 0) > 0
     except Exception:
         return False
 
@@ -123,13 +123,12 @@ def _customer_already_engaged(opportunity: dict) -> bool:
 
     return False
 
-
-def _day2_first_touch_due_iso(
+def _first_touch_due_iso(
     *,
     inbound_ts: str | None,
     opportunity: dict | None,
     fresh_opp: dict | None,
-    start_day: int = 2,
+    start_day: int,
 ) -> str:
     created_dt = _resolve_lead_created_dt(
         inbound_ts=inbound_ts,
@@ -2223,50 +2222,48 @@ def process_lead_notification(inbound: dict) -> None:
 
         return
 
-    # ------------------------------------------------------------------
-    # DAY-2 START ROOFTOPS:
-    # Tustin Mazda / Huntington Beach Mazda should not get immediate Patti first-touch.
-    # Instead, queue Patti to begin on Day 2 only if sales has NOT already engaged.
-    # ------------------------------------------------------------------
-    if _is_day2_start_rooftop(subscription_id, rooftop_name):
-        due_iso = _day2_first_touch_due_iso(
+    # --- Day-N delayed start (Mazda logic) ---
+    if _is_delayed_start_rooftop(subscription_id, rooftop_name):
+        rt = get_rooftop_info(subscription_id) or {}
+        start_day = int(rt.get("patti_start_day") or 2)
+    
+        due_iso = _first_touch_due_iso(
             inbound_ts=ts,
             opportunity=opportunity,
             fresh_opp=fresh_opp,
-            start_day=2,
+            start_day=start_day,
         )
-
+    
         log.info(
-            "Day-2 start rooftop: deferring Patti first-touch opp=%s rooftop=%r due_at=%s",
+            "Day-%s start rooftop: deferring Patti first-touch opp=%s rooftop=%r due_at=%s",
+            start_day,
             opp_id,
             rooftop_name,
             due_iso,
         )
-
+    
         extra_fields = {
-            # email cadence seed
             "email_status": "ready",
             "email_day": 1,
             "next_email_at": due_iso,
-
-            # sms cadence seed
+    
             "sms_status": "ready",
             "sms_day": 1,
             "next_sms_at": due_iso,
             "sms_nudge_count": 0,
-
-            # shared cadence state
+    
             "follow_up_at": due_iso,
             "followUP_date": due_iso,
             "mode": "cadence",
         }
-
+    
         try:
             save_opp(opportunity, extra_fields=extra_fields)
         except Exception:
-            log.exception("Failed to seed Day-2 Patti start opp=%s", opp_id)
-
+            log.exception("Failed to seed Day-%s Patti start opp=%s", start_day, opp_id)
+    
         return
+
     # --- STEP 1: Queue first SMS on new lead (General Leads only) ---
     first_sms_queued_ok = False
     try:
