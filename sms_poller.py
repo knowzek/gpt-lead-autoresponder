@@ -86,6 +86,24 @@ _MAZDA_TRANSFER_RE = re.compile(
     """
 )
 
+_MAZDA_NEGATIVE_TRANSFER_RE = re.compile(
+    r"""(?ix)
+    \b(
+        no\s+one\s+to\s+transfer(?:\s+it)?\s+to|
+        don'?t\s+have\s+anyone\s+to\s+transfer(?:\s+it)?\s+to|
+        do\s+not\s+have\s+anyone\s+to\s+transfer(?:\s+it)?\s+to|
+        nobody\s+to\s+transfer(?:\s+it)?\s+to|
+        not\s+interested(?:\s+at\s+this\s+time|\s+right\s+now)?|
+        keep\s+the\s+voucher|
+        no\s+need\s+for\s+anyone\s+to\s+reach\s+out|
+        no\s+need\s+to\s+reach\s+out
+    )\b
+    """
+)
+
+def _looks_like_mazda_negative_transfer_or_decline(text: str) -> bool:
+    return bool(_MAZDA_NEGATIVE_TRANSFER_RE.search(text or ""))
+
 def _build_general_lead_first_sms(fields: dict) -> str:
     first_name = (
         (fields.get("Customer First Name") or "")
@@ -316,6 +334,23 @@ def handle_mazda_loyalty_inbound_sms_webhook(*, payload_json: dict) -> dict:
         first_name=first_name,
     )
 
+    if decision.get("mark_opt_out"):
+        now_iso = _now_iso()
+        try:
+            patch_by_id(rec_id, {
+                "do_not_contact": True,
+                "Suppressed": True,
+                "sms_status": "opted_out",
+                "email_status": "opted_out",
+                "next_email_at": None,
+                "next_sms_at": None,
+                "last_sms_inbound_message_id": msg_id,
+                "last_sms_inbound_at": now_iso,
+                "last_inbound_text": inbound_text[:2000],
+            })
+        except Exception:
+            log.exception("Mazda SMS webhook: failed patching negative-transfer opt-out rec=%s", rec_id)
+
     reply_text = (decision.get("reply") or "").strip()
     if not reply_text:
         prefix = f"{first_name}, " if first_name else ""
@@ -460,10 +495,11 @@ def _finalize_mazda_sms_decision(*, decision: dict, inbound_text: str, first_nam
     Final deterministic Mazda SMS overrides after the brain runs.
     Priority:
       1. actual voucher code
-      2. transfer intent
-      3. preserve stronger existing handoff reasons
-      4. true appointment intent
-      5. leave brain decision alone
+      2. explicit decline / negative-transfer / no-follow-up
+      3. transfer intent
+      4. preserve stronger existing handoff reasons
+      5. true appointment intent
+      6. leave brain decision alone
     """
     inbound = (inbound_text or "").strip()
     first = (first_name or "").strip()
@@ -478,6 +514,18 @@ def _finalize_mazda_sms_decision(*, decision: dict, inbound_text: str, first_nam
             ),
             "needs_handoff": True,
             "handoff_reason": "voucher_lookup",
+        }
+
+    # NEW: negative transfer / decline / do-not-follow-up intent
+    if _looks_like_mazda_negative_transfer_or_decline(inbound):
+        return {
+            "reply": (
+                f"{prefix}understood — we won’t continue reaching out about the voucher. "
+                "If anything changes later, you can text me here."
+            ),
+            "needs_handoff": False,
+            "handoff_reason": "",
+            "mark_opt_out": True,
         }
 
     if _looks_like_mazda_transfer_intent(inbound):
@@ -1116,6 +1164,8 @@ def poll_once(owner: str):
                 inbound_text=last_inbound,
                 first_name=first_name,
             )
+
+            
 
             reply_text = (decision.get("reply") or "").strip()
             if not reply_text:
