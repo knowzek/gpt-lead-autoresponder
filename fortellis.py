@@ -1040,6 +1040,7 @@ def schedule_appointment_with_notify(
     opportunity=None,
     fresh_opp=None,
     rooftop_name="",
+    rooftop_sender="",
     appt_human="",
     customer_reply="",
     subject=""
@@ -1084,14 +1085,15 @@ def schedule_appointment_with_notify(
         from patti_triage import notify_staff_patti_scheduled_appt
 
         notify_staff_patti_scheduled_appt(
-            opportunity=opportunity,
-            fresh_opp=fresh_opp or {},
-            subscription_id=dealer_key,
-            rooftop_name=rooftop_name or "",
-            appt_human=appt_human or due_dt_iso_utc,
-            customer_reply=customer_reply or "",
-            subject=subject
-        )
+          opportunity=opportunity,
+          fresh_opp=fresh_opp or {},
+          subscription_id=dealer_key,
+          rooftop_name=rooftop_name or "",
+          rooftop_sender=rooftop_sender or "",
+          appt_human=appt_human or due_dt_iso_utc,
+          customer_reply=customer_reply or "",
+          subject=subject,
+      )
 
         # mark AFTER successful send attempt
         patti_meta["appt_notify_sent"] = True
