@@ -4381,6 +4381,22 @@ def send_thread_reply_now(
                 # We’re about to confirm in the reply, so mark it to prevent duplicates.
                 opportunity["patti"] = patti_meta
 
+                # Persist appointment fields in Airtable
+                try:
+                    save_opp(
+                        opportunity,
+                        extra_fields={
+                            "AI Set Appointment": True,
+                            "AI Appointment At": due_dt_iso_utc,
+                        },
+                    )
+                except Exception as e:
+                    log.warning(
+                        "APPT_SAVE failed opp=%s: %s",
+                        opportunityId,
+                        e,
+                    )
+
                 log.info(
                     "✅ Auto-scheduled appointment from webhook reply for %s at %s (conf=%.2f)",
                     opportunityId,
