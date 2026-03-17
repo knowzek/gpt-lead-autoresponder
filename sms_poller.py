@@ -102,6 +102,34 @@ _MAZDA_NEGATIVE_TRANSFER_RE = re.compile(
     """
 )
 
+def _extract_simple_appt_phrase(text: str) -> str:
+    """
+    Return a human-friendly appointment phrase only when the guest
+    gave a concrete day/time. Otherwise return "".
+    """
+    t = (text or "").strip()
+    if not t:
+        return ""
+
+    try:
+        parsed = extract_appt_time(t, tz="America/Los_Angeles")
+        if isinstance(parsed, dict):
+            conf = float(parsed.get("confidence") or 0)
+            iso = (parsed.get("iso") or "").strip()
+            if iso and conf >= 0.80:
+                dt_local = datetime.fromisoformat(iso)
+                return dt_local.strftime("%A at %-I:%M %p")
+    except Exception:
+        pass
+
+    # fallback for simple cases if parser misses
+    has_day = bool(re.search(r"\b(mon|monday|tue|tuesday|wed|wednesday|thu|thursday|fri|friday|sat|saturday|sun|sunday)\b", t, re.I))
+    has_time = bool(re.search(r"\b\d{1,2}(:\d{2})?\s?(am|pm)\b", t, re.I))
+    if has_day and has_time:
+        return t
+
+    return ""
+
 def _looks_like_mazda_negative_transfer_or_decline(text: str) -> bool:
     return bool(_MAZDA_NEGATIVE_TRANSFER_RE.search(text or ""))
 
@@ -351,6 +379,27 @@ def handle_mazda_loyalty_inbound_sms_webhook(*, payload_json: dict) -> dict:
             })
         except Exception:
             log.exception("Mazda SMS webhook: failed patching negative-transfer opt-out rec=%s", rec_id)
+
+    # ✅ FIX: If guest already provided a concrete appointment time, don't ask again
+    appt_phrase = _extract_simple_appt_phrase(inbound_text)
+    
+    if decision.get("needs_handoff") and (
+        (decision.get("handoff_reason") or "").strip().lower() == "appointment"
+    ) and appt_phrase:
+        first = f"{first_name}, " if first_name else ""
+        reply_text = (
+            f"{first}Perfect — I’m looping in a team member to confirm {appt_phrase}."
+        )
+    
+        # Override decision reply so downstream uses this
+        decision["reply"] = reply_text
+        decision["handoff_reason"] = "appointment_with_time"
+    
+        log.warning(
+            "MAZDA_APPT_CAPTURE rec_id=%s extracted_time=%r",
+            rec_id,
+            appt_phrase,
+        )
 
     reply_text = (decision.get("reply") or "").strip()
     if not reply_text:
@@ -1202,9 +1251,25 @@ def poll_once(owner: str):
                 inbound_text=last_inbound,
                 first_name=first_name,
             )
-
             
-
+            # ✅ If guest already provided a concrete appointment time, don't ask again
+            appt_phrase = _extract_simple_appt_phrase(last_inbound)
+            
+            if decision.get("needs_handoff") and (
+                (decision.get("handoff_reason") or "").strip().lower() == "appointment"
+            ) and appt_phrase:
+                prefix = f"{first_name}, " if first_name else ""
+                decision["reply"] = (
+                    f"{prefix}Perfect — I’m looping in a team member to confirm {appt_phrase}."
+                )
+                decision["handoff_reason"] = "appointment_with_time"
+            
+                log.warning(
+                    "MAZDA_APPT_CAPTURE rec_id=%s extracted_time=%r",
+                    rec_id,
+                    appt_phrase,
+                )
+            
             reply_text = (decision.get("reply") or "").strip()
             if not reply_text:
                 prefix = f"{first_name}, " if first_name else ""
@@ -1273,6 +1338,10 @@ def poll_once(owner: str):
                         rec_id, salesperson_email, cc_addrs
                     )
 
+                    handoff_reason_text = f"Mazda Loyalty SMS handoff: {reason}"
+                    if appt_phrase:
+                        handoff_reason_text += f" | Proposed time: {appt_phrase}"
+                    
                     _send_mazda_sms_handoff_email(
                         to_addr=salesperson_email,
                         cc_addrs=cc_addrs,
@@ -1283,7 +1352,7 @@ def poll_once(owner: str):
                         customer_phone=customer_phone or "unknown",
                         bucket=bucket,
                         inbound_text=last_inbound,
-                        reason=f"Mazda Loyalty SMS handoff: {reason}",
+                        reason=handoff_reason_text,
                         now_iso=_now_iso(),
                     )
                     
