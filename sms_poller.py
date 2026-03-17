@@ -33,6 +33,7 @@ from airtable_store import (
     opp_from_record,
     save_opp,
     should_suppress_all_sends_airtable,
+    mark_customer_reply,
 
     # conversation thread storage
     _ensure_conversation,
@@ -1448,6 +1449,13 @@ def poll_once(owner: str):
             )
         except Exception:
             log.exception("SMS poll: failed to flip sms_status=convo for rec_id=%s", rec.get("id"))
+
+        # ✅ Mark customer engagement on the general lead record too
+        try:
+            inbound_ts = last.get("timestamp") or _now_iso()
+            mark_customer_reply(opp, when_iso=inbound_ts)
+        except Exception:
+            log.exception("SMS poll: failed mark_customer_reply opp=%s", opp.get("opportunityId"))
 
         
         # ✅ NOW we know this inbound is new — log it to CRM once
