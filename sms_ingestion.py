@@ -19,6 +19,7 @@ from airtable_store import (
     opp_from_record,
     save_opp,
     upsert_conversation,
+    mark_customer_reply,
     should_suppress_all_sends_airtable
 )
 from goto_sms import send_sms, list_messages
@@ -345,13 +346,20 @@ def process_inbound_sms(payload_json: dict | None, raw_text: str = "") -> dict:
         )
         return {"status": "ok", "action": "suppressed_no_reply"}
 
-    # Guest replied (any non-stop) => mode="convo" and stop SMS nudges
-    if patti_mode != "convo":
-        opp["patti"]["mode"] = "convo"
-    
+    # Guest replied (any non-stop) => mark Customer Replied in Airtable,
+    # move to convo mode, and stop both general cadence + SMS nudges.
+    try:
+        mark_customer_reply(opp, when_iso=now_iso)
+    except Exception:
+        log.exception("SMS inbound: failed mark_customer_reply opp=%s", opp.get("opportunityId"))
+
     base_patch.update(
         {
+            "Customer Replied": True,
+            "Last Customer Reply At": now_iso,
             "sms_followup_due_at": None,
+            "follow_up_at": None,
+            "mode": "convo",
         }
     )
     
