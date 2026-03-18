@@ -878,7 +878,7 @@ def send_sms_cadence_once():
 
     MAX_SMS_DAY = int(os.getenv("MAZDA_MAX_SMS_DAY", "3"))
 
-    recs = list_records_by_view(SMS_DUE_VIEW, max_records=500)
+    recs = list_records_by_view(SMS_DUE_VIEW, max_records=100)
 
     for r in recs:
         rid = r.get("id")
