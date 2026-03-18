@@ -1944,7 +1944,7 @@ def poll_once(owner: str):
                 body=reply_text,
             )
             log.info("SMS poll: replied to=%s (test=%s)", to_number, _sms_test_enabled())
-            
+
             # ✅ Log outbound SMS to CRM
             try:
                 token = get_token(subscription_id)
@@ -1957,7 +1957,6 @@ def poll_once(owner: str):
                 )
             except Exception:
                 log.exception("SMS poll: failed to log outbound SMS to CRM opp=%s", opp_id)
-                
 
             inbound_count = len(_get_messages_for_conversation(conversation_id, "inbound"))
             outbound_count = len(_get_messages_for_conversation(conversation_id, "outbound"))
@@ -1972,7 +1971,7 @@ def poll_once(owner: str):
                     status="open" if not needs_handoff else None,
                     message_count_inbound=inbound_count,
                     message_count_outbound=outbound_count,
-                    message_count_total=inbound_count+outbound_count
+                    message_count_total=inbound_count + outbound_count,
                 )
                 conversation_record_id = upsert_conversation(activity_update_convo)
             except Exception as e:
@@ -1982,10 +1981,6 @@ def poll_once(owner: str):
 
             # 2) Always update “sent” metrics (fail-open)
             now_iso = _now_iso()
-            next_due = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
-
-            try:
-                            now_iso = _now_iso()
             next_due = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
 
             try:
@@ -2010,6 +2005,56 @@ def poll_once(owner: str):
                 save_opp(opp, extra_fields=extra_sent)
             except Exception:
                 log.exception("SMS poll: failed to save SMS sent metrics opp=%s", opp.get("opportunityId"))
+
+            # 3) If handoff, flag Airtable + notify salesperson/GMs (fail-open)
+            if needs_handoff:
+                try:
+                    save_opp(
+                        opp,
+                        extra_fields={
+                            "Needs Human Review": True,
+                            "Human Review Reason": f"SMS handoff: {handoff_reason}",
+                        },
+                    )
+                except Exception:
+                    log.exception("SMS poll: failed to set Needs Human Review fields opp=%s", opp.get("opportunityId"))
+
+                try:
+                    token = get_token(subscription_id)
+
+                    log.warning(
+                        "SMS_HR_DEBUG opp=%s rooftop=%r sub=%r salesperson_name=%r salesperson_email=%r keys_has_rep_email=%s",
+                        opp.get("opportunityId"),
+                        opp.get("rooftop_name"),
+                        opp.get("subscription_id"),
+                        opp.get("salesperson_name"),
+                        opp.get("Assigned Sales Rep Email") or opp.get("salesperson_email") or opp.get("salespersonEmail"),
+                        any(k in opp for k in ("Assigned Sales Rep Email", "salesperson_email", "salespersonEmail"))
+                    )
+
+                    fresh_opp = None
+                    try:
+                        fresh_opp = get_opportunity(opp_id, token, subscription_id)
+                    except Exception:
+                        log.exception("SMS poll: failed to fetch fresh opp from Fortellis opp=%s", opp_id)
+
+                    handoff_to_human(
+                        opportunity=opp,
+                        fresh_opp=fresh_opp,
+                        token=token,
+                        subscription_id=subscription_id,
+                        rooftop_name=opp.get("rooftop_name") or "",
+                        inbound_subject=f"SMS handoff: {handoff_reason}",
+                        inbound_text=last_inbound,
+                        inbound_ts=now_iso,
+                        triage={"reason": f"SMS handoff: {handoff_reason}", "confidence": 1.0},
+                    )
+
+                except Exception:
+                    log.exception("SMS poll: failed to trigger handoff_to_human opp=%s", opp.get("opportunityId"))
+
+        except Exception:
+            log.exception("SMS poll: reply send failed opp=%s", opp.get("opportunityId"))
 
             # 3) If handoff, flag Airtable + notify salesperson/GMs (fail-open)
             if needs_handoff:
