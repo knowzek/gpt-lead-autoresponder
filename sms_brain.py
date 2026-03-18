@@ -81,7 +81,7 @@ _oai = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 SYSTEM_PROMPT = """You are Patti, an AI online relations assistant for a car dealership.
 
-Voice / vibe (match Impel "Sierra" examples):
+Voice / vibe:
 - Friendly, professional, confident.
 - Short, clean sentences.
 - No emojis. No slang. No exclamation spamming.
@@ -89,7 +89,9 @@ Voice / vibe (match Impel "Sierra" examples):
 
 Primary goal:
 - Answer the customer’s question clearly and briefly.
-- Then (if appropriate) suggest a next step: schedule an appointment OR offer a quick call.
+- Move the conversation toward a dealership visit / appointment in a natural, low-pressure way.
+- Default to an appointment as the next step.
+- Only offer a phone call if the customer explicitly asks for a call or the situation clearly requires a human handoff.
 
 Hard rules:
 - Never quote pricing, OTD, payments, APR, lease terms, discounts, trade values, incentives.
@@ -98,7 +100,7 @@ Hard rules:
 - Do not ask more than ONE question in a single SMS.
 - Only use intent="close" if the customer clearly ends the conversation (e.g., not interested, bought elsewhere, wrong number).
 - If you asked a question and the customer answered it, acknowledge it and ask the next single best question OR tell them what happens next.
-- If they say "no thanks" after you offered an appointment/call, treat it as declining that option and continue helping.
+- If they say "no thanks" after you offered an appointment, treat it as declining that option and continue helping.
 - Keep replies under ~320 characters unless asked a complex question.
 - If you do not have a specific fact (vehicle, name, availability), say you’ll check and offer to pass along to their assigned salesteam. Do NOT guess.
 - If asked something like "why buy from you", use ONLY the provided "Why buy from us" bullets. Pick 1–2 max and keep it conversational. Do NOT invent awards, policies, pricing claims, or guarantees not listed.
@@ -216,7 +218,233 @@ def build_user_prompt(
         f"Write Patti's next SMS."
     )
 
+def _run_sms_json_reply(
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    thread_snippet: Optional[List[Dict[str, str]]] = None,
+    temperature: float = 0.2,
+) -> Dict[str, Any]:
+    if not _oai:
+        return {}
 
+    messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
+
+    if thread_snippet:
+        for m in thread_snippet[-12:]:
+            role = (m.get("role") or "").strip().lower()
+            content = (m.get("content") or "").strip()
+            if not content or role not in ("user", "assistant"):
+                continue
+            messages.append({"role": role, "content": content})
+
+    messages.append({"role": "user", "content": user_prompt})
+
+    try:
+        try:
+            resp = _oai.chat.completions.create(
+                model=SMS_MODEL,
+                temperature=temperature,
+                messages=messages,
+                response_format={"type": "json_object"},
+            )
+        except TypeError:
+            resp = _oai.chat.completions.create(
+                model=SMS_MODEL,
+                temperature=temperature,
+                messages=messages,
+            )
+
+        content = (resp.choices[0].message.content or "").strip()
+        data = _extract_first_json_object(content) or {}
+        if data.get("needs_handoff") and not data.get("handoff_reason"):
+            data["handoff_reason"] = "other"
+        return data
+    except Exception as e:
+        log.warning("sms_brain scheduling OpenAI call failed: %r", e)
+        return {}
+
+
+def generate_sms_schedule_reply(
+    *,
+    mode: str,
+    rooftop_name: str,
+    customer_first_name: str,
+    customer_phone: str,
+    salesperson: str,
+    vehicle: str,
+    last_inbound: str,
+    thread_snippet: Optional[List[Dict[str, str]]] = None,
+    appt_human: str = "",
+) -> Dict[str, Any]:
+    """
+    Text-friendly scheduling branch, mirroring the email intent flow:
+    - CONFIRM
+    - CLARIFY_TIME
+    - DIG_PREFS
+    - HANDLE_MULTI
+    """
+    mode = (mode or "").strip().upper()
+
+    if mode == "CONFIRM":
+        reply = f"Perfect — I have you down for {appt_human} at {rooftop_name}. If anything changes, just text me here."
+        return {
+            "reply": reply,
+            "intent": "reply",
+            "needs_handoff": False,
+            "handoff_reason": "",
+            "include_optout_footer": False,
+        }
+
+    common_context = (
+        f"Context:\n"
+        f"- Rooftop: {rooftop_name or 'our dealership'}\n"
+        f"- Customer first name: {customer_first_name or 'there'}\n"
+        f"- Customer phone: {customer_phone or ''}\n"
+        f"- Assigned rep (human): {salesperson or 'our team'}\n"
+        f"- Vehicle: {vehicle or 'the vehicle you asked about'}\n"
+        f"- Store hours:\n{STORE_HOURS}\n"
+        f"\n"
+        f"Customer's latest inbound SMS:\n{(last_inbound or '').strip()}\n"
+    )
+
+    if mode == "CLARIFY_TIME":
+        system_prompt = """You are Patti replying by SMS.
+
+The customer wants to make an appointment, but they did not give a fully bookable exact time.
+
+Your goal:
+- Ask ONLY one short follow-up question to get the missing scheduling detail.
+- Be warm, direct, and text-friendly.
+- Keep the reply under 220 characters.
+- Do NOT sound pushy.
+- Do NOT ask a broad 'what day and time works best?' if the customer already gave partial info.
+
+Rules:
+- If they gave a specific day but no time, ask what time on that day works best.
+- If they said 'this weekend' or 'weekend', narrow to Saturday or Sunday.
+- If they gave a vague time window like 'after 3' or 'tomorrow afternoon', propose the earliest reasonable slot in that window and ask for confirmation.
+- Do NOT suggest a time outside store hours.
+- Return ONLY valid JSON with:
+{
+  "reply": string,
+  "intent": "reply",
+  "needs_handoff": false,
+  "handoff_reason": "",
+  "include_optout_footer": false
+}
+"""
+        user_prompt = common_context + "\nWrite Patti's next SMS."
+
+        data = _run_sms_json_reply(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            thread_snippet=thread_snippet,
+            temperature=0.2,
+        )
+
+        reply = (data.get("reply") or "").strip() or "What time works best for you?"
+        return {
+            "reply": reply,
+            "intent": "reply",
+            "needs_handoff": False,
+            "handoff_reason": "",
+            "include_optout_footer": False,
+        }
+
+    if mode == "DIG_PREFS":
+        system_prompt = """You are Patti replying by SMS.
+
+The customer seems open to visiting, but they have not proposed a specific day or time yet.
+
+Your goal:
+- Gently narrow down scheduling preferences.
+- Ask ONLY one simple question.
+- Be warm, helpful, and low-pressure.
+- Keep the reply under 220 characters.
+- Move toward setting an appointment without sounding pushy.
+
+Good patterns:
+- 'Would weekdays or weekends be easier for you?'
+- 'Is later today or tomorrow better for you?'
+
+Return ONLY valid JSON with:
+{
+  "reply": string,
+  "intent": "reply",
+  "needs_handoff": false,
+  "handoff_reason": "",
+  "include_optout_footer": false
+}
+"""
+        user_prompt = common_context + "\nWrite Patti's next SMS."
+
+        data = _run_sms_json_reply(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            thread_snippet=thread_snippet,
+            temperature=0.2,
+        )
+
+        reply = (data.get("reply") or "").strip() or "Would weekdays or weekends be easier for you?"
+        return {
+            "reply": reply,
+            "intent": "reply",
+            "needs_handoff": False,
+            "handoff_reason": "",
+            "include_optout_footer": False,
+        }
+
+    if mode == "HANDLE_MULTI":
+        system_prompt = """You are Patti replying by SMS.
+
+The customer gave multiple appointment options.
+
+Your goal:
+- Pick ONE reasonable offered option, preferably the sooner one.
+- Ask for confirmation in a very short, natural text.
+- Do NOT ask them to repeat all their options.
+- Do NOT invent new options.
+- Keep the reply under 220 characters.
+
+Example:
+'Tuesday at 3 works great — want me to lock that in?'
+
+Return ONLY valid JSON with:
+{
+  "reply": string,
+  "intent": "reply",
+  "needs_handoff": false,
+  "handoff_reason": "",
+  "include_optout_footer": false
+}
+"""
+        user_prompt = common_context + "\nWrite Patti's next SMS."
+
+        data = _run_sms_json_reply(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            thread_snippet=thread_snippet,
+            temperature=0.2,
+        )
+
+        reply = (data.get("reply") or "").strip() or "That works — want me to lock that in?"
+        return {
+            "reply": reply,
+            "intent": "reply",
+            "needs_handoff": False,
+            "handoff_reason": "",
+            "include_optout_footer": False,
+        }
+
+    return {
+        "reply": "What day and time works best for you to come in?",
+        "intent": "reply",
+        "needs_handoff": False,
+        "handoff_reason": "",
+        "include_optout_footer": False,
+    }
+    
 def generate_sms_reply(
     *,
     rooftop_name: str,
