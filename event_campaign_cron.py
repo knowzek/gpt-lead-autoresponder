@@ -35,7 +35,7 @@ INVITES_TABLE = (os.getenv("EVENT_INVITES_TABLE_NAME") or "Event Invites").strip
 
 STORE_TIMEZONE = (os.getenv("STORE_TIMEZONE") or "America/Los_Angeles").strip()
 EVENT_CAMPAIGN_DRY_RUN = (os.getenv("EVENT_CAMPAIGN_DRY_RUN") or "0").strip() == "1"
-EVENT_CAMPAIGN_MAX_INVITES = int(os.getenv("EVENT_CAMPAIGN_MAX_INVITES") or "500")
+EVENT_CAMPAIGN_MAX_INVITES = int(os.getenv("EVENT_CAMPAIGN_MAX_INVITES") or "1000")
 EVENT_CAMPAIGN_VIEW = (os.getenv("EVENT_CAMPAIGN_VIEW") or "").strip()  # optional Airtable view
 
 if not AIRTABLE_API_TOKEN or not AIRTABLE_BASE_ID:
