@@ -170,24 +170,25 @@ def send_sms(
 
     timestamp = datetime.now(timezone.utc).isoformat()
 
-    # Try to infer opp + rooftop fields if not provided
+    # Try to infer opp + rooftop fields only for standard lead flows.
+    # Event campaign sends may use a different Airtable schema (e.g. Guests.Phone),
+    # so do not force a customer_phone lookup unless we already have an opp_id.
     opp = {}
-    e164_to_number = None
-    try:
-        e164_to_number = norm_phone_e164_us(to_number)
-        rec = find_by_customer_phone(e164_to_number) if e164_to_number else None
-        if rec:
-            opp = opp_from_record(rec) or {}
-            if not opp_id:
-                opp_id = (opp.get("opportunityId") or opp.get("id") or "").strip()
-            if not rooftop_name:
-                rooftop_name = (opp.get("rooftop_name") or "").strip()
-            if not rooftop_sender:
-                rooftop_sender = (opp.get("rooftop_sender") or "").strip()
-        else:
-            log.warning("send_sms: no Airtable record found for to_number=%r (e164=%r)", to_number, e164_to_number)
-    except Exception as e:
-        log.error(f"Failed to fetch opp (send_sms): {e}")
+    e164_to_number = _norm_phone_e164_us(to_number)
+
+    if opp_id:
+        try:
+            rec = find_by_customer_phone(e164_to_number) if e164_to_number else None
+            if rec:
+                opp = opp_from_record(rec) or {}
+                if not rooftop_name:
+                    rooftop_name = (opp.get("rooftop_name") or "").strip()
+                if not rooftop_sender:
+                    rooftop_sender = (opp.get("rooftop_sender") or "").strip()
+            else:
+                log.warning("send_sms: no Airtable record found for to_number=%r (e164=%r)", to_number, e164_to_number)
+        except Exception as e:
+            log.error(f"Failed to fetch opp (send_sms): {e}")
 
     # Send SMS (do this even if we can't log it)
     r = requests.post(GOTO_SMS_URL, json=payload, headers=headers, timeout=30)
