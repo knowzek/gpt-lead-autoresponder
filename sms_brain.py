@@ -35,6 +35,15 @@ HANDOFF_REASONS = {
     "other",
 }
 
+CLOSE_TOKENS = (
+    "already bought",
+    "bought elsewhere",
+    "not interested",
+    "wrong number",
+    "remove me",
+    "no longer looking",
+)
+
 def _handoff(reply: str, reason: str):
     r = reason if reason in HANDOFF_REASONS else "other"
     return {
@@ -102,7 +111,7 @@ Hard rules:
 - If you asked a question and the customer answered it, acknowledge it and ask the next single best question OR tell them what happens next.
 - If they say "no thanks" after you offered an appointment, treat it as declining that option and continue helping.
 - Keep replies under ~320 characters unless asked a complex question.
-- If you do not have a specific fact (vehicle, name, availability), say you’ll check and offer to pass along to their assigned salesteam. Do NOT guess.
+- If you do not have a specific fact (vehicle, name, availability), say you’ll check and offer to pass it along to their assigned sales team. Do NOT guess.
 - If asked something like "why buy from you", use ONLY the provided "Why buy from us" bullets. Pick 1–2 max and keep it conversational. Do NOT invent awards, policies, pricing claims, or guarantees not listed.
 
 Output format:
@@ -343,7 +352,7 @@ Rules:
             temperature=0.2,
         )
 
-        reply = (data.get("reply") or "").strip() or "What time works best for you?"
+        reply = (data.get("reply") or "").strip() or "What time works best for you that day?"
         return {
             "reply": reply,
             "intent": "reply",
@@ -470,11 +479,23 @@ def generate_sms_reply(
 
     inbound = (last_inbound or "").strip()
 
+    # --- STOP / opt-out ---
     if OPTOUT_RE.search(inbound or ""):
         log.info("sms_brain GATE=stop inbound=%r", inbound[:120])
         return {
             "reply": "You’re all set — we’ll stop texting you. Reply START if you change your mind.",
             "intent": "opt_out",
+            "needs_handoff": False,
+            "handoff_reason": "",
+            "include_optout_footer": False,
+        }
+
+    # --- CLOSE (already bought / not interested / wrong number) ---
+    if _contains_any(inbound, CLOSE_TOKENS):
+        log.info("sms_brain GATE=close inbound=%r", inbound[:120])
+        return {
+            "reply": "Understood — thanks for letting me know.",
+            "intent": "close",
             "needs_handoff": False,
             "handoff_reason": "",
             "include_optout_footer": False,
@@ -566,8 +587,6 @@ def generate_sms_reply(
 
         if data.get("needs_handoff") and not data.get("handoff_reason"):
             data["handoff_reason"] = "other"
-            if not data.get("handoff_reason"):
-                data["handoff_reason"] = "other"
     
     except Exception as e:
         log.warning("sms_brain OpenAI call failed: %r", e)
@@ -578,6 +597,8 @@ def generate_sms_reply(
     intent = (data.get("intent") or "reply").strip()
     needs_handoff = bool(data.get("needs_handoff"))
     handoff_reason = (data.get("handoff_reason") or "").strip()
+    if handoff_reason and handoff_reason not in HANDOFF_REASONS:
+        handoff_reason = "other"
     footer = bool(data.get("include_optout_footer"))
 
     if not reply:
