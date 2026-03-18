@@ -174,7 +174,7 @@ def send_sms(
     # Event campaign sends may use a different Airtable schema (e.g. Guests.Phone),
     # so do not force a customer_phone lookup unless we already have an opp_id.
     opp = {}
-    e164_to_number = _norm_phone_e164_us(to_number)
+    e164_to_number = norm_phone_e164_us(to_number)
 
     if opp_id:
         try:
