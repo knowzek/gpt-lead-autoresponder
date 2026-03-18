@@ -168,7 +168,8 @@ def _build_general_lead_first_sms(fields: dict) -> str:
 def _looks_like_mazda_transfer_intent(text: str) -> bool:
     return bool(_MAZDA_TRANSFER_RE.search(text or ""))
 
-_VOUCHERISH_RE = re.compile(r"(?<!\d)(\d{12,20})(?!\d)")  # catches 12–20 digit codes
+# Mazda loyalty voucher codes can be alphanumeric.
+_VOUCHERISH_RE = re.compile(r"(?<![A-Z0-9])([A-Z0-9][A-Z0-9 -]{10,24}[A-Z0-9])(?![A-Z0-9])", re.I)
 
 from zoneinfo import ZoneInfo
 
@@ -197,11 +198,21 @@ def _within_send_window() -> bool:
     return 8 <= now_local.hour < 20
     
 def _extract_voucherish_code(text: str) -> str:
-    t = (text or "").strip()
-    if not t:
+    s = (text or "").strip().upper()
+    if not s:
         return ""
-    m = _VOUCHERISH_RE.search(t.replace(" ", ""))
-    return m.group(1) if m else ""
+
+    for m in _VOUCHERISH_RE.finditer(s):
+        raw = m.group(1)
+        cleaned = re.sub(r"[^A-Z0-9]", "", raw)
+
+        if 12 <= len(cleaned) <= 20 and any(ch.isalpha() for ch in cleaned) and any(ch.isdigit() for ch in cleaned):
+            return cleaned
+
+        if len(cleaned) == 16 and cleaned.isdigit():
+            return cleaned
+
+    return ""
 
 
 def _now_iso():
@@ -360,8 +371,9 @@ def handle_mazda_loyalty_inbound_sms_webhook(*, payload_json: dict) -> dict:
 
     decision = _finalize_mazda_sms_decision(
         decision=decision,
-        inbound_text=inbound_text,
+        inbound_text=last_inbound,
         first_name=first_name,
+        thread_snippet=thread,
     )
 
     if decision.get("mark_opt_out"):
@@ -474,6 +486,7 @@ def handle_mazda_loyalty_inbound_sms_webhook(*, payload_json: dict) -> dict:
                 customer_name=first_name or "Customer",
                 customer_email=customer_email or "unknown",
                 customer_phone=phone or "unknown",
+                thread_text=_thread_text(thread),
                 bucket=bucket,
                 inbound_text=inbound_text,
                 reason=f"Mazda Loyalty SMS handoff: {reason}",
@@ -541,17 +554,59 @@ def _looks_like_appt_intent(text: str) -> bool:
 
     return (has_day or has_time) and has_sched_context
 
-def _finalize_mazda_sms_decision(*, decision: dict, inbound_text: str, first_name: str) -> dict:
-    """
-    Final deterministic Mazda SMS overrides after the brain runs.
-    Priority:
-      1. actual voucher code
-      2. explicit decline / negative-transfer / no-follow-up
-      3. transfer intent
-      4. preserve stronger existing handoff reasons
-      5. true appointment intent
-      6. leave brain decision alone
-    """
+def _thread_text(thread_snippet: list[dict] | None, max_msgs: int = 8) -> str:
+    if not thread_snippet:
+        return ""
+    out = []
+    for m in thread_snippet[-max_msgs:]:
+        role = (m.get("role") or "").strip().lower()
+        content = (m.get("content") or "").strip()
+        if not content:
+            continue
+        who = "Customer" if role == "user" else "Patti"
+        out.append(f"{who}: {content}")
+    return "\n".join(out).strip()
+
+
+def _thread_indicates_service_credit_flow(thread_snippet: list[dict] | None) -> bool:
+    t = _thread_text(thread_snippet).lower()
+    return any(x in t for x in (
+        "service & parts credit",
+        "service and parts credit",
+        "service credit",
+        "redeem it for service",
+        "apply to as a credit for service",
+        "apply it as a credit for service",
+    ))
+
+
+def _thread_indicates_handoff_started(thread_snippet: list[dict] | None) -> bool:
+    t = _thread_text(thread_snippet).lower()
+    return any(x in t for x in (
+        "looping in a team member",
+        "what day/time were you hoping for",
+        "what day works best, and about what time",
+    ))
+
+
+def _looks_like_bare_availability_reply(text: str) -> bool:
+    t = (text or "").lower().strip()
+    if not t:
+        return False
+
+    has_day = bool(_DOW_RE.search(t)) or any(x in t for x in ("today", "tomorrow", "weekday", "weekend", "any day"))
+    has_time = bool(_TIME_RE.search(t)) or "after " in t or "before " in t
+    shortish = len(t) <= 80
+
+    return shortish and (has_day or has_time)
+
+def _finalize_mazda_sms_decision(
+    *,
+    decision: dict,
+    inbound_text: str,
+    first_name: str,
+    thread_snippet: list[dict] | None = None,
+) -> dict:
     inbound = (inbound_text or "").strip()
     first = (first_name or "").strip()
     prefix = f"{first}, " if first else ""
@@ -567,18 +622,6 @@ def _finalize_mazda_sms_decision(*, decision: dict, inbound_text: str, first_nam
             "handoff_reason": "voucher_lookup",
         }
 
-    # NEW: negative transfer / decline / do-not-follow-up intent
-    if _looks_like_mazda_negative_transfer_or_decline(inbound):
-        return {
-            "reply": (
-                f"{prefix}understood — we won’t continue reaching out about the voucher. "
-                "If anything changes later, you can text me here."
-            ),
-            "needs_handoff": False,
-            "handoff_reason": "",
-            "mark_opt_out": True,
-        }
-
     if _looks_like_mazda_transfer_intent(inbound):
         return {
             "reply": (
@@ -589,9 +632,31 @@ def _finalize_mazda_sms_decision(*, decision: dict, inbound_text: str, first_nam
             "handoff_reason": "other",
         }
 
+    # Preserve stronger handoffs already chosen upstream
     existing_reason = (decision.get("handoff_reason") or "").strip().lower()
-    if decision.get("needs_handoff") and existing_reason in {"pricing", "trade", "finance", "angry", "complaint"}:
+    if decision.get("needs_handoff") and existing_reason in {
+        "pricing", "trade", "finance", "angry", "complaint", "voucher_lookup", "appointment"
+    }:
         return decision
+
+    # Context-aware continuation:
+    # if we're already in service-credit/handoff mode and customer replies with availability,
+    # keep handoff going instead of regressing to generic Mazda script.
+    if (
+        _looks_like_bare_availability_reply(inbound)
+        and (
+            _thread_indicates_service_credit_flow(thread_snippet)
+            or _thread_indicates_handoff_started(thread_snippet)
+        )
+    ):
+        return {
+            "reply": (
+                f"{prefix}thanks — I’m looping in a team member to lock in a time. "
+                "They’ll reach out shortly."
+            ),
+            "needs_handoff": True,
+            "handoff_reason": "appointment",
+        }
 
     if looks_like_sms_appointment_intent(inbound):
         return {
@@ -616,10 +681,17 @@ def _send_mazda_sms_handoff_email(
     customer_phone: str,
     bucket: str,
     inbound_text: str,
+    thread_text: str = "",
     reason: str,
     now_iso: str,
 ):
     subj = f"[Patti] Mazda Loyalty SMS handoff - {rooftop_name} - {customer_name}"
+    thread_html = ""
+    if thread_text:
+        thread_html = f"""
+        <p><b>Recent thread:</b><br>
+        <pre style="white-space:pre-wrap;font-family:Arial,Helvetica,sans-serif;">{thread_text[:4000]}</pre></p>
+        """.strip()
     html = f"""
     <p><b>Mazda Loyalty SMS handoff — please take over.</b></p>
 
@@ -634,6 +706,7 @@ def _send_mazda_sms_handoff_email(
 
     <p><b>Latest customer text:</b><br>
     <pre style="white-space:pre-wrap;font-family:Arial,Helvetica,sans-serif;">{(inbound_text or "")[:2000]}</pre></p>
+    {thread_html}
 
     <p style="color:#666;font-size:12px;">
       Logged by Patti • Mazda Loyalty • {now_iso}
@@ -1251,6 +1324,7 @@ def poll_once(owner: str):
                 decision=decision,
                 inbound_text=last_inbound,
                 first_name=first_name,
+                thread_snippet=thread,
             )
             
             # ✅ If guest already provided a concrete appointment time, don't ask again
@@ -1351,6 +1425,7 @@ def poll_once(owner: str):
                         customer_name=customer_name,
                         customer_email=customer_email or "unknown",
                         customer_phone=customer_phone or "unknown",
+                        thread_text=_thread_text(thread),
                         bucket=bucket,
                         inbound_text=last_inbound,
                         reason=handoff_reason_text,
