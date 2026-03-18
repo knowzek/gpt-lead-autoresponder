@@ -1009,12 +1009,14 @@ def opp_from_record(rec: dict) -> dict:
 
     # ✅ NEW: Hydrate suppression/compliance from Airtable columns (authoritative for gating)
     if fields.get("Suppressed") is True:
-        opp["compliance"] = {
+        comp = {
             "suppressed": True,
             "reason": (fields.get("Suppression Reason") or "unsubscribe"),
             "channel": "email",
-            "at": (fields.get("Suppressed At") or ""),
         }
+        if fields.get("Suppressed At"):
+            comp["at"] = fields.get("Suppressed At")
+        opp["compliance"] = comp
     else:
         if not isinstance(opp.get("compliance"), dict):
             opp["compliance"] = {"suppressed": False}
@@ -1243,16 +1245,18 @@ def save_opp(opp: dict, *, extra_fields: dict | None = None):
         pass
 
     # ---------------------------
-    # Mirror compliance into columns (safe)
+    # Mirror compliance into columns (root-safe)
     # ---------------------------
-    comp = opp.get("compliance")
-    if not isinstance(comp, dict):
-        comp = {"suppressed": False}
+    comp = _extract_compliance(opp)
 
     patch["Suppressed"] = bool(comp.get("suppressed"))
+
     if comp.get("suppressed"):
         patch["Suppression Reason"] = comp.get("reason") or ""
-        patch["Suppressed At"] = comp.get("at") or ""
+        patch["Suppressed At"] = comp.get("at") or None
+    else:
+        patch["Suppression Reason"] = ""
+        patch["Suppressed At"] = None
 
     # ---------------------------
     # Apply caller overrides last (caller wins)
