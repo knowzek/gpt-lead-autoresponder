@@ -103,6 +103,42 @@ _MAZDA_NEGATIVE_TRANSFER_RE = re.compile(
     """
 )
 
+_INVENTORY_VERIFY_RE = re.compile(
+    r"""(?ix)
+    \b(
+        available|availability|in\s+stock|still\s+available|still\s+have|do\s+you\s+have|
+        package|night\s*fall|nightfall|tech|technology|premium|trim|
+        color|grey|gray|black|white|blue|red|silver|green|interior|
+        awd|fwd|rwd|4wd|4x4|
+        bench|captain|captain'?s\s+chairs|
+        panoramic|sunroof|moonroof|
+        heated|ventilated|leather|
+        tow|navigation|nav|carplay|android\s+auto
+    )\b
+    """
+)
+
+def _looks_like_inventory_verification_request(text: str, vehicle: str = "") -> bool:
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+
+    # explicit config / availability ask
+    if _INVENTORY_VERIFY_RE.search(t):
+        return True
+
+    # guest names a trim/package/color in a short fragment response
+    # ex: "yes kia land with nightfall package"
+    if vehicle:
+        v = (vehicle or "").strip().lower()
+        if any(tok in t for tok in ("trim", "package", "color", "nightfall")):
+            return True
+        # short answer + variant language usually means exact inventory check
+        if len(t) <= 120 and any(tok in t for tok in ("land", "gt", "lx", "ex", "sx", "touring", "premium")):
+            return True
+
+    return False
+
 def classify_scheduling_intent(extraction: dict) -> str:
     """
     Mirror the email scheduling decision tree for SMS.
@@ -1680,6 +1716,26 @@ def poll_once(owner: str):
                 include_optout_footer=False,
             )
 
+        # Force human handoff for exact inventory/configuration verification
+        if _looks_like_inventory_verification_request(
+            last_inbound,
+            vehicle=opp.get("vehicle") or "",
+        ):
+            name = (opp.get("customer_first_name") or "").strip()
+            prefix = f"Thanks, {name}. " if name else "Thanks. "
+
+            decision = {
+                "reply": (
+                    prefix
+                    + "I’m checking on that exact configuration with the team now. "
+                      "They’ll follow up shortly. If you’d like, I can also help set up a time for you to come by."
+                ),
+                "intent": "handoff",
+                "needs_handoff": True,
+                "handoff_reason": "inventory_check",
+                "include_optout_footer": False,
+            }
+
         needs_handoff = bool(decision.get("needs_handoff"))
         handoff_reason = (decision.get("handoff_reason") or "other").strip().lower()
 
@@ -1689,12 +1745,19 @@ def poll_once(owner: str):
 
             if handoff_reason == "pricing":
                 decision["reply"] = prefix + "I got the offer you sent over. I’m having the team review it now and they’ll follow up with you shortly."
+            elif handoff_reason == "inventory_check":
+                decision["reply"] = (
+                    prefix
+                    + "I’m checking on that exact configuration with the team now. "
+                      "They’ll follow up shortly. If you’d like, I can also help set up a time for you to come by."
+                )
             elif handoff_reason == "phone_call":
                 decision["reply"] = prefix + "I’ll have someone give you a quick call shortly."
             elif handoff_reason in ("angry", "complaint"):
                 decision["reply"] = prefix + "I’m sorry about that. I’m looping in a manager now so we can help."
             else:
                 decision["reply"] = prefix + "I’m looping in a team member to help, and they’ll follow up shortly."
+                
             try:
                 handoff_update_convo = Conversation(
                     conversation_id=conversation_id,
