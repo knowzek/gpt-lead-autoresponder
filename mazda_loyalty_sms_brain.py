@@ -63,7 +63,9 @@ def _looks_like_code_not_found(text: str) -> bool:
 
     return False
 
-VOUCHER_RE = re.compile(r"\b(\d[ -]?){15}\d\b")
+# Mazda loyalty codes may be alphanumeric, commonly 16 chars, sometimes with spaces/dashes.
+# Example: MBA226BFRW7QN4G8
+VOUCHER_RE = re.compile(r"(?<![A-Z0-9])([A-Z0-9][A-Z0-9 -]{10,24}[A-Z0-9])(?![A-Z0-9])", re.I)
 
 SYSTEM = """You are Patti, a virtual assistant for a Mazda dealership.
 This is SMS about the Mazda Loyalty CX-5 reward program.
@@ -108,16 +110,86 @@ Return ONLY JSON:
 {{"reply": "...", "needs_handoff": true/false, "handoff_reason": "pricing|trade|finance|angry|complaint|other"}}
 """
 
+def _thread_to_text(thread_snippet: list[dict] | None, max_msgs: int = 8) -> str:
+    if not thread_snippet:
+        return ""
+
+    lines = []
+    for m in thread_snippet[-max_msgs:]:
+        role = (m.get("role") or "").strip().lower()
+        content = (m.get("content") or "").strip()
+        if not content:
+            continue
+        who = "Customer" if role == "user" else "Patti"
+        lines.append(f"{who}: {content}")
+
+    return "\n".join(lines).strip()
+
+
+def _thread_has_service_credit_flow(thread_snippet: list[dict] | None) -> bool:
+    t = _thread_to_text(thread_snippet).lower()
+    if not t:
+        return False
+    return any(x in t for x in (
+        "service & parts credit",
+        "service and parts credit",
+        "service credit",
+        "redeem it for a $100 service",
+        "apply to as a credit for service",
+        "apply it as a credit for service",
+        "redeem it for service",
+    ))
+
+
+def _thread_has_voucher_request(thread_snippet: list[dict] | None) -> bool:
+    t = _thread_to_text(thread_snippet).lower()
+    if not t:
+        return False
+    return any(x in t for x in (
+        "do you already have your 16-digit mazda loyalty voucher code",
+        "if you already have your 16-digit voucher code",
+        "text it here",
+        "find the voucher code",
+        "were you able to find the voucher code",
+    ))
+
+
+def _thread_has_handoff_started(thread_snippet: list[dict] | None) -> bool:
+    t = _thread_to_text(thread_snippet).lower()
+    if not t:
+        return False
+    return any(x in t for x in (
+        "i’m looping in a team member",
+        "i'm looping in a team member",
+        "team member to help with that",
+        "team member now to confirm eligibility",
+        "what day/time were you hoping for",
+        "what day works best, and about what time",
+    ))
+    
 def _contains_any(t: str, toks: tuple[str, ...]) -> bool:
     s = (t or "").lower()
     return any(x in s for x in toks)
-
+    
 def _extract_code(t: str) -> str:
-    m = VOUCHER_RE.search(t or "")
-    if not m:
+    s = (t or "").strip().upper()
+    if not s:
         return ""
-    digits = "".join(ch for ch in m.group(0) if ch.isdigit())
-    return digits if len(digits) == 16 else ""
+
+    for m in VOUCHER_RE.finditer(s):
+        raw = m.group(1)
+        cleaned = re.sub(r"[^A-Z0-9]", "", raw)
+
+        # Mazda loyalty codes are typically 16 chars alphanumeric.
+        # Keep this slightly flexible if you later learn some valid variants differ.
+        if 12 <= len(cleaned) <= 20 and any(ch.isalpha() for ch in cleaned) and any(ch.isdigit() for ch in cleaned):
+            return cleaned
+
+        # Also allow pure 16-digit codes if those still exist in some flows.
+        if len(cleaned) == 16 and cleaned.isdigit():
+            return cleaned
+
+    return ""
 
 def _safe_json(s: str) -> Dict[str, Any]:
     s = (s or "").strip()
@@ -262,6 +334,7 @@ def generate_mazda_loyalty_sms_reply(
 ) -> Dict[str, Any]:
     inbound = (last_inbound or "").strip()
     first = (first_name or "").strip()
+    thread_text = _thread_to_text(thread_snippet)
 
     # Stop keywords
     if _contains_any(inbound, STOP_TOKENS):
@@ -288,6 +361,39 @@ def generate_mazda_loyalty_sms_reply(
             "needs_handoff": False,
             "handoff_reason": "other",
         }
+
+    # Context-aware follow-up:
+    # If Patti already asked for the voucher code / service-credit flow is underway,
+    # and the customer now sends the code, hand off immediately.
+    code_from_inbound = _extract_code(inbound)
+    if code_from_inbound:
+        prefix = f"{first}, " if first else ""
+        return {
+            "reply": (
+                f"{prefix}thanks — I got your voucher code. "
+                "I’m looping in a team member now to confirm eligibility and make sure everything is set up correctly."
+            ),
+            "needs_handoff": True,
+            "handoff_reason": "voucher_lookup",
+        }
+
+    # If the thread is already in service-credit/handoff scheduling mode and the customer
+    # replies with just availability, do not reset to the generic voucher script.
+    if (_thread_has_service_credit_flow(thread_snippet) or _thread_has_handoff_started(thread_snippet)):
+        t = inbound.lower()
+        has_time_signal = bool(re.search(r"\b(\d{1,2})(:\d{2})?\s?(am|pm)\b", t, re.I)) or "after " in t or "before " in t
+        has_day_signal = bool(re.search(r"\b(mon|monday|tue|tuesday|wed|wednesday|thu|thursday|fri|friday|sat|saturday|sun|sunday|today|tomorrow|weekday|weekend|any day)\b", t, re.I))
+
+        if has_time_signal or has_day_signal:
+            prefix = f"{first}, " if first else ""
+            return {
+                "reply": (
+                    f"{prefix}thanks — I’m looping in a team member to lock in a time. "
+                    "They’ll reach out shortly."
+                ),
+                "needs_handoff": True,
+                "handoff_reason": "appointment",
+            }
         
     # ---- Clear buying intent: do NOT push transfer/service credit ----
     if _looks_like_buying_intent(inbound):
@@ -376,7 +482,14 @@ def generate_mazda_loyalty_sms_reply(
         f"Rooftop: {rooftop_name or 'Mazda'}\n"
         f"Customer first name: {first or 'there'}\n"
         f"Bucket/tier: {bucket or 'unknown'} ({tier})\n\n"
-        f"Latest SMS:\n{inbound}\n\n"
+        f"Recent thread (oldest -> newest):\n{thread_text or '[no prior thread available]'}\n\n"
+        f"Latest inbound SMS:\n{inbound}\n\n"
+        "Important:\n"
+        "- Reply to the latest message in context of the thread.\n"
+        "- Do not restart the conversation or repeat earlier generic options if the thread is already past that step.\n"
+        "- If Patti already asked for the voucher code and the customer now provided it, acknowledge receipt and hand off.\n"
+        "- If Patti already said she is looping in a team member and the customer replies with availability, keep it in handoff mode.\n"
+        "- If the customer is clearly continuing a service-credit flow, do not pivot back to transfer vs service-credit options.\n\n"
         "Write the best next SMS reply following the rules."
     )
 
@@ -401,7 +514,7 @@ def generate_mazda_loyalty_sms_reply(
 
         if not reply:
             prefix = f"{first}, " if first else ""
-            reply = f"{prefix}I can help. If you have your 16-digit voucher code, text it here and I’ll verify it."
+            reply = f"{prefix}I can help. If you have your Mazda loyalty voucher code, text it here and I’ll help with next steps."
 
         return {"reply": reply, "needs_handoff": needs, "handoff_reason": reason}
     except Exception:
