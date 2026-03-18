@@ -14,7 +14,7 @@ def _now_iso():
     return datetime.now(timezone.utc).isoformat()
 
 def send_email_cadence_once():
-    records = list_records_by_view(EMAIL_DUE_VIEW, max_records=500)
+    records = list_records_by_view(EMAIL_DUE_VIEW, max_records=100)
 
     MAX_EMAIL_DAY = int(os.getenv("MAZDA_MAX_EMAIL_DAY", "3"))
 
