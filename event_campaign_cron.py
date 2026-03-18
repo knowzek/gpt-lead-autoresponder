@@ -46,8 +46,8 @@ AIRTABLE_HEADERS = {
     "Content-Type": "application/json",
 }
 
-DEFAULT_EMAIL_OFFSETS = {1: 14, 2: 7, 3: 1}
-DEFAULT_SMS_OFFSETS = {1: 14, 2: 7, 3: 1, 4: 0}
+DEFAULT_EMAIL_OFFSETS = {1: 14, 2: 2, 3: 1}
+DEFAULT_SMS_OFFSETS = {1: 14, 2: 2, 3: 1, 4: 0}
 
 # Build store -> SMS number map from your existing rooftop config
 STORE_TO_SMS_FROM = {
