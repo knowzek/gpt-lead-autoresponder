@@ -10,7 +10,7 @@ from fortellis import get_token, schedule_activity, get_opportunity, add_opportu
 
 from phone_utils import norm_phone_e164_us
 from goto_sms import list_conversations, iter_conversations, list_messages, send_sms
-from sms_brain import generate_sms_reply
+from sms_brain import generate_sms_reply, generate_sms_schedule_reply
 from mazda_loyalty_sms_brain import generate_mazda_loyalty_sms_reply
 from templates import build_mazda_loyalty_sms
 from event_campaign_state import handle_event_sms_reply
@@ -103,6 +103,39 @@ _MAZDA_NEGATIVE_TRANSFER_RE = re.compile(
     """
 )
 
+def classify_scheduling_intent(extraction: dict) -> str:
+    """
+    Mirror the email scheduling decision tree for SMS.
+    Returns:
+    - SCHEDULE
+    - CLARIFY_TIME
+    - DIG_PREFS
+    - HANDLE_MULTI
+    - DEFAULT_REPLY
+    """
+    cls = (extraction.get("classification") or "NO_INTENT").upper()
+    iso = (extraction.get("iso") or "").strip()
+    conf = float(extraction.get("confidence") or 0.0)
+
+    if cls == "EXACT_TIME":
+        if iso and conf >= 0.60:
+            return "SCHEDULE"
+        return "CLARIFY_TIME"
+
+    if cls in ("VAGUE_DATE", "VAGUE_WINDOW"):
+        return "CLARIFY_TIME"
+
+    if cls == "OPEN_ENDED":
+        return "DIG_PREFS"
+
+    if cls == "MULTI_OPTION":
+        return "HANDLE_MULTI"
+
+    if cls == "RESCHEDULE":
+        return "CLARIFY_TIME"
+
+    return "DEFAULT_REPLY"
+    
 def _extract_simple_appt_phrase(text: str) -> str:
     """
     Return a human-friendly appointment phrase only when the guest
@@ -777,7 +810,6 @@ def _patti_number() -> str:
 
 SMS_DUE_VIEW = os.getenv("SMS_DUE_VIEW", "SMS Due")
 
-SMS_DUE_VIEW = os.getenv("SMS_DUE_VIEW", "SMS Due")
 MAZDA_MAX_SMS_DAY = int(os.getenv("MAZDA_MAX_SMS_DAY", "9"))
 
 def _is_terminal_mazda_sms(fields: dict) -> bool:
@@ -1678,94 +1710,158 @@ def poll_once(owner: str):
                     f"Something went wrong while upserting message update in poll_once to Conversations table (2): {e}"
                 )
 
-        # --- Appointment detect + schedule (authoritative actions happen here, not in GPT text) ---
+        scheduled_appt_ok = False
+        # --- Appointment detect + schedule (mirror email logic, but SMS-friendly) ---
         appt = extract_appt_time(last_inbound, tz="America/Los_Angeles")
         appt_iso = (appt.get("iso") or "").strip()
-        appt_conf = float(appt.get("confidence") or 0)
+        appt_conf = float(appt.get("confidence") or 0.0)
+        intent_action = classify_scheduling_intent(appt)
 
-        if appt_iso and appt_conf >= 0.80:
-            try:
-                # Convert local ISO w/ offset -> UTC Z for Fortellis
-                dt_local = datetime.fromisoformat(appt_iso)
-                dt_utc = dt_local.astimezone(timezone.utc)
-                due_utc = dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+        log.info(
+            "SMS scheduling intent=%s opp=%s iso=%r conf=%.2f class=%s",
+            intent_action,
+            opp.get("opportunityId"),
+            appt_iso,
+            appt_conf,
+            appt.get("classification"),
+        )
 
-                # Get CRM token + schedule activity
-                dealer_key = opp.get("subscription_id") or opp.get("dealer_key")
-                if not dealer_key:
-                    raise RuntimeError(f"Missing subscription_id/dealer_key for opp={opp.get('opportunityId')}")
-                token = get_token(dealer_key)
-
-                schedule_activity(
-                    token,
-                    opp["subscription_id"],
-                    opp["opportunityId"],
-                    due_dt_iso_utc=due_utc,
-                    activity_name="Sales Appointment",
-                    activity_type=7,
-                    comments=f"Patti scheduled via SMS based on customer reply: {last_inbound[:200]}",
-                )
-        
-                # ✅ Send appointment notification email (same as email flow)
+        # Only override the normal SMS brain if this message is not already being handed to a human.
+        if not decision.get("needs_handoff"):
+            if intent_action == "SCHEDULE":
                 try:
-                    fresh_opp = None
+                    dt_local = datetime.fromisoformat(appt_iso)
+                    dt_utc = dt_local.astimezone(timezone.utc)
+                    due_utc = dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+                    crm_subscription_id = (opp.get("subscription_id") or "").strip()
+                    if not crm_subscription_id:
+                        raise RuntimeError(
+                            f"Missing subscription_id for opp={opp.get('opportunityId')}"
+                        )
+                    
+                    token = get_token(crm_subscription_id)
+                    
+                    schedule_activity(
+                        token,
+                        crm_subscription_id,
+                        opp["opportunityId"],
+                        due_dt_iso_utc=due_utc,
+                        activity_name="Sales Appointment",
+                        activity_type=7,
+                        comments=f"Patti scheduled via SMS based on customer reply: {last_inbound[:200]}",
+                    )
+
+                    scheduled_appt_ok = True
+                    appt_human = dt_local.strftime("%a %-m/%-d %-I:%M %p")
+
+                    # Override GPT reply with deterministic confirmation text
+                    decision = generate_sms_schedule_reply(
+                        mode="CONFIRM",
+                        rooftop_name=opp.get("rooftop_name") or opp.get("rooftop") or "",
+                        customer_first_name=opp.get("customer_first_name") or "",
+                        customer_phone=opp.get("customer_phone") or "",
+                        salesperson=opp.get("salesperson_name") or "",
+                        vehicle=opp.get("vehicle") or "",
+                        last_inbound=last_inbound,
+                        thread_snippet=thread,
+                        appt_human=appt_human,
+                    )
+
                     try:
-                        fresh_opp = get_opportunity(
-                            opp["opportunityId"],
-                            token,
-                            dealer_key
+                        fresh_opp = None
+                        try:
+                            fresh_opp = get_opportunity(
+                                opp["opportunityId"],
+                                token,
+                                crm_subscription_id,
+                            )
+                        except Exception:
+                            log.exception(
+                                "SMS poll: failed to fetch fresh opp for appt notify opp=%s",
+                                opp.get("opportunityId"),
+                            )
+
+                        notify_staff_patti_scheduled_appt(
+                            opportunity=opp,
+                            fresh_opp=fresh_opp,
+                            subscription_id=crm_subscription_id,
+                            rooftop_name=opp.get("rooftop_name") or opp.get("rooftop") or "",
+                            subject="Patti scheduled appointment via SMS",
+                            appt_human=appt_human,
+                            customer_reply=last_inbound,
                         )
                     except Exception:
                         log.exception(
-                            "SMS poll: failed to fetch fresh opp for appt notify opp=%s",
+                            "SMS poll: failed to send appt notify email opp=%s",
                             opp.get("opportunityId"),
                         )
-        
-                    appt_human = dt_local.strftime("%a %-m/%-d %-I:%M %p")
-        
-                    notify_staff_patti_scheduled_appt(
-                        opportunity=opp,
-                        fresh_opp=fresh_opp,
-                        subscription_id=dealer_key,
-                        rooftop_name=opp.get("rooftop_name") or opp.get("rooftop") or "",
-                        subject="Patti scheduled appointment via SMS",
-                        appt_human=appt_human,
-                        customer_reply=last_inbound,
-                    )
-        
+
+                    try:
+                        extra_appt = {
+                            "AI Set Appointment": True,
+                            "AI Appointment At": due_utc,
+                        }
+                        save_opp(opp, extra_fields=extra_appt)
+                    except Exception:
+                        log.exception(
+                            "SMS poll: failed to save Airtable appt fields opp=%s",
+                            opp.get("opportunityId"),
+                        )
+
+                    try:
+                        activity_update_convo = Conversation(
+                            conversation_id=conversation_id,
+                            last_activity_at=_dt.now(_tz.utc).replace(microsecond=0).isoformat(),
+                            last_channel="sms",
+                        )
+                        conversation_record_id = upsert_conversation(activity_update_convo)
+                    except Exception as e:
+                        log.error(
+                            f"Something went wrong while upserting last activity in poll_once to Conversations table (3): {e}"
+                        )
+
                 except Exception:
                     log.exception(
-                        "SMS poll: failed to send appt notify email opp=%s",
+                        "SMS poll: failed to schedule appointment opp=%s appt_iso=%r",
                         opp.get("opportunityId"),
-                    )
-        
-                # ✅ Best-effort Airtable update (should NOT block notify)
-                try:
-                    extra_appt = {
-                        "AI Set Appointment": True,
-                        "AI Appointment At": due_utc,
-                    }
-                    save_opp(opp, extra_fields=extra_appt)
-                except Exception:
-                    log.exception(
-                        "SMS poll: failed to save Airtable appt fields opp=%s",
-                        opp.get("opportunityId"),
+                        appt_iso,
                     )
 
-        
-            except Exception:
-                log.exception("SMS poll: failed to schedule appointment opp=%s appt_iso=%r", opp.get("opportunityId"), appt_iso)
-
-            try:
-                activity_update_convo = Conversation(
-                    conversation_id=conversation_id,
-                    last_activity_at=_dt.now(_tz.utc).replace(microsecond=0).isoformat(),
-                    last_channel="sms",
+            elif intent_action == "CLARIFY_TIME":
+                decision = generate_sms_schedule_reply(
+                    mode="CLARIFY_TIME",
+                    rooftop_name=opp.get("rooftop_name") or "",
+                    customer_first_name=opp.get("customer_first_name") or "",
+                    customer_phone=opp.get("customer_phone") or "",
+                    salesperson=opp.get("salesperson_name") or "",
+                    vehicle=opp.get("vehicle") or "",
+                    last_inbound=last_inbound,
+                    thread_snippet=thread,
                 )
-                conversation_record_id = upsert_conversation(activity_update_convo)
-            except Exception as e:
-                log.error(
-                    f"Something went wrong while upserting last activity in poll_once to Conversations table (3): {e}"
+
+            elif intent_action == "DIG_PREFS":
+                decision = generate_sms_schedule_reply(
+                    mode="DIG_PREFS",
+                    rooftop_name=opp.get("rooftop_name") or "",
+                    customer_first_name=opp.get("customer_first_name") or "",
+                    customer_phone=opp.get("customer_phone") or "",
+                    salesperson=opp.get("salesperson_name") or "",
+                    vehicle=opp.get("vehicle") or "",
+                    last_inbound=last_inbound,
+                    thread_snippet=thread,
+                )
+
+            elif intent_action == "HANDLE_MULTI":
+                decision = generate_sms_schedule_reply(
+                    mode="HANDLE_MULTI",
+                    rooftop_name=opp.get("rooftop_name") or "",
+                    customer_first_name=opp.get("customer_first_name") or "",
+                    customer_phone=opp.get("customer_phone") or "",
+                    salesperson=opp.get("salesperson_name") or "",
+                    vehicle=opp.get("vehicle") or "",
+                    last_inbound=last_inbound,
+                    thread_snippet=thread,
                 )
 
         # --- Send SMS reply + persist metrics + optional handoff escalation ---
@@ -1826,12 +1922,28 @@ def poll_once(owner: str):
             next_due = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
 
             try:
+                            now_iso = _now_iso()
+            next_due = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+
+            try:
                 extra_sent = {
                     "last_sms_sent_at": now_iso,
-                    "sms_followup_due_at": next_due,
                     "sms_nudge_count": int(opp.get("sms_nudge_count") or 0) + 1,
                     "AI Texts Sent": int(opp.get("AI Texts Sent") or 0) + 1,
                 }
+
+                if scheduled_appt_ok:
+                    extra_sent.update({
+                        "sms_followup_due_at": None,
+                        "next_sms_at": None,
+                        "sms_status": "appt_set",
+                        "mode": "appointment",
+                    })
+                else:
+                    extra_sent.update({
+                        "sms_followup_due_at": next_due,
+                    })
+
                 save_opp(opp, extra_fields=extra_sent)
             except Exception:
                 log.exception("SMS poll: failed to save SMS sent metrics opp=%s", opp.get("opportunityId"))
