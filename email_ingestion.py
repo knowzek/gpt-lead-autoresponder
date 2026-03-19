@@ -353,6 +353,81 @@ def _extract_phone_from_opp(fresh_opp: dict, body_text: str = "") -> str:
 
     return ""
 
+def _is_facebook_lead(*, inbound: dict, subject: str, body_text: str, body_html: str) -> bool:
+    src = (inbound.get("source") or "").strip().lower()
+    lead_type = (inbound.get("lead_type") or "").strip().lower()
+    subj = (subject or "").strip().lower()
+    bt = (body_text or "").strip().lower()
+    bh = (body_html or "").strip().lower()
+
+    return (
+        src == "facebook"
+        or lead_type == "facebook"
+        or "facebook" in subj
+        or "##source##: facebook" in bt
+        or "##source##: facebook" in bh
+        or "new facebook lead" in subj
+    )
+
+
+def _extract_facebook_email(body_text: str, body_html: str = "") -> str:
+    hay = "\n".join([body_text or "", body_html or ""])
+
+    patterns = [
+        r"(?im)^\s*prospect_customer_contact_email\s*:\s*([^\s<]+@[^\s<]+)\s*$",
+        r"(?im)^\s*email\s*:\s*([^\s<]+@[^\s<]+)\s*$",
+    ]
+    for pat in patterns:
+        m = re.search(pat, hay)
+        if m:
+            return (m.group(1) or "").strip().lower()
+
+    return ""
+
+
+def _extract_facebook_phone(body_text: str, body_html: str = "") -> str:
+    hay = "\n".join([body_text or "", body_html or ""])
+
+    patterns = [
+        r"(?im)^\s*prospect_customer_contact_phone\s*:\s*([+\d\-\(\)\.\s]{7,})\s*$",
+        r"(?im)^\s*phone\s*:\s*([+\d\-\(\)\.\s]{7,})\s*$",
+    ]
+    for pat in patterns:
+        m = re.search(pat, hay)
+        if m:
+            return norm_phone_e164_us((m.group(1) or "").strip())
+
+    return ""
+
+
+def _extract_facebook_name(body_text: str, body_html: str = "") -> tuple[str, str]:
+    hay = "\n".join([body_text or "", body_html or ""])
+
+    patterns = [
+        r"(?im)^\s*prospect_customer_contact_name.*?:\s*(.+?)\s*$",
+        r"(?im)^\s*customer\s*name\s*:\s*(.+?)\s*$",
+    ]
+    full_name = ""
+    for pat in patterns:
+        m = re.search(pat, hay)
+        if m:
+            full_name = (m.group(1) or "").strip()
+            break
+
+    if not full_name:
+        return "", ""
+
+    parts = [p for p in re.split(r"\s+", full_name) if p]
+    if not parts:
+        return "", ""
+
+    first = _clean_first_name(parts[0])
+    last = " ".join(parts[1:]).strip()
+    if last.isupper():
+        last = last.title()
+
+    return first, last
+
 
 def _sms_test_enabled() -> bool:
     return os.getenv("SMS_TEST", "0").strip() == "1"
@@ -1065,12 +1140,20 @@ def process_lead_notification(inbound: dict) -> None:
 
     phone = ""
 
+    is_facebook = _is_facebook_lead(
+        inbound=inbound,
+        subject=subject,
+        body_text=body_text,
+        body_html=raw_html,
+    )
+
     # ✅ ADF (CarGurus) structured parse first
     adf_src = (
         raw_html
         if (raw_html.lstrip().startswith("<?xml") or "<adf" in raw_html.lower())
         else body_text
     )
+    
     adf = _extract_adf_fields(adf_src) if _looks_like_adf_xml(adf_src) else {}
 
     first_name = ""
@@ -1081,6 +1164,18 @@ def process_lead_notification(inbound: dict) -> None:
         last_name = (adf.get("last", "") or "").strip()
         candidate_phone = _extract_phone_number_from_email_body_using_llm(str(adf))
         phone = _maybe_set_phone(current_phone=phone, candidate_phone=candidate_phone)
+
+    # ✅ Facebook-specific deterministic extraction first
+    if is_facebook:
+        fb_first, fb_last = _extract_facebook_name(body_text, raw_html)
+        fb_phone = _extract_facebook_phone(body_text, raw_html)
+
+        if fb_first:
+            first_name = fb_first
+        if fb_last:
+            last_name = fb_last
+        if fb_phone:
+            phone = _maybe_set_phone(current_phone=phone, candidate_phone=fb_phone)
 
     if not first_name and not last_name:
         first_name, last_name = _extract_first_last_from_provider(cleaned_text)
@@ -1158,6 +1253,17 @@ def process_lead_notification(inbound: dict) -> None:
             (adf.get("provider_name", "") if adf else ""),
             subject[:160],
         )
+
+    log.info(
+        "FACEBOOK DEBUG is_facebook=%s source=%r lead_type=%r shopper_email=%r phone=%r first=%r last=%r",
+        is_facebook,
+        source,
+        lead_type,
+        shopper_email if 'shopper_email' in locals() else "",
+        phone,
+        first_name,
+        last_name,
+    )
 
     if not customer_comment and provider_template:
         customer_comment = _extract_provider_comment_best_effort(
@@ -1239,13 +1345,17 @@ def process_lead_notification(inbound: dict) -> None:
     is_adf = bool(adf)  # already parsed from _looks_like_adf_xml(body_text)
 
     # If it's ADF and customer phone is blank, do NOT scrape provider numbers from the blob.
+    if not phone and is_facebook:
+        fb_phone = _extract_facebook_phone(body_text, raw_html)
+        phone = _maybe_set_phone(current_phone=phone, candidate_phone=fb_phone)
+
     if not phone and not is_adf:
         candidate_phone = _extract_phone_number_from_email_body_using_llm(
             str(body_text)
         )
         phone = _maybe_set_phone(
             current_phone=phone, candidate_phone=candidate_phone
-        )  # Act's as a verification step for phone num extraction
+        )
 
     ts = inbound.get("timestamp") or _dt.now(_tz.utc).isoformat()
     headers = inbound.get("headers") or {}
@@ -1271,7 +1381,14 @@ def process_lead_notification(inbound: dict) -> None:
 
     tok = get_token(subscription_id)
 
-    shopper_email = (adf.get("email", "") or "").strip() if adf else ""
+    shopper_email = ""
+
+    if is_facebook:
+        shopper_email = _extract_facebook_email(body_text, raw_html)
+
+    if not shopper_email:
+        shopper_email = (adf.get("email", "") or "").strip() if adf else ""
+
     if not shopper_email:
         shopper_email = _extract_shopper_email_from_provider(body_text)
 
@@ -1452,12 +1569,20 @@ def process_lead_notification(inbound: dict) -> None:
     # Persist guest email once, forever
     opportunity["customer_email"] = shopper_email
 
+    patti_meta = opportunity.get("patti") or {}
+    if is_facebook:
+        patti_meta["persona"] = "facebook_closer"
+        patti_meta["lead_channel"] = "facebook"
+    opportunity["patti"] = patti_meta
+
     extra = {
         "customer_email": shopper_email,
         "Customer First Name": first_name,
         "Customer Last Name": last_name,
         "customer_phone": phone,
         "Customer Comments": customer_comment,
+        "source": "facebook" if is_facebook else source,
+        "lead_type": "facebook" if is_facebook else lead_type,
     }
     
     # Keep trade-in details in opp snapshot for debugging / future handling
@@ -2289,16 +2414,20 @@ def process_lead_notification(inbound: dict) -> None:
                         opp_id,
                     )
                 else:
-                    first_sms_due = (_dt.now(_tz.utc) + timedelta(minutes=15)).replace(
+                    sms_delay_minutes = 1 if is_facebook else 15
+
+                    first_sms_due = (_dt.now(_tz.utc) + timedelta(minutes=sms_delay_minutes)).replace(
                         microsecond=0
                     ).isoformat()
-    
+
                     extra_sms = {
                         "sms_status": "ready",
                         "sms_day": 1,
                         "next_sms_at": first_sms_due,
                         "sms_nudge_count": 0,
                         "last_sms_body": "",
+                        "source": "facebook" if is_facebook else source,
+                        "lead_type": "facebook" if is_facebook else lead_type,
                     }
     
                     save_opp(opportunity, extra_fields=extra_sms)
@@ -2327,7 +2456,7 @@ def process_lead_notification(inbound: dict) -> None:
         rooftop_sender=rooftop_sender,
         customer_name=customer_first_name,
         customer_email=customer_email,
-        source=source_label,
+        source=("facebook" if is_facebook else source_label),
         vehicle_str=vehicle_str,
         salesperson=salesperson,
         inquiry_text=(customer_comment or triage_text or "").strip(),
@@ -2340,6 +2469,8 @@ def process_lead_notification(inbound: dict) -> None:
         SAFE_MODE=safe_mode,
         test_recipient=test_recipient,
         message_id=message_id,
+        lead_type=("facebook" if is_facebook else lead_type),
+        persona=("facebook_closer" if is_facebook else "sales"),
     )
 
     # right after successful first-touch email send (sent_ok=True)
