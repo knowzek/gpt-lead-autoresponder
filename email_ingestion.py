@@ -74,6 +74,14 @@ def _parse_iso_utc_best_effort(v: str | None) -> _dt | None:
     except Exception:
         return None
 
+def _clean_shopper_email(v: str) -> str:
+    s = (v or "").strip()
+    s = _HTML_NBSP_RE.sub(" ", s)
+    s = s.replace("\u00a0", " ")
+    s = s.strip()
+    s = re.sub(r"^\s+", "", s)
+    s = re.sub(r"^[^A-Z0-9._%+\-]*", "", s, flags=re.I)
+    return s.strip().lower()
 
 def _resolve_lead_created_dt(
     *,
@@ -1398,6 +1406,8 @@ def process_lead_notification(inbound: dict) -> None:
     if not shopper_email and raw_html:
         shopper_email = _extract_shopper_email_from_provider(raw_html)
 
+    shopper_email = _clean_shopper_email(shopper_email)
+
     if not shopper_email:
         log.warning(
             "No shopper email found in provider lead email. subj=%r", subject[:120]
@@ -1410,6 +1420,7 @@ def process_lead_notification(inbound: dict) -> None:
         subscription_id=subscription_id,
     )
 
+    log.info("SHOPPER EMAIL DEBUG raw_cleaned=%r", shopper_email)
     customer_details = _fetch_customer_details(opp_id=opp_id) or {}
 
     if not opp_id:
