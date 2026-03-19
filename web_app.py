@@ -298,32 +298,30 @@ def email_inbound():
             inbound.get("to"),
         )
 
-        # --- Event campaign RSVP / STOP handling ---
-        try:
-            from event_campaign_state import handle_event_email_reply
-
-            event_out = handle_event_email_reply(inbound)
-            if event_out.get("handled"):
-                log.info(
-                    "📨 Event email reply handled action=%s from=%s subject=%s",
-                    event_out.get("action"),
-                    inbound.get("from"),
-                    inbound.get("subject"),
-                )
-                return jsonify({
-                    "status": "ok",
-                    "event_handled": True,
-                    "action": event_out.get("action"),
-                }), 200
-        except Exception as e:
-            log.exception("Event email reply handler failed: %s", e)
-
         # --- ASYNC: respond fast to Power Automate, process in background ---
         import threading
 
         def _worker(snapshot: dict):
             try:
+                # --- Event campaign RSVP / STOP handling ---
+                try:
+                    from event_campaign_state import handle_event_email_reply
+
+                    event_out = handle_event_email_reply(snapshot)
+                    if event_out.get("handled"):
+                        log.info(
+                            "📨 Event email reply handled action=%s from=%s subject=%s",
+                            event_out.get("action"),
+                            snapshot.get("from"),
+                            snapshot.get("subject"),
+                        )
+                        return
+                except Exception:
+                    log.exception("Event email reply handler failed")
+
+                # --- Normal processing ---
                 process_inbound_email(snapshot)
+
             except Exception:
                 log.exception("email_inbound worker failed")
 
