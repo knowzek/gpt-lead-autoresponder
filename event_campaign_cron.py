@@ -41,6 +41,7 @@ EVENT_CAMPAIGN_VIEW = (os.getenv("EVENT_CAMPAIGN_VIEW") or "").strip()  # option
 EVENT_TEST_TO_NUMBER = (os.getenv("EVENT_TEST_TO_NUMBER") or "").strip()
 EVENT_TEST_INVITE_ID = (os.getenv("EVENT_TEST_INVITE_ID") or "").strip()
 EVENT_TEST_CORRECTION_ONLY = (os.getenv("EVENT_TEST_CORRECTION_ONLY") or "0").strip() == "1"
+EVENT_TEST_TO_EMAIL = (os.getenv("EVENT_TEST_TO_EMAIL") or "").strip()
 
 if not AIRTABLE_API_TOKEN or not AIRTABLE_BASE_ID:
     raise RuntimeError("Missing AIRTABLE_API_TOKEN or AIRTABLE_BASE_ID")
@@ -59,6 +60,7 @@ CX5_FIX_BRAND = "mazda"
 CX5_FIX_MODEL = "cx-5"
 CX5_FIX_EVENT_DATE = "2026-03-21"
 CX5_FIX_CORRECTION_TAG = "event_correction_20260319_sent"
+CX5_FIX_EMAIL_CORRECTION_TAG = "event_email_correction_20260319_sent"
 
 # Build store -> SMS number map from your existing rooftop config
 STORE_TO_SMS_FROM = {
@@ -253,6 +255,69 @@ def _append_result_tag(existing: str, tag: str) -> str:
         return existing
     return f"{existing} | {tag}".strip(" |")
 
+def _send_cx5_email_correction_now_if_needed(invite_id: str, invite_fields: dict, event_fields: dict, guest_fields: dict) -> bool:
+    if not _is_target_cx5_event(event_fields):
+        return False
+
+    if EVENT_TEST_INVITE_ID and invite_id != EVENT_TEST_INVITE_ID:
+        return False
+
+    now_local = _now_utc().astimezone(ZoneInfo(STORE_TIMEZONE))
+    if now_local.date() != date(2026, 3, 19):
+        return False
+
+    invite_status = str(invite_fields.get("Invite Status") or "").strip().lower()
+    if invite_status in {"opted out", "attended", "cancelled", "do not send"}:
+        return False
+
+    if _boolish(guest_fields.get("Suppressed")) or _boolish(guest_fields.get("Do Not Contact")):
+        return False
+
+    if _boolish(guest_fields.get("Email Opt Out")):
+        return False
+
+    if not invite_fields.get("Email 3 Sent At"):
+        return False
+
+    if CX5_FIX_EMAIL_CORRECTION_TAG in str(invite_fields.get("Last Send Result") or ""):
+        return False
+
+    real_email = (guest_fields.get("Email") or guest_fields.get("customer_email") or "").strip()
+    to_email = EVENT_TEST_TO_EMAIL or real_email
+    if not to_email:
+        return False
+
+    msg = build_event_correction_email(event_fields, guest_fields)
+
+    if EVENT_CAMPAIGN_DRY_RUN:
+        log.info("DRY RUN correction email invite=%s to=%s subject=%r", invite_id, to_email, msg["subject"])
+        ok = True
+        result = "dry_run"
+    else:
+        ok = send_via_sendgrid(
+            to_email=to_email,
+            subject=msg["subject"],
+            body_html=msg["body_html"],
+            body_text=msg["body_text"],
+        )
+        result = "sent" if ok else "sendgrid_failed"
+
+    patch = {
+        "Last Send Attempt At": _now_iso(),
+        "Last Send Channel": "email",
+        "Last Send Result": _append_result_tag(
+            str(invite_fields.get("Last Send Result") or ""),
+            CX5_FIX_EMAIL_CORRECTION_TAG if ok else f"{CX5_FIX_EMAIL_CORRECTION_TAG}_failed"
+        ),
+        "Last Send Error": "" if ok else result,
+    }
+    if ok:
+        patch["Last Email Sent At"] = _now_iso()
+
+    _patch_record(INVITES_TABLE, invite_id, patch)
+    log.info("CX5 correction email invite=%s ok=%s result=%s", invite_id, ok, result)
+    return ok
+
 
 def _send_cx5_correction_now_if_needed(invite_id: str, invite_fields: dict, event_fields: dict, guest_fields: dict) -> bool:
     """
@@ -392,6 +457,90 @@ def _event_benefits(event: dict) -> list[str]:
         "Enjoy food on us while you’re here",
     ]
 
+def build_event_correction_email(event: dict, guest: dict) -> dict[str, str]:
+    first_name = (guest.get("First Name") or "there").strip()
+    store = (event.get("Store") or "Patterson Autos").strip()
+    title = _event_title(event)
+    date_display = (event.get("Event Date Display") or event.get("Event Date") or "Saturday, March 21").strip()
+    time_window = _fmt_time_window(event.get("Event Start Time", ""), event.get("Event End Time", ""))
+    location = (event.get("Event Location") or store).strip()
+    poster_url = (event.get("Poster Image URL") or event.get("Hero Image URL") or "").strip()
+
+    subject = f"Correction: {title} is on {date_display}"
+    preheader = f"Quick correction: the event is on {date_display}, not tomorrow."
+
+    opener = (
+        f"I wanted to send a quick correction about our {title} event at {store}. "
+        f"It is on {date_display}"
+        + (f" from {time_window}" if time_window else "")
+        + ", not tomorrow."
+    )
+
+    closer = "Sorry for the confusion. If you plan to attend, just reply YES and we’ll be ready for you."
+
+    hero_html = (
+        f"<img src='{escape(poster_url)}' alt='{escape(title)}' style='width:100%;max-width:640px;display:block;border:0;border-radius:10px;'>"
+        if poster_url else ""
+    )
+
+    signature_html = build_patti_footer(store)
+
+    body_html = f"""
+    <!doctype html>
+    <html>
+      <body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,Helvetica,sans-serif;color:#111111;">
+        <div style="display:none;max-height:0;overflow:hidden;opacity:0;">{escape(preheader)}</div>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f4f4;">
+          <tr>
+            <td align="center" style="padding:24px 12px;">
+              <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="width:100%;max-width:640px;background:#ffffff;border-radius:12px;overflow:hidden;">
+                <tr><td style="padding:0;">{hero_html}</td></tr>
+                <tr>
+                  <td style="padding:28px 32px;">
+                    <div style="font-size:12px;letter-spacing:1.2px;text-transform:uppercase;color:#b01d24;font-weight:700;margin-bottom:10px;">Quick correction</div>
+                    <h1 style="margin:0 0 14px 0;font-size:30px;line-height:1.15;">{escape(title)} is on {escape(date_display)}</h1>
+                    <div style="width:60px;height:4px;background:#b01d24;margin:0 0 18px 0;border-radius:2px;"></div>
+                    <p style="margin:0 0 18px 0;font-size:16px;line-height:1.6;">Hi {escape(first_name)},</p>
+                    <p style="margin:0 0 18px 0;font-size:16px;line-height:1.6;">{escape(opener)}</p>
+                    <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 22px 0;background:#f7f7f7;border-radius:10px;width:100%;border:1px solid #ececec;">
+                      <tr>
+                        <td style="padding:20px 22px;font-size:15px;line-height:1.7;">
+                          <strong>{escape(title)}</strong><br>
+                          <strong>{escape(date_display)}</strong>{('<br>' + escape(time_window)) if time_window else ''}<br>
+                          {escape(location)}
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin:0 0 22px 0;font-size:16px;line-height:1.6;">{escape(closer)}</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:0 32px 32px 32px;">
+                    {signature_html}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+    </html>
+    """.strip()
+
+    body_text = (
+        f"Hi {first_name},\n\n"
+        f"{opener}\n\n"
+        f"{title}\n{date_display}\n"
+        + (f"{time_window}\n" if time_window else "")
+        + f"{location}\n\n"
+        f"{closer}\n"
+    )
+
+    return {
+        "subject": subject,
+        "body_html": body_html,
+        "body_text": body_text,
+    }
 
 def build_event_email(event: dict, guest: dict, template_no: int) -> dict[str, str]:
     first_name = (guest.get("First Name") or "there").strip()
@@ -785,6 +934,17 @@ def run_event_campaigns_once() -> None:
                 "Last Send Error": reason,
             })
             continue
+
+        # one-time correction email for the bad "tomorrow" email sent on 3/19
+        try:
+            _send_cx5_email_correction_now_if_needed(
+                invite_id=invite_id,
+                invite_fields=invite_fields,
+                event_fields=event_fields,
+                guest_fields=guest_fields,
+            )
+        except Exception:
+            log.exception("CX5 correction email failed invite=%s", invite_id)
 
         # one-time correction for the bad "tomorrow" SMS sent on 3/19
         try:
