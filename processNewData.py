@@ -3796,7 +3796,53 @@ def send_first_touch_email(
         subject = f"Your Kia Telluride Inquiry at {rooftop_name}"
 
     # -------------------------------
-    # CONTENT PATH 2: Short variant
+    # CONTENT PATH 2: Facebook closer
+    # -------------------------------
+    elif is_facebook:
+        prompt = f"""
+    You are Patti, the virtual assistant for {rooftop_name}.
+    
+    This is a brand new Facebook vehicle lead.
+    Your job is to move the customer toward a dealership visit or test drive quickly, while still sounding warm and helpful.
+    
+    Hard rules:
+    - Begin with exactly: Hi {customer_name},
+    - Keep it to about 70–120 words.
+    - Sound confident, helpful, and human.
+    - Do NOT sound generic or overly formal.
+    - Do NOT say "Thank you for your internet inquiry."
+    - Do NOT ask "what day and time works best?" if the customer already provided availability.
+    - If the customer already provided availability, acknowledge it and move toward confirming it.
+    - Ask only ONE question.
+    - Prioritize setting an appointment over long explanations.
+    - Prefer concrete options over broad open-ended questions.
+    - If appropriate, offer a simple choice like morning or afternoon, today or tomorrow, or this weekend.
+    - Do NOT include any signature block, phone number, or URL.
+    - Do NOT quote pricing, payments, APR, OTD, or trade value.
+    - Mention the assigned salesperson naturally if relevant.
+    
+    Context:
+    - Rooftop: {rooftop_name}
+    - Assigned salesperson: {salesperson or "our team"}
+    - Vehicle of interest: {vehicle_str}
+    - Source: Facebook
+    - Customer inquiry/comment: {(inquiry_text or "").strip() or "No additional comment provided."}
+    
+    Return ONLY valid JSON with keys:
+    {{"subject":"...", "body":"..."}}
+    """.strip()
+    
+        response = run_gpt(
+            prompt,
+            customer_name,
+            rooftop_name,
+            persona=active_persona,
+        )
+        subject = response["subject"]
+        body_html = response["body"]
+    
+    # -------------------------------
+    # CONTENT PATH 3: Short variant
     # -------------------------------
     elif variant == VARIANT_SHORT:
         if is_trade_lead:
@@ -3811,9 +3857,9 @@ def send_first_touch_email(
                 f"<p>Hi {customer_name},</p>"
                 "<p>Thank you for your internet inquiry. I’d love to set up a time for you to come by and visit our showroom - is there a day and time that works best for you?</p>"
             )
-
+    
     # -------------------------------
-    # CONTENT PATH 3: Standard GPT
+    # CONTENT PATH 4: Standard GPT
     # -------------------------------
     else:
         fallback_mode = not inquiry_text or inquiry_text.strip().lower() in [
@@ -3948,7 +3994,6 @@ Do not include any signature, dealership contact block, address, phone number, o
 
         prompt += SUBJECT_RULES
 
-        # --- if Patti auto-scheduled an appointment, tell GPT to confirm it ---
         if created_appt_ok and appt_human:
             prompt += f"""
 
@@ -3962,7 +4007,6 @@ In your email:
 - Do NOT ask them to pick a time; the appointment is already scheduled. Focus on confirming it.
 """
 
-        # === Inventory recommendations =====================================
         if inquiry_text and inquiry_text.strip():
             customer_email_text = inquiry_text
         else:
@@ -3971,71 +4015,6 @@ In your email:
             customer_email_text = (inquiry_text or "").strip() or plain_vehicle or "SUV car"
 
         recommendation_text = ""
-
-        # NOTE: (cont with line: 523)when you need to use just uncomment and uncomment in import section also
-        # if inventory_xml:
-        #     try:
-        #         recommendation_text = recommend_from_xml(inventory_xml, customer_email_text).strip()
-        #         if recommendation_text:
-        #             prompt += f"\n\nInventory suggestions to include:\n{recommendation_text}\n"
-        #     except Exception:
-        #         pass
-
-        if is_facebook:
-            prompt = f"""
-You are Patti, the virtual assistant for {rooftop_name}.
-
-This is a brand new Facebook vehicle lead.
-Your job is to move the customer toward a dealership visit or test drive quickly, while still sounding warm and helpful.
-
-Hard rules:
-- Begin with exactly: Hi {customer_name},
-- Keep it to about 70–120 words.
-- Sound confident, helpful, and human.
-- Do NOT sound generic or overly formal.
-- Ask only ONE question.
-- Prioritize setting an appointment over long explanations.
-- Prefer concrete options over broad open-ended questions.
-- If appropriate, offer a simple choice like morning or afternoon, today or tomorrow, or this weekend.
-- Do NOT include any signature block, phone number, or URL.
-- Do NOT quote pricing, payments, APR, OTD, or trade value.
-- Mention the assigned salesperson naturally if relevant.
-
-Context:
-- Rooftop: {rooftop_name}
-- Assigned salesperson: {salesperson or "our team"}
-- Vehicle of interest: {vehicle_str}
-- Source: Facebook
-- Customer inquiry/comment: {(inquiry_text or "").strip() or "No additional comment provided."}
-
-Return ONLY valid JSON with keys:
-{{"subject":"...", "body":"..."}}
-""".strip()
-        else:
-            prompt = f"""
-You are Patti, the virtual assistant for {rooftop_name}.
-
-Write the first outreach email to a new internet lead.
-
-Hard rules:
-- Begin with exactly: Hi {customer_name},
-- Keep it warm, professional, and natural.
-- Mention the assigned salesperson by name when helpful.
-- If the vehicle is known, reference it naturally.
-- Ask only ONE clear question.
-- Do NOT include any signature block, phone number, or URL.
-- Do NOT quote pricing, payments, APR, OTD, or trade value.
-
-Context:
-- Rooftop: {rooftop_name}
-- Assigned salesperson: {salesperson or "our team"}
-- Vehicle of interest: {vehicle_str}
-- Lead source: {source or "internet lead"}
-- Customer inquiry/comment: {(inquiry_text or "").strip() or "No additional comment provided."}
-
-Return ONLY valid JSON with keys:
-{{"subject":"...", "body":"..."}}
-""".strip()
 
         response = run_gpt(
             prompt,
