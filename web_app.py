@@ -471,6 +471,10 @@ def email_router_inbound():
         log.exception("email router inbound failed: %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route("/", methods=["GET"])
+def root():
+    return jsonify({"status": "ok", "service": "patti-email-ingestion"}), 200
+
 
 # -----------------------------
 #   Local Run
