@@ -200,6 +200,57 @@ def _extract_simple_appt_phrase(text: str) -> str:
 
     return ""
 
+def _enforce_mazda_loyalty_guardrails(reply: str, inbound_text: str) -> tuple[str, bool]:
+    text = (reply or "").lower()
+    inbound = (inbound_text or "").lower()
+
+    # 🚨 Dangerous claims → override immediately
+    risky_phrases = [
+        "$500",
+        "500 back",
+        "you will get",
+        "you'll get",
+        "you are eligible",
+        "you're eligible",
+        "guaranteed",
+    ]
+
+    if any(p in text for p in risky_phrases):
+        return (
+            "I want to make sure I give you accurate info — the Mazda loyalty offer "
+            "can vary and isn’t guaranteed. Let me connect you with a team member "
+            "right now to review your situation and make sure you get the correct details.",
+            True,  # force handoff
+        )
+
+    # 🚨 Customer confusion / complaint → escalate
+    complaint_signals = [
+        "you said",
+        "was told",
+        "misled",
+        "not what",
+        "doesn't make sense",
+        "i thought",
+        "supposed to",
+        "promised",
+    ]
+
+    if any(p in inbound for p in complaint_signals):
+        return (
+            "I’m really sorry for the confusion — I want to make sure you get the right information. "
+            "I’m going to have a team member reach out to you directly to clarify everything.",
+            True,
+        )
+
+    # ✅ Safe fallback normalization (soft correction)
+    safe_reply = reply
+
+    # Replace risky certainty language
+    safe_reply = re.sub(r"\bwill get\b", "may be eligible for", safe_reply, flags=re.I)
+    safe_reply = re.sub(r"\bguaranteed\b", "dependent on eligibility", safe_reply, flags=re.I)
+
+    return safe_reply, False
+
 def _looks_like_mazda_negative_transfer_or_decline(text: str) -> bool:
     return bool(_MAZDA_NEGATIVE_TRANSFER_RE.search(text or ""))
 
@@ -484,6 +535,23 @@ def handle_mazda_loyalty_inbound_sms_webhook(*, payload_json: dict) -> dict:
         )
 
     reply_text = (decision.get("reply") or "").strip()
+
+    # ✅ Enforce guardrails
+    reply_text, force_handoff = _enforce_mazda_loyalty_guardrails(
+        reply_text,
+        inbound_text
+    )
+    
+    # 🚨 Force escalation if needed
+    if force_handoff:
+        try:
+            handoff_to_human(
+                opp_id=None,  # Mazda flow doesn’t always have opp_id
+                reason="Mazda loyalty confusion / misleading expectation",
+                transcript=inbound_text,
+            )
+        except Exception:
+            log.exception("Mazda SMS: failed to trigger handoff")
     if not reply_text:
         prefix = f"{first_name}, " if first_name else ""
         reply_text = (
