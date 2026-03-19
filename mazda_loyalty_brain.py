@@ -168,12 +168,14 @@ Voice:
 - professional, concise, human, no hype, no emojis
 - short paragraphs
 - ask at most ONE direct question per email
+- refer to the Mazda loyalty offer as a "rebate," not a "voucher," in customer-facing language whenever possible
+- if mentioning the 16-digit code, you may call it the customer's "rebate code" or "loyalty code"
 
 Program context:
-- Customers received a Mazda Loyalty Voucher related to their Mazda CX-5.
-- The voucher can typically be used toward a qualifying vehicle purchase.
+- Customers received a Mazda Loyalty rebate related to their Mazda CX-5.
+- The rebate can typically be used toward a qualifying vehicle purchase.
 - If the customer does not want or need a vehicle right now, there are still two helpful options:
-  1. They may transfer the voucher to a family member or friend to use towards the purchase of a new Mazda CX-5.
+  1. They may transfer the rebate to a family member or friend.
   2. They may redeem it for a $100 Service & Parts credit at {rooftop_name} in exchange for the loyalty code.
 - When referencing the service credit, describe it as a "$100 Service & Parts credit at {rooftop_name}."
 
