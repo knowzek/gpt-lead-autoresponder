@@ -512,6 +512,23 @@ def _getDigPrefsPrompts():
         """
     )
 
+def _facebook_closer_rules_system(customer_first: str, rooftop_name: str | None):
+    return (
+        "Facebook Lead Closer Rules:\n"
+        f"- Begin with exactly: Hi {customer_first or 'there'},\n"
+        "- This is a fresh Facebook lead. Respond fast and confidently.\n"
+        "- Prioritize setting an appointment over long education.\n"
+        "- Keep replies concise and action-oriented.\n"
+        "- Ask only ONE question.\n"
+        "- Prefer concrete options over open-ended asks.\n"
+        "- When appropriate, offer two simple choices like morning vs afternoon or today vs tomorrow.\n"
+        "- Sound helpful, not pushy.\n"
+        "- Do not include links, phone numbers, or signature blocks.\n"
+        "- Do not quote price, payments, APR, OTD, or trade value.\n"
+        "- If the guest shows intent, move directly toward visit/test-drive scheduling.\n"
+        "- If they are vague, narrow toward a time window, not a broad conversation."
+    )
+
 def _getMultiOptionPrompts():
     return (
         """
@@ -578,6 +595,19 @@ def run_gpt(prompt: str,
     if persona == "kbb_ico":
         joined = "\n---\n".join([m.get("content","") for m in system_msgs if m.get("role") == "system"])
         log.info("KBB SYSTEM STACK (trunc): %s", joined[:4000])
+
+    if persona == "facebook_closer":
+        base = [
+            {"role": "system", "content": _patti_persona_system()},
+            {"role": "system", "content": _patterson_why_buys_system()},
+            {"role": "system", "content": _facebook_closer_rules_system(customer_first, rooftop_name)},
+            {"role": "system", "content": _personalization_rules_system()},
+            {"role": "system", "content": _appointment_cta_system()},
+            {"role": "system", "content": _compliance_system()},
+            {"role": "system", "content": _links_and_boundaries_system()},
+            {"role": "system", "content": _format_system()},
+        ]
+        return base
 
 
     # --- Tustin Kia new-location flavor (subscription c27d7f4f...) ---
