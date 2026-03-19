@@ -265,7 +265,7 @@ def handle_mazda_loyalty_inbound_sms_webhook(*, payload_json: dict) -> dict:
 
     reply_text = (decision.get("reply") or "").strip()
     if not reply_text:
-        reply_text = "Thanks — if you have your Mazda loyalty voucher code, text it here and I’ll help with next steps."
+        reply_text = "Thanks, if you have your Mazda loyalty rebate code, text it here and I’ll help with next steps."
         
     # Send SMS reply
 
