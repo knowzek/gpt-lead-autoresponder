@@ -26,10 +26,34 @@ EMAIL_MODEL = (os.getenv("EMAIL_OPENAI_MODEL") or os.getenv("OPENAI_MODEL") or "
 
 _oai = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-STOP_TOKENS = ("stop", "unsubscribe", "end", "quit", "do not contact", "dont contact")
+STOP_TOKENS = (
+    "stop",
+    "unsubscribe",
+    "quit",
+    "do not contact",
+    "dont contact",
+    "please stop",
+    "stop sending",
+    "leave me alone",
+)
+
+_STOP_RE = re.compile(r"""(?ix)
+    ^\s*(stop|unsubscribe|quit)\s*$ |
+    \b(stop\s+email(ing)?|stop\s+messag(es|ing)|stop\s+sending)\b |
+    \b(do\s+not\s+contact|dont\s+contact|don't\s+contact)\b |
+    \b(please\s+stop)\b |
+    \b(leave\s+me\s+alone)\b
+""")
+
+def _contains_any(text: str, tokens: tuple[str, ...]) -> bool:
+    t = (text or "").lower()
+    return any(tok in t for tok in tokens)
+
+def _is_stop_request(text: str) -> bool:
+    return bool(_STOP_RE.search(text or ""))
 PRICING_TOKENS = (
     "otd", "out the door", "out-the-door", "price", "pricing", "best price",
-    "payment", "monthly", "per month", "lease", "apr", "interest", "rate",
+    "payment", "monthly", "per month", "apr", "interest", "rate",
     "trade", "trade-in", "trade in", "value my trade", "down payment", "down"
 )
 
@@ -199,10 +223,6 @@ Return ONLY valid JSON:
 }}
 """
 
-def _contains_any(text: str, tokens: tuple[str, ...]) -> bool:
-    t = (text or "").lower()
-    return any(tok in t for tok in tokens)
-
 def _extract_voucher_code(text: str) -> str:
     m = VOUCHER_RE.search(text or "")
     if not m:
@@ -308,7 +328,7 @@ def generate_mazda_loyalty_email_reply(
     bucket = (bucket or "").strip()
 
     # ---- deterministic pre-guards ----
-    if _contains_any(inbound, STOP_TOKENS):
+    if _is_stop_request(inbound):
         txt = "Understood, we’ll stop reaching out. If you need anything in the future, just reply here."
         return {
             "reply_text": txt,
