@@ -167,22 +167,38 @@ def lead_notification_inbound():
     if not inbound["subscription_id"]:
         return jsonify({"status": "error", "message": "subscription_id is required"}), 400
 
-    # ✅ Detect lead source quickly (keep this in-request; should be cheap)
+    # ✅ Prefer Power Automate source/lead_type when explicitly provided
+    pa_source = (payload.get("source") or "").strip().lower()
+    pa_lead_type = (payload.get("lead_type") or payload.get("leadType") or "").strip().lower()
+
     try:
         detected = detect_lead_source(inbound)
     except Exception:
-        # Never crash the endpoint; just treat as no match
         detected = None
+
+    is_facebook = (
+        pa_source == "facebook"
+        or pa_lead_type == "facebook"
+        or "facebook" in ((inbound.get("subject") or "").lower())
+        or "##source##: facebook" in ((inbound.get("body_text") or "").lower())
+        or "##source##: facebook" in ((inbound.get("body_html") or "").lower())
+    )
 
     inbound["lead_source"] = detected or ""
 
-    # ✅ Normalize source for downstream (your current behavior)
-    if detected:
+    # Only overwrite source from rule detection if PA did NOT already tell us
+    if detected and not pa_source:
         inbound["source"] = detected
 
-    # ✅ Log quickly (safe)
+    # Force canonical Facebook source/type if matched by PA or fallback content check
+    if is_facebook:
+        inbound["source"] = "facebook"
+        inbound["lead_type"] = "facebook"
+
     log.info(
-        "📥 lead-notification-inbound: sub_id=%s rooftop=%s detected=%r pa_source=%r from=%r subject=%r msg_id=%r",
+        "📥 lead-notification-inbound: source=%r lead_type=%r sub_id=%s rooftop=%s detected=%r pa_source=%r from=%r subject=%r msg_id=%r",
+        inbound.get("source"),
+        inbound.get("lead_type"),
         inbound.get("subscription_id"),
         inbound.get("rooftop_code"),
         detected,
@@ -192,8 +208,10 @@ def lead_notification_inbound():
         inbound.get("message_id"),
     )
 
-    # If it doesn’t match rules, ignore immediately
-    if not detected:
+    # Allow through if either:
+    # 1) a normal lead rule matched, OR
+    # 2) PA / fallback logic identified Facebook
+    if not detected and not is_facebook:
         return jsonify({
             "status": "ok",
             "handled": False,
