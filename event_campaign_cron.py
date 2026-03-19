@@ -49,6 +49,13 @@ AIRTABLE_HEADERS = {
 DEFAULT_EMAIL_OFFSETS = {1: 14, 2: 2, 3: 1}
 DEFAULT_SMS_OFFSETS = {1: 14, 2: 2, 3: 1, 4: 0}
 
+# one-time CX-5 correction + override
+CX5_FIX_STORE = "tustin mazda"
+CX5_FIX_BRAND = "mazda"
+CX5_FIX_MODEL = "cx-5"
+CX5_FIX_EVENT_DATE = "2026-03-21"
+CX5_FIX_CORRECTION_TAG = "event_correction_20260319_sent"
+
 # Build store -> SMS number map from your existing rooftop config
 STORE_TO_SMS_FROM = {
     (rec.get("name") or "").strip().lower(): (rec.get("sms_number") or "").strip()
@@ -187,6 +194,146 @@ def _fmt_time_window(start_time: str, end_time: str) -> str:
     return start_time or end_time or ""
 
 
+def _event_date_iso(event_fields: dict) -> str:
+    raw = str(event_fields.get("Event Date") or "").strip()
+    m = re.match(r"^(\d{4}-\d{2}-\d{2})", raw)
+    return m.group(1) if m else ""
+
+
+def _is_date_only_event_value(value: Any) -> bool:
+    s = str(value or "").strip()
+    return bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", s))
+
+
+def _event_local_datetime(event_fields: dict) -> datetime | None:
+    """
+    Treat date-only Event Date values as STORE_TIMEZONE local midnight,
+    not UTC midnight.
+    """
+    raw = event_fields.get("Event Date")
+    tz = ZoneInfo(STORE_TIMEZONE)
+
+    if _is_date_only_event_value(raw):
+        y, m, d = map(int, str(raw).strip().split("-"))
+        return datetime(y, m, d, 0, 0, 0, tzinfo=tz)
+
+    dt = _parse_dt(raw)
+    if not dt:
+        return None
+
+    return dt.astimezone(tz)
+
+
+def _is_target_cx5_event(event_fields: dict) -> bool:
+    store = str(event_fields.get("Store") or "").strip().lower()
+    brand = str(event_fields.get("Brand") or "").strip().lower()
+    model = str(event_fields.get("Model") or "").strip().lower()
+    event_date = _event_date_iso(event_fields)
+
+    return (
+        store == CX5_FIX_STORE
+        and brand == CX5_FIX_BRAND
+        and model == CX5_FIX_MODEL
+        and event_date == CX5_FIX_EVENT_DATE
+    )
+
+
+def _hardcoded_cx5_day_of_send_at_utc() -> datetime:
+    local_dt = datetime(2026, 3, 21, 8, 30, 0, tzinfo=ZoneInfo(STORE_TIMEZONE))
+    return local_dt.astimezone(timezone.utc)
+
+
+def _append_result_tag(existing: str, tag: str) -> str:
+    existing = (existing or "").strip()
+    if tag in existing:
+        return existing
+    return f"{existing} | {tag}".strip(" |")
+
+
+def _send_cx5_correction_now_if_needed(invite_id: str, invite_fields: dict, event_fields: dict, guest_fields: dict) -> bool:
+    """
+    One-time correction SMS for people who already got the wrong 'tomorrow' text
+    on Thursday 3/19 for the Saturday 3/21 event.
+    Uses Last Send Result as the idempotency marker so repeated cron runs today
+    do not resend it.
+    """
+    if not _is_target_cx5_event(event_fields):
+        return False
+
+    now_local = _now_utc().astimezone(ZoneInfo(STORE_TIMEZONE))
+    if now_local.date() != date(2026, 3, 19):
+        return False
+
+    invite_status = str(invite_fields.get("Invite Status") or "").strip().lower()
+    if invite_status in {"opted out", "attended", "cancelled", "do not send"}:
+        return False
+
+    if _boolish(guest_fields.get("Suppressed")) or _boolish(guest_fields.get("Do Not Contact")):
+        return False
+
+    if _boolish(guest_fields.get("SMS Opt Out")):
+        return False
+
+    if not invite_fields.get("SMS 3 Sent At"):
+        return False
+
+    if CX5_FIX_CORRECTION_TAG in str(invite_fields.get("Last Send Result") or ""):
+        return False
+
+    phone = _to_e164_us((guest_fields.get("Phone") or guest_fields.get("customer_phone") or "").strip())
+    if not phone:
+        return False
+
+    store_name = (event_fields.get("Store") or guest_fields.get("Store") or "").strip()
+    override_from = (os.getenv("EVENT_SMS_FROM_NUMBER") or "").strip()
+    if override_from:
+        from_number = override_from
+    else:
+        from_number = STORE_TO_SMS_FROM.get(store_name.lower(), "")
+
+    if not from_number:
+        log.warning("Correction SMS skipped invite=%s reason=missing_store_sms_number store=%r", invite_id, store_name)
+        return False
+
+    title = _event_title(event_fields)
+    date_display = (event_fields.get("Event Date Display") or "Saturday, March 21").strip()
+    time_window = _fmt_time_window(event_fields.get("Event Start Time", ""), event_fields.get("Event End Time", ""))
+    poster_url = (event_fields.get("Poster Image URL") or event_fields.get("Hero Image URL") or "").strip()
+    url_part = f" Details: {poster_url}" if poster_url else ""
+
+    body = (
+        f"Quick correction: our {title} event is "
+        f"{date_display} from {time_window}, not tomorrow. Sorry for the confusion. "
+        f"Reply YES if you plan to attend.{url_part}"
+    )
+
+    if EVENT_CAMPAIGN_DRY_RUN:
+        log.info("DRY RUN correction sms invite=%s to=%s body=%r", invite_id, phone, body)
+        ok = True
+        result = "dry_run"
+    else:
+        resp = send_sms(
+            from_number=from_number,
+            to_number=phone,
+            body=body,
+            rooftop_name=store_name,
+        )
+        ok = not resp.get("blocked")
+        result = "sent" if ok else (resp.get("reason") or "sms_blocked")
+
+    patch = {
+        "Last Send Attempt At": _now_iso(),
+        "Last Send Channel": "sms",
+        "Last Send Result": _append_result_tag(str(invite_fields.get("Last Send Result") or ""), CX5_FIX_CORRECTION_TAG if ok else f"{CX5_FIX_CORRECTION_TAG}_failed"),
+        "Last Send Error": "" if ok else result,
+    }
+    if ok:
+        patch["Last SMS Sent At"] = _now_iso()
+
+    _patch_record(INVITES_TABLE, invite_id, patch)
+    log.info("CX5 correction sms invite=%s ok=%s result=%s", invite_id, ok, result)
+    return ok
+    
 # =========================================================
 # COPY / TEMPLATES
 # =========================================================
@@ -416,8 +563,12 @@ def _effective_send_at(event_fields: dict, explicit_field: str, offset_field: st
     if explicit_dt:
         return explicit_dt
 
-    event_dt = _parse_dt(event_fields.get("Event Date"))
-    if not event_dt:
+    # hardcode this one specific Saturday CX-5 day-of text
+    if explicit_field == "SMS Day Of Send At" and _is_target_cx5_event(event_fields):
+        return _hardcoded_cx5_day_of_send_at_utc()
+
+    event_local_dt = _event_local_datetime(event_fields)
+    if not event_local_dt:
         return None
 
     try:
@@ -425,22 +576,33 @@ def _effective_send_at(event_fields: dict, explicit_field: str, offset_field: st
     except Exception:
         offset_days = default_offset_days
 
-    send_dt = event_dt - timedelta(days=offset_days)
+    send_local_dt = event_local_dt - timedelta(days=offset_days)
 
-    # If Airtable only stores a date, default local send time.
-    # Day-of RSVP reminder goes at 7:30 AM local; everything else at 9:00 AM local.
-    if send_dt.hour == 0 and send_dt.minute == 0:
+    # If Event Date is date-only, anchor to local send time on the intended local day.
+    if _is_date_only_event_value(event_fields.get("Event Date")):
         hour = 7 if default_offset_days == 0 else 9
         minute = 30 if default_offset_days == 0 else 0
-        local_dt = send_dt.astimezone(ZoneInfo(STORE_TIMEZONE)).replace(
+        send_local_dt = send_local_dt.replace(
             hour=hour,
             minute=minute,
             second=0,
             microsecond=0,
         )
-        return local_dt.astimezone(timezone.utc)
+        return send_local_dt.astimezone(timezone.utc)
 
-    return send_dt
+    # existing fallback for timestamp-ish values that land at midnight
+    if send_local_dt.hour == 0 and send_local_dt.minute == 0:
+        hour = 7 if default_offset_days == 0 else 9
+        minute = 30 if default_offset_days == 0 else 0
+        send_local_dt = send_local_dt.replace(
+            hour=hour,
+            minute=minute,
+            second=0,
+            microsecond=0,
+        )
+        return send_local_dt.astimezone(timezone.utc)
+
+    return send_local_dt.astimezone(timezone.utc)
 
 
 def _due_actions(invite_fields: dict, event_fields: dict) -> list[SendPlan]:
@@ -613,6 +775,29 @@ def run_event_campaigns_once() -> None:
                 "Last Send Error": reason,
             })
             continue
+
+        event_fields = event_rec.get("fields") or {}
+        guest_fields = guest_rec.get("fields") or {}
+
+        suppressed, reason = _is_suppressed(guest_fields)
+        if suppressed:
+            _patch_record(INVITES_TABLE, invite_id, {
+                "Invite Status": "Suppressed",
+                "Last Send Attempt At": _now_iso(),
+                "Last Send Error": reason,
+            })
+            continue
+
+        # one-time correction for the bad "tomorrow" SMS sent on 3/19
+        try:
+            _send_cx5_correction_now_if_needed(
+                invite_id=invite_id,
+                invite_fields=invite_fields,
+                event_fields=event_fields,
+                guest_fields=guest_fields,
+            )
+        except Exception:
+            log.exception("CX5 correction send failed invite=%s", invite_id)
 
         due = _due_actions(invite_fields, event_fields)
         if not due:
