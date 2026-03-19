@@ -133,7 +133,6 @@ def _build_event_context(event_fields: dict) -> str:
         f"Event start time: {g('Event Start Time')}",
         f"Event end time: {g('Event End Time')}",
         f"Event location: {g('Event Location')}",
-        f"Poster image URL: {g('Poster Image URL') or g('Hero Image URL')}",
         f"RSVP URL: {g('RSVP URL') or g('Calendly URL') or g('Landing Page URL')}",
         f"Email subject 1: {g('Email Subject 1')}",
         f"Email subject 2: {g('Email Subject 2')}",
