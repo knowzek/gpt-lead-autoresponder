@@ -131,6 +131,17 @@ def _customer_already_engaged(opportunity: dict) -> bool:
 
     return False
 
+def _clean_fb_field_value(v: str) -> str:
+    s = (v or "")
+    s = _HTML_NBSP_RE.sub(" ", s)   # handles &nbsp; and &#160;
+    s = s.replace("\u00a0", " ")
+    s = _html.unescape(s)
+    s = re.sub(r"\s+", " ", s).strip()
+
+    # Strip leading punctuation / separators that sometimes survive provider formatting
+    s = re.sub(r"^[\s:;\-|]+", "", s).strip()
+    return s
+
 def _first_touch_due_iso(
     *,
     inbound_ts: str | None,
@@ -382,13 +393,16 @@ def _extract_facebook_email(body_text: str, body_html: str = "") -> str:
     hay = "\n".join([body_text or "", body_html or ""])
 
     patterns = [
-        r"(?im)^\s*prospect_customer_contact_email\s*:\s*([^\s<]+@[^\s<]+)\s*$",
-        r"(?im)^\s*email\s*:\s*([^\s<]+@[^\s<]+)\s*$",
+        r"(?im)^\s*prospect_customer_contact_email\s*:\s*(.+?)\s*$",
+        r"(?im)^\s*email\s*:\s*(.+?)\s*$",
     ]
     for pat in patterns:
         m = re.search(pat, hay)
         if m:
-            return (m.group(1) or "").strip().lower()
+            raw = _clean_fb_field_value(m.group(1))
+            # extract email from noisy field value
+            em = _extract_email(raw)
+            return (em or raw).strip().lower()
 
     return ""
 
@@ -397,13 +411,14 @@ def _extract_facebook_phone(body_text: str, body_html: str = "") -> str:
     hay = "\n".join([body_text or "", body_html or ""])
 
     patterns = [
-        r"(?im)^\s*prospect_customer_contact_phone\s*:\s*([+\d\-\(\)\.\s]{7,})\s*$",
-        r"(?im)^\s*phone\s*:\s*([+\d\-\(\)\.\s]{7,})\s*$",
+        r"(?im)^\s*prospect_customer_contact_phone\s*:\s*(.+?)\s*$",
+        r"(?im)^\s*phone\s*:\s*(.+?)\s*$",
     ]
     for pat in patterns:
         m = re.search(pat, hay)
         if m:
-            return norm_phone_e164_us((m.group(1) or "").strip())
+            raw = _clean_fb_field_value(m.group(1))
+            return norm_phone_e164_us(raw)
 
     return ""
 
@@ -419,7 +434,7 @@ def _extract_facebook_name(body_text: str, body_html: str = "") -> tuple[str, st
     for pat in patterns:
         m = re.search(pat, hay)
         if m:
-            full_name = (m.group(1) or "").strip()
+            full_name = _clean_fb_field_value(m.group(1))
             break
 
     if not full_name:
@@ -429,8 +444,9 @@ def _extract_facebook_name(body_text: str, body_html: str = "") -> tuple[str, st
     if not parts:
         return "", ""
 
-    first = _clean_first_name(parts[0])
-    last = " ".join(parts[1:]).strip()
+    first = _clean_first_name(_clean_fb_field_value(parts[0]))
+    last = _clean_fb_field_value(" ".join(parts[1:]))
+
     if last.isupper():
         last = last.title()
 
@@ -1179,11 +1195,14 @@ def process_lead_notification(inbound: dict) -> None:
         fb_phone = _extract_facebook_phone(body_text, raw_html)
 
         if fb_first:
-            first_name = fb_first
+            first_name = _clean_fb_field_value(fb_first)
         if fb_last:
-            last_name = fb_last
+            last_name = _clean_fb_field_value(fb_last)
         if fb_phone:
             phone = _maybe_set_phone(current_phone=phone, candidate_phone=fb_phone)
+
+    first_name = _clean_fb_field_value(first_name)
+    last_name = _clean_fb_field_value(last_name)
 
     if not first_name and not last_name:
         first_name, last_name = _extract_first_last_from_provider(cleaned_text)
@@ -2359,7 +2378,7 @@ def process_lead_notification(inbound: dict) -> None:
         return
 
     # --- Day-N delayed start (Mazda logic) ---
-    if _is_delayed_start_rooftop(subscription_id, rooftop_name):
+    if _is_delayed_start_rooftop(subscription_id, rooftop_name) and not is_facebook:
         rt = get_rooftop_info(subscription_id) or {}
         start_day = int(rt.get("patti_start_day") or 2)
     
@@ -2381,7 +2400,7 @@ def process_lead_notification(inbound: dict) -> None:
         extra_fields = {
             "email_status": "ready",
             "email_day": 1,
-            "next_email_at": due_iso,
+            "follow_up_at": due_iso,
     
             "sms_status": "ready",
             "sms_day": 1,
