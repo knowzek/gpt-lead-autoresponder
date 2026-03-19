@@ -4092,7 +4092,8 @@ Return ONLY valid JSON with keys:
     else:
         if is_facebook:
             body_html = body_html.strip()
-            if not re.search(r"(?i)\b(morning|afternoon|today|tomorrow|weekend)\b", body_html):
+            import re as _re
+            if not _re.search(r"(?i)\b(morning|afternoon|today|tomorrow|weekend)\b", body_html or ""):
                 body_html += "<p>Would morning or afternoon work better for you?</p>"
         else:
             if not _is_telluride and variant != VARIANT_SHORT:
