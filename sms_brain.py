@@ -125,6 +125,22 @@ Return ONLY valid JSON with keys:
 }
 """
 
+FACEBOOK_CLOSER_APPEND = """
+Facebook closer mode:
+- This is a fresh Facebook lead or an early Facebook text conversation.
+- Prioritize setting an appointment or dealership visit quickly.
+- Prefer narrowing questions over broad questions.
+- When appropriate, offer two simple options like:
+  - today or tomorrow
+  - morning or afternoon
+  - weekday or weekend
+- Be a little more proactive than the default Patti tone, but never pushy.
+- Do NOT ask vague questions like "How can I help?" or "What are you looking for?" if a stronger scheduling question would work.
+- If the guest is responsive but non-specific, move them toward a time window.
+- If they ask about availability, answer briefly and move toward a visit.
+- Keep the reply short and natural.
+"""
+
 OPTOUT_RE = re.compile(
     r"""(?ix)
     ^\s*(stop|unsubscribe|end|quit)\s*$ |
@@ -187,6 +203,7 @@ def build_user_prompt(
     last_inbound: str,
     thread_snippet: Optional[List[Dict[str, str]]] = None,
     include_optout_footer: bool = False,
+    persona: str = "default",
 ) -> str:
     rooftop_name = rooftop_name or "our dealership"
     customer_first_name = customer_first_name or "there"
@@ -209,6 +226,14 @@ def build_user_prompt(
         if lines:
             recent = "\n\nConversation so far (most recent last):\n" + "\n".join(lines)
 
+    persona_note = ""
+    if (persona or "").strip().lower() == "facebook_closer":
+        persona_note = (
+            "- Persona mode: facebook_closer\n"
+            "- This lead came from Facebook.\n"
+            "- Lean harder toward booking a visit/test drive.\n"
+            "- Prefer specific choices over broad open-ended questions.\n"
+        )
 
     return (
         f"Context:\n"
@@ -220,6 +245,7 @@ def build_user_prompt(
         f"- Why buy from us (use when asked 'why buy from you/us/Tustin'): {WHY_BUY_TEXT}\n"
         f"- Vehicle: {vehicle}\n"
         f"- include_optout_footer: {include_optout_footer}\n"
+        f"{persona_note}"
         f"{recent}\n"
         f"\n"
         f"Customer inbound SMS:\n{last_inbound}\n"
@@ -464,10 +490,17 @@ def generate_sms_reply(
     last_inbound: str,
     thread_snippet: Optional[List[Dict[str, str]]] = None,
     include_optout_footer: bool = False,
+    persona: str = "default",
 ) -> Dict[str, Any]:
+    
+    persona = (persona or "").strip().lower()
+
     if not _oai:
+        fallback_reply = "Thanks — what day/time works best for you to come in?"
+        if persona == "facebook_closer":
+            fallback_reply = "Thanks — would morning or afternoon work better for you to come by?"
         return {
-            "reply": "Thanks, what day/time works best for you to come in?",
+            "reply": fallback_reply,
             "intent": "reply",
             "needs_handoff": False,
             "handoff_reason": "",
@@ -535,6 +568,10 @@ def generate_sms_reply(
             "angry",
         )
 
+    system_prompt = SYSTEM_PROMPT
+    if persona == "facebook_closer":
+        system_prompt = SYSTEM_PROMPT + "\n\n" + FACEBOOK_CLOSER_APPEND
+
     user_prompt = build_user_prompt(
         rooftop_name=rooftop_name,
         customer_first_name=customer_first_name,
@@ -542,12 +579,13 @@ def generate_sms_reply(
         salesperson=salesperson,
         vehicle=vehicle,
         last_inbound=last_inbound,
-        thread_snippet=thread_snippet,  # ok to keep; optional
+        thread_snippet=thread_snippet,
         include_optout_footer=include_optout_footer,
+        persona=persona,
     )
 
     # ✅ Build chat messages properly (system -> thread -> final instruction)
-    messages: List[Dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
 
     # If we have thread context, pass it as actual conversation turns
     if thread_snippet:
@@ -602,11 +640,20 @@ def generate_sms_reply(
     footer = bool(data.get("include_optout_footer"))
 
     if not reply:
-        reply = "Thanks — what day/time works best for you to come in?"
+        if persona == "facebook_closer":
+            reply = "Thanks — would morning or afternoon work better for you to come by?"
+        else:
+            reply = "Thanks — what day/time works best for you to come in?"
     if intent not in ("reply", "handoff", "opt_out", "close"):
         intent = "reply"
 
-    log.info("SMS brain decision intent=%s handoff=%s reply=%r", intent, needs_handoff, reply[:160])
+    log.info(
+        "SMS brain decision persona=%s intent=%s handoff=%s reply=%r",
+        persona,
+        intent,
+        needs_handoff,
+        reply[:160],
+    )
 
     return {
         "reply": reply,
