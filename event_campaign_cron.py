@@ -289,6 +289,15 @@ def _send_cx5_email_correction_now_if_needed(invite_id: str, invite_fields: dict
 
     msg = build_event_correction_email(event_fields, guest_fields)
 
+    log.info(
+        "CX5 correction email attempt invite=%s to=%s real_email=%s test_email=%s subject=%r",
+        invite_id,
+        to_email,
+        real_email,
+        EVENT_TEST_TO_EMAIL,
+        msg["subject"],
+    )
+
     if EVENT_CAMPAIGN_DRY_RUN:
         log.info("DRY RUN correction email invite=%s to=%s subject=%r", invite_id, to_email, msg["subject"])
         ok = True
@@ -301,6 +310,8 @@ def _send_cx5_email_correction_now_if_needed(invite_id: str, invite_fields: dict
             body_text=msg["body_text"],
         )
         result = "sent" if ok else "sendgrid_failed"
+
+    log.info("CX5 correction email invite=%s ok=%s result=%s", invite_id, ok, result)
 
     patch = {
         "Last Send Attempt At": _now_iso(),
@@ -464,7 +475,6 @@ def build_event_correction_email(event: dict, guest: dict) -> dict[str, str]:
     date_display = (event.get("Event Date Display") or event.get("Event Date") or "Saturday, March 21").strip()
     time_window = _fmt_time_window(event.get("Event Start Time", ""), event.get("Event End Time", ""))
     location = (event.get("Event Location") or store).strip()
-    # poster_url = (event.get("Poster Image URL") or event.get("Hero Image URL") or "").strip()
 
     subject = f"Correction: {title} is on {date_display}"
     preheader = f"Quick correction: the event is on {date_display}, not tomorrow."
@@ -478,7 +488,6 @@ def build_event_correction_email(event: dict, guest: dict) -> dict[str, str]:
 
     closer = "Sorry for the confusion. If you plan to attend, just reply YES and we’ll be ready for you."
 
-
     signature_html = build_patti_footer(store)
 
     body_html = f"""
@@ -490,7 +499,6 @@ def build_event_correction_email(event: dict, guest: dict) -> dict[str, str]:
           <tr>
             <td align="center" style="padding:24px 12px;">
               <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="width:100%;max-width:640px;background:#ffffff;border-radius:12px;overflow:hidden;">
-                <tr><td style="padding:0;">{hero_html}</td></tr>
                 <tr>
                   <td style="padding:28px 32px;">
                     <div style="font-size:12px;letter-spacing:1.2px;text-transform:uppercase;color:#b01d24;font-weight:700;margin-bottom:10px;">Quick correction</div>
@@ -608,7 +616,6 @@ def build_event_email(event: dict, guest: dict, template_no: int) -> dict[str, s
           <tr>
             <td align="center" style="padding:24px 12px;">
               <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="width:100%;max-width:640px;background:#ffffff;border-radius:12px;overflow:hidden;">
-                <tr><td style="padding:0;">{hero_html}</td></tr>
                 <tr>
                   <td style="padding:28px 32px;">
                     <div style="font-size:12px;letter-spacing:1.2px;text-transform:uppercase;color:#b01d24;font-weight:700;margin-bottom:10px;">A Patterson customer exclusive</div>
@@ -930,28 +937,15 @@ def run_event_campaigns_once() -> None:
         # one-time correction email for the bad "tomorrow" email sent on 3/19
 
         try:
-            log.info(
-                "CX5 correction email attempt invite=%s to=%s real_email=%s test_email=%s subject=%r",
-                invite_id,
-                to_email,
-                real_email,
-                EVENT_TEST_TO_EMAIL,
-                msg["subject"],
-            )
             _send_cx5_email_correction_now_if_needed(
                 invite_id=invite_id,
                 invite_fields=invite_fields,
                 event_fields=event_fields,
                 guest_fields=guest_fields,
             )
-            log.info(
-                "CX5 correction email send result invite=%s ok=%s result=%s",
-                invite_id,
-                ok,
-                result,
-            )
         except Exception:
             log.exception("CX5 correction email failed invite=%s", invite_id)
+        
 
         # one-time correction for the bad "tomorrow" SMS sent on 3/19
         try:
