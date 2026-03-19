@@ -38,6 +38,9 @@ STORE_TIMEZONE = (os.getenv("STORE_TIMEZONE") or "America/Los_Angeles").strip()
 EVENT_CAMPAIGN_DRY_RUN = (os.getenv("EVENT_CAMPAIGN_DRY_RUN") or "0").strip() == "1"
 EVENT_CAMPAIGN_MAX_INVITES = int(os.getenv("EVENT_CAMPAIGN_MAX_INVITES") or "1000")
 EVENT_CAMPAIGN_VIEW = (os.getenv("EVENT_CAMPAIGN_VIEW") or "").strip()  # optional Airtable view
+EVENT_TEST_TO_NUMBER = (os.getenv("EVENT_TEST_TO_NUMBER") or "").strip()
+EVENT_TEST_INVITE_ID = (os.getenv("EVENT_TEST_INVITE_ID") or "").strip()
+EVENT_TEST_CORRECTION_ONLY = (os.getenv("EVENT_TEST_CORRECTION_ONLY") or "0").strip() == "1"
 
 if not AIRTABLE_API_TOKEN or not AIRTABLE_BASE_ID:
     raise RuntimeError("Missing AIRTABLE_API_TOKEN or AIRTABLE_BASE_ID")
@@ -260,6 +263,8 @@ def _send_cx5_correction_now_if_needed(invite_id: str, invite_fields: dict, even
     """
     if not _is_target_cx5_event(event_fields):
         return False
+    if EVENT_TEST_INVITE_ID and invite_id != EVENT_TEST_INVITE_ID:
+        return False
 
     now_local = _now_utc().astimezone(ZoneInfo(STORE_TIMEZONE))
     if now_local.date() != date(2026, 3, 19):
@@ -275,13 +280,14 @@ def _send_cx5_correction_now_if_needed(invite_id: str, invite_fields: dict, even
     if _boolish(guest_fields.get("SMS Opt Out")):
         return False
 
-    if not invite_fields.get("SMS 3 Sent At"):
+    if not EVENT_TEST_TO_NUMBER and not invite_fields.get("SMS 3 Sent At"):
+        return False
+        
+    if not EVENT_TEST_TO_NUMBER and CX5_FIX_CORRECTION_TAG in str(invite_fields.get("Last Send Result") or ""):
         return False
 
-    if CX5_FIX_CORRECTION_TAG in str(invite_fields.get("Last Send Result") or ""):
-        return False
-
-    phone = _to_e164_us((guest_fields.get("Phone") or guest_fields.get("customer_phone") or "").strip())
+    real_phone = _to_e164_us((guest_fields.get("Phone") or guest_fields.get("customer_phone") or "").strip())
+    phone = _to_e164_us(EVENT_TEST_TO_NUMBER) if EVENT_TEST_TO_NUMBER else real_phone
     if not phone:
         return False
 
@@ -749,6 +755,9 @@ def run_event_campaigns_once() -> None:
         invite_id = invite["id"]
         invite_fields = invite.get("fields") or {}
 
+        if EVENT_TEST_CORRECTION_ONLY and EVENT_TEST_INVITE_ID and invite_id != EVENT_TEST_INVITE_ID:
+            continue
+
         if _boolish(invite_fields.get("Cancelled")):
             continue
         if str(invite_fields.get("Invite Status") or "").strip().lower() in {"cancelled", "do not send"}:
@@ -787,6 +796,9 @@ def run_event_campaigns_once() -> None:
             )
         except Exception:
             log.exception("CX5 correction send failed invite=%s", invite_id)
+
+        if EVENT_TEST_CORRECTION_ONLY:
+            continue
 
         due = _due_actions(invite_fields, event_fields)
         if not due:
