@@ -277,6 +277,24 @@ def _build_general_lead_first_sms(fields: dict) -> str:
     if not vehicle_phrase:
         vehicle_phrase = "your vehicle inquiry"
 
+    lead_type = (
+        (fields.get("lead_type") or "")
+        or (fields.get("Lead Type") or "")
+        or ""
+    ).strip().lower()
+
+    source = ((fields.get("source") or "")).strip().lower()
+
+    is_facebook = lead_type == "facebook" or source == "facebook"
+
+    if is_facebook:
+        return (
+            f"Hi {first_name or 'there'}, this is Patti with {rooftop_name}. "
+            f"Thanks for reaching out about {vehicle_phrase}. "
+            f"We’d be happy to help this weekend. Would morning or afternoon work better for you to come by? "
+            f"Opt-out reply STOP"
+        )
+
     return (
         f"Hi {first_name or 'there'}, this is Patti with {rooftop_name}. "
         f"Thanks for reaching out about {vehicle_phrase}. "
@@ -1339,6 +1357,21 @@ def poll_once(owner: str):
         bucket = (fields.get("bucket") or "").strip()
         is_mazda = ("mazda" in program) or bool(bucket)
 
+        patti_meta = opp.get("patti") or {}
+        persona = (patti_meta.get("persona") or "").strip().lower()
+        lead_type = (opp.get("lead_type") or fields.get("lead_type") or "").strip().lower()
+
+        if persona != "facebook_closer" and lead_type == "facebook":
+            persona = "facebook_closer"
+
+        log.info(
+            "SMS POLLER PERSONA DEBUG opp=%s persona=%r lead_type=%r source=%r",
+            opp.get("opportunityId") or opp.get("opportunity_id"),
+            persona,
+            lead_type,
+            opp.get("source"),
+        )
+
         # ✅ If it's Mazda Loyalty, ALWAYS use Mazda path (even if opp_id exists)
         if is_mazda:
             rec_id = rec.get("id")
@@ -1782,6 +1815,7 @@ def poll_once(owner: str):
                 last_inbound=last_inbound,
                 thread_snippet=thread,
                 include_optout_footer=False,
+                persona=("facebook_closer" if persona == "facebook_closer" else "default"),
             )
 
         # Force human handoff for exact inventory/configuration verification
@@ -1998,7 +2032,10 @@ def poll_once(owner: str):
         # --- Send SMS reply + persist metrics + optional handoff escalation ---
         reply_text = (decision.get("reply") or "").strip()
         if not reply_text:
-            reply_text = "Thanks — what day/time works best for you to come in?"
+            if persona == "facebook_closer":
+                reply_text = "Thanks — would morning or afternoon work better for you to come by?"
+            else:
+                reply_text = "Thanks — what day/time works best for you to come in?"
 
         to_number = author
         if _sms_test_enabled() and _sms_test_to():
