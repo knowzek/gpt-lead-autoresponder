@@ -1,155 +1,83 @@
 # ----------------------------------------
-# Mazda Loyalty Sprint - SMS Cadence
+# Mazda Loyalty Sprint - SAFE Email + SMS Cadence
 # ----------------------------------------
 
 from datetime import datetime
 from patti_common import build_patti_footer
 
+
 def build_mazda_loyalty_email(*, day: int, fields: dict) -> dict:
     """
     Deterministic Mazda Loyalty email nudges aligned to SMS cadence days.
-    Returns: {"subject": str, "body_text": str, "body_html": str}
-
-    Uses Airtable field 'bucket' to select copy set:
-      - "2+ Loyalists ($1,000)" => highest tier copy ($1,000)
-      - "Brand Advocates ($500)" => advocate copy ($500)
+    Safer version:
+    - no dollar amounts in subject/body except $100 Service & Parts credit
+    - no guaranteed eligibility language
+    - no "stackable with current specials"
+    - no "verify eligibility"
+    - frames the Mazda loyalty communication as conditional / review-based
     """
 
-    # -------------------------
-    # Identity + segmentation
-    # -------------------------
-    first_name = (fields.get("customer_first_name")
-                  or fields.get("first_name")
-                  or "").strip()
-
+    first_name = (fields.get("customer_first_name") or fields.get("first_name") or "").strip()
     greet = f"Hi {first_name}," if first_name else "Hi there,"
 
-    bucket_raw = (fields.get("bucket") or "").strip()
-    bucket_lower = bucket_raw.lower()
+    rooftop_name = (fields.get("rooftop_name") or fields.get("rooftop") or "").strip() or "our dealership"
 
-    # Top tier if bucket starts with "2+" (matches your Airtable option),
-    # OR contains "1,000" as a safe fallback.
-    is_top_tier = bucket_raw.startswith("2+") or ("1,000" in bucket_lower) or ("1000" in bucket_lower)
-
-    # -------------------------
-    # Template sets
-    # -------------------------
-    TOP_TIER = {
+    EMAIL_TEMPLATES = {
         1: {
-            "subject": "[Mazda Loyalty] Your highest-tier CX-5 loyalty reward",
+            "subject": "[Mazda Loyalty] Quick question about your CX-5 loyalty email",
             "body": (
                 "{greet}\n\n"
-                "You’re receiving the highest tier of Mazda’s Loyalty Reward — a $1,000 voucher toward a new CX-5.\n\n"
-                "This level is reserved for our 2+ Mazda loyalists, and I just wanted to confirm you’ve received your 16-digit voucher code.\n\n"
-                "If you have it handy, reply with the code and I’ll verify eligibility and make sure everything is applied correctly.\n\n"
-                "If you haven’t seen it yet, I can help track it down for you.\n\n"
-                "Looking forward to helping you take advantage of it,\n"
+                "I wanted to reach out in case you received a Mazda Loyalty email regarding the CX-5.\n\n"
+                "If you have your 16-digit code, you can reply with it here and I can have our team review it with you.\n\n"
+                "If you have not seen the email yet, I can point you in the right direction for where to look.\n"
             ),
         },
         2: {
-            "subject": "[Mazda Loyalty] Your $1,000 reward stacks with current CX-5 offers",
+            "subject": "[Mazda Loyalty] I can help review your CX-5 loyalty options",
             "body": (
                 "{greet}\n\n"
-                "A quick note — your $1,000 loyalty reward can be stacked with current CX-5 incentives.\n\n"
-                "You’re not choosing between offers — your highest-tier reward works alongside current programs.\n\n"
-                "If there’s a trim or color you’ve had your eye on, let me know and I’ll send options that qualify.\n\n"
-                "Happy to make this seamless for you.\n"
+                "Just checking in in case you wanted help reviewing your Mazda Loyalty offer for the CX-5.\n\n"
+                "If you already have your 16-digit code, send it over and our team can take a look.\n\n"
+                "If you are thinking about a specific trim or color, I can also help send available CX-5 options.\n"
             ),
         },
         3: {
-            "subject": "[Mazda Loyalty] You can transfer your $1,000 reward",
+            "subject": "[Mazda Loyalty] Another option if you are not planning to use it",
             "body": (
                 "{greet}\n\n"
-                "If you’re not planning to use your $1,000 loyalty reward yourself, it is fully transferable.\n\n"
-                "Many of our 2+ loyalists choose to gift it to a family member or close friend.\n\n"
-                "If someone comes to mind, just send me their name and best contact info and I’ll personally take care of everything.\n\n"
-                "I just don’t want your highest-tier benefit to go unused.\n"
+                "If you are not planning to use your Mazda Loyalty offer yourself, there may still be other options available.\n\n"
+                "In some cases, it may be transferable to a family member or friend, or it may be usable as a $100 Service & Parts credit at {rooftop_name} in exchange for the loyalty code.\n\n"
+                "If you would like help with either option, just reply here and I can help.\n"
             ),
         },
         4: {
-            "subject": "[Mazda Loyalty] The CX-5 is especially strong right now",
+            "subject": "[Mazda Loyalty] Want me to send available CX-5 options?",
             "body": (
                 "{greet}\n\n"
-                "We’ve seen a strong response to the latest CX-5 — especially from our top-tier loyalty customers.\n\n"
-                "Between the upgraded interior, enhanced tech, and your $1,000 loyalty reward, it’s one of the strongest overall value positions in the lineup right now.\n\n"
-                "If you'd like, I can send available inventory that qualifies or set up a quick test drive around your schedule.\n\n"
-                "Would weekday or weekend work better?\n"
+                "If you are considering a CX-5, I’d be happy to help make the next step easy.\n\n"
+                "I can send available inventory, help answer general questions, or have someone from the team follow up with you directly.\n\n"
+                "If you want to move forward, just reply with your 16-digit code or let me know what kind of CX-5 you are interested in.\n"
             ),
         },
         5: {
-            "subject": "[Mazda Loyalty] Don’t let your $1,000 reward expire",
+            "subject": "[Mazda Loyalty] Last check-in from Patti",
             "body": (
                 "{greet}\n\n"
-                "Just a final reminder — your $1,000 loyalty reward won’t remain active indefinitely.\n\n"
-                "Whether you use it personally or transfer it to someone close to you, I’d be happy to help you take advantage of it before it expires.\n\n"
-                "Reply here and I’ll take care of the details.\n"
+                "I just wanted to check in one last time regarding the Mazda Loyalty CX-5 email.\n\n"
+                "If you would like help reviewing it, transferring it if allowed, or using it toward the $100 Service & Parts credit at {rooftop_name}, I’m happy to help.\n\n"
+                "If you’d prefer a team member to reach out directly, reply here and I’ll make sure that happens.\n"
             ),
         },
     }
 
-    ADVOCATE = {
-        1: {
-            "subject": "[Mazda Loyalty] Your CX-5 loyalty reward",
-            "body": (
-                "{greet}\n\n"
-                "As a valued Mazda Brand Advocate, you’ve been issued a $500 loyalty voucher toward a new CX-5.\n\n"
-                "I just wanted to confirm you’ve received your 16-digit voucher code.\n\n"
-                "If you have it handy, reply with the code and I’ll verify everything for you.\n\n"
-                "If you haven’t seen it yet, I can help track it down.\n"
-            ),
-        },
-        2: {
-            "subject": "[Mazda Loyalty] Your $500 reward stacks with CX-5 offers",
-            "body": (
-                "{greet}\n\n"
-                "Just a quick reminder — your $500 loyalty reward can be combined with current CX-5 incentives.\n\n"
-                "It’s designed to enhance the value you’re already receiving.\n\n"
-                "If you’d like, tell me what you’re considering and I’ll send qualifying options.\n"
-            ),
-        },
-        3: {
-            "subject": "[Mazda Loyalty] You can gift your $500 reward",
-            "body": (
-                "{greet}\n\n"
-                "If you’re not planning to use your $500 loyalty reward yourself, it’s fully transferable.\n\n"
-                "If someone comes to mind, just send their name and contact info and I’ll take care of everything.\n\n"
-                "No pressure — just making sure it doesn’t go unused.\n"
-            ),
-        },
-        4: {
-            "subject": "[Mazda Loyalty] A quick CX-5 update",
-            "body": (
-                "{greet}\n\n"
-                "The latest CX-5 updates have been getting strong feedback — especially paired with loyalty incentives like yours.\n\n"
-                "If you’d like to explore inventory or schedule a test drive, I can coordinate that around your schedule.\n\n"
-                "Let me know what works best.\n"
-            ),
-        },
-        5: {
-            "subject": "[Mazda Loyalty] Use your $500 reward before it expires",
-            "body": (
-                "{greet}\n\n"
-                "Just a quick reminder — your $500 loyalty reward won’t be available indefinitely.\n\n"
-                "If you’d like to use it or transfer it to someone close to you, I’m happy to assist.\n\n"
-                "Reply here and I’ll handle the details.\n"
-            ),
-        },
-    }
-
-    templates = TOP_TIER if is_top_tier else ADVOCATE
-    # Normalize day (fallback to day 5 copy for anything beyond 5)
     d = int(day or 1)
-    if d not in templates:
+    if d not in EMAIL_TEMPLATES:
         d = 5
 
-    subject = templates[d]["subject"]
-    body = templates[d]["body"].format(greet=greet)
-
+    subject = EMAIL_TEMPLATES[d]["subject"]
+    body = EMAIL_TEMPLATES[d]["body"].format(greet=greet, rooftop_name=rooftop_name)
     body_text = body.strip()
 
-    # -------------------------
-    # HTML wrapper + Patti footer (unchanged behavior)
-    # -------------------------
     html_main = "<br>".join((body_text or "").split("\n"))
     body_html = (
         "<div style='font-family:Arial, Helvetica, sans-serif; font-size:14px; line-height:20px; color:#222;'>"
@@ -157,7 +85,6 @@ def build_mazda_loyalty_email(*, day: int, fields: dict) -> dict:
         "</div>"
     )
 
-    rooftop_name = (fields.get("rooftop_name") or fields.get("rooftop") or "").strip()
     footer_html = build_patti_footer(rooftop_name=rooftop_name)
     body_html = body_html + footer_html
 
@@ -167,76 +94,62 @@ def build_mazda_loyalty_email(*, day: int, fields: dict) -> dict:
         "body_html": body_html,
     }
 
+
 def build_mazda_loyalty_sms(*, day: int, fields: dict) -> str:
     """
-    Deterministic SMS nudges for Mazda Loyalty Sprint.
-    This is outbound cadence only (not GPT conversational replies).
-
-    Args:
-        day: current sms_day (int)
-        fields: Airtable record fields (dict)
-
-    Returns:
-        SMS body (str)
+    Deterministic outbound SMS nudges for Mazda Loyalty Sprint.
+    Safer version:
+    - no $500 / $1,000 language
+    - no "stackable with specials"
+    - no "confirm eligibility"
+    - no "reward payout" framing
+    - keeps Patti in helper / router mode
     """
 
-    first_name = (fields.get("customer_first_name")
-                  or fields.get("first_name")
-                  or "").strip()
-
-    bucket = (fields.get("bucket") or "").lower()
-
-    if "1,000" in bucket or "2+" in bucket:
-        incentive_text = "$1,000 Mazda Loyalty Reward"
-    else:
-        incentive_text = "$500 Mazda Loyalty Reward"
+    first_name = (fields.get("customer_first_name") or fields.get("first_name") or "").strip()
+    rooftop_name = (fields.get("rooftop_name") or fields.get("rooftop") or "").strip() or "Patterson Autos"
 
     name_prefix = f"{first_name}, " if first_name else ""
 
-    # -------------------------
-    # Day-based deterministic sequence
-    # -------------------------
-
     if day == 1:
         return (
-            f"{name_prefix}this is Patti from Patterson Autos. Quick question - did you receive your {incentive_text} "
-            f"voucher for the new CX-5? If you have your 16-digit code handy, "
-            f"I can confirm eligibility for you."
+            f"{name_prefix}this is Patti from {rooftop_name}. "
+            f"Quick question — did you receive a Mazda Loyalty email about the CX-5? "
+            f"If you have your 16-digit code, text it here and I can help get it reviewed."
         )
 
     if day == 2:
         return (
-            f"{name_prefix}Patti at Patterson Autos again - just a reminder your {incentive_text} can be used "
-            f"on a new CX-5 and is stackable with current specials. "
-            f"Want me to check available inventory?"
+            f"{name_prefix}Patti here from {rooftop_name} again. "
+            f"If you received the Mazda Loyalty CX-5 email and want help reviewing your options, "
+            f"I’m happy to help. Want me to check available inventory?"
         )
 
     if day == 3:
         return (
-            f"{name_prefix}this is Patti with Patterson Autos again. I just wanted to let you know if you're not planning to use your "
-            f"{incentive_text}, you can gift it to a friend or family member. "
-            f"Just send me their name and number and I’ll take care of it."
+            f"{name_prefix}just a heads-up — if you are not planning to use the Mazda Loyalty offer yourself, "
+            f"there may be other options available, including transfer or a $100 Service & Parts credit in exchange for the loyalty code. "
+            f"Want help with that?"
         )
 
     if day == 4:
         return (
-            f"{name_prefix}we’ve had a strong response to the CX-5 loyalty program. "
-            f"If you’d like to test drive one or run numbers, I can set that up quickly."
+            f"{name_prefix}if you’re considering a CX-5, I can help with next steps. "
+            f"I can send available inventory or have a team member reach out directly. "
+            f"Would you like me to do that?"
         )
 
     if day == 5:
         return (
-            f"{name_prefix}final reminder - your {incentive_text} won’t be available forever. "
-            f"Let me know if you'd like to use it or gift it before it expires."
+            f"{name_prefix}last check-in from Patti on the Mazda Loyalty CX-5 email. "
+            f"If you want help reviewing it, using the service credit option, or connecting with someone on our team, "
+            f"just reply here."
         )
 
-    # Fallback after Day 5 (soft close)
     return (
-        f"{name_prefix}just checking in one last time regarding your "
-        f"{incentive_text}. If you'd like help using it or transferring it, "
-        f"I'm here to assist."
+        f"{name_prefix}just checking in one last time on the Mazda Loyalty CX-5 email. "
+        f"If you’d like help reviewing it or exploring your options, I’m here to help."
     )
-
 
 def build_event_email(day: int, fields: dict):
     first = fields.get("first_name", "")
