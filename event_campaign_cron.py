@@ -936,12 +936,27 @@ def run_event_campaigns_once() -> None:
             continue
 
         # one-time correction email for the bad "tomorrow" email sent on 3/19
+
         try:
+            log.info(
+                "CX5 correction email attempt invite=%s to=%s real_email=%s test_email=%s subject=%r",
+                invite_id,
+                to_email,
+                real_email,
+                EVENT_TEST_TO_EMAIL,
+                msg["subject"],
+            )
             _send_cx5_email_correction_now_if_needed(
                 invite_id=invite_id,
                 invite_fields=invite_fields,
                 event_fields=event_fields,
                 guest_fields=guest_fields,
+            )
+            log.info(
+                "CX5 correction email send result invite=%s ok=%s result=%s",
+                invite_id,
+                ok,
+                result,
             )
         except Exception:
             log.exception("CX5 correction email failed invite=%s", invite_id)
