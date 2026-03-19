@@ -600,7 +600,7 @@ def run_gpt(prompt: str,
         base = [
             {"role": "system", "content": _patti_persona_system()},
             {"role": "system", "content": _patterson_why_buys_system()},
-            {{"role": "system", "content": _facebook_closer_rules_system(customer_name, rooftop_name)},
+            {"role": "system", "content": _facebook_closer_rules_system(customer_name, rooftop_name)},
             {"role": "system", "content": _personalization_rules_system()},
             {"role": "system", "content": _appointment_cta_system()},
             {"role": "system", "content": _compliance_system()},
