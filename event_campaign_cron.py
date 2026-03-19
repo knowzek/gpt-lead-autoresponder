@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+import re
+from datetime import date, datetime, timedelta, timezone
 from html import escape
 from typing import Any, Iterable
 
@@ -762,18 +763,6 @@ def run_event_campaigns_once() -> None:
                 "Last Send Error": "missing_linked_event_or_guest",
             })
             failed += 1
-            continue
-
-        event_fields = event_rec.get("fields") or {}
-        guest_fields = guest_rec.get("fields") or {}
-
-        suppressed, reason = _is_suppressed(guest_fields)
-        if suppressed:
-            _patch_record(INVITES_TABLE, invite_id, {
-                "Invite Status": "Suppressed",
-                "Last Send Attempt At": _now_iso(),
-                "Last Send Error": reason,
-            })
             continue
 
         event_fields = event_rec.get("fields") or {}
