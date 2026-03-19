@@ -2942,6 +2942,8 @@ def processHit(hit):
             currDate_iso=currDate_iso,
             opportunityId=opportunityId,
             OFFLINE_MODE=OFFLINE_MODE,
+            lead_type=(opportunity.get("lead_type") or ""),
+            persona=((opportunity.get("patti") or {}).get("persona") or "sales"),
         )
 
     else:
@@ -3650,6 +3652,8 @@ def send_first_touch_email(
     SAFE_MODE: bool = False,
     test_recipient: str | None = None,
     message_id: str | None = None,
+    lead_type: str = "",
+    persona: str = "sales",
 ) -> bool:
     """
     Returns sent_ok (True only if actually sent or OFFLINE_MODE).
@@ -3668,6 +3672,31 @@ def send_first_touch_email(
         opportunity.get("opportunityId") or opportunityId,
         salesperson,
         customer_email,
+    )
+
+    lead_type = (lead_type or "").strip().lower()
+    source_lc = (source or "").strip().lower()
+
+    patti_meta = opportunity.get("patti") or {}
+    saved_persona = (patti_meta.get("persona") or "").strip().lower()
+
+    is_facebook = (
+        persona == "facebook_closer"
+        or saved_persona == "facebook_closer"
+        or lead_type == "facebook"
+        or source_lc == "facebook"
+    )
+
+    active_persona = "facebook_closer" if is_facebook else "sales"
+
+    log.info(
+        "FIRST_TOUCH PERSONA DEBUG opp=%s is_facebook=%s active_persona=%r source=%r lead_type=%r saved_persona=%r",
+        opportunity.get("opportunityId") or opportunityId,
+        is_facebook,
+        active_persona,
+        source,
+        lead_type,
+        saved_persona,
     )
 
     # --- HARD FIRST-TOUCH IDEMPOTENCY GATE ---
@@ -3943,6 +3972,7 @@ In your email:
 
         recommendation_text = ""
 
+        # NOTE: (cont with line: 523)when you need to use just uncomment and uncomment in import section also
         # if inventory_xml:
         #     try:
         #         recommendation_text = recommend_from_xml(inventory_xml, customer_email_text).strip()
@@ -3951,7 +3981,68 @@ In your email:
         #     except Exception:
         #         pass
 
-        response = run_gpt(prompt, customer_name, rooftop_name)
+        if is_facebook:
+            prompt = f"""
+You are Patti, the virtual assistant for {rooftop_name}.
+
+This is a brand new Facebook vehicle lead.
+Your job is to move the customer toward a dealership visit or test drive quickly, while still sounding warm and helpful.
+
+Hard rules:
+- Begin with exactly: Hi {customer_name},
+- Keep it to about 70–120 words.
+- Sound confident, helpful, and human.
+- Do NOT sound generic or overly formal.
+- Ask only ONE question.
+- Prioritize setting an appointment over long explanations.
+- Prefer concrete options over broad open-ended questions.
+- If appropriate, offer a simple choice like morning or afternoon, today or tomorrow, or this weekend.
+- Do NOT include any signature block, phone number, or URL.
+- Do NOT quote pricing, payments, APR, OTD, or trade value.
+- Mention the assigned salesperson naturally if relevant.
+
+Context:
+- Rooftop: {rooftop_name}
+- Assigned salesperson: {salesperson or "our team"}
+- Vehicle of interest: {vehicle_str}
+- Source: Facebook
+- Customer inquiry/comment: {(inquiry_text or "").strip() or "No additional comment provided."}
+
+Return ONLY valid JSON with keys:
+{{"subject":"...", "body":"..."}}
+""".strip()
+        else:
+            prompt = f"""
+You are Patti, the virtual assistant for {rooftop_name}.
+
+Write the first outreach email to a new internet lead.
+
+Hard rules:
+- Begin with exactly: Hi {customer_name},
+- Keep it warm, professional, and natural.
+- Mention the assigned salesperson by name when helpful.
+- If the vehicle is known, reference it naturally.
+- Ask only ONE clear question.
+- Do NOT include any signature block, phone number, or URL.
+- Do NOT quote pricing, payments, APR, OTD, or trade value.
+
+Context:
+- Rooftop: {rooftop_name}
+- Assigned salesperson: {salesperson or "our team"}
+- Vehicle of interest: {vehicle_str}
+- Lead source: {source or "internet lead"}
+- Customer inquiry/comment: {(inquiry_text or "").strip() or "No additional comment provided."}
+
+Return ONLY valid JSON with keys:
+{{"subject":"...", "body":"..."}}
+""".strip()
+
+        response = run_gpt(
+            prompt,
+            customer_name,
+            rooftop_name,
+            persona=active_persona,
+        )
         subject = response["subject"]
         body_html = response["body"]
         
@@ -3999,8 +4090,13 @@ In your email:
         body_html = rewrite_sched_cta_for_booked(body_html)
         body_html = _SCHED_ANY_RE.sub("", body_html).strip()
     else:
-        if not _is_telluride and variant != VARIANT_SHORT:
-            body_html = append_soft_schedule_sentence(body_html, rooftop_name)
+        if is_facebook:
+            body_html = body_html.strip()
+            if not re.search(r"(?i)\b(morning|afternoon|today|tomorrow|weekend)\b", body_html):
+                body_html += "<p>Would morning or afternoon work better for you?</p>"
+        else:
+            if not _is_telluride and variant != VARIANT_SHORT:
+                body_html = append_soft_schedule_sentence(body_html, rooftop_name)
 
     # Strip GPT footer if added
     body_html = _PREFS_RE.sub("", body_html).strip()
@@ -4011,6 +4107,14 @@ In your email:
         body_html = body_html + build_patti_footer(rooftop_name)
     
     opportunity["body_html"] = body_html
+
+    log.info(
+        "FIRST_TOUCH OUTPUT DEBUG opp=%s persona=%r subject=%r body_preview=%r",
+        opportunity.get("opportunityId") or opportunityId,
+        active_persona,
+        subject,
+        (body_html or "")[:240],
+    )
 
     # Append message to opportunity log
     msg_entry = {"msgFrom": "patti", "subject": subject, "body": body_html, "date": currDate_iso}
