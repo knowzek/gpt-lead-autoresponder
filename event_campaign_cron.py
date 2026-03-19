@@ -370,13 +370,13 @@ def _send_cx5_correction_now_if_needed(invite_id: str, invite_fields: dict, even
     title = _event_title(event_fields)
     date_display = (event_fields.get("Event Date Display") or "Saturday, March 21").strip()
     time_window = _fmt_time_window(event_fields.get("Event Start Time", ""), event_fields.get("Event End Time", ""))
-    poster_url = (event_fields.get("Poster Image URL") or event_fields.get("Hero Image URL") or "").strip()
-    url_part = f" Details: {poster_url}" if poster_url else ""
+    # poster_url = (event_fields.get("Poster Image URL") or event_fields.get("Hero Image URL") or "").strip()
+    # url_part = f" Details: {poster_url}" if poster_url else ""
 
     body = (
         f"Quick correction: our {title} event is "
         f"{date_display} from {time_window}, not tomorrow. Sorry for the confusion. "
-        f"Reply YES if you plan to attend.{url_part}"
+        f"Reply YES if you plan to attend."
     )
 
     if EVENT_CAMPAIGN_DRY_RUN:
@@ -464,7 +464,7 @@ def build_event_correction_email(event: dict, guest: dict) -> dict[str, str]:
     date_display = (event.get("Event Date Display") or event.get("Event Date") or "Saturday, March 21").strip()
     time_window = _fmt_time_window(event.get("Event Start Time", ""), event.get("Event End Time", ""))
     location = (event.get("Event Location") or store).strip()
-    poster_url = (event.get("Poster Image URL") or event.get("Hero Image URL") or "").strip()
+    # poster_url = (event.get("Poster Image URL") or event.get("Hero Image URL") or "").strip()
 
     subject = f"Correction: {title} is on {date_display}"
     preheader = f"Quick correction: the event is on {date_display}, not tomorrow."
@@ -478,10 +478,6 @@ def build_event_correction_email(event: dict, guest: dict) -> dict[str, str]:
 
     closer = "Sorry for the confusion. If you plan to attend, just reply YES and we’ll be ready for you."
 
-    hero_html = (
-        f"<img src='{escape(poster_url)}' alt='{escape(title)}' style='width:100%;max-width:640px;display:block;border:0;border-radius:10px;'>"
-        if poster_url else ""
-    )
 
     signature_html = build_patti_footer(store)
 
@@ -549,7 +545,7 @@ def build_event_email(event: dict, guest: dict, template_no: int) -> dict[str, s
     date_display = (event.get("Event Date Display") or event.get("Event Date") or "").strip()
     time_window = _fmt_time_window(event.get("Event Start Time", ""), event.get("Event End Time", ""))
     location = (event.get("Event Location") or store).strip()
-    poster_url = (event.get("Poster Image URL") or event.get("Hero Image URL") or "").strip()
+    # poster_url = (event.get("Poster Image URL") or event.get("Hero Image URL") or "").strip()
     rsvp_url = (
         (event.get("RSVP URL") or "").strip()
         or (event.get("Calendly URL") or "").strip()
@@ -600,10 +596,6 @@ def build_event_email(event: dict, guest: dict, template_no: int) -> dict[str, s
     closer = chosen["closer"]
 
     bullet_html = "".join(f"<li style='margin:0 0 8px 0;'>{escape(item)}</li>" for item in benefits)
-    hero_html = (
-        f"<img src='{escape(poster_url)}' alt='{escape(title)}' style='width:100%;max-width:640px;display:block;border:0;border-radius:10px;'>"
-        if poster_url else ""
-    )
 
     signature_html = build_patti_footer(store)
 
@@ -678,14 +670,14 @@ def build_event_sms(event: dict, guest: dict, template_no: int) -> str:
     title = _event_title(event)
     date_display = (event.get("Event Date Display") or event.get("Event Date") or "").strip()
     time_window = _fmt_time_window(event.get("Event Start Time", ""), event.get("Event End Time", ""))
-    poster_url = (event.get("Poster Image URL") or event.get("Hero Image URL") or "").strip()
-    url_part = f" Details: {poster_url}" if poster_url else ""
+    # poster_url = (event.get("Poster Image URL") or event.get("Hero Image URL") or "").strip()
+    # url_part = f" Details: {poster_url}" if poster_url else ""
 
     defaults = {
-        1: f"{prefix}this is Patti from {store}. You're invited to our {title} launch at {store} on {date_display} from {time_window}. Stop by anytime to see it and take a drive. Reply YES if you plan to attend.{url_part}",
-        2: f"{prefix}this is Patti from {store}. Quick reminder about our {title} event at {store} on {date_display} from {time_window}. Food is on us and vehicles will be ready. Reply YES if you think you'll stop by.{url_part}",
-        3: f"{prefix}Patti from {store}. Our {title} event at {store} is tomorrow from {time_window}. If you plan to come by, reply YES and we'll be ready for you.{url_part}",
-        4: f"{prefix}can't wait to see you at the {title} event today at {store}. We're here from {time_window}. Stop by anytime — the vehicle, food, and team will be ready for you.{url_part}",
+        1: f"{prefix}this is Patti from {store}. You're invited to our {title} launch at {store} on {date_display} from {time_window}. Stop by anytime to see it and take a drive. Reply YES if you plan to attend.",
+        2: f"{prefix}this is Patti from {store}. Quick reminder about our {title} event at {store} on {date_display} from {time_window}. Food is on us and vehicles will be ready. Reply YES if you think you'll stop by.",
+        3: f"{prefix}Patti from {store}. Our {title} event at {store} is tomorrow from {time_window}. If you plan to come by, reply YES and we'll be ready for you.",
+        4: f"{prefix}can't wait to see you at the {title} event today at {store}. We're here from {time_window}. Stop by anytime — the vehicle, food, and team will be ready for you.",
     }
     return defaults[template_no]
 
