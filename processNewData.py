@@ -3628,6 +3628,65 @@ def _build_email_context(*, opportunity: dict, fresh_opp: dict, subscription_id:
         "sub_source": sub_source,
     }
 
+def _clean_fb_prompt_text(v: str) -> str:
+    s = (v or "")
+    s = _html.unescape(s)
+    s = s.replace("\u00a0", " ")
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+def _extract_facebook_field(inquiry_text: str, field_name: str) -> str:
+    """
+    Extracts values from provider-style Facebook lead text, e.g.
+    'prospect_customer_comments: ...'
+    """
+    txt = inquiry_text or ""
+    pat = rf"(?is){re.escape(field_name)}\s*:\s*(.*?)(?=\s+prospect_[a-z0-9_]+\s*:|$)"
+    m = re.search(pat, txt, re.I | re.S)
+    if not m:
+        return ""
+    return _clean_fb_prompt_text(m.group(1))
+
+
+def _extract_facebook_availability(inquiry_text: str) -> str:
+    txt = _clean_fb_prompt_text(inquiry_text or "")
+    if not txt:
+        return ""
+
+    patterns = [
+        r"(?i)\b(?:available|availability|can come|come in|stop by|free)\b[^.:\n]{0,120}",
+        r"(?i)\b(?:today|tomorrow|tonight|this weekend|weekend|saturday|sunday|monday|tuesday|wednesday|thursday|friday)\b[^.:\n]{0,120}",
+        r"(?i)\b\d{1,2}(?::\d{2})?\s?(?:am|pm)\b[^.:\n]{0,80}",
+    ]
+
+    hits = []
+    for pat in patterns:
+        for m in re.finditer(pat, txt):
+            snippet = _clean_fb_prompt_text(m.group(0))
+            if snippet and snippet not in hits:
+                hits.append(snippet)
+
+    return " | ".join(hits[:3])
+
+
+def _build_facebook_customer_summary(inquiry_text: str) -> str:
+    comments = _extract_facebook_field(inquiry_text, "prospect_customer_comments")
+    email = _extract_facebook_field(inquiry_text, "prospect_customer_contact_email")
+    phone = _extract_facebook_field(inquiry_text, "prospect_customer_contact_phone")
+    availability = _extract_facebook_availability(comments or inquiry_text)
+
+    parts = []
+    if comments:
+        parts.append(f"Customer comments: {comments}")
+    if availability:
+        parts.append(f"Stated availability: {availability}")
+    if email:
+        parts.append(f"Customer email: {email}")
+    if phone:
+        parts.append(f"Customer phone: {phone}")
+
+    return "\n".join(parts).strip()
 
 def send_first_touch_email(
     *,
@@ -3799,39 +3858,55 @@ def send_first_touch_email(
     # CONTENT PATH 2: Facebook closer
     # -------------------------------
     elif is_facebook:
+        fb_summary = _build_facebook_customer_summary(inquiry_text or "")
+        fb_comments = _extract_facebook_field(inquiry_text or "", "prospect_customer_comments")
+        fb_availability = _extract_facebook_availability(fb_comments or inquiry_text or "")
+
+        log.info(
+            "FACEBOOK PROMPT SUMMARY opp=%s comments=%r availability=%r",
+            opportunity.get("opportunityId") or opportunityId,
+            fb_comments,
+            fb_availability,
+        )
+
         prompt = f"""
-    You are Patti, the virtual assistant for {rooftop_name}.
-    
-    This is a brand new Facebook vehicle lead.
-    Your job is to move the customer toward a dealership visit or test drive quickly, while still sounding warm and helpful.
-    
-    Hard rules:
-    - Begin with exactly: Hi {customer_name},
-    - Keep it to about 70–120 words.
-    - Sound confident, helpful, and human.
-    - Do NOT sound generic or overly formal.
-    - Do NOT say "Thank you for your internet inquiry."
-    - Do NOT ask "what day and time works best?" if the customer already provided availability.
-    - If the customer already provided availability, acknowledge it and move toward confirming it.
-    - Ask only ONE question.
-    - Prioritize setting an appointment over long explanations.
-    - Prefer concrete options over broad open-ended questions.
-    - If appropriate, offer a simple choice like morning or afternoon, today or tomorrow, or this weekend.
-    - Do NOT include any signature block, phone number, or URL.
-    - Do NOT quote pricing, payments, APR, OTD, or trade value.
-    - Mention the assigned salesperson naturally if relevant.
-    
-    Context:
-    - Rooftop: {rooftop_name}
-    - Assigned salesperson: {salesperson or "our team"}
-    - Vehicle of interest: {vehicle_str}
-    - Source: Facebook
-    - Customer inquiry/comment: {(inquiry_text or "").strip() or "No additional comment provided."}
-    
-    Return ONLY valid JSON with keys:
-    {{"subject":"...", "body":"..."}}
-    """.strip()
-    
+You are Patti, the virtual assistant for {rooftop_name}.
+
+This is a brand new Facebook vehicle lead.
+Your job is to move the customer toward a dealership visit or test drive quickly, while still sounding warm and helpful.
+
+Hard rules:
+- Begin with exactly: Hi {customer_name},
+- Keep it to about 70–120 words.
+- Sound confident, helpful, and human.
+- Do NOT sound generic or overly formal.
+- Do NOT say "Thank you for your internet inquiry."
+- Do NOT say "internet lead" or "internet inquiry."
+- Do NOT ask "what day and time works best?" if the customer already provided availability.
+- If the customer already provided availability, acknowledge it and move toward confirming it.
+- If the customer gave a broad time window, narrow it one step further.
+- Ask only ONE question.
+- Prioritize setting an appointment over long explanations.
+- Prefer concrete options over broad open-ended questions.
+- If appropriate, offer a simple choice like morning or afternoon, today or tomorrow, or this weekend.
+- Do NOT include any signature block, phone number, or URL.
+- Do NOT quote pricing, payments, APR, OTD, or trade value.
+- Mention the assigned salesperson naturally if relevant.
+- If the lead mentions trade-in, acknowledge it briefly but keep the main goal on booking the visit.
+
+Context:
+- Rooftop: {rooftop_name}
+- Assigned salesperson: {salesperson or "our team"}
+- Vehicle of interest: {vehicle_str}
+- Source: Facebook
+
+Structured customer summary:
+{fb_summary or "No structured customer summary available."}
+
+Return ONLY valid JSON with keys:
+{{"subject":"...", "body":"..."}}
+""".strip()
+
         response = run_gpt(
             prompt,
             customer_name,
@@ -3840,7 +3915,19 @@ def send_first_touch_email(
         )
         subject = response["subject"]
         body_html = response["body"]
-    
+
+        # Light cleanup for generic phrasing that still slips through
+        body_html = re.sub(
+            r"(?i)thank you for your internet inquiry\.?\s*",
+            "",
+            body_html or "",
+        )
+        body_html = re.sub(
+            r"(?i)is there a day and time that works best for you\??",
+            "Would morning or afternoon work better for you?",
+            body_html or "",
+        )
+
     # -------------------------------
     # CONTENT PATH 3: Short variant
     # -------------------------------
@@ -3857,7 +3944,7 @@ def send_first_touch_email(
                 f"<p>Hi {customer_name},</p>"
                 "<p>Thank you for your internet inquiry. I’d love to set up a time for you to come by and visit our showroom - is there a day and time that works best for you?</p>"
             )
-    
+
     # -------------------------------
     # CONTENT PATH 4: Standard GPT
     # -------------------------------
@@ -4072,8 +4159,15 @@ In your email:
         if is_facebook:
             body_html = body_html.strip()
             import re as _re
-            if not _re.search(r"(?i)\b(morning|afternoon|today|tomorrow|weekend)\b", body_html or ""):
-                body_html += "<p>Would morning or afternoon work better for you?</p>"
+    
+            fb_comments = _extract_facebook_field(inquiry_text or "", "prospect_customer_comments")
+            fb_availability = _extract_facebook_availability(fb_comments or inquiry_text or "")
+    
+            if not _re.search(r"(?i)\b(morning|afternoon|today|tomorrow|weekend|saturday|sunday)\b", body_html or ""):
+                if fb_availability:
+                    body_html += "<p>I saw the availability you mentioned — would morning or afternoon work better?</p>"
+                else:
+                    body_html += "<p>Would morning or afternoon work better for you?</p>"
         else:
             if not _is_telluride and variant != VARIANT_SHORT:
                 body_html = append_soft_schedule_sentence(body_html, rooftop_name)
