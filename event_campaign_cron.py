@@ -386,7 +386,7 @@ def _send_cx5_correction_now_if_needed(invite_id: str, invite_fields: dict, even
 
     body = (
         f"Quick correction: our {title} event is "
-        f"{date_display} from {time_window}, not tomorrow. Sorry for the confusion. "
+        f"{date_display} from {time_window}, not tomorrow. "
         f"Reply YES if you plan to attend."
     )
 
