@@ -77,11 +77,33 @@ def _table_url(table_name: str) -> str:
     return f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{table_name}"
 
 
+import time
+import random
+
 def _request(method: str, url: str, **kwargs) -> dict:
-    response = requests.request(method, url, headers=AIRTABLE_HEADERS, timeout=30, **kwargs)
-    if response.status_code >= 400:
-        raise RuntimeError(f"Airtable {method} failed {response.status_code}: {response.text[:800]}")
-    return response.json()
+    last_text = ""
+    last_code = None
+
+    for attempt in range(4):
+        response = requests.request(method, url, headers=AIRTABLE_HEADERS, timeout=30, **kwargs)
+        last_code = response.status_code
+        last_text = response.text[:800]
+
+        if response.status_code < 400:
+            return response.json()
+
+        if response.status_code in {429, 502, 503, 504} and attempt < 3:
+            sleep_s = (2 ** attempt) + random.uniform(0.2, 0.8)
+            log.warning(
+                "Airtable %s retryable error status=%s attempt=%s sleep=%.1fs url=%s",
+                method, response.status_code, attempt + 1, sleep_s, url
+            )
+            time.sleep(sleep_s)
+            continue
+
+        raise RuntimeError(f"Airtable {method} failed {response.status_code}: {last_text}")
+
+    raise RuntimeError(f"Airtable {method} failed {last_code}: {last_text}")
 
 
 def _fetch_all_records(
@@ -121,7 +143,7 @@ def _fetch_record_map(table_name: str, record_ids: Iterable[str]) -> dict[str, d
         return {}
 
     out: dict[str, dict] = {}
-    chunk_size = 10
+    chunk_size = 5
 
     for i in range(0, len(ids), chunk_size):
         chunk = ids[i:i + chunk_size]
