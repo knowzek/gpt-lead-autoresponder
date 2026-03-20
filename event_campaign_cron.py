@@ -287,7 +287,7 @@ def _send_cx5_email_correction_now_if_needed(invite_id: str, invite_fields: dict
         return False
 
     now_local = _now_utc().astimezone(ZoneInfo(STORE_TIMEZONE))
-    if now_local.date() != date(2026, 3, 19):
+    if now_local.date() != date(2026, 3, 20):
         return False
 
     invite_status = str(invite_fields.get("Invite Status") or "").strip().lower()
@@ -414,8 +414,8 @@ def _send_cx5_correction_now_if_needed(invite_id: str, invite_fields: dict, even
     # url_part = f" Details: {poster_url}" if poster_url else ""
 
     body = (
-        f"Quick correction: our {title} event is "
-        f"{date_display} from {time_window}, not tomorrow. "
+        f"Quick correction: our {title} event is tomorrow, "
+        f"{date_display} from {time_window}, not today. "
         f"Reply YES if you plan to attend."
     )
 
@@ -973,26 +973,28 @@ def run_event_campaigns_once() -> None:
 
         # one-time correction email for the bad "tomorrow" email sent on 3/19
 
-        try:
-            _send_cx5_email_correction_now_if_needed(
-                invite_id=invite_id,
-                invite_fields=invite_fields,
-                event_fields=event_fields,
-                guest_fields=guest_fields,
-            )
-        except Exception:
-            log.exception("CX5 correction email failed invite=%s", invite_id)
-        
-        # one-time correction for the bad "tomorrow" SMS sent on 3/19
         # try:
-        #     _send_cx5_correction_now_if_needed(
+        #     _send_cx5_email_correction_now_if_needed(
         #         invite_id=invite_id,
         #         invite_fields=invite_fields,
         #         event_fields=event_fields,
         #         guest_fields=guest_fields,
         #     )
         # except Exception:
-        #     log.exception("CX5 correction send failed invite=%s", invite_id)
+        #     log.exception("CX5 correction email failed invite=%s", invite_id)
+        
+        # one-time correction for the bad "tomorrow" SMS sent on 3/19
+        try:
+            _send_cx5_correction_now_if_needed(
+                invite_id=invite_id,
+                invite_fields=invite_fields,
+                event_fields=event_fields,
+                guest_fields=guest_fields,
+            )
+        except Exception:
+            log.exception("CX5 correction send failed invite=%s", invite_id)
+
+        continue
 
         if EVENT_TEST_CORRECTION_ONLY:
             continue
