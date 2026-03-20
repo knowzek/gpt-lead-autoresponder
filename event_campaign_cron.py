@@ -372,7 +372,7 @@ def _send_cx5_correction_now_if_needed(invite_id: str, invite_fields: dict, even
         return False
 
     now_local = _now_utc().astimezone(ZoneInfo(STORE_TIMEZONE))
-    if now_local.date() != date(2026, 3, 19):
+    if now_local.date() != date(2026, 3, 20):
         return False
 
     invite_status = str(invite_fields.get("Invite Status") or "").strip().lower()
