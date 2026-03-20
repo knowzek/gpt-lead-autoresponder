@@ -134,6 +134,8 @@ def _fetch_record_map(table_name: str, record_ids: Iterable[str]) -> dict[str, d
 def _patch_record(table_name: str, rec_id: str, fields: dict[str, Any]) -> None:
     _request("PATCH", f"{_table_url(table_name)}/{rec_id}", json={"fields": fields})
 
+def _fetch_record(table_name: str, rec_id: str) -> dict:
+    return _request("GET", f"{_table_url(table_name)}/{rec_id}")
 
 # =========================================================
 # GENERIC HELPERS
@@ -313,11 +315,16 @@ def _send_cx5_email_correction_now_if_needed(invite_id: str, invite_fields: dict
 
     log.info("CX5 correction email invite=%s ok=%s result=%s", invite_id, ok, result)
 
+    # ✅ fetch latest value from Airtable (prevents overwrite)
+    current_invite = _fetch_record(INVITES_TABLE, invite_id)
+    current_fields = current_invite.get("fields") or {}
+    current_result = str(current_fields.get("Last Send Result") or "")
+    
     patch = {
         "Last Send Attempt At": _now_iso(),
         "Last Send Channel": "email",
         "Last Send Result": _append_result_tag(
-            str(invite_fields.get("Last Send Result") or ""),
+            current_result,
             CX5_FIX_EMAIL_CORRECTION_TAG if ok else f"{CX5_FIX_EMAIL_CORRECTION_TAG}_failed"
         ),
         "Last Send Error": "" if ok else result,
@@ -359,7 +366,7 @@ def _send_cx5_correction_now_if_needed(invite_id: str, invite_fields: dict, even
     if not EVENT_TEST_TO_NUMBER and not invite_fields.get("SMS 3 Sent At"):
         return False
         
-    if not EVENT_TEST_TO_NUMBER and CX5_FIX_CORRECTION_TAG in str(invite_fields.get("Last Send Result") or ""):
+    if CX5_FIX_CORRECTION_TAG in str(invite_fields.get("Last Send Result") or ""):
         return False
 
     real_phone = _to_e164_us((guest_fields.get("Phone") or guest_fields.get("customer_phone") or "").strip())
@@ -404,10 +411,18 @@ def _send_cx5_correction_now_if_needed(invite_id: str, invite_fields: dict, even
         ok = not resp.get("blocked")
         result = "sent" if ok else (resp.get("reason") or "sms_blocked")
 
+    # ✅ fetch latest value from Airtable (prevents overwrite)
+    current_invite = _fetch_record(INVITES_TABLE, invite_id)
+    current_fields = current_invite.get("fields") or {}
+    current_result = str(current_fields.get("Last Send Result") or "")
+    
     patch = {
         "Last Send Attempt At": _now_iso(),
         "Last Send Channel": "sms",
-        "Last Send Result": _append_result_tag(str(invite_fields.get("Last Send Result") or ""), CX5_FIX_CORRECTION_TAG if ok else f"{CX5_FIX_CORRECTION_TAG}_failed"),
+        "Last Send Result": _append_result_tag(
+            current_result,
+            CX5_FIX_CORRECTION_TAG if ok else f"{CX5_FIX_CORRECTION_TAG}_failed"
+        ),
         "Last Send Error": "" if ok else result,
     }
     if ok:
