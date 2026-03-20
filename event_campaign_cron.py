@@ -480,13 +480,13 @@ def build_event_correction_email(event: dict, guest: dict) -> dict[str, str]:
     preheader = f"Quick correction: the event is on {date_display}, not tomorrow."
 
     opener = (
-        f"I wanted to send a quick correction about our {title} event at {store}. "
-        f"It is on {date_display}"
+        f"A quick correction about our {title} event at {store}. "
+        f"The event is on {date_display}"
         + (f" from {time_window}" if time_window else "")
         + ", not tomorrow."
     )
 
-    closer = "Sorry for the confusion. If you plan to attend, just reply YES and we’ll be ready for you."
+    closer = "If you plan to attend, just reply YES and we’ll be ready for you."
 
     signature_html = build_patti_footer(store)
 
