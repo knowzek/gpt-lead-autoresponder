@@ -983,17 +983,16 @@ def run_event_campaigns_once() -> None:
         except Exception:
             log.exception("CX5 correction email failed invite=%s", invite_id)
         
-
         # one-time correction for the bad "tomorrow" SMS sent on 3/19
-        try:
-            _send_cx5_correction_now_if_needed(
-                invite_id=invite_id,
-                invite_fields=invite_fields,
-                event_fields=event_fields,
-                guest_fields=guest_fields,
-            )
-        except Exception:
-            log.exception("CX5 correction send failed invite=%s", invite_id)
+        # try:
+        #     _send_cx5_correction_now_if_needed(
+        #         invite_id=invite_id,
+        #         invite_fields=invite_fields,
+        #         event_fields=event_fields,
+        #         guest_fields=guest_fields,
+        #     )
+        # except Exception:
+        #     log.exception("CX5 correction send failed invite=%s", invite_id)
 
         if EVENT_TEST_CORRECTION_ONLY:
             continue
